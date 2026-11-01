@@ -11,11 +11,15 @@ Defects the runtime reports and the checker does not. Each is a missing violatio
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
+- Fuzzer `ref-factory-body` with a helper or IIFE layer and a `hook-member`, `or-assign` or `bind` binding (about 190 recall programs, ADR 0527): the read reaches the layer through a binding dispatch, ADR 0522's non-layer edge; certified clean.
+- Fuzzer `pos-handler-expr` with some non-direct bindings (about 25 recall programs, ADR 0527): a read in the IIFE of a handler expression reached through an alias, tuple or hook binding of the memo variant; certified clean.
+- Hand-off of the site's function by name (saturation research 2026-11-01, held hand-off layers): an owner operation in a closure a wrapper or a timer runs is placed owned by the region it is written in (13 probes; a first fix turned ADR 0347's dormant exports into violations and was not landed), a read in a function handed by name to `forEach`, `sort`, `new Promise`, `.call` or `Reflect.apply` is attributed only at named calls (13 probes), and a write climb that exhausts its 16-layer bound takes the lexical role (2 probes). Main has all three.
+
 - `c2d-method-tracked` (App.tsx:19, :32): a function registered from a method or helper called in tracked JSX, then run by a later component body, keeps its registrant's lexical role. Same family: c2, c2c, c3d.
 - `r10-destructured` (App.tsx:12): destructuring `useParams()` in setup reads the reactive parameter proxy, which the checker does not take as a reactive read.
 - `r9-b3-childrenreadinbody` (App.tsx:14): the accessor returned by `children()` is called in the component body.
 - `r9-d1-mixmemoslotreadinbody` (App.tsx:7): a helper builds a memo from a callback and reads `m()` in the helper body.
-- `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
+- A read that reaches an in-place layer's summary through a non-layer edge (a helper called twice inside `h1(() => { g(); })`), or a store head Get in such a layer, is not carried to the function around the layer's call (ADR 0522 climbs direct-call and `Function.prototype` rows only): `dir1()` in the body is certified clean.
 
 - `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable. An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
 
@@ -28,6 +32,7 @@ Write in an owned scope (`no-write-in-pure-computation`, SC2001):
 - A violation at a site no execution reaches is uncertifiable (ADR 0458, handle calls included). Not read as unreached: a site after a call that always throws, a `try` that cannot complete, `undefined` or a `const` as a test, a module-scope function nothing references, a site whose only proof runs through an unreached call of a function also called elsewhere, an evidence step in dead code.
 - False clean (fuzzer): a write behind a nested component or slot in a handle callback (`({ slot: c => c() }).slot(Child1)`), or in an `onSettled` in a `setTimeout` rendering `<Child2/>`.
 - A closure named in an `onCleanup` callback and passed by name to `createRoot` there takes the callback's lexical role: an action it calls throws (no disposal exemption; fuzzer 8a3b250077, Chrome-confirmed) and is silent. An action written directly in a cleanup did not throw in the two rc.17 triggers probed (a memo rerun, a root disposed at top level: no ambient owner).
+- A write in a closure the first step of a generator stepped at its own call runs in place (`(function* () { [1].forEach(() => setW1(7)); yield 1; })().next()` in a handler's root) is placed by the read arm, which stops at the generator (ADR 0521 places only the generator's own body). A bound owner's callback in a handler (`runWithOwner(boundOwner, …)`) leaves every layer unplaced, the stepped generator included.
 - SC2001 in `render`/`hydrate` `code` off web rc.13/17: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter is unclaimed: `createOptimistic`'s unguarded one shares its type.
 
 Store write outside a setter (`no-store-mutation-outside-setter`, SC2003; ADR 0425):
@@ -138,6 +143,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
+- A summary consumer's call inside a class member's body (`wrapUse()` or a hook's returned accessor in a constructor or method) is an uncertifiable `strict-read-untracked` wherever the class is constructed or called, in the body (rc.17 warns) as in a handler or a tracked attribute (rc.17 silent): the construction and member call are followed by nothing (ADRs 0516, 0522).
 - Instance field initializer: a violation whose primary location is in one is demoted to uncertifiable, whichever rule claimed it (`diagnostics.rs`, `site_in_instance_field`). Static fields and static blocks keep theirs.
 - Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); a read there is an uncertifiable `strict-read-untracked`, even where the runtime warns.
 - `reactive-handler-frozen` (SC1007) on an element inside a tracked JSX expression or a component's children is uncertifiable: the listener is replaced when the scope re-runs.
@@ -186,6 +192,8 @@ Known false-positive shapes left open (fire today, wanted gone):
 - A library callback that may run zero times (`none.forEach(() => s())`) is crossed by SC1001/SC2001's inline arms (rc.17 is silent on an empty array), not by `resolve`/`until` or ADR 0517's climbs. Conflicting `export *` (TS2308) resolve to the binder's winner.
 
 ## 4. Open questions and live approximations
+
+- A body read in a component `dynamic()` mounts (`@solidjs/web` `dynamicCore` renders it under an unlabelled `untrack`: no strict-read window) is reported `strict-read-untracked` as a violation, while rc.17 warns nothing (the read is stale all the same). The recall generator skips `dynamic` mounts for the strict-read body cells; the store cells do not, and 12 `pos-flush-fn` programs (a nested store write through a module wrapper, `dynamic` mount) judge wrong-rule for it (ADR 0527). Main has it too. Decide: the unwindowed role (ADR 0443) there, or an accepted louder-than-Solid trade.
 
 - Import edits on app-game: the producer's update round trip is about 100 ms (module-graph work for the new specifier, producer side). The IR reruns 2 graph chunks and its result reads take about 13 ms, as for a code edit: the inserted line no longer renumbers the file's later local ids (ADR 0415; before, about 60 graph chunks and 65 ms).
 - Body edits of an unexported declaration move its `Local` id (ADR 0415), so the two `function_for_symbol` buckets it leaves and joins (`hand_outs.rs`, 1024 buckets by a hash of the id) rerun their readers: app-game body edit reruns 77 graph chunks (28 before), wall +2 to +9 ms across two runs. Widening the buckets to 16384 restores the reruns but grows the bucket memos from about 9k to 24k and adds 13 to 20 ms to mid-file and import edits.

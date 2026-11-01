@@ -20,6 +20,20 @@ not this rule's.
 A callback of an `onSettled` called inside another leaf body runs with no owner
 (rc.13 queues it), so an `onCleanup` there is this rule's claim.
 
+An action body (`action(function* () { … })`) is placed by the action's callers,
+never by where it is written (ADR 0520): rc.17 steps the generator on the stack
+of whoever calls the action, so an `onCleanup`, `createEffect`, `useContext`,
+`Loading(props)` or `onSettled` cleanup there is unowned when every caller is
+(a handler, a timer, module scope), takes a caller's owner otherwise (a leaf
+caller gives a leaf, where `onCleanup` is SC3001's claim; a children-capable
+caller throws `ACTION_CALLED_IN_OWNED_SCOPE` before the body runs), and is an
+obligation when a caller is unresolved (a `let` rebound, a component prop, a
+generator no binding holds). After a `yield` of a native promise
+(`Promise.resolve()`, `new Promise(…)`, or any `yield` of an async generator)
+the next step runs from the promise's continuation with no owner, whatever the
+caller; after a `yield` of a plain value the caller's owner stays; any other
+operand is an obligation.
+
 `Loading(props)` or `Errored(props)` called as a function creates its boundary
 in the call, and rc.17 warns `NO_OWNER_BOUNDARY` when no owner is current. The
 call is placed as an effect is: an ownerless handler, a timer or promise

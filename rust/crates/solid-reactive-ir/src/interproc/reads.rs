@@ -182,6 +182,21 @@ pub(super) fn direct_reference_contributions(
                 conditional: false,
                 undecided: false,
             };
+            for layer in
+                in_place_layer_owners(context, nodes, nodes_by_path, file, call.span, owner)
+            {
+                contributions.push(DirectReferenceContribution {
+                    owner: layer.owner,
+                    read: SummaryRead {
+                        origin_context: nodes[layer.owner].name.clone().unwrap_or_default(),
+                        owner: nodes[layer.owner].symbol.clone(),
+                        local: layer.local,
+                        undecided: layer.undecided,
+                        ..read.clone()
+                    },
+                    unique: false,
+                });
+            }
             contributions.push(DirectReferenceContribution {
                 owner,
                 read,
@@ -228,6 +243,9 @@ pub(super) fn direct_reference_contributions(
                     .members
                     .iter()
                     .filter(|member| member.object == reference_span)
+                    // A plain assignment's target, or a destructuring leaf
+                    // (ADR 0526), is written and never read: no Get.
+                    .filter(|member| !file.ast.is_plain_write_target(member.span))
                     // ADR 0293: only a head Get whose key warns is a read. An
                     // exempt Get whose backing runs nothing is no row; an
                     // undecided one is an undecided row (review round 1),
@@ -274,6 +292,86 @@ pub(super) fn direct_reference_contributions(
         }
     }
     contributions
+}
+
+/// A node a read written in layers that run in place belongs to as well
+/// (ADR 0522): a function whose body holds a call the layers run on.
+struct InPlaceLayerOwner {
+    owner: usize,
+    /// The layers' call in the owner's body runs on some of the owner's
+    /// completions only.
+    local: bool,
+    /// The run at that call is unproven: a possible await on the way, a site
+    /// in a layer's parameter list, a generator stepped at its own call.
+    undecided: bool,
+}
+
+/// ADR 0522: a read written in a function that runs in place on the stack of
+/// a call (an IIFE, a helper's callback the helper calls in its own body, a
+/// closure bound to a name and called once; ADR 0469's climb,
+/// [`crate::execution_role::in_place_run_calls`]) is a read the function
+/// around that call performs when the call runs. The read's own node is the
+/// innermost layer, whose summary nothing may consume: `h1(() => { r(); })` in
+/// `dir1`'s body left `dir1`'s summary without the read, so `dir1()` in a
+/// component body or a JSX `ref` was certified clean; so did `wrapUse()` there
+/// for a `wrapUse` declared outside `dir1` and called nowhere else. Each call
+/// the climb passes names the node whose own body holds it; that node gets the
+/// read at that call, once, with the climb up to it ([`in_place_run_site_within`])
+/// deciding whether the run is proven, and with the same escapes asked of the
+/// call as of a read written directly in the node. A site that follows an
+/// await on every path in a layer runs on a later task: no row.
+fn in_place_layer_owners(
+    context: &InterproceduralContext<'_, '_>,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    file: &solid_facts::FileFacts,
+    site: Span,
+    owner: usize,
+) -> Vec<InPlaceLayerOwner> {
+    let InterproceduralContext {
+        entities,
+        symbol_names,
+        lookup,
+        ..
+    } = context;
+    let mut owners: Vec<InPlaceLayerOwner> = Vec::new();
+    for call in crate::execution_role::in_place_run_calls(file, site, lookup) {
+        let Some(index) =
+            containing_summary_function_indexed(nodes, nodes_by_path, file.path.as_str(), call)
+        else {
+            continue;
+        };
+        if index == owner || owners.iter().any(|layer| layer.owner == index) {
+            continue;
+        }
+        let node = &nodes[index];
+        let Some((climb, through_generator)) =
+            crate::execution_role::in_place_run_site_within(file, site, lookup, Some(node.span))
+        else {
+            continue;
+        };
+        if climb.suspended == Some(true)
+            || climb.at != call
+            || file.ast.function_at(node.span).is_none_or(|function| {
+                !crate::owners::written_directly_in(&file.ast, function, call)
+            })
+        {
+            continue;
+        }
+        if read_escapes_synchronous_extent(file, call, entities, symbol_names, lookup.dialect)
+            || read_escapes_runtime_stack(file, call, node.body, lookup)
+            || runs_in_retained_value_literal(file, call, node)
+            || runs_outside_owner_call(file, call, node.body, lookup)
+        {
+            continue;
+        }
+        owners.push(InPlaceLayerOwner {
+            owner: index,
+            local: !site_on_every_completion(lookup, file, node.span, call),
+            undecided: climb.suspended.is_some() || climb.in_list || through_generator,
+        });
+    }
+    owners
 }
 
 /// The call that invokes the function `reference` names without `reference`

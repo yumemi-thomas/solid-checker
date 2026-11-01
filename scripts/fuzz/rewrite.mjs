@@ -30,6 +30,7 @@ function* statementLists(program) {
       case "component": case "fn": case "contain": yield [node.body, node]; break;
       case "try": yield [node.body, node]; yield [node.fin, node]; break;
       case "button": yield [node.handler, node]; break;
+      case "flow": yield [node.body, node]; break;
       default: break;
     }
   }

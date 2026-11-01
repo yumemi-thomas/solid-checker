@@ -188,9 +188,22 @@ pub(super) fn emit_file(
         } else {
             settled_call.map(|call| call.span)
         };
-        let possible_continuation = possible_site
-            .filter(|_| !after_await)
-            .and_then(|site| possible_await_continuation_context(file, site, context));
+        // An operation of an action's stepped generator after a `yield` of a
+        // promise runs from that promise's continuation, with no owner, as
+        // one after an `await` does; after a `yield` of a possible thenable
+        // it may (`action_step_resumption`). A generator that never runs
+        // (context zero) resumes nothing.
+        let step_resumption = possible_site
+            .filter(|_| !after_await && context != 0)
+            .and_then(|site| action_step_resumption(file, site, lookup));
+        let after_yield = step_resumption == Some(StepResumption::Proven);
+        let after_await = after_await || after_yield;
+        let possible_continuation = possible_site.filter(|_| !after_await).and_then(|site| {
+            possible_await_continuation_context(file, site, context).or_else(|| {
+                (step_resumption == Some(StepResumption::Possible))
+                    .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
+            })
+        });
         let context = if after_await {
             await_continuation_context(context)
         } else {
@@ -333,7 +346,8 @@ pub(super) fn emit_file(
                 later_run_unowned,
                 component_uncertain,
                 provider_open,
-                after_await,
+                after_await: after_await && !after_yield,
+                after_yield,
                 // A cleanup in a leaf that is not owned is reported; in an
                 // owned leaf it is SC3001's claim (ADR 0347 amendment).
                 report: report_hit

@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "ref", "flow", "handler-expr", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -295,7 +295,7 @@ function render(program, instrument) {
       case "set": return glue(e, () => `${signals.get(e.sig).setter}(${expr(e.e, depth)})`);
       case "getOwner": used.add("getOwner"); return glue(e, () => "getOwner()");
       case "createOwner": used.add("createOwner"); return "createOwner()";
-      case "flush": used.add("flush"); return "flush()";
+      case "flush": used.add("flush"); return e.fn ? `flush(${expr(e.fn, depth)})` : "flush()";
       case "iife": return glue(e, () => `(${expr(e.fn, depth)})()`);
       case "iter": return glue(e, () => (e.method === "map" ? `[1].map(${expr(e.fn, depth)})[0]` : `[1].forEach(${expr(e.fn, depth)})`));
       case "prim": return glue(e, () => primText(e, depth));
@@ -378,8 +378,30 @@ function render(program, instrument) {
       case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
-      default: throw new Error(`cannot print control form ${c.form}`);
+      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }
+  }
+
+  /** A hand-off form (model.mjs HANDOFF_FORMS): `hf` holds the site and is handed on by name, in a block of its own. */
+  function handoffText(c, depth) {
+    const inner = depth + 1;
+    const fnBody = (tail = []) => block(c.body, inner, null, [], tail);
+    const lines = {
+      "handoff-foreach": [`const hf = () => ${fnBody()};`, "[1].forEach(hf);"],
+      "handoff-map": [`const hf = () => ${fnBody()};`, "[1].map(hf);"],
+      "handoff-from": [`const hf = () => ${fnBody()};`, "Array.from([1], hf);"],
+      "handoff-sort": [`const hf = (_a: number, _b: number) => ${fnBody(["return 0;"])};`, "[2, 1].sort(hf);"],
+      "handoff-call": [`const hf = () => ${fnBody()};`, "hf.call(null);"],
+      "handoff-apply": [`const hf = () => ${fnBody()};`, "hf.apply(null, []);"],
+      "handoff-reflect": [`const hf = () => ${fnBody()};`, "Reflect.apply(hf, null, []);"],
+      "handoff-tagged": [`const hf = (_s: TemplateStringsArray) => ${fnBody()};`, "hf`x`;"],
+      "handoff-wrapper": [`const hf = () => ${fnBody()};`, "const run = (g: () => void) => { g(); };", "run(hf);"],
+      "handoff-member": [`const hf = () => ${fnBody()};`, "const ho = { m: hf };", "ho.m();"],
+      "handoff-assign": ["const ho: { m?: () => void } = {};", `ho.m = () => ${fnBody()};`, "ho.m?.();"],
+      "handoff-function": [`function hf() ${fnBody()}`, "hf();"],
+    }[c.form];
+    if (!lines) throw new Error(`cannot print control form ${c.form}`);
+    return `{\n${lines.map((line) => `${ind(inner)}${line}`).join("\n")}\n${ind(depth)}}`;
   }
 
   /** A write by its target's kind (model.mjs storeSignal, memoSignal, actionSignal); a plain signal is `setX(value)`. */
@@ -441,13 +463,32 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
       }
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
+      case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
+      case "flow": {
+        // The function child's body: the statements, then one element (a selector must match exactly one).
+        const element = item.flow.startsWith("for") ? "li" : "p";
+        const body = block(item.body, depth + 1, entryFor(item, "flow"), [], [`return <${element} data-view="${item.id}">x</${element}>;`]);
+        const open = { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
+        const close = { for: "</For>", "for-unkeyed": "</For>", show: "</Show>", "show-keyed": "</Show>", match: "</Switch>", repeat: "</Repeat>" }[item.flow];
+        for (const name of { for: ["For"], "for-unkeyed": ["For"], show: ["Show"], "show-keyed": ["Show"], match: ["Switch", "Match"], repeat: ["Repeat"] }[item.flow]) used.add(name);
+        // A `Show`/`Match` child takes its parameter: rc.17 runs a function child only when `child.length > 0` (`solid.dev.js:1587`,
+        // `:1634`, untracked under `"<Show>"`/`"<Match>"`), and the typings reject a zero-arity `Show` child (`NonZeroParams`).
+        const child = `{(${item.flow.startsWith("for") || item.flow === "repeat" ? "" : "_u"}) => ${body}}`;
+        if (item.flow === "match") return [`${ind(depth)}${open}`, `${ind(depth + 1)}<Match when={1}>${child}</Match>`, `${ind(depth)}${close}`];
+        return [`${ind(depth)}${open}`, `${ind(depth + 1)}${child}`, `${ind(depth)}${close}`];
+      }
+      case "ref": {
+        const callback = expr(item.e, depth);
+        const value = item.form === "array" ? `[${callback}, () => {}]` : item.form === "cond" ? `1 ? ${callback} : undefined` : callback;
+        return [`${ind(depth)}<p ref={${value}} data-view="${item.id}">x</p>`];
+      }
       case "show": {
         used.add("Show");
         return [`${ind(depth)}<Show when={${expr(item.when, depth)}}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Show>`];
@@ -619,6 +660,7 @@ function signalText(sig, signals, used) {
     case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
     case "async-dep": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => { ${sig.dep}(); await Promise.resolve(); return 1; });`;
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
+    case "store-list": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, items: [1, 2] });`;
     case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
     default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
   }
@@ -629,7 +671,7 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "memo": return [[sig.name, "SourceAccessor<number>"]];

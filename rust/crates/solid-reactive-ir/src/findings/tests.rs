@@ -247,6 +247,7 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         later_run_unowned: false,
         component_uncertain: false,
         after_await: false,
+        after_yield: false,
         missing_jsx_census: false,
         provider_open: false,
         through_dependency: None,

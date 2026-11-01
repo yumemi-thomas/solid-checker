@@ -32,7 +32,7 @@ import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   CALLBACK_CONTEXTS, CALLBACK_FORMS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
-  gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, sourcesOf, sourcesOption,
+  gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
 } from "./misuse.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
 import { isSite, walk } from "./model.mjs";
@@ -167,8 +167,8 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  * A recall context (a cell only `--recall` lists) takes its base grid as well. `base` is the cell's base grid (`gridShapes`, or the
  * legal grid's `legalShapes`); `variants` its variants.
  */
-export function recallAxes(code, context, base, variants) {
-  const recallCell = recallContextsOf(code).includes(context);
+export function recallAxes(code, context, base, variants, { legal = false } = {}) {
+  const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
   const shapes = recallCell ? [...base] : [];
   for (const variant of variants) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
@@ -180,6 +180,8 @@ export function recallAxes(code, context, base, variants) {
     const layers = THROWN.has(code) ? RECALL_LAYERS.filter((layer) => layer !== "try-catch") : RECALL_LAYERS;
     for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
   }
+  // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
+  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context))) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
   const local = base.filter((shape) => !shape.mount && !shape.source);
   if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's

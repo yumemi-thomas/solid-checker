@@ -646,7 +646,7 @@ pub(super) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -
 
 /// Whether `awaited` and `span` lie in the two different arms of one `if` or
 /// one `?:`: only one arm runs, so the await cannot come before `span`.
-fn in_exclusive_arms(file: &solid_facts::FileFacts, awaited: Span, span: Span) -> bool {
+pub(crate) fn in_exclusive_arms(file: &solid_facts::FileFacts, awaited: Span, span: Span) -> bool {
     let split = |first: Span, second: Span| first.contains(awaited) && second.contains(span);
     file.ast.if_regions.iter().any(|region| {
         region.alternate.is_some_and(|alternate| {
@@ -957,6 +957,30 @@ pub(super) fn semantic_execution_role_within(
     // only no single role. An implicit suspension (`for await`, `await using`)
     // is placed by position alone, which does not prove it runs (a loop under
     // a branch), so there the read is unplaced, not proven silent.
+    let role = window_after_awaits(file, span, lookup, role);
+    // Review round 4: code written in a component element's children (an
+    // event-handler factory on a `<button>` inside `<Show>`, `<Loading>`, a
+    // portal or a wrapper rendering `props.children`) runs when the receiving
+    // component evaluates its children -- inside Show's memo, an insert, a
+    // later render -- not in this body's strict-read window, which the
+    // lexical rendering role assumes. No proven untracked read.
+    if role == ExecutionRole::UntrackedRendering && inside_component_element_children(file, span) {
+        return ExecutionRole::Unknown;
+    }
+    role
+}
+
+/// The role at `span` once its function's awaits are accounted for
+/// ([`semantic_execution_role_within`]'s ADR 0323 and 0354 arms): a reporting
+/// role past an unconditional await is [`ExecutionRole::Unreported`], one past
+/// a possible await or an implicit suspension is unplaced; any other role is
+/// returned as it is.
+pub(super) fn window_after_awaits(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    role: ExecutionRole,
+) -> ExecutionRole {
     if role.reports_untracked_read()
         && (follows_unconditional_await(file, span)
             || follows_dominating_await(file, span)
@@ -967,15 +991,6 @@ pub(super) fn semantic_execution_role_within(
     if role.reports_untracked_read()
         && (follows_any_suspension(file, span) || may_follow_own_await(file, span))
     {
-        return ExecutionRole::Unknown;
-    }
-    // Review round 4: code written in a component element's children (an
-    // event-handler factory on a `<button>` inside `<Show>`, `<Loading>`, a
-    // portal or a wrapper rendering `props.children`) runs when the receiving
-    // component evaluates its children -- inside Show's memo, an insert, a
-    // later render -- not in this body's strict-read window, which the
-    // lexical rendering role assumes. No proven untracked read.
-    if role == ExecutionRole::UntrackedRendering && inside_component_element_children(file, span) {
         return ExecutionRole::Unknown;
     }
     role

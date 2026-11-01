@@ -15,7 +15,15 @@ pub(super) fn owner_node(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> OwnerNode {
-    let name = function_binding_name(file, function);
+    // The stepped generator of an action runs where the action is called, so
+    // the binding that holds the action is how call edges reach its node
+    // (`action_binding_name`); the generator's own name reaches nothing.
+    let stepped_action = stepped_action_generator(file, function, lookup).is_some();
+    let name = if stepped_action {
+        action_binding_name(file, function, lookup)
+    } else {
+        function_binding_name(file, function)
+    };
     let symbol = name.and_then(|name| {
         entities
             .get(&location(file.path.shared(), name.span))
@@ -103,6 +111,18 @@ pub(super) fn owner_node(
                 .is_some_and(|call| !super::iterator_stepped_at(file, call.span)) =>
         {
             seed_context |= OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED;
+        }
+        // The stepped generator of an action nothing binds (`onClick={action(
+        // function* () { … })}`, `export default action(…)`): it runs where
+        // the action is called, which no edge names, so every caller is
+        // unseen and its owner questions stay obligations, never silent.
+        // The same for one whose binding reaches code the graph cannot
+        // follow (`action_binding_escapes`): a component prop, a slot.
+        crate::indexes::ComponentStatus::No
+            if stepped_action
+                && name.is_none_or(|name| action_binding_escapes(file, name.span)) =>
+        {
+            seed_context |= OWNER_CONTEXT_UNOWNED;
         }
         crate::indexes::ComponentStatus::No => {}
     }
@@ -223,7 +243,9 @@ pub(super) fn propagate_owner_contexts(
             } else if uncertain[source]
                 && matches!(
                     kind,
-                    OwnerEdgeKind::QueuedLeaf | OwnerEdgeKind::ProvenNoOwnerGuarded
+                    OwnerEdgeKind::QueuedLeaf
+                        | OwnerEdgeKind::ProvenNoOwnerGuarded
+                        | OwnerEdgeKind::ResumesUnowned
                 )
             {
                 // The callback's proof is the leaf body that creates it, and an
@@ -461,6 +483,9 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) provider_open: bool,
     /// The operation runs after an `await` ([`AwaitContinuations`]).
     pub(crate) after_await: bool,
+    /// The operation runs after a promise-yielding `yield` of its action body
+    /// ([`action_step_resumption`]).
+    pub(crate) after_yield: bool,
     pub(crate) report: bool,
 }
 

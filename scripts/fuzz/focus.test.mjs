@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_GRIDS, GRIDS, parse, readGrid, runGridProcess } from "./focus.mjs";
+import { DEFAULT_GRIDS, GRIDS, parse, readGrid, roomAt, runGridProcess } from "./focus.mjs";
 
 describe("readGrid", () => {
   it("tallies the outcomes, flags what needs a look, and counts every difference from the oracle as behaviour", () => {
@@ -51,4 +51,14 @@ describe("the grid process", () => {
     expect(hung.timedOut).toBe(true);
     expect(readFileSync(join(dir, "hung.log"), "utf8")).toMatch(/^heap/);
   }, 30_000);
+});
+
+describe("roomAt", () => {
+  const disk = (over) => () => ({ bavail: 100 * 2 ** 20, bsize: 4096, files: 1000, ffree: 500, ...over });
+  it("is null with room, and names a full disk or exhausted inodes", () => {
+    expect(roomAt("/x", { statfs: disk({}) })).toBeNull();
+    expect(roomAt("/x", { statfs: disk({ bavail: 2 ** 20 }) })).toMatch(/GiB free/);
+    expect(roomAt("/x", { statfs: disk({ ffree: 10 }) })).toMatch(/10 of 1000 inodes free/);
+    expect(roomAt("/x", { statfs: () => { throw new Error("no such dir"); } })).toBeNull();
+  });
 });

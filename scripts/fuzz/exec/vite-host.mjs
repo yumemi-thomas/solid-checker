@@ -10,6 +10,10 @@ import http from "node:http";
 import { startViteHost } from "../chrome-host.mjs";
 
 const settings = JSON.parse(process.argv[2] ?? "{}");
+// The helper ends with its executor: a parent that died (killed with its grid, or crashed past its cleanup) reparents this process,
+// which would otherwise keep serving, and hold its port and work directory, until the machine restarts.
+const parent = process.ppid;
+setInterval(() => { if (process.ppid !== parent) process.exit(0); }, 1000).unref();
 const vite = await startViteHost({ install: settings.install, oracleInstall: settings.oracleInstall });
 
 const routes = {

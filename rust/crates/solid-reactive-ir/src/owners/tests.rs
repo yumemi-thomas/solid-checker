@@ -124,6 +124,17 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::Unowned, OWNER_CONTEXT_OWNED),
         OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
     );
+    // A step resumed from a yielded promise's continuation has no owner
+    // whatever the action was called under; a generator that never runs
+    // resumes nothing.
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::ResumesUnowned,
+            OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+        ),
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    assert_eq!(owner_edge_context(OwnerEdgeKind::ResumesUnowned, 0), 0);
     assert_eq!(
         owner_edge_context(
             OwnerEdgeKind::Preserve,
@@ -503,10 +514,11 @@ mod kept_graph {
 
     const PATHS: [&str; 5] = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"];
 
-    const KINDS: [OwnerEdgeKind; 12] = [
+    const KINDS: [OwnerEdgeKind; 13] = [
         OwnerEdgeKind::Preserve,
         OwnerEdgeKind::MayRun,
         OwnerEdgeKind::MayResumeUnowned,
+        OwnerEdgeKind::ResumesUnowned,
         OwnerEdgeKind::Owned,
         OwnerEdgeKind::Unowned,
         OwnerEdgeKind::Conditional,

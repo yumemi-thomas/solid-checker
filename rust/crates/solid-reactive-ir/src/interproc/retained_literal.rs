@@ -109,6 +109,12 @@ pub(super) fn runs_in_unproven_stored_literal(
             span = call.span;
             continue;
         }
+        // A function an intrinsic `ref` applies runs where its element is
+        // created, which the read's role says (`read_execution_role`): it is
+        // never an unproven store.
+        if crate::owners::ref_applied_element(file, literal, lookup).is_some() {
+            return false;
+        }
         // ADR 0489: a function bound to a name whose only run is its one call
         // (ADR 0479, `layer_run`'s `InPlace`) runs where that call is, as an
         // IIFE does: the walk continues from the call.

@@ -35,7 +35,7 @@ function describe(node, helperForms) {
     case "own": return node.site ? null : `own:${node.op}${node.handle ? ":handle" : ""}`;
     case "contain": return `contain:${node.kind}${node.use ? `:${node.use}` : ""}${node.async ? ":async" : ""}`;
     case "try": case "flush": return node.k;
-    case "iife": case "obj": case "field": case "button": case "child": case "attr": case "show": case "for": case "return": return node.k;
+    case "iife": case "obj": case "field": case "button": case "child": case "attr": case "ref": case "flow": case "handler-expr": case "show": case "for": case "return": return node.k;
     default: return null;
   }
 }
@@ -45,6 +45,8 @@ function scopeOf(node, up) {
   for (let at = up.get(node)?.parent; at; at = up.get(at)?.parent) {
     if (at.k === "prim") return at.name;
     if (at.k === "button") return "handler";
+    if (at.k === "ref") return "ref";
+    if (at.k === "flow") return `flow:${at.flow}`;
     if (at.k === "child" || at.k === "attr") return "jsx";
     if (at.k === "fn" && at.async) return "async";
     if (at.k === "component") return "body";

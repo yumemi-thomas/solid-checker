@@ -194,6 +194,160 @@ pub(crate) fn own_method_name<'a>(
     .then_some(name)
 }
 
+/// The call whose stepped argument `function` is, with the argument's index:
+/// `action(function* () { … })` on a dialect that steps that argument's
+/// generator ([`solid_dialect::Dialect::callback_runs_as_action_steps`]). The
+/// generator must *be* the argument (behind TypeScript sugar at most): the
+/// call steps whatever a wrapper returns. Such a generator runs its body step
+/// by step where the returned action is called, never where it is written.
+pub(crate) fn stepped_action_generator<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(&'a solid_facts::ast::CallFact, usize)> {
+    if !function.generator {
+        return None;
+    }
+    let (call, index) = file
+        .ast
+        .arguments_containing(function.span)
+        .find(|(call, index)| {
+            !call.arguments[*index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    lookup
+        .dialect
+        .callback_runs_as_action_steps(primitive, index)
+        .then_some((call, index))
+}
+
+/// The binding that holds the action whose stepped generator `function` is
+/// (`const a = action(function* () { … })`): one plain name whose initializer
+/// is exactly that call. Call edges to the name reach the generator's owner
+/// node through it, as they reach a function bound by name: the action's
+/// wrapper runs the generator's first step on the caller's stack, under the
+/// caller's owner. `None` for a generator stepped by an action nothing
+/// binds, or one bound through a pattern or a wrapper.
+pub(crate) fn action_binding_name<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'a solid_facts::ast::NamedSpan> {
+    let (call, _) = stepped_action_generator(file, function, lookup)?;
+    file.ast
+        .bindings_initializer_containing(call.span)
+        .find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast.peel_ts_sugar_span(initializer) == call.span
+                })
+        })
+        .and_then(|binding| binding.names.first())
+}
+
+/// The stepped generator an identifier names by value, where the owner
+/// graph's symbol edges see another binding: `span` (behind TypeScript
+/// wrappers) is a reference to a `const` holding an action
+/// ([`action_binding_name`]), directly or through `const` copies (ADR 0463's
+/// alias fact, followed to its source). A mention that may run before its
+/// binding's declarator, a withheld alias, or a binding that is written
+/// anywhere names nothing: the call edge then takes the binding's symbol and
+/// ADR 0468's may-run reading.
+pub(crate) fn named_action_generator(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    if ast.member_at(span).is_some()
+        || lookup.may_precede_initialization(file.path.as_str(), span)
+        || lookup.local_alias_mention_withheld(file, span)
+    {
+        return None;
+    }
+    let mut declaration = ast.reference_declaration(span)?;
+    for _ in 0..8 {
+        match ast.local_alias_binding(declaration) {
+            Some(alias) => declaration = alias.source,
+            None => break,
+        }
+    }
+    if crate::indexes::binding_written(file, declaration) {
+        return None;
+    }
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && matches!(binding.names.as_slice(), [name] if name.span == declaration)
+    })?;
+    let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+    ast.functions_within(initializer)
+        .find(|function| {
+            stepped_action_generator(file, function, lookup)
+                .is_some_and(|(call, _)| call.span == initializer)
+        })
+        .map(|function| function.span)
+}
+
+/// Whether the action a binding holds (`name`, from [`action_binding_name`])
+/// reaches code the owner graph cannot follow: a reference that is not the
+/// callee of a call, a whole argument of one, the value of an intrinsic
+/// element's attribute, or the initializer of a `const` copy whose own
+/// references are followed the same way. A component prop (`<Child
+/// run={a1} />`), an object or array slot, an assignment and every other use
+/// may invoke the action anywhere, under any owner: the generator then
+/// carries the open-world unowned bit, so its owner questions stay
+/// obligations until a caller is named.
+pub(crate) fn action_binding_escapes(file: &solid_facts::FileFacts, name: Span) -> bool {
+    let ast = &file.ast;
+    let peel = |span: Span| ast.peel_ts_sugar_span(span);
+    let mut holders = vec![name];
+    let mut index = 0;
+    while index < holders.len() {
+        let holder = holders[index];
+        index += 1;
+        if index > 8 {
+            return true;
+        }
+        for &(reference, declaration) in &ast.reference_declarations {
+            if declaration != holder {
+                continue;
+            }
+            let called = ast.calls.iter().any(|call| peel(call.callee) == reference);
+            let argument = ast
+                .arguments_containing(reference)
+                .any(|(call, index)| peel(call.arguments[index].span) == reference);
+            let intrinsic_attribute = ast.jsx_containing(reference).any(|element| {
+                crate::object_members::intrinsic_element(file, element)
+                    && element.attributes.iter().any(|attribute| {
+                        attribute
+                            .expression
+                            .is_some_and(|value| peel(value) == reference)
+                    })
+            });
+            if called || argument || intrinsic_attribute {
+                continue;
+            }
+            let copy = ast.bindings.iter().find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding
+                        .initializer
+                        .is_some_and(|initializer| peel(initializer) == reference)
+            });
+            match copy {
+                Some(binding) => holders.push(binding.names[0].span),
+                None => return true,
+            }
+        }
+    }
+    false
+}
+
 /// Like [`function_binding_name`], but also sees through a call initializer:
 /// `const Wrapped = withTheme(({ name }) => ...)` names the arrow `Wrapped`,
 /// so a wrapped component is classified like an unwrapped one. Object and

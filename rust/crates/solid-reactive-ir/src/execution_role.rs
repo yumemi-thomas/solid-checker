@@ -255,11 +255,15 @@ fn source_execution_role(
                 callback.role,
                 solid_facts::compiler::CallbackRoleKind::Deferred
                     | solid_facts::compiler::CallbackRoleKind::Render
-            ) || file
-                .ast
-                .functions_within(callback.span)
-                .max_by_key(|function| function.span.end - function.span.start)
-                .is_some_and(|function| function.body.contains(span)))
+            ) || file.ast.functions_within(callback.span).any(|function| {
+                // Only a function the attribute's expression yields is the
+                // handler (or the ref) the compiler binds; any other function
+                // in it runs, or not, while the expression evaluates at the
+                // element's setup: `onClick={(log(), h)}`'s IIFE runs in the
+                // body, under its window (rc.17 warns a read there).
+                function.body.contains(span)
+                    && crate::owners::yielded_value_contains(file, callback.span, function.span)
+            }))
     })
 }
 
@@ -280,6 +284,127 @@ pub(super) fn semantic_execution_role(
         lookup,
         &mut HashSet::default(),
     )
+}
+
+/// [`semantic_execution_role`] for a reactive read. A read in a function an
+/// intrinsic `ref` applies ([`crate::owners::ref_applied_element`]: the
+/// literal written in the attribute, the function a bare identifier there
+/// holds, a literal the factory of a two-phase directive returns) runs while
+/// its element is created: rc.17's `ref` (`@solidjs/web`
+/// `dist/web.dev.js:1016-1022`) applies it under `runWithOwner(null)`, which
+/// clears the owner and the observer (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev-shared.js:5758-5786`) and leaves the strict-read window of the
+/// code creating the element as it is. On an element created in a component
+/// body's untracked rendering the read is that body's read
+/// ([`ExecutionRole::UntrackedRendering`]); the same through the layers that
+/// run in place on the applied function's stack (an IIFE, a helper's inline
+/// callback, [`climb_in_place_layers`]). An element created anywhere else (a
+/// flow row, a component's children, a tracked expression) leaves the read
+/// unplaced, as does a function the ref receives that no proof applies (one
+/// nested in the applied function, a generator): an obligation, never a
+/// silent clean.
+pub(super) fn read_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    let role = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
+    // Deleted code and code past an await keep their answers.
+    if matches!(
+        role,
+        ExecutionRole::DiscardedRendering | ExecutionRole::Unreported
+    ) {
+        return role;
+    }
+    if let Some(applied) =
+        ref_applied_read_role(file, span, allowed, entities, symbol_names, lookup)
+    {
+        return applied;
+    }
+    if role == ExecutionRole::DirectiveApply {
+        return ExecutionRole::Unknown;
+    }
+    role
+}
+
+/// Whether an intrinsic `ref` applies `literal` while creating an element in a
+/// component body's untracked rendering ([`crate::owners::ref_applied_element`],
+/// [`read_execution_role`]): the literal then runs during that body, in its
+/// strict-read window.
+pub(crate) fn ref_applied_in_body(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    crate::owners::ref_applied_element(file, literal, lookup).is_some_and(|element| {
+        semantic_execution_role(
+            file,
+            element.name.span,
+            &allowed_callback_spans(file, lookup),
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+        ) == ExecutionRole::UntrackedRendering
+    })
+}
+
+/// The role of a read in a function an intrinsic `ref` applies, or in a
+/// layer that runs in place on that function's stack ([`read_execution_role`]).
+fn ref_applied_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let function = containing_ast_function(&file.ast, span)?;
+    let (element, climb) = match crate::owners::ref_applied_element(file, function, lookup) {
+        Some(element) => (element, None),
+        None => {
+            // Through the generators stepped at their own call too (ADR 0516,
+            // `in_place_run_site`): `(function* () { r(); yield 1; })().next()`
+            // in a ref callback runs some of its body, or none, on the stack
+            // of that call, so the read is unplaced there, never the deferred
+            // role the callback's position gives it.
+            let (climb, through_generator) = in_place_run_site(file, span, lookup)?;
+            let function = containing_ast_function(&file.ast, climb.at)?;
+            (
+                crate::owners::ref_applied_element(file, function, lookup)?,
+                Some((climb, through_generator)),
+            )
+        }
+    };
+    // The element's own tag is where the compiler creates it and applies its
+    // ref: the role of that spot is the role of the application.
+    let created = semantic_execution_role(
+        file,
+        element.name.span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+    );
+    if created != ExecutionRole::UntrackedRendering {
+        return Some(ExecutionRole::Unknown);
+    }
+    if let Some((climb, through_generator)) = climb {
+        match climb.suspended {
+            Some(true) => return Some(ExecutionRole::Unreported),
+            Some(false) => return Some(ExecutionRole::Unknown),
+            None if climb.in_list || through_generator => return Some(ExecutionRole::Unknown),
+            None => {}
+        }
+    }
+    Some(window_after_awaits(
+        file,
+        span,
+        lookup,
+        ExecutionRole::UntrackedRendering,
+    ))
 }
 
 /// What the operation's runtime guard does when a root owner is the ambient

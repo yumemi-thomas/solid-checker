@@ -378,6 +378,27 @@ fn creation_refused_at(
     false
 }
 
+/// Whether `span` runs in the body of a class member (a constructor, method
+/// or accessor) that some execution may enter: directly, or through the
+/// layers that run in place there and the generators stepped at their own
+/// call ([`super::in_place_run_site`]). A member's body runs at a
+/// construction or a member call, which neither the reachable-call index nor
+/// the role proofs follow: a reactive read there is placed nowhere, so it is
+/// an obligation, never silence (invariant 2), as for a function handed on
+/// unfollowed (ADR 0516). A member of a class nothing reaches
+/// ([`SiteReach::function_runs`], ADR 0458) never runs it: no obligation.
+pub(crate) fn inside_class_member(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let at = super::in_place_run_site(file, span, lookup).map_or(span, |(climb, _)| climb.at);
+    crate::owners::containing_ast_function(&file.ast, at).is_some_and(|function| {
+        class_of_member(file, function).is_some()
+            && SiteReach::new(lookup).function_runs(file, function)
+    })
+}
+
 /// The class whose constructor, method or accessor `function` is.
 fn class_of_member<'f>(
     file: &'f solid_facts::FileFacts,

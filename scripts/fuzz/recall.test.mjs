@@ -3,7 +3,7 @@ import { legalCells, recallLegalShapes, generateLegal } from "./legal.mjs";
 import { cellList, generateShape, gridShapes, recallShapes, shapeSeed } from "./matrix.mjs";
 import {
   CALLBACK_CONTEXTS, CALLBACK_FORMS, CALLEE_FORMS, RECALL_API_BINDINGS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, RECALL_VALUE_BINDINGS, SOURCE_AXES,
-  SPEC, TEMPLATE_CODES, recallContextsOf,
+  REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallVariantsOf,
 } from "./misuse.mjs";
 import { RECALL_MOUNTS, mountParts } from "./mounts.mjs";
 import { legalPartner, pairOutcome, siteAnswer } from "./mutation.mjs";
@@ -155,5 +155,67 @@ describe("the recall axes and one-source variants", () => {
         if (carried[shape.variant]) expect(carried[shape.variant]).toContain(shape.source);
       }
     }
+  });
+});
+
+describe("the ref contexts (recall only)", () => {
+  it("are recall cells of the misuse and legal grids, never base cells", () => {
+    const isRef = (cell) => cell.context.startsWith("ref");
+    expect(cellList().filter(isRef)).toEqual([]);
+    expect(legalCells().filter(isRef)).toEqual([]);
+    expect(cellList({ recall: true }).filter(isRef).map((cell) => cell.context)).toEqual(expect.arrayContaining([...REF_CONTEXTS, "ref-factory-body"]));
+    expect(legalCells({ recall: true }).filter(isRef)).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "ref" });
+    expect(legalCells({ recall: true }).filter(isRef)).toContainEqual({ code: "NO_OWNER_EFFECT", context: "ref-factory-body" });
+  });
+  it("a legal recall context takes its whole base grid, and the legal grid builds it", () => {
+    const shapes = recallLegalShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "ref-named");
+    expect(shapes.length).toBeGreaterThan(0);
+    const { built } = generateLegal({ seed: 1 }, { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "ref-named" }, { shape: shapes[0] });
+    expect(built.files["App.tsx"]).toMatch(/<p ref=\{rf\d+\} data-view="v\d+">x<\/p>/);
+  });
+  it("prints each callback form on an intrinsic", () => {
+    expect(text("NO_OWNER_EFFECT", "ref", { variant: "effect" })["App.tsx"]).toMatch(/<p ref=\{\(\) => \{[^]*createEffect\(/);
+    expect(text("NO_OWNER_EFFECT", "ref-array", { variant: "effect" })["App.tsx"]).toMatch(/ref=\{\[\(\) => \{[^]*\}, \(\) => \{\}\]\}/);
+    expect(text("NO_OWNER_EFFECT", "ref-cond", { variant: "effect" })["App.tsx"]).toMatch(/ref=\{1 \? \(\) => \{[^]*\} : undefined\}/);
+    expect(text("NO_OWNER_EFFECT", "ref-factory", { variant: "effect" })["App.tsx"]).toMatch(/const dir\d+ = \(\) => \{\s+return \(\) => \{[^]*ref=\{dir\d+\(\)\}/);
+    expect(text("NO_OWNER_EFFECT", "ref-row", { variant: "effect" })["App.tsx"]).toMatch(/<For each=\{\[1\]\}>[^]*<p ref=\{/);
+    const body = text("REACTIVE_WRITE_IN_OWNED_SCOPE", "ref-factory-body", { variant: "signal" })["App.tsx"];
+    expect(body.indexOf("setW")).toBeLessThan(body.indexOf("return () => {}"));
+  });
+});
+
+describe("the owned and legal positions (recall only)", () => {
+  it("are recall cells only, and keep their base cells", () => {
+    const isPos = (cell) => cell.context.startsWith("pos-");
+    expect(cellList().filter(isPos)).toEqual([]);
+    expect(legalCells().filter(isPos)).toEqual([]);
+    expect(cellList({ recall: true })).toContainEqual({ code: "STRICT_READ_UNTRACKED", context: "owner-null" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "settled" });
+    expect(legalCells()).not.toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "settled" });
+    const contexts = (code) => [...SPEC[code].contexts, ...recallContextsOf(code)];
+    for (const code of Object.keys(SPEC)) expect(new Set(contexts(code)).size).toBe(contexts(code).length);
+  });
+  it("prints each position", () => {
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-attr", { variant: "signal" })["App.tsx"]).toMatch(/<p data-attr=\{\(\(\) => \{[^]*setW\d+\(/);
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-class-method", { variant: "signal" })["App.tsx"]).toMatch(/class \w+ \{\s+m\(\) \{[^]*new \w+\(\)\.m\(\);/);
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-foreach", { variant: "signal" })["App.tsx"]).toContain("[1].forEach(");
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-handler-root", { variant: "signal" })["App.tsx"]).toMatch(/onClick=\{\(\) => \{[^]*createRoot\(/);
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-handler-owner", { variant: "signal" })["App.tsx"]).toMatch(/const boundOwner = createOwner\(\);[^]*onClick=\{\(\) => \{[^]*runWithOwner\(boundOwner,/);
+  });
+});
+
+describe("the store operations and the setup positions (recall only)", () => {
+  it("cross the store operations on the base bindings only in the recall grids", () => {
+    const ops = recallVariantsOf("STORE_WRITE_OUTSIDE_SETTER");
+    expect(ops).toEqual(expect.arrayContaining(["compound", "object-assign", "items-sort", "items-length", "nested-held"]));
+    expect(gridShapes("STORE_WRITE_OUTSIDE_SETTER", "body").some((shape) => ops.includes(shape.variant))).toBe(false);
+    expect(recallShapes("STORE_WRITE_OUTSIDE_SETTER", "body").filter((shape) => shape.variant === "items-sort").length).toBeGreaterThan(0);
+    const sort = text("STORE_WRITE_OUTSIDE_SETTER", "body", { variant: "items-sort" })["App.tsx"];
+    expect(sort).toContain("createStore({ v: 0, items: [1, 2] })");
+    expect(sort).toMatch(/s\d+\.items\.sort\(\(a, b\) => b - a\)/);
+  });
+  it("prints a handler expression and flush(fn)", () => {
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-handler-expr", { variant: "signal" })["App.tsx"]).toMatch(/<p onClick=\{\(\(\(\) => \{[^]*setW\d+\([^]*\}\)\(\), \(\) => \{\}\)\}/);
+    expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-flush-fn", { variant: "signal" })["App.tsx"]).toMatch(/flush\(\(\) => \{[^]*setW\d+\(/);
   });
 });

@@ -228,6 +228,14 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   site in a layer's parameter list uncertifiable; a primitive's callback, a
   stored or handed-on function, a fresh stack or a layer called inside JSX
   ends the climb.
+- **A read in such layers belongs to the enclosing function's summary (ADR 0522).**
+  `const dir1 = () => { h1(() => { r1(); }); … }` reads at the `h1` call when
+  `dir1` is called: a `ref` factory the JSX evaluates eagerly, a statement in
+  the body or a hook called there is a violation; a factory in a tracked
+  attribute, a timer's callback and a stored callback stay silent. A helper or
+  a hook's accessor called in a class member's body is an obligation (ADR
+  0516), as is a read in a generator stepped at its own call inside a function
+  an intrinsic `ref` applies.
 - **An effect apply reading an async source stays here (ADR 0467).** A run
   that meets the source pending throws `PENDING_ASYNC_UNTRACKED_READ` instead
   of the warning; when the apply first runs against the source's settling is

@@ -1145,6 +1145,12 @@ pub struct OwnerRequirement {
     /// function was entered with.
     #[serde(default, skip_serializing_if = "is_false")]
     pub after_await: bool,
+    /// The operation runs after a `yield` of a promise in the generator an
+    /// action steps, on every path through its body: the next step runs from
+    /// the promise's continuation, where no owner is current. Proven unowned
+    /// whatever owner the action was called under.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub after_yield: bool,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted

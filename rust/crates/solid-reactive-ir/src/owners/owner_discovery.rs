@@ -38,12 +38,22 @@ pub(crate) fn discover_owner_file(
     let list_site = |span| crate::owners::in_parameter_list(&file.ast, span);
     // Keyed by function span: the emission pass resolves it to the node whose
     // propagated context it reads, as it does `owner`.
+    // A region never answers for the stepped generator of an action: its
+    // body runs where the action is called, never where it is written, so an
+    // operation under one is judged on the graph (its callers' edges).
     let region_chain = |span| {
         providing_region_chain(
             &providing_regions,
             nodes.iter().map(|node| (node.span, node.span, node.body)),
             span,
         )
+        .filter(|chain: &Vec<Span>| {
+            !chain.iter().any(|function| {
+                file.ast.function_at(*function).is_some_and(|function| {
+                    stepped_action_generator(file, function, lookup).is_some()
+                })
+            })
+        })
     };
     // The callback an argument names, exactly as `owner_callback_index` reads
     // it: the function literal itself (or an event tuple's handler slot), or
@@ -67,6 +77,9 @@ pub(crate) fn discover_owner_file(
                 crate::owners::exact_function_argument(file, argument, lookup)
                     .map(|(path, span)| OwnerTarget::Function(path, span))
             })
+            // The stepped generator of an action a `const` holds: the action
+            // runs its first step where it is called.
+            .or_else(|| named_action_generator(file, argument, lookup).map(OwnerTarget::LocalSpan))
             .or_else(|| {
                 if !is_identifier_span(file, argument) {
                     return None;
@@ -124,6 +137,9 @@ pub(crate) fn discover_owner_file(
             .object_member_function(file, call.callee)
             .map(|(file, function)| OwnerTarget::Function(file.path.to_string(), function.span))
             .or_else(|| {
+                named_action_generator(file, call.callee, lookup).map(OwnerTarget::LocalSpan)
+            })
+            .or_else(|| {
                 call_edge_symbol(file, call, entities, lookup)
                     .cloned()
                     .map(OwnerTarget::Symbol)
@@ -136,7 +152,7 @@ pub(crate) fn discover_owner_file(
         let kind = if in_list {
             OwnerEdgeKind::MayBeUnowned
         } else {
-            call_owner_edge(file, call.callee)
+            call_owner_edge(file, call.callee, lookup)
         };
         // ADR 0468: an edge to a function the call may run, not one it does:
         // the source's owner without its proof ([`OwnerEdgeKind::MayRun`]).
@@ -216,7 +232,7 @@ pub(crate) fn discover_owner_file(
                     kind: if in_list {
                         OwnerEdgeKind::MayBeUnowned
                     } else {
-                        call_owner_edge(file, call.callee)
+                        call_owner_edge(file, call.callee, lookup)
                     },
                 });
             }

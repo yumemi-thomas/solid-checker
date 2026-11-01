@@ -249,6 +249,9 @@ impl Finding {
             } else if requirement.after_await {
                 "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
                     .into()
+            } else if requirement.after_yield {
+                "this call runs after the action body yielded a promise, from that promise's continuation: the owner the action was called under is not current after the `yield`, and no other owner is"
+                    .into()
             } else if component_uncertain {
                 "component identity is unresolved, so this operation may execute with or without a reactive owner"
                     .into()
