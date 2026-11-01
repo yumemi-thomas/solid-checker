@@ -528,7 +528,7 @@ mod tests;
 
 /// A closed reference census for a component returned directly by the source
 /// literal of an exact dynamic factory. Other entries withhold the placement.
-fn dynamic_component_entry(
+pub(crate) fn dynamic_component_entry(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,

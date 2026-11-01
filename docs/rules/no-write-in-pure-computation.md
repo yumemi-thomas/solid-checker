@@ -44,7 +44,9 @@ settles on its first pass (no call, read or reference), and the call is on
 every completion of the body. `schedule` withholds the first run as `defer`
 does (ADR 0502). A `createRenderEffect` created where
 writes are legal (an event handler, module scope) leaves every run of its apply
-legal.
+legal. A callback the dialect runs with no owner whenever it runs (a
+`createReaction` callback, a `createEffect` apply) leaves a write legal also in
+a layer it runs in place (an IIFE, a helper calling its callback; ADR 0540).
 
 A control-flow component's children callback (`For`'s row) runs under an
 owner, and its JSX children are render computations. A write in a function the

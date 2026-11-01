@@ -250,6 +250,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   0509), both stay uncertifiable at the read, this rule's and that one's
   (ADR 0511): a `<Loading>` that shows its fallback holds a user effect to the
   reveal, where the warning fires instead.
+- **An effect's returned cleanup and its error arm.** A read in the cleanup an
+  apply returns is uncertifiable: a rerun runs it in the window, a disposal
+  outside it (ADR 0539). A compute with no call, no reference and a literal
+  return never reruns, and its cleanup is silent. A read in an exact bundle's
+  `error` member is silent: rc.17 runs it before the window opens (ADR 0540).
 
 ## Why is this bad?
 

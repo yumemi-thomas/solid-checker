@@ -167,10 +167,12 @@ effect.
 - **Positions it does not place.** An apply passed by name
   (`createEffect(v, applyFn)`), the `{ effect, error }` bundle form, and an
   apply the engine proves absent (`defer: true` on a constant compute: it
-  reports nothing there, ADR 0302). `createRenderEffect`
-  is never claimed (see the table).
+  reports nothing there, ADR 0302). `createRenderEffect`'s apply is
+  uncertifiable on rc.17, never a violation (ADR 0541; see the table).
 - **Returned cleanups.** A cleanup function the apply returns reports only on
-  the run that replaces it, so no single answer holds.
+  the run that replaces it, so no single answer holds: uncertifiable (ADR 0541).
+- **`createReaction`.** On rc.17 its callback is a deferred user effect's apply
+  and runs only from the draining flush: claimed as an apply is (ADR 0541).
 
 ## Premises
 

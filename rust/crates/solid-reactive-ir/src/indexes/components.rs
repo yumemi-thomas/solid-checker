@@ -305,7 +305,16 @@ impl<'a> SemanticLookup<'a> {
                 .functions_within(function.body)
                 .filter(|inner| {
                     (crate::execution_role::function_placed_by_dialect(file, inner.span, self)
-                        && !crate::execution_role::function_runs_inline(file, inner.span, self))
+                        && !crate::execution_role::function_runs_inline(file, inner.span, self)
+                        // ADR 0542: `flush(fn)` runs its callback where the
+                        // body is, however the body is entered, unless ADR
+                        // 0530's census proves the body is entered only as a
+                        // component through an exact dynamic factory.
+                        && (!crate::execution_role::function_keeps_caller_context(
+                            file, inner.span, self,
+                        ) || crate::execution_role::dynamic_component_entry(
+                            file, inner.span, self,
+                        ) == Some(true)))
                         // A nested component a tag renders is a component
                         // however this body is entered.
                         || (self.jsx_call_site_loading(path, inner.span).any

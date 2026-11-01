@@ -321,5 +321,11 @@
    "lg-action-called-in-owned-scope-reaction-x-direct-iife"
   ],
   "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
+ },
+ {
+  "finding": "A read in flush(fn) in a component also handed out as a plain function ([1].map(Row)) was proven SC1001: the undecided-component funnel carved out flush's callback (ADR 0542)",
+  "found": "review of full-7's 12 dynamic-mount STORE_WRITE_OUTSIDE_SETTER wrong-rule rows (those stay: ADR 0530 proves dynamic-only entries)",
+  "fixed": "t3/verify-fuzz-recall",
+  "outside": "no mount hands a component to plain code as a function value; fixture undecided-flush-callback holds the case (old build: violation)"
  }
 ]

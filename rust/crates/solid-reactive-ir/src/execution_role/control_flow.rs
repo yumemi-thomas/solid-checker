@@ -267,6 +267,36 @@ pub(crate) fn function_runs_inline(
         })
 }
 
+/// ADR 0542: whether `function` is written as the callback of a primitive that
+/// runs it during the call and keeps the caller's owner and read role
+/// ([`solid_dialect::Dialect::callback_preserves_owner_write_context`] with an
+/// inline execution: `flush(fn)`, `untrack(fn)`). Where the caller runs, it
+/// runs: no primitive places it.
+pub(crate) fn function_keeps_caller_context(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            !call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_preserves_owner_write_context(primitive)
+                            && lookup
+                                .dialect
+                                .callback_semantics_at(primitive, index, call.arguments.len())
+                                .execution
+                                == Some(Execution::Inline)
+                    })
+        })
+}
+
 /// The expression an expression-container child (`{expression}`) holds, with
 /// transparent TypeScript wrappers peeled. `None` for a text, element or
 /// fragment child, which holds no expression of its own.
