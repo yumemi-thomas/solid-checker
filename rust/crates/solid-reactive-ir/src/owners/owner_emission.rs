@@ -21,6 +21,7 @@
 
 use super::owner_state::{NodeId, OwnerGraph, PathId};
 use super::*;
+use crate::role_log::arm_id;
 use typefacts::Location;
 
 /// One file's emitted requirements and what they were emitted under.
@@ -137,10 +138,18 @@ pub(super) fn emit_file(
             }
             continue;
         }
+        // The role log's answer for this candidate (ADR 0533): which arm set
+        // its context last. Write-only; nothing below reads it.
+        let mut arm = if owner.is_none() {
+            arm_id!("owner_emission.no-owner-node")
+        } else {
+            arm_id!("owner_emission.region-context")
+        };
         // A function no owner edge reaches holds context zero: its body never
         // runs from syntax. Its parameter list is no such claim (ADR 0454).
         if candidate.in_parameter_list && context == 0 {
             context = OWNER_CONTEXT_UNOWNED;
+            arm = arm_id!("owner_emission.parameter-list");
         }
         // ADR 0472: context zero is no proof for a function whose value its
         // function returns: the caller of that function may call it later, on
@@ -154,6 +163,7 @@ pub(super) fn emit_file(
                 .is_some_and(|span| returned_unreached_function(graph, pid, file, span));
         if returned_unplaced {
             context = OWNER_CONTEXT_UNOWNED;
+            arm = arm_id!("owner_emission.returned-unplaced");
         }
         // ADR 0534: a function proven never to run (ADR 0458's query) has no
         // operation to place.
@@ -278,10 +288,23 @@ pub(super) fn emit_file(
             })
         });
         let context = if after_await {
+            arm = if after_yield {
+                arm_id!("owner_emission.after-yield")
+            } else {
+                arm_id!("owner_emission.after-await")
+            };
             await_continuation_context(context)
         } else {
+            if possible_continuation.is_some() {
+                arm = arm_id!("owner_emission.possible-continuation");
+            }
             possible_continuation.unwrap_or(context)
         };
+        if context == 0 {
+            // No owner edge reaches the function: its body never runs from
+            // syntax, so nothing is reported (the saturation report's class 1).
+            arm = arm_id!(default "owner_emission.context-0");
+        }
         // A read of a provider-free context under an owner throws
         // `ContextNotFoundError` (ADR 0352).
         let provider_free_read = candidate.operation == "context-read"
@@ -307,7 +330,18 @@ pub(super) fn emit_file(
         // a provider finding, not an owner question (ADR 0352).
         let provider = provider_free_read && (root_owned || owned_on_every_path(context));
         if root_owned && !provider {
+            crate::role_log::owner(
+                candidate.operation,
+                path,
+                candidate.operation_span,
+                arm_id!("owner_emission.root-owned"),
+                context,
+                true,
+            );
             continue;
+        }
+        if provider {
+            arm = arm_id!("owner_emission.provider-free-read");
         }
         let (operation, report_hit) = if provider {
             ("context-provider", true)
@@ -354,15 +388,31 @@ pub(super) fn emit_file(
                             resolved.validity == typefacts::ResolvedCallValidity::Valid
                         })
             });
+            let cleanup_skipped = |arm| {
+                crate::role_log::owner(
+                    candidate.operation,
+                    path,
+                    candidate.operation_span,
+                    arm,
+                    context,
+                    true,
+                );
+            };
             match cleanup_proof.unwrap_or(CleanupReturnProof::Unresolved) {
-                CleanupReturnProof::NoFunction => continue,
+                CleanupReturnProof::NoFunction => {
+                    cleanup_skipped(arm_id!("owner_emission.cleanup-no-function"));
+                    continue;
+                }
                 CleanupReturnProof::Function => {}
                 CleanupReturnProof::OptionalFunction => {
                     // The callback may return a cleanup. Preserve that as
                     // runtime uncertainty instead of certifying it absent.
                 }
                 CleanupReturnProof::Unresolved if settled_call_valid => {}
-                CleanupReturnProof::Unresolved => continue,
+                CleanupReturnProof::Unresolved => {
+                    cleanup_skipped(arm_id!("owner_emission.cleanup-unresolved-call"));
+                    continue;
+                }
             }
         }
         let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
@@ -409,6 +459,20 @@ pub(super) fn emit_file(
             || component_uncertain
             || unplaced_callback
             || provider_open;
+        // A cleanup in a leaf that is not owned is reported; in an owned leaf
+        // it is SC3001's claim (ADR 0347 amendment).
+        let report = report_hit
+            || (candidate.operation == "cleanup"
+                && context & OWNER_CONTEXT_LEAF != 0
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0);
+        crate::role_log::owner(
+            operation,
+            path,
+            candidate.operation_span,
+            arm,
+            context,
+            !report && !uncertain,
+        );
         push_owner_requirement(
             &mut emission.requirements,
             &mut seen,
@@ -426,12 +490,7 @@ pub(super) fn emit_file(
                 provider_open,
                 after_await: after_await && !after_yield,
                 after_yield,
-                // A cleanup in a leaf that is not owned is reported; in an
-                // owned leaf it is SC3001's claim (ADR 0347 amendment).
-                report: report_hit
-                    || (candidate.operation == "cleanup"
-                        && context & OWNER_CONTEXT_LEAF != 0
-                        && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),
+                report,
             },
             lookup,
         );

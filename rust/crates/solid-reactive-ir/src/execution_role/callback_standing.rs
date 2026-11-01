@@ -1139,7 +1139,10 @@ pub(super) fn inline_callback_execution_role(
                     lookup,
                 )
             {
-                return Some(ExecutionRole::Unknown);
+                return Some(role_arm!(
+                    "callback_standing.inline_callback_execution_role.unknown",
+                    ExecutionRole::Unknown
+                ));
             }
             Some(role)
         })
@@ -1250,7 +1253,10 @@ pub(super) fn role_at_returned_invocations(
         // contexts. A single diagnostic site cannot truthfully claim one
         // dominates, so preserve uncertainty instead of manufacturing a
         // false positive in either direction.
-        _ => Some(ExecutionRole::DeferredCallback),
+        _ => Some(role_arm!(
+            default "callback_standing.returned-invocations-incompatible",
+            ExecutionRole::DeferredCallback
+        )),
     }
 }
 

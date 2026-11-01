@@ -8,12 +8,15 @@
 //   node scripts/fuzz/focus.mjs --codes A,B --checker-bin <solid-checker-rust> --typefacts <solid-typefacts>
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
-//     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>]
+//     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]]
 // `--split-codes`: one grid process per code (`<grid>/<code>/`), so a large grid (mx-recall, 277k programs) stays within a heap and a
 // failure or hang costs one code; `--prune-cases`: delete each grid's `cases/` and `chrome-cases/` once its rows are read (a program is
 // a directory of files: three full runs filled a VM disk's inodes); `--grid-timeout`: a grid process that runs longer is killed and
 // reported (default 120 minutes; a stalled Chrome or a paused VM once hung a run for hours); `--heap-mb`: the grid process's heap
 // (default 12000 for the recall grids, Node's default otherwise). Each grid's output streams to `<grid>.log` while it runs.
+// `--role-log` (ADR 0533): each grid's checkers append the role log to `<grid>.roles.jsonl` (one file: a directory would take an inode
+// per program); it is folded into `<grid>/roles.json` and the run's
+// `<out>/roles.json` (roles.mjs: arms hit and never hit, yield, new arms against `--roles-against`, silent-by-default decisions).
 // `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json),
 // plus `--sample` of its other programs picked anew each run (`--sample-seed` repeats a run's pick; the summary prints it).
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
@@ -27,6 +30,7 @@ import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
+import { foldGrids, summaryLine } from "./roles.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -85,11 +89,11 @@ export function roomAt(dir, { statfs = statfsSync } = {}) {
   return null;
 }
 
-export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runtime = NODE }) {
+export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runtime = NODE, env = process.env }) {
   mkdirSync(dirname(logPath), { recursive: true });
   const log = openSync(logPath, "w");
   try {
-      const run = spawnSync(runtime, [...(heapMb ? [`--max-old-space-size=${heapMb}`] : []), script, ...args], { stdio: ["ignore", log, log], timeout: timeoutMs, killSignal: "SIGTERM" });
+      const run = spawnSync(runtime, [...(heapMb ? [`--max-old-space-size=${heapMb}`] : []), script, ...args], { stdio: ["ignore", log, log], timeout: timeoutMs, killSignal: "SIGTERM", env });
       return { status: run.status, signal: run.signal, timedOut: run.error?.code === "ETIMEDOUT" };
     } finally {
       closeSync(log);
@@ -103,11 +107,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-      if (key === "splitCodes" || key === "pruneCases") { options[key] = true; index -= 1; continue; }
-      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (key === "splitCodes" || key === "pruneCases" || key === "roleLog") { options[key] = true; index -= 1; continue; }
+      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
+    if (options.rolesAgainst && !options.roleLog) throw new Error("focus.mjs: --roles-against needs --role-log");
     // A smoke manifest names one grid's programs across its codes: a per-code process would not generate them all.
     if (options.splitCodes && options.smoke) throw new Error("focus.mjs: --split-codes does not apply to --smoke (a smoke grid is small)");
     for (const grid of options.grids.split(",")) if (!GRIDS[grid]) throw new Error(`focus.mjs: no grid ${grid} (${Object.keys(GRIDS).join(", ")})`);
@@ -122,6 +127,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
     const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...oracle];
     const attention = [];
+    const folded = [];
+    const against = options.rolesAgainst ? { ...JSON.parse(readFileSync(resolve(options.rolesAgainst), "utf8")), path: resolve(options.rolesAgainst) } : null;
     console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}`);
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
@@ -135,7 +142,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const select = [...(unit.codes ? ["--codes", unit.codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
       const heap = options.heapMb ?? (grid.endsWith("-recall") ? "12000" : undefined);
       const logPath = `${unit.dir}.log`;
-      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, "--out", unit.dir, ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap });
+      // The role log: one file per grid that every checker process appends whole lines to (role_log.rs), folded once the grid's rows
+      // are written; a line two processes interleaved is counted as malformed, never folded.
+      const roles = options.roleLog ? `${unit.dir}.roles.jsonl` : null;
+      if (roles) rmSync(roles, { force: true });
+      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
+      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, "--out", unit.dir, ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const seconds = Math.round((Date.now() - started) / 1000);
       const { outcomes, flagged, oracle, behaviour } = readGrid(unit.dir);
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
@@ -160,8 +172,17 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
         if (moved.worse.length > 10) attention.push(`${unit.label}: ... ${moved.worse.length - 10} more worse`);
         for (const move of moved.other.slice(0, 5)) console.log(`             ${move.id} ${move.from} -> ${move.to}`);
       }
+      if (roles && existsSync(join(unit.dir, "programs.jsonl"))) {
+        const report = foldGrids([unit.dir], { against });
+        writeFileSync(join(unit.dir, "roles.json"), `${JSON.stringify(report, null, 2)}\n`);
+        console.log(`           ${summaryLine(report)}`);
+        if (report.notInInventory.length) attention.push(`${unit.label}: role log arms missing from the source inventory: ${report.notInInventory.slice(0, 5).join(", ")}`);
+        folded.push(unit.dir);
+      }
       if (oracle?.inconclusive) attention.push(`${unit.label}: ${oracle.inconclusive} oracle runs inconclusive (${join(unit.dir, "runtime-diff.jsonl")})`);
       if (options.pruneCases) for (const name of ["cases", "chrome-cases"]) rmSync(join(unit.dir, name), { recursive: true, force: true });
+      // The folded log is in roles.json; the raw one runs to about 23 KB a program.
+      if (options.pruneCases && roles && existsSync(join(unit.dir, "roles.json"))) rmSync(roles, { force: true });
     };
     try {
     for (const grid of options.grids.split(",")) {
@@ -179,6 +200,11 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     if (!(error instanceof FocusStop)) throw error;
     attention.push(`stopped: ${error.message}`);
     process.exitCode = 2;
+  }
+  if (folded.length) {
+    const report = foldGrids(folded, { against });
+    writeFileSync(join(out, "roles.json"), `${JSON.stringify(report, null, 2)}\n`);
+    console.log(`\n${summaryLine(report)} (${join(out, "roles.json")})`);
   }
   if (attention.length) {
     console.log(`\nneeds a look (${attention.length}):`);

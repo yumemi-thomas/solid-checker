@@ -302,6 +302,26 @@ ADR 0458: a violation at a site no execution reaches is uncertifiable, so the ch
 * **`--dead-site`** now means the strict confirmation: the strict grammar (no container) and no waiver, the conditions as they stood before. It is a mode, not a second path. Folded, not kept as its own subkind, on this evidence: the strict conditions are a subset of the default ones, so it cannot confirm anything the default does not; and it confirms none of the five known false positives (m1-m5, all containers; each ends `closed-grammar`), so as a separate verdict it would stay silent where this was built to speak. It stays only as the way to ask for the smaller claim.
 * **Not covered.** A finding on a plumbing line stays `inconclusive`, so two of the five original programs (a createEffect call after an `await` in a component never rendered) are not flagged in that shape; their minimal forms with a payload site are. A shrunk repro keeps its witness probes (Chrome waits on them) but is not rerun in Chrome.
 
+## The role log and saturation
+
+ADR 0533. A grid's findings say what it found, not whether its programs reached checker code the earlier grids never ran. The checker records which arm of its role and owner classifiers answered each decision when `SOLID_CHECKER_IR_ROLE_LOG` names a file (appended to) or a directory (one `roles-<pid>.jsonl` per checker process, so a grid's concurrent checkers never share a file). One JSON line per decision: `k` (`read`, `write`, `action`, `role`, `owner`; `unframed` for an arm hit outside one), `f`/`s`/`e` (the site), `role` (or `rule` and `ctx` for an owner answer), `arm` (the last tagged arm that returned the final answer; null when an untagged path did), `arms` (every tagged arm passed), `default`, `silent` (no rule reports the answer; absent for `role`, which feeds both rule families). An arm is a `role_arm!("<file stem>.<name>", …)` or `arm_id!(…)` literal in `rust/crates/solid-reactive-ir/src/execution_role*` and `owners/`; `default` marks a non-reporting answer given for want of a proof. The log changes no verdict and costs one atomic load per hook when unset.
+
+```bash
+# The focus loop with the log: <grid>.roles.jsonl per grid, <grid>/roles.json per grid, <out>/roles.json for the run
+node scripts/fuzz/focus.mjs --codes A,B --checker-bin ... --typefacts ... --role-log [--roles-against <earlier roles.json>]
+# By hand, any grid (the log beside the fresh --out)
+SOLID_CHECKER_IR_ROLE_LOG=<out>.roles.jsonl node scripts/fuzz/matrix.mjs --out <out> ...
+node scripts/fuzz/roles.mjs [--against <roles.json>] [--out <roles.json>] <out> [<more grid dirs>]
+```
+
+`roles.json`: `armsKnown` (the inventory, read from the source; a duplicate id or one under another file's stem fails the fold), `armsHit`, `neverHit` (the audit queue: no program reached them), `notInInventory` (a stale build), per arm `passed`, `answered`, `programs`, `silent`, `roles`, `kinds`, and `saturation`:
+
+* `yield`: findings per 1,000 programs (`false-clean`, `wrong-rule`, `false-positive`), fast-path candidates and Chrome-confirmed (`chrome.status` same).
+* `growth`: arms this run hit that `--against`'s run did not (null without one).
+* `silentByDefault`: decisions a `default` arm answered with a role no rule reports. Each is a place where silence is a default, not a proof.
+
+A slice is saturated for its axis when its new programs raise none of the three (0 confirmed, 0 new arms, a flat silent-by-default count); its axis then belongs in the smoke set only. A decision counts once per program and site, so a program the checker ran twice (a confirmation, a twin) counts once. A grid's log is one file every checker appends whole lines to (a directory would take an inode a program, ADR 0519); a line two processes interleaved is `malformed` in `roles.json`, never folded. The raw log runs to about 23 KB a program (336 STRICT_READ_UNTRACKED programs: 7.8 MB), so a recall grid takes `--split-codes`, and `--prune-cases` deletes each log once folded. Overhead on that grid, release checker, 4 at a time: 2,642-2,802 ms without the log, 2,681-2,785 ms with it (three rounds each), every finding the same. The log covers the classifiers, not the whole engine: region coverage (`cargo llvm-cov`, ADR 0533) is the stronger measure. When it is not installed (no `llvm-tools-preview` on the pinned toolchains, no `cargo-llvm-cov`, as on 2026-11-01), the arm log substitutes for `execution_role/` and `owners/`: `neverHit` is the uncovered-arm queue and `growth` the per-PR delta, with two limits: an arm is a return, not a region (code between two returns is not seen), and `local_access.rs` and `interproc/` carry no arms. To get region coverage later: `rustup component add llvm-tools-preview --toolchain 1.99.1`, `cargo binstall cargo-llvm-cov`, a `RUSTFLAGS=-Cinstrument-coverage` build in its own target directory, `LLVM_PROFILE_FILE` set for a smoke run (about 2-3x slower).
+
 ## Equivalence mode
 
 `node scripts/fuzz/equivalence.mjs` is metamorphic testing. For each generated program it runs the checker on the program and on `--equivalence N` variants (default 3), each the program under **one** rewrite that does not change what it does at run time (`rewrite.mjs`). The verdict at every site of interest is compared across the two. The rewrites are equivalent by construction, so a different verdict is a checker placement path that handles one spelling and not the other; no runtime is needed to find it, and Chrome only says which side is right. It takes the generator flags of `run.mjs` (`--profile`, `--seed`, `--count`, the tool flags), works with every profile, and leaves `run.mjs` and its verdicts untouched when it is not used.
@@ -387,6 +407,7 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 | `exec.mjs`, `exec/` | the Rust executor: projects, type checks, checker runs and the Chrome pages off the orchestrator's thread; `exec/vite-host.mjs` its Vite helper |
 | `runtime-diff.mjs` | the runtime differential: the fast path's records against the oracle's, behaviour apart from attribution |
 | `focus.mjs`, `smoke.mjs`, `smoke/` | `make fuzz-focus` (the grids for some codes) and `make fuzz-smoke` (the smoke manifests, their selection and validation) |
+| `roles.mjs` | the role-log fold: arms hit and never hit, and the saturation numbers (`roles.json`, ADR 0533) |
 | `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest), `--fast-host happy-dom` |
 | `classify.mjs`, `codes.mjs` | the comparator; the policy table per rc.17 code and the oracle's code/rule tables (tests fail when they drift) |
 | `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |

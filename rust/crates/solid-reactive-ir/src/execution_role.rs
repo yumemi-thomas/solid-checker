@@ -5,6 +5,7 @@
 //! the compiler-fact classifier plus the semantic (AST-driven) classifier and
 //! the two role-keyed read helpers that consume its result.
 
+use crate::role_log::role_arm;
 use crate::{HashMap, HashSet};
 
 use solid_dialect::{Dialect, Execution, Primitive};
@@ -153,7 +154,10 @@ fn execution_role_where(
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused has no facts to place anything.
     if facts.withheld() {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "execution_role.execution_role_where.unknown",
+            ExecutionRole::Unknown
+        );
     }
     // Only facts strictly inside `within` place `span`, when given.
     let inside =
@@ -174,10 +178,16 @@ fn execution_role_where(
         .iter()
         .any(|region| region.span.contains(span))
     {
-        return ExecutionRole::DiscardedRendering;
+        return role_arm!(
+            "execution_role.execution_role_where.discarded-rendering",
+            ExecutionRole::DiscardedRendering
+        );
     }
     if allowed.iter().any(|region| region.contains(span)) {
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(
+            "execution_role.execution_role_where.deferred-callback",
+            ExecutionRole::DeferredCallback
+        );
     }
     let tracked = facts.tracked_regions.iter().filter_map(|region| {
         (region.span.contains(span) && inside(region.span)).then_some((
@@ -221,7 +231,10 @@ fn execution_role_where(
     {
         return role;
     }
-    ExecutionRole::Unknown
+    role_arm!(
+        "execution_role.execution_role_where.unknown-2",
+        ExecutionRole::Unknown
+    )
 }
 
 /// Compiler execution role for code that actually runs at `span`.
@@ -275,15 +288,17 @@ pub(super) fn semantic_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
-    semantic_execution_role_within(
-        file,
-        span,
-        allowed,
-        entities,
-        symbol_names,
-        lookup,
-        &mut HashSet::default(),
-    )
+    crate::role_log::decide("role", file.path.as_str(), span, || {
+        semantic_execution_role_within(
+            file,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            &mut HashSet::default(),
+        )
+    })
 }
 
 /// [`semantic_execution_role`] for a reactive read. A read in a function an
@@ -311,6 +326,19 @@ pub(super) fn read_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
+    crate::role_log::decide("read", file.path.as_str(), span, || {
+        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
+    })
+}
+
+fn read_execution_role_unlogged(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
     let role = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
     // Deleted code and code past an await keep their answers.
     if matches!(
@@ -325,7 +353,10 @@ pub(super) fn read_execution_role(
         return applied;
     }
     if role == ExecutionRole::DirectiveApply {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "execution_role.read_execution_role_unlogged.unknown",
+            ExecutionRole::Unknown
+        );
     }
     dynamic_read_role(file, span, role, lookup)
 }
@@ -410,13 +441,31 @@ fn ref_applied_read_role(
         lookup,
     );
     if created != ExecutionRole::UntrackedRendering {
-        return Some(ExecutionRole::Unknown);
+        return Some(role_arm!(
+            "execution_role.ref_applied_read_role.unknown",
+            ExecutionRole::Unknown
+        ));
     }
     if let Some((climb, through_generator)) = climb {
         match climb.suspended {
-            Some(true) => return Some(ExecutionRole::Unreported),
-            Some(false) => return Some(ExecutionRole::Unknown),
-            None if climb.in_list || through_generator => return Some(ExecutionRole::Unknown),
+            Some(true) => {
+                return Some(role_arm!(
+                    "execution_role.ref_applied_read_role.unreported",
+                    ExecutionRole::Unreported
+                ));
+            }
+            Some(false) => {
+                return Some(role_arm!(
+                    "execution_role.ref_applied_read_role.unknown-2",
+                    ExecutionRole::Unknown
+                ));
+            }
+            None if climb.in_list || through_generator => {
+                return Some(role_arm!(
+                    "execution_role.ref_applied_read_role.unknown-3",
+                    ExecutionRole::Unknown
+                ));
+            }
             None => {}
         }
     }

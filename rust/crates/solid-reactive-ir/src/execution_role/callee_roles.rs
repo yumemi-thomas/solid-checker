@@ -112,7 +112,10 @@ pub(crate) fn unwindowed_role_at_call(
             .resolved_callee_call(file, enclosing.callee)
             .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Valid)
     }) {
-        return ExecutionRole::Unreported;
+        return role_arm!(
+            "callee_roles.unwindowed_role_at_call.unreported",
+            ExecutionRole::Unreported
+        );
     }
     // A function literal invoked in place runs where its call is written, so
     // the awaits that precede that call count too (ADR 0340's reach).
@@ -122,14 +125,20 @@ pub(crate) fn unwindowed_role_at_call(
     let mut steps = 0;
     loop {
         if steps == 8 {
-            return ExecutionRole::Unknown;
+            return role_arm!(
+                "callee_roles.unwindowed_role_at_call.await-climb-exhausted",
+                ExecutionRole::Unknown
+            );
         }
         steps += 1;
         if follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
             || follows_try_head_await(file, at, lookup)
         {
-            return ExecutionRole::Unreported;
+            return role_arm!(
+                "callee_roles.unwindowed_role_at_call.unreported-2",
+                ExecutionRole::Unreported
+            );
         }
         suspended |= follows_any_suspension(file, at) || may_follow_own_await(file, at);
         let Some(function) = containing_ast_function(&file.ast, at) else {
@@ -146,9 +155,15 @@ pub(crate) fn unwindowed_role_at_call(
         at = invocation.span;
     }
     if suspended {
-        ExecutionRole::Unknown
+        role_arm!(
+            "callee_roles.unwindowed_role_at_call.unknown",
+            ExecutionRole::Unknown
+        )
     } else {
-        ExecutionRole::UntrackedUnwindowed
+        role_arm!(
+            "callee_roles.unwindowed_role_at_call.untracked-unwindowed",
+            ExecutionRole::UntrackedUnwindowed
+        )
     }
 }
 
@@ -171,7 +186,10 @@ pub(super) fn semantic_role_before_awaits(
     // position and be silently *certified*: a positive claim about dead code
     // either way.
     if discarded_region_contains(file, span) {
-        return ExecutionRole::DiscardedRendering;
+        return role_arm!(
+            "callee_roles.discarded-region",
+            ExecutionRole::DiscardedRendering
+        );
     }
     // An instance field initializer is no function fact, so every path below
     // would place it -- and any literal written in it -- in the function the
@@ -179,7 +197,7 @@ pub(super) fn semantic_role_before_awaits(
     // here places. (A static field or block runs where the class is
     // evaluated, in that function, so it keeps its placement.)
     if inside_instance_field(file, span) {
-        return ExecutionRole::Unknown;
+        return role_arm!("callee_roles.instance-field", ExecutionRole::Unknown);
     }
     // Also ahead of every semantic path, for the mirror-image reason: code
     // inside a callback that runs on reads of a returned view (rc.9's `omit`
@@ -188,7 +206,10 @@ pub(super) fn semantic_role_before_awaits(
     // enclosing component body, the one place it is least likely to run --
     // so the role is left unknown and projection claims nothing about it.
     if result_access_callback_contains(file, span, lookup) {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "callee_roles.result-access-callback",
+            ExecutionRole::Unknown
+        );
     }
     // A function argument the primitive wraps in a memo of its own (2.0's
     // `merge`) runs inside that computation, not in the caller's body.
@@ -212,13 +233,13 @@ pub(super) fn semantic_role_before_awaits(
                     })
             })
     }) {
-        return ExecutionRole::Unknown;
+        return role_arm!("callee_roles.memo-wrapped-argument", ExecutionRole::Unknown);
     }
     if let Some(role) = context_provider_value_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.context-provider-value", role);
     }
     if assigned_member_function_contains(file, span, entities) {
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(default "callee_roles.assigned-member-function", ExecutionRole::DeferredCallback);
     }
     // A read in a function nested in a named callback runs where the in-place
     // layers between them (a helper's callback, an IIFE, an inline library
@@ -234,7 +255,10 @@ pub(super) fn semantic_role_before_awaits(
         && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
     {
         if climb.exhausted {
-            return ExecutionRole::Unknown;
+            return role_arm!(
+                "callee_roles.semantic_role_before_awaits.named-climb-exhausted",
+                ExecutionRole::Unknown
+            );
         }
         let role = semantic_execution_role_within(
             file,
@@ -251,10 +275,17 @@ pub(super) fn semantic_role_before_awaits(
         // no legal shape moves.
         if role.reports_untracked_read() {
             return match climb.suspended {
-                Some(true) => ExecutionRole::Unreported,
-                Some(false) => ExecutionRole::Unknown,
-                None if climb.in_list => ExecutionRole::Unknown,
-                None => role,
+                Some(true) => role_arm!(
+                    "callee_roles.named-climb-after-await",
+                    ExecutionRole::Unreported
+                ),
+                Some(false) => {
+                    role_arm!("callee_roles.named-climb-may-await", ExecutionRole::Unknown)
+                }
+                None if climb.in_list => {
+                    role_arm!("callee_roles.named-climb-in-list", ExecutionRole::Unknown)
+                }
+                None => role_arm!("callee_roles.named-climb", role),
             };
         }
         // ADR 0517: the layers run the read at a call in the callback's body
@@ -262,26 +293,26 @@ pub(super) fn semantic_role_before_awaits(
         // callback no fact places): the read is not deferred, it runs there,
         // so its role is unknown too, never the named arm's deferred.
         if role == ExecutionRole::Unknown {
-            return ExecutionRole::Unknown;
+            return role_arm!("callee_roles.named-climb-unplaced", ExecutionRole::Unknown);
         }
     }
     if classifying.contains(&write_classification_marker()) {
         if let Some(role) =
             super::named_callbacks::named_callback_write_execution_role(file, span, lookup)
         {
-            return role;
+            return role_arm!("callee_roles.named-callback-write", role);
         }
     } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.named-callback", role);
     }
     if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.returned-callback", role);
     }
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.returned-factory-callback", role);
     }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.inline-callback", role);
     }
     // ADR 0470: a read in a JSX expression the compiler wraps, written in the
     // read's own function, runs in the render computation or getter the
@@ -293,7 +324,7 @@ pub(super) fn semantic_role_before_awaits(
     if !classifying.contains(&write_classification_marker())
         && let Some(role) = own_jsx_compiler_role(file, span)
     {
-        return role;
+        return role_arm!("callee_roles.own-jsx-compiler", role);
     }
     let dialect = lookup.dialect;
     if file.ast.arguments_containing(span).any(|(call, index)| {
@@ -304,7 +335,10 @@ pub(super) fn semantic_role_before_awaits(
             == Some(index)
             && direct_callback_contains(file, call.arguments[index].span, span)
     }) {
-        return ExecutionRole::EffectApply;
+        return role_arm!(
+            "callee_roles.effect-apply-argument",
+            ExecutionRole::EffectApply
+        );
     }
     // ADR 0323 (review round 10): a callback that runs synchronously at its
     // call with the listener cleared but the strict-read window untouched
@@ -347,15 +381,18 @@ pub(super) fn semantic_role_before_awaits(
                     })
                 })
     {
-        return inheriting_call_role(
-            file,
-            call,
-            clears_tracking,
-            allowed,
-            entities,
-            symbol_names,
-            lookup,
-            classifying,
+        return role_arm!(
+            "callee_roles.inheriting-call",
+            inheriting_call_role(
+                file,
+                call,
+                clears_tracking,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            )
         );
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
@@ -386,13 +423,19 @@ pub(super) fn semantic_role_before_awaits(
                     resolved.validity == typefacts::ResolvedCallValidity::Valid
                 })
         }) {
-            ExecutionRole::UntrackedUnwindowed
+            role_arm!(
+                "callee_roles.untracked-unwindowed-argument",
+                ExecutionRole::UntrackedUnwindowed
+            )
         } else {
-            ExecutionRole::UntrackedCallback
+            role_arm!(
+                "callee_roles.untracked-argument",
+                ExecutionRole::UntrackedCallback
+            )
         };
     }
     if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.forwarded-tracked-compute", role);
     }
     if allowed.iter().any(|region| region.contains(span)) {
         // ADR 0469: a read in a layer that runs in place (an IIFE, a
@@ -406,7 +449,10 @@ pub(super) fn semantic_role_before_awaits(
             && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
         {
             if climb.exhausted {
-                return ExecutionRole::Unknown;
+                return role_arm!(
+                    "callee_roles.semantic_role_before_awaits.layer-climb-exhausted",
+                    ExecutionRole::Unknown
+                );
             }
             let role = semantic_execution_role_within(
                 file,
@@ -418,11 +464,21 @@ pub(super) fn semantic_role_before_awaits(
                 classifying,
             );
             return match climb.suspended {
-                _ if !role.reports_untracked_read() => role,
-                Some(true) => ExecutionRole::Unreported,
-                Some(false) => ExecutionRole::Unknown,
-                None if climb.in_list => ExecutionRole::Unknown,
-                None => role,
+                _ if !role.reports_untracked_read() => {
+                    role_arm!("callee_roles.allowed-climb-silent", role)
+                }
+                Some(true) => role_arm!(
+                    "callee_roles.allowed-climb-after-await",
+                    ExecutionRole::Unreported
+                ),
+                Some(false) => role_arm!(
+                    "callee_roles.allowed-climb-may-await",
+                    ExecutionRole::Unknown
+                ),
+                None if climb.in_list => {
+                    role_arm!("callee_roles.allowed-climb-in-list", ExecutionRole::Unknown)
+                }
+                None => role_arm!("callee_roles.allowed-climb", role),
             };
         }
         // ADR 0516: the climb stops at a generator, whose body runs when its
@@ -446,7 +502,10 @@ pub(super) fn semantic_role_before_awaits(
             })
         {
             if classifying.contains(&write_classification_marker()) {
-                return ExecutionRole::Unknown;
+                return role_arm!(
+                    "callee_roles.allowed-generator-write",
+                    ExecutionRole::Unknown
+                );
             }
             // An async generator's body past an `await` runs on a later task.
             if let Some(created) = crate::owners::generator_iterator_used(file, function)
@@ -463,12 +522,12 @@ pub(super) fn semantic_role_before_awaits(
                     classifying,
                 );
                 if !role.reports_untracked_read() && !role.reports_unplaced() {
-                    return role;
+                    return role_arm!("callee_roles.allowed-generator-stepped", role);
                 }
             }
-            return ExecutionRole::Unknown;
+            return role_arm!("callee_roles.allowed-generator", ExecutionRole::Unknown);
         }
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(default "callee_roles.allowed-unplaced-nested", ExecutionRole::DeferredCallback);
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
         // A read in a function nested in the flow callback that runs in
@@ -492,7 +551,10 @@ pub(super) fn semantic_role_before_awaits(
                 super::write_roles::in_place_run_site(file, span, lookup)
         {
             if climb.exhausted {
-                return ExecutionRole::Unknown;
+                return role_arm!(
+                    "callee_roles.semantic_role_before_awaits.deferred-climb-exhausted",
+                    ExecutionRole::Unknown
+                );
             }
             let placed = semantic_execution_role_within(
                 file,
@@ -505,14 +567,23 @@ pub(super) fn semantic_role_before_awaits(
             );
             if placed.reports_untracked_read() {
                 return match climb.suspended {
-                    Some(true) => ExecutionRole::Unreported,
-                    Some(false) => ExecutionRole::Unknown,
-                    None if climb.in_list || through_generator => ExecutionRole::Unknown,
-                    None => placed,
+                    Some(true) => role_arm!(
+                        "callee_roles.control-flow-climb-after-await",
+                        ExecutionRole::Unreported
+                    ),
+                    Some(false) => role_arm!(
+                        "callee_roles.control-flow-climb-may-await",
+                        ExecutionRole::Unknown
+                    ),
+                    None if climb.in_list || through_generator => role_arm!(
+                        "callee_roles.control-flow-climb-in-list",
+                        ExecutionRole::Unknown
+                    ),
+                    None => role_arm!("callee_roles.control-flow-climb", placed),
                 };
             }
         }
-        return role;
+        return role_arm!("callee_roles.control-flow", role);
     }
     {
         // A function written as a component's child expression
@@ -548,9 +619,12 @@ pub(super) fn semantic_role_before_awaits(
                             lookup,
                         ))
             }) {
-                ExecutionRole::TrackedJsx
+                role_arm!("callee_roles.tracked-region", ExecutionRole::TrackedJsx)
             } else {
-                ExecutionRole::Unknown
+                role_arm!(
+                    "callee_roles.tracked-region-unrun-closure",
+                    ExecutionRole::Unknown
+                )
             };
         }
     }
@@ -580,40 +654,49 @@ pub(super) fn semantic_role_before_awaits(
             || (!classifying.contains(&write_classification_marker())
                 && unrun_closure_within(file, argument, span, entities, symbol_names, lookup))
         {
-            ExecutionRole::Unknown
+            role_arm!(
+                "callee_roles.tracked-callback-unrun-closure",
+                ExecutionRole::Unknown
+            )
         } else {
-            ExecutionRole::TrackedJsx
+            role_arm!("callee_roles.tracked-callback", ExecutionRole::TrackedJsx)
         };
     }
     // Ahead of the compiler role and the lexical fallbacks, which place a
     // callback prop's body where the JSX is written.
     if let Some(role) = forwarded_event_prop_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.forwarded-event-prop", role);
     }
     if let Some(role) = callee_use_site_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.callee-use-site", role);
     }
     if let Some(role) = invocation_flow_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.invocation-flow", role);
     }
     let compiler_role = source_execution_role(file, span, allowed);
     if compiler_role != ExecutionRole::Unknown {
-        return compiler_role;
+        return role_arm!("callee_roles.compiler-source", compiler_role);
     }
     // Ahead of the lexical fallbacks below, which place code by where it is
     // written: a callback a fresh-stack host scheduler runs is written in the
     // component body but does not execute there.
     if let Some(role) = fresh_stack_callback_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.fresh-stack-callback", role);
     }
     if lookup.inside_component(file, span) {
-        return ExecutionRole::UntrackedRendering;
+        return role_arm!(
+            "callee_roles.inside-component",
+            ExecutionRole::UntrackedRendering
+        );
     }
     if lookup.inside_possible_component(file, span) {
         // Select the component execution branch so the relevant rule is
         // projected, while LocalAccess marks the read uncertifiable. Leaving
         // this Unknown would silently certify the ordinary-helper branch.
-        return ExecutionRole::UntrackedRendering;
+        return role_arm!(
+            "callee_roles.inside-possible-component",
+            ExecutionRole::UntrackedRendering
+        );
     }
     // Module initialization is an AST-proven one-shot execution context. It
     // is not a compiler-fact gap: no reactive owner or subscriber can be
@@ -624,9 +707,12 @@ pub(super) fn semantic_role_before_awaits(
     if !file.ast.any_function_body_containing(span)
         && !crate::owners::in_parameter_list(&file.ast, span)
     {
-        return ExecutionRole::ModuleInitialization;
+        return role_arm!(
+            "callee_roles.module-initialization",
+            ExecutionRole::ModuleInitialization
+        );
     }
-    ExecutionRole::Unknown
+    role_arm!("callee_roles.unplaced", ExecutionRole::Unknown)
 }
 
 /// The `classifying` entry that marks a write-legality classification, which
@@ -1658,7 +1744,10 @@ pub(super) fn inheriting_call_role(
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
     if clears_tracking == Some(true) {
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(
+            "callee_roles.inheriting-cleared-tracked-region",
+            ExecutionRole::DeferredCallback
+        );
     }
     let clears_tracking = clears_tracking.is_some();
     let at_call = semantic_execution_role_within(
@@ -1709,13 +1798,23 @@ pub(super) fn inheriting_call_role(
             {
                 unwindowed_role_at_call(file, call.callee, lookup)
             } else {
-                ExecutionRole::Unreported
+                role_arm!(
+                    "callee_roles.inheriting-invalid-call",
+                    ExecutionRole::Unreported
+                )
             }
         }
-        ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
+        ExecutionRole::TrackedJsx => {
+            role_arm!(default "callee_roles.inheriting-tracked-root", ExecutionRole::DeferredCallback)
+        }
         // One-shot module evaluation is no component window, and the
         // role before this ADR was the silent deferred one.
-        ExecutionRole::ModuleInitialization => ExecutionRole::Unreported,
+        ExecutionRole::ModuleInitialization => {
+            role_arm!(
+                "callee_roles.inheriting-module-initialization",
+                ExecutionRole::Unreported
+            )
+        }
         other => other,
     }
 }

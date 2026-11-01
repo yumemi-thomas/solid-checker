@@ -2743,15 +2743,17 @@ impl LocalAccessContext<'_, '_> {
             let action_execution = if alias_withheld {
                 ExecutionRole::Unknown
             } else {
-                semantic_write_execution_role(
-                    file,
-                    call.callee,
-                    allowed,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                    RootBodyGuard::Rejects,
-                )
+                crate::role_log::decide("action", file.path.as_str(), call.callee, || {
+                    semantic_write_execution_role(
+                        file,
+                        call.callee,
+                        allowed,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                        RootBodyGuard::Rejects,
+                    )
+                })
             };
             for _ in 0..multiplicity {
                 result.action_invocations.push(Arc::new(ActionInvocation {

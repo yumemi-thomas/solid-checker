@@ -693,11 +693,17 @@ pub(crate) fn named_callback_execution_role(
     }
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
-        return Some(ExecutionRole::DeferredCallback);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.deferred-callback",
+            ExecutionRole::DeferredCallback
+        ));
     }
     let role = roles.get(callback.span);
     if role.result_access {
-        return Some(ExecutionRole::Unknown);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.unknown",
+            ExecutionRole::Unknown
+        ));
     }
     if role.ref_applied {
         // Also named at a primitive's callback position: two entries, no one
@@ -716,28 +722,49 @@ pub(crate) fn named_callback_execution_role(
         );
     }
     if role.untracked_callback {
-        return Some(ExecutionRole::UntrackedCallback);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.untracked-callback",
+            ExecutionRole::UntrackedCallback
+        ));
     }
     if role.untracked_unwindowed {
-        return Some(ExecutionRole::UntrackedUnwindowed);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.untracked-unwindowed",
+            ExecutionRole::UntrackedUnwindowed
+        ));
     }
     if role.effect_apply {
-        return Some(ExecutionRole::EffectApply);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.effect-apply",
+            ExecutionRole::EffectApply
+        ));
     }
     if role.tracked {
-        return Some(ExecutionRole::TrackedJsx);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.tracked-jsx",
+            ExecutionRole::TrackedJsx
+        ));
     }
     if role.deferred {
-        return Some(ExecutionRole::DeferredCallback);
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.deferred-callback-2",
+            ExecutionRole::DeferredCallback
+        ));
     }
     if file
         .ast
         .jsx_containing(span)
         .any(|element| callback.body.contains(element.span))
     {
-        Some(ExecutionRole::TrackedJsx)
+        Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.tracked-jsx-2",
+            ExecutionRole::TrackedJsx
+        ))
     } else {
-        Some(ExecutionRole::UntrackedRendering)
+        Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.untracked-rendering",
+            ExecutionRole::UntrackedRendering
+        ))
     }
 }
 
@@ -891,10 +918,16 @@ fn inherits_callback_role(
         // A library callback may run zero times (ADR 0493 review): the read
         // is not proven to run at the layer's call.
         if super::write_roles::climb_crosses_library_callback(file, span, climb.at, lookup) {
-            return Some(ExecutionRole::Unknown);
+            return Some(role_arm!(
+                "named_callbacks.inherits_callback_role.unknown",
+                ExecutionRole::Unknown
+            ));
         }
         if climb.in_list {
-            return Some(ExecutionRole::Unknown);
+            return Some(role_arm!(
+                "named_callbacks.inherits_callback_role.unknown-2",
+                ExecutionRole::Unknown
+            ));
         }
         // The layers' own awaits are the climb's; the layer's call in the
         // callback's body may follow one of the callback's.
@@ -904,18 +937,27 @@ fn inherits_callback_role(
             || follows_dominating_await(file, at)
             || follows_try_head_await(file, at, lookup)
         {
-            return Some(ExecutionRole::Unreported);
+            return Some(role_arm!(
+                "named_callbacks.inherits_callback_role.unreported",
+                ExecutionRole::Unreported
+            ));
         }
         if climb.suspended.is_some()
             || follows_any_suspension(file, at)
             || may_follow_own_await(file, at)
         {
-            return Some(ExecutionRole::Unknown);
+            return Some(role_arm!(
+                "named_callbacks.inherits_callback_role.unknown-3",
+                ExecutionRole::Unknown
+            ));
         }
         return inherits_callback_role(file, at, lookup);
     }
     let Some((call_span, index)) = roles.inherits.get(&callback.span).copied().flatten() else {
-        return Some(ExecutionRole::Unknown);
+        return Some(role_arm!(
+            "named_callbacks.inherits_callback_role.unknown-4",
+            ExecutionRole::Unknown
+        ));
     };
     let call = file.ast.calls.iter().find(|call| call.span == call_span)?;
     let primitive = lookup.primitive_at_call(file, call.span)?;
@@ -928,7 +970,10 @@ fn inherits_callback_role(
     // being placed on this thread has no placement to give.
     let key = (file.path.to_string(), callback.span);
     if !INHERITS_PLACING.with(|placing| placing.borrow_mut().insert(key.clone())) {
-        return Some(ExecutionRole::Unknown);
+        return Some(role_arm!(
+            "named_callbacks.inherits_callback_role.unknown-5",
+            ExecutionRole::Unknown
+        ));
     }
     let allowed = super::allowed_callback_spans(file, lookup);
     let mut classifying = HashSet::default();

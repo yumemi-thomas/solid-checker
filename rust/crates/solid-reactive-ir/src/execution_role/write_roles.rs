@@ -20,17 +20,19 @@ pub(crate) fn semantic_write_execution_role(
     lookup: &SemanticLookup<'_>,
     root_body: RootBodyGuard,
 ) -> ExecutionRole {
-    let allowed = write_allowed_spans(file, allowed, lookup);
-    semantic_write_execution_role_within(
-        file,
-        span,
-        &allowed,
-        entities,
-        symbol_names,
-        lookup,
-        root_body,
-        &mut HashSet::default(),
-    )
+    crate::role_log::decide("write", file.path.as_str(), span, || {
+        let allowed = write_allowed_spans(file, allowed, lookup);
+        semantic_write_execution_role_within(
+            file,
+            span,
+            &allowed,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            &mut HashSet::default(),
+        )
+    })
 }
 
 /// The regions a write may treat as imperative.
@@ -1398,7 +1400,10 @@ fn write_role_walk(
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused places no write.
     if file.compiler.withheld() {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "write_roles.write_role_walk.unknown",
+            ExecutionRole::Unknown
+        );
     }
     // Write legality follows the runtime's *owner* context, which is not
     // always the read-execution context: leaf scopes are write-legal though
@@ -1408,7 +1413,12 @@ fn write_role_walk(
     let mut span = span;
     loop {
         match write_region_adjustment(file, span, lookup) {
-            Some(WriteRegionAdjustment::LeafScope) => return ExecutionRole::DeferredCallback,
+            Some(WriteRegionAdjustment::LeafScope) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.deferred-callback",
+                    ExecutionRole::DeferredCallback
+                );
+            }
             Some(WriteRegionAdjustment::CallSite(outer)) => span = outer,
             Some(WriteRegionAdjustment::CallSiteAmongOthers(outer)) => {
                 let role = semantic_write_execution_role_within(
@@ -1422,10 +1432,13 @@ fn write_role_walk(
                     visiting,
                 );
                 if role.reports_disallowed_write() {
-                    return role;
+                    return role_arm!("write_roles.walk-role-1", role);
                 }
                 *decided = true;
-                return ExecutionRole::Unknown;
+                return role_arm!(
+                    "write_roles.write_role_walk.unknown-2",
+                    ExecutionRole::Unknown
+                );
             }
             // A root body is a one-shot, untracked run under a
             // children-capable owner -- in dev builds exactly what a
@@ -1442,19 +1455,32 @@ fn write_role_walk(
                 | WriteRegionAdjustment::CreatedRootAmongOthers),
             ) => {
                 if let Some(role) = suspended_write_role(file, span, lookup) {
-                    return role;
+                    return role_arm!("write_roles.walk-role-2", role);
                 }
                 match root_body {
-                    RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
+                    RootBodyGuard::Rejects => {
+                        return role_arm!(
+                            "write_roles.write_role_walk.untracked-rendering",
+                            ExecutionRole::UntrackedRendering
+                        );
+                    }
                     // Legal in the run under the root; the callback's other runs
                     // are not placed, so a legal write is no claim there.
                     RootBodyGuard::Exempts
                         if matches!(adjustment, WriteRegionAdjustment::CreatedRootAmongOthers) =>
                     {
                         *decided = true;
-                        return ExecutionRole::Unknown;
+                        return role_arm!(
+                            "write_roles.write_role_walk.unknown-3",
+                            ExecutionRole::Unknown
+                        );
                     }
-                    RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
+                    RootBodyGuard::Exempts => {
+                        return role_arm!(
+                            "write_roles.write_role_walk.untracked-callback",
+                            ExecutionRole::UntrackedCallback
+                        );
+                    }
                     // The guard stands down while an owner is disposed, on the
                     // release that says so, and the write is written in a
                     // callback that runs only then (ADR 0455 amendment). A
@@ -1465,20 +1491,32 @@ fn write_role_walk(
                         use solid_dialect::WriteGuardInDisposal as Guard;
                         let guard = lookup.dialect.write_guard_in_disposal();
                         if guard == Guard::Rejects {
-                            return ExecutionRole::UntrackedRendering;
+                            return role_arm!(
+                                "write_roles.write_role_walk.untracked-rendering-2",
+                                ExecutionRole::UntrackedRendering
+                            );
                         }
                         // A violation needs the proof that the write is not in a
                         // disposal; a legal write needs the release to say so.
                         // Neither is the call sites' to give: the owner is the
                         // call's, whatever runs the function.
                         return match runs_in_disposal(file, span, lookup) {
-                            DisposalReach::NotIn => ExecutionRole::UntrackedRendering,
+                            DisposalReach::NotIn => role_arm!(
+                                "write_roles.created-root-outside-disposal",
+                                ExecutionRole::UntrackedRendering
+                            ),
                             DisposalReach::Only if guard == Guard::StandsDown => {
-                                ExecutionRole::UntrackedCallback
+                                role_arm!(
+                                    "write_roles.created-root-disposal-stands-down",
+                                    ExecutionRole::UntrackedCallback
+                                )
                             }
                             DisposalReach::Only | DisposalReach::Unplaced => {
                                 *decided = true;
-                                ExecutionRole::Unknown
+                                role_arm!(
+                                    "write_roles.created-root-disposal-unplaced",
+                                    ExecutionRole::Unknown
+                                )
                             }
                         };
                     }
@@ -1486,12 +1524,32 @@ fn write_role_walk(
             }
             // Whether a root wraps this callback is not audited on this
             // release, so the write has no placement the checker can prove.
-            Some(WriteRegionAdjustment::UnauditedRoot) => return ExecutionRole::Unknown,
+            Some(WriteRegionAdjustment::UnauditedRoot) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.unknown-4",
+                    ExecutionRole::Unknown
+                );
+            }
             // No owner reaches the write: the guard has nothing to reject.
-            Some(WriteRegionAdjustment::Detached) => return ExecutionRole::UntrackedCallback,
-            Some(WriteRegionAdjustment::OwnerUnknown) => return ExecutionRole::Unknown,
+            Some(WriteRegionAdjustment::Detached) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.untracked-callback-2",
+                    ExecutionRole::UntrackedCallback
+                );
+            }
+            Some(WriteRegionAdjustment::OwnerUnknown) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.unknown-5",
+                    ExecutionRole::Unknown
+                );
+            }
             // ADR 0532: the bound of the climb proves nothing either way.
-            Some(WriteRegionAdjustment::ClimbExhausted) => return ExecutionRole::Unknown,
+            Some(WriteRegionAdjustment::ClimbExhausted) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.climb-exhausted",
+                    ExecutionRole::Unknown
+                );
+            }
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -1512,8 +1570,12 @@ fn write_role_walk(
                     visiting,
                 );
                 match first_run {
-                    ExecutionRole::DiscardedRendering => return first_run,
-                    ExecutionRole::Unknown | ExecutionRole::Unreported => return first_run,
+                    ExecutionRole::DiscardedRendering => {
+                        return role_arm!("write_roles.first-run-discarded", first_run);
+                    }
+                    ExecutionRole::Unknown | ExecutionRole::Unreported => {
+                        return role_arm!("write_roles.first-run-unplaced", first_run);
+                    }
                     // ADR 0503: a first run proven synchronous throws there,
                     // when nothing in the apply runs before the write (an
                     // earlier call, a pending read among them, may throw
@@ -1522,9 +1584,9 @@ fn write_role_walk(
                         return if first_run_proven_at_call(file, call, lookup)
                             && apply_runs_nothing_before(file, call, span, lookup)
                         {
-                            role
+                            role_arm!("write_roles.first-run-reporting", role)
                         } else {
-                            ExecutionRole::Unknown
+                            role_arm!("write_roles.first-run-unproven", ExecutionRole::Unknown)
                         };
                     }
                     _ => break,
@@ -1546,14 +1608,14 @@ fn write_role_walk(
                     if role.reports_disallowed_write()
                         && let Some(suspended) = suspended_write_role(file, span, lookup)
                     {
-                        return suspended;
+                        return role_arm!("write_roles.walk-suspended-1", suspended);
                     }
                     // A call a disposal leaves unplaced is final: no other
                     // entry of the function places what its owner decides.
                     if role == ExecutionRole::Unknown {
                         *decided = true;
                     }
-                    return role;
+                    return role_arm!("write_roles.walk-role-3", role);
                 }
                 break;
             }
@@ -1580,15 +1642,25 @@ fn write_role_walk(
             // or `throw` on a fresh generator runs none of the body, and a
             // write a `yield` may precede runs on no step there is.
             return match step.first_step {
-                StepReach::Reaches => role,
-                StepReach::Never => ExecutionRole::Unreported,
-                StepReach::Unproven => ExecutionRole::Unknown,
+                StepReach::Reaches => role_arm!("write_roles.stepped-generator-reaches", role),
+                StepReach::Never => {
+                    role_arm!(
+                        "write_roles.stepped-generator-never",
+                        ExecutionRole::Unreported
+                    )
+                }
+                StepReach::Unproven => {
+                    role_arm!(
+                        "write_roles.stepped-generator-unproven",
+                        ExecutionRole::Unknown
+                    )
+                }
             };
         }
         // Legal where the call is, or never run: legal. Unplaced stays so;
         // the read walk's answer at the call would claim more than the
         // write's own adjustments allow.
-        return role;
+        return role_arm!("write_roles.stepped-generator", role);
     }
     // ADR 0315: write legality keeps the role it had before the use-site arm;
     // that arm places only reads.
@@ -1652,7 +1724,10 @@ fn write_role_walk(
         && root_body == RootBodyGuard::Exempts
         && runs_directly_in_component_root(file, span, lookup)
     {
-        return ExecutionRole::UntrackedCallback;
+        return role_arm!(
+            "write_roles.write_role_walk.untracked-callback-3",
+            ExecutionRole::UntrackedCallback
+        );
     }
     // The rendering role places code by where it is written. For a write in a
     // function literal nested in the body that is a proof only when the
@@ -1672,7 +1747,7 @@ fn write_role_walk(
     // change that. The tracked or rendering role such a wrapper gives the
     // *expression* is not a proof about the function inside it.
     if direct.reports_disallowed_write() && enclosed_by_jsx_attribute_function(file, span) {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-1", unknown);
     }
     // A tracked role reaches every closure written inside the tracked region
     // or callback, including ones only stored there (`createMemo(() => ({ go:
@@ -1681,7 +1756,7 @@ fn write_role_walk(
     if direct == ExecutionRole::TrackedJsx
         && enclosed_by_stored_function(file, span, entities, symbol_names, lookup)
     {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-2", unknown);
     }
     // The same holds for a closure bound to a name inside the tracked scope
     // (ADR 0452): the scope runs its construction, not its body. The closure's
@@ -1728,13 +1803,19 @@ fn write_role_walk(
     if direct == ExecutionRole::DeferredCallback
         && unrun_layer_in_owner_keeping_callback(file, span, lookup)
     {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "write_roles.write_role_walk.unknown-6",
+            ExecutionRole::Unknown
+        );
     }
     // Past an await that dominates it, the write runs on a later task with no
     // owner, whatever its lexical role or its function's callers: legal, and
     // proven so, though in no single role.
     if follows_dominating_await(file, span) || follows_try_head_await(file, span, lookup) {
-        return ExecutionRole::Unreported;
+        return role_arm!(
+            "write_roles.write_role_walk.unreported",
+            ExecutionRole::Unreported
+        );
     }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
@@ -1745,7 +1826,7 @@ fn write_role_walk(
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
         && may_follow_suspension(file, span)
     {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-3", unknown);
     }
     // A site in a parameter list (a default value, a pattern, a function written
     // inside either) runs when its function is called without the argument:
@@ -1761,7 +1842,7 @@ fn write_role_walk(
         .into_iter()
         .any(|function| parameter_slot(function, span).is_some())
     {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-4", unknown);
     }
     // ADR 0456: a disposal callback whose handle the code calls also runs at
     // those calls, outside the disposal, so its lexical role is no proof there.
@@ -1782,13 +1863,13 @@ fn write_role_walk(
                 if role == ExecutionRole::Unknown {
                     *decided = true;
                 }
-                return role;
+                return role_arm!("write_roles.walk-role-4", role);
             }
             // The entries of the layer decide, but none of them places a write
             // that follows a suspension (as above).
             Some(HandleRole::Unrun) if may_follow_suspension(file, span) => {
                 *decided = true;
-                return unknown;
+                return role_arm!("write_roles.walk-unknown-5", unknown);
             }
             Some(HandleRole::Unrun) => ExecutionRole::Unknown,
             None => direct,
@@ -1798,7 +1879,10 @@ fn write_role_walk(
     // the effect owns, as the same compute written inline does: a write it runs
     // in place is rejected there, whatever the function's other entries do.
     if !direct.reports_disallowed_write() && named_effect_compute_runs(file, span, lookup) {
-        return ExecutionRole::TrackedJsx;
+        return role_arm!(
+            "write_roles.write_role_walk.tracked-jsx",
+            ExecutionRole::TrackedJsx
+        );
     }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
     // A permissive role read off the positions that name the function as a
@@ -1824,10 +1908,10 @@ fn write_role_walk(
     let possible_render = direct == ExecutionRole::UntrackedRendering
         && innermost_identity_is_possible(file, span, lookup);
     if direct != ExecutionRole::Unknown && named_callback.is_none() && !possible_render {
-        return direct;
+        return role_arm!("write_roles.walk-direct-1", direct);
     }
     let Some(innermost) = innermost else {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-6", unknown);
     };
     // ADR 0452: the named closure built in a tracked scope is entered by its
     // calls, and the write runs with it only through layers that run in place
@@ -1836,16 +1920,19 @@ fn write_role_walk(
     let entry = match tracked_named {
         Some(closure) if closure.span == innermost.span => Some(closure),
         Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
-        Some(_) => return unknown,
+        Some(_) => return role_arm!("write_roles.walk-unknown-entry", unknown),
         None => None,
     };
     // ADR 0327: every invocation of the writing function, followed forward
     // through the closed program, is an event delivery. No other entry exists.
     if event_only_entries(file, entry.unwrap_or(innermost), lookup) {
-        return ExecutionRole::EventCallback;
+        return role_arm!(
+            "write_roles.write_role_walk.event-callback",
+            ExecutionRole::EventCallback
+        );
     }
     if visiting.contains(&lexical_only_marker()) {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-7", unknown);
     }
     let function = named.or(entry).unwrap_or(innermost);
     // The write is in a closure nested in the named callback: a call of the
@@ -1875,7 +1962,7 @@ fn write_role_walk(
             .tracked_owned
     {
         return if current {
-            ExecutionRole::TrackedJsx
+            role_arm!("write_roles.named-tracked-owned", ExecutionRole::TrackedJsx)
         } else {
             unknown
         };
@@ -1917,12 +2004,12 @@ fn write_role_walk(
             .collect::<HashSet<_>>()
             .len();
         if !current || (several && adjusted_inline) || (distinct > 1 && owner_keeping) {
-            return unknown;
+            return role_arm!("write_roles.walk-unknown-8", unknown);
         }
     }
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-9", unknown);
     }
     let mut imperative = named.map(|_| direct);
     let mut unplaced = false;
@@ -1971,10 +2058,10 @@ fn write_role_walk(
     }
     visiting.remove(&key);
     if possible_render {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-10", unknown);
     }
     let Some(role) = imperative.filter(|_| !unplaced) else {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-11", unknown);
     };
     // A permissive role is inherited only from a complete census of the
     // function's entries: a use the walk did not follow (handed to a child

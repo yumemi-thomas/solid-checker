@@ -52,7 +52,10 @@ pub(super) fn primitive_slot_role(
         return None;
     }
     if semantics.tracks_reads {
-        return Some(ExecutionRole::TrackedJsx);
+        return Some(role_arm!(
+            "flow_helpers.primitive_slot_role.tracked-jsx",
+            ExecutionRole::TrackedJsx
+        ));
     }
     (execution == Execution::Deferred || dialect.runs_callback_deferred(primitive))
         .then_some(ExecutionRole::DeferredCallback)
