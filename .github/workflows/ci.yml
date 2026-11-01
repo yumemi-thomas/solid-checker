@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy,rustfmt
@@ -93,7 +93,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
         with:
@@ -163,7 +163,7 @@ jobs:
       # workspace needs its own cache.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -219,7 +219,7 @@ jobs:
       - run: rustup target add wasm32-wasip1 --toolchain 1.99.1
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -247,7 +247,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - run: sh -n scripts/*.sh
       # The script tests import the oracle harness, which resolves `typescript`
       # through packages/cli. `make test-cli` installs it too, but that runs

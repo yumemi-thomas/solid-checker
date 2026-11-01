@@ -41,7 +41,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -104,7 +104,7 @@ jobs:
       # is the Type Facts producer built for wasm32-wasip1.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -167,7 +167,7 @@ jobs:
       # assembly above use Bun.
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
           registry-url: https://registry.npmjs.org
       - name: Install Trusted Publishing-compatible npm
         run: npm install --global "npm@^11.15.0"
