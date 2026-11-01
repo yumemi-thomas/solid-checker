@@ -4408,7 +4408,7 @@ fn read_in_named_local_function(
 /// ADR 0535: whether `span` is in a named non-component function that no
 /// named-callback role places, nested where `inside_non_component_function`
 /// answers for the primitive's callback around it.
-fn nested_named_function(
+pub(crate) fn nested_named_function(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
@@ -4424,7 +4424,7 @@ fn nested_named_function(
 /// member's value (`this.m = () => …`), wherever
 /// `inside_non_component_function` answers for a primitive's callback around
 /// it.
-fn escapes_nested(
+pub(crate) fn escapes_nested(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
@@ -4476,7 +4476,7 @@ fn member_assigned(
     })
 }
 
-fn function_escapes_unfollowed(
+pub(crate) fn function_escapes_unfollowed(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
@@ -4815,7 +4815,7 @@ fn hand_off_at(
 /// scheduled on fresh stacks or run at non-reporting positions takes the first
 /// such role, which reports nothing. A proven role comes with the carrier's
 /// span: the read's timing is the carrier's ([`push_accessor_read_placed`]).
-fn handed_read_role(
+pub(crate) fn handed_read_role(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     allowed: &[solid_facts::core::Span],

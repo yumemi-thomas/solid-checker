@@ -567,6 +567,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
+      "start": 962,
+      "end": 971,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
       "start": 1320,
       "end": 1327,
       "fixes": 0
