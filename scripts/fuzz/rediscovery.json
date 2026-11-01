@@ -283,5 +283,43 @@
    "lg-reactive-write-in-owned-scope-reaction-signal-direct-module-helper"
   ],
   "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK in a createReaction callback, a render apply rerun and an apply's returned cleanup was certified clean (ADR 0541)",
+  "found": "VM run full-7 on 5d848b2cf (effect-window cells)",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-reaction-memo-direct-none",
+   "mx-primitive-in-effect-callback-effect-cleanup-rerun-memo-direct-none",
+   "mx-primitive-in-effect-callback-render-apply-guarded-rerun-memo-direct-none"
+  ],
+  "rediscovered": "5d848b2cf: certified false-clean (full-7 rows); the ADR 0541 build: violation in the reaction, obligations in the cleanup and the render rerun"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK in a createReaction callback, a render apply rerun and an apply's returned cleanup was certified clean (ADR 0541)",
+  "found": "VM run full-7 on 5d848b2cf (effect-window cells)",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-reaction-x-direct-none",
+   "mx-flush-in-effect-callback-effect-cleanup-rerun-x-direct-none",
+   "mx-flush-in-effect-callback-render-apply-guarded-rerun-x-direct-none"
+  ],
+  "rediscovered": "5d848b2cf: certified false-clean (full-7 rows); the ADR 0541 build: violation in the reaction, obligations in the cleanup and the render rerun"
+ },
+ {
+  "finding": "An action called in a helper or IIFE a createReaction callback runs in place was proven SC2002 (the shared write climb took the component body's role) (ADR 0540)",
+  "found": "VM run full-7 on 5d848b2cf: 550 false positives in lg-recall reaction",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-reaction-x-direct-helper",
+   "lg-action-called-in-owned-scope-reaction-x-direct-iife"
+  ],
+  "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
  }
 ]

@@ -72,7 +72,7 @@ export function AfterAnotherCall() {
 }
 
 // Clean: an owner is set, the state is value-form, or the callback is the
-// compute (owned) or a render effect's apply (first run owned).
+// compute (owned). A render effect's apply is uncertifiable (ADR 0541).
 export function OwnedAndValueForm() {
   const [count] = createSignal(0);
   const owner = getOwner();

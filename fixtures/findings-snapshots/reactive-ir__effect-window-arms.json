@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
-      "start": 1017,
-      "end": 1024,
+      "start": 1025,
+      "end": 1032,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
-      "start": 1107,
-      "end": 1114,
+      "start": 1115,
+      "end": 1122,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
-      "start": 1357,
-      "end": 1369,
+      "start": 1365,
+      "end": 1377,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
-      "start": 1421,
-      "end": 1428,
+      "start": 1429,
+      "end": 1436,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
-      "start": 2282,
-      "end": 2289,
+      "start": 2739,
+      "end": 2746,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
-      "start": 2590,
-      "end": 2601,
+      "start": 3047,
+      "end": 3058,
       "fixes": 0
     },
     {

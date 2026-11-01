@@ -387,6 +387,17 @@ fn the_effect_phase_report_follows_the_resolved_signals() {
         assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateEffect, 0));
         assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateRenderEffect, 1));
         assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateMemo, 1));
+        // ADR 0541: read on rc.17 only.
+        let rc17 = vocabulary.write_guard_in_disposal() == crate::WriteGuardInDisposal::StandsDown;
+        assert_eq!(
+            vocabulary.callback_runs_in_effect_phase(Primitive::CreateReaction, 0),
+            rc17
+        );
+        assert_eq!(
+            vocabulary.callback_reruns_in_effect_phase(Primitive::CreateRenderEffect, 1),
+            rc17
+        );
+        assert!(!vocabulary.callback_reruns_in_effect_phase(Primitive::CreateEffect, 1));
     }
 }
 

@@ -780,3 +780,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/effect-cleanup-rerun-read/node_modules/**
 !fixtures/reactive-ir/effect-window-arms/node_modules/
 !fixtures/reactive-ir/effect-window-arms/node_modules/**
+!fixtures/reactive-ir/effect-phase-windows/node_modules/
+!fixtures/reactive-ir/effect-phase-windows/node_modules/**

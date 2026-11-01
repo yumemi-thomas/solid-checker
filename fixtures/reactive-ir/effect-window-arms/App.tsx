@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createReaction, createSignal } from "solid-js";
+import { action, createEffect, createMemo, createReaction, createSignal } from "solid-js";
 
 function run(cb: () => unknown) {
   cb();
@@ -77,6 +77,23 @@ export function ReactionWrite() {
     })();
     const write = () => setValue(4);
     write();
+  });
+  track(() => tick());
+  return <button onClick={() => setTick(2 + value())}>go</button>;
+}
+
+// An action called there is legal too (it shares the write climb).
+export function ReactionAction() {
+  const [value, setValue] = createSignal(0);
+  const [tick, setTick] = createSignal(1);
+  const save = action(function* () {
+    setValue(7);
+  });
+  const track = createReaction(() => {
+    run(() => save());
+    (() => {
+      save();
+    })();
   });
   track(() => tick());
   return <button onClick={() => setTick(2 + value())}>go</button>;

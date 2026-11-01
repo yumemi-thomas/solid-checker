@@ -2550,8 +2550,27 @@ impl Dialect for Solid2 {
     /// so the draining flush is always the one on the stack. `createRenderEffect`
     /// is not: unless `schedule` is set its first run is the synchronous
     /// `runEffect(node, LANE_RUN)` at creation, with no flush in progress.
+    ///
+    /// ADR 0541: rc.17's `createReaction` callback is the apply of a user
+    /// effect created `{ user: true, defer: true }` (`dist/dev.js:2630-2675`),
+    /// so it too runs only from `runEffect` in the draining flush. Read on
+    /// rc.17 only (`disposal_write_guard`, as
+    /// [`Solid2::throws_creating_in_effect_callback`]).
     fn callback_runs_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
-        primitive == Primitive::CreateEffect && argument == 1
+        (primitive == Primitive::CreateEffect && argument == 1)
+            || (primitive == Primitive::CreateReaction
+                && argument == 0
+                && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown)
+    }
+
+    /// ADR 0541: `createRenderEffect`'s apply runs first synchronously at
+    /// creation (no flush, the caller's owner) and on every later run from
+    /// `runEffect` in the draining flush with no owner (rc.17 `dist/dev.js`
+    /// `effect`, `runEffect` at `:1946-2026`). Read on rc.17 only.
+    fn callback_reruns_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::CreateRenderEffect
+            && argument == 1
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
     }
 
     /// Once a flush is running, `flush` returns without draining, after

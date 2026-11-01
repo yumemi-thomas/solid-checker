@@ -333,13 +333,15 @@ impl StaticApiContext<'_> {
                 )
             {
                 let reached = match origin.helper_calls {
-                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    0 => format!("directly in {}", origin.callback_label()),
                     1 => format!(
-                        "in a function that the apply callback of a createEffect in {} calls",
+                        "in a function that {} in {} calls",
+                        origin.callback_label(),
                         origin.path
                     ),
                     calls => format!(
-                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        "in a function reached through {calls} calls from {} in {}",
+                        origin.callback_label(),
                         origin.path
                     ),
                 };
@@ -401,13 +403,15 @@ impl StaticApiContext<'_> {
                                 origin.apply.contains(*tag) && tag.end <= call.span.start
                             })));
                 let reached = match origin.helper_calls {
-                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    0 => format!("directly in {}", origin.callback_label()),
                     1 => format!(
-                        "in a function that the apply callback of a createEffect in {} calls",
+                        "in a function that {} in {} calls",
+                        origin.callback_label(),
                         origin.path
                     ),
                     calls => format!(
-                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        "in a function reached through {calls} calls from {} in {}",
+                        origin.callback_label(),
                         origin.path
                     ),
                 };

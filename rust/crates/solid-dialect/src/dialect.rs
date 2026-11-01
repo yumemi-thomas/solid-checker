@@ -1068,6 +1068,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` of `primitive` runs in the effect
+    /// phase on its later runs but not provably on its first (ADR 0541): code
+    /// there that the phase decides is an obligation, never a proof. The
+    /// default is `false`, which claims no run in the phase.
+    fn callback_reruns_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether calling `primitive` synchronously from an effect phase
     /// ([`Dialect::callback_runs_in_effect_phase`]) is a **no-op**, one the
     /// development build usually reports (`FLUSH_IN_EFFECT_CALLBACK`, a

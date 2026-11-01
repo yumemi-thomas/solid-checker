@@ -85,6 +85,22 @@ pub(crate) struct EffectPhaseOrigin {
     /// run (another call site, a use the walk does not follow) is not proven
     /// to be: the claim is an obligation, not a violation.
     pub(crate) mixed: bool,
+    /// ADR 0541: the primitive whose callback the walk ended at, for the
+    /// wording (`createEffect`, `createRenderEffect`, `createReaction`).
+    pub(crate) primitive: solid_dialect::Primitive,
+}
+
+impl EffectPhaseOrigin {
+    /// The callback the walk ended at, as a finding names it.
+    pub(crate) fn callback_label(&self) -> &'static str {
+        match self.primitive {
+            solid_dialect::Primitive::CreateReaction => "the callback of a createReaction",
+            solid_dialect::Primitive::CreateRenderEffect => {
+                "the apply callback of a createRenderEffect (on a run after its first)"
+            }
+            _ => "the apply callback of a createEffect",
+        }
+    }
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -355,6 +371,22 @@ impl<'l, 'a> Walk<'l, 'a> {
                         apply: call.arguments[index].span,
                         earlier_call: self.earlier,
                         mixed: self.stepped,
+                        primitive,
+                    });
+            }
+            // ADR 0541: a callback only whose later runs are in the phase
+            // (`createRenderEffect`'s apply, ownerless on those runs): any
+            // origin is an obligation.
+            if dialect.callback_reruns_in_effect_phase(primitive, index) {
+                return self
+                    .same_package_instance(file, call)
+                    .then(|| EffectPhaseOrigin {
+                        path: file.path.to_string(),
+                        helper_calls,
+                        apply: call.arguments[index].span,
+                        earlier_call: self.earlier,
+                        mixed: true,
+                        primitive,
                     });
             }
             if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
@@ -675,7 +707,8 @@ impl<'l, 'a> Walk<'l, 'a> {
                 file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
             })?;
             let primitive = walk.lookup.primitive_at_call(file, call.span)?;
-            (dialect.callback_runs_in_effect_phase(primitive, index)
+            let reruns = dialect.callback_reruns_in_effect_phase(primitive, index);
+            ((dialect.callback_runs_in_effect_phase(primitive, index) || reruns)
                 && !call
                     .arguments
                     .iter()
@@ -687,7 +720,8 @@ impl<'l, 'a> Walk<'l, 'a> {
                 helper_calls,
                 apply: call.arguments[index].span,
                 earlier_call: walk.earlier,
-                mixed: false,
+                mixed: reruns,
+                primitive,
             })
         };
         let references_of = |symbol: &str| -> Vec<(String, Span)> {
@@ -742,8 +776,16 @@ impl<'l, 'a> Walk<'l, 'a> {
                 // A literal that is neither named nor a slot (one the layer
                 // returns: an apply's cleanup runs at the next run and at
                 // disposal) keeps no single answer.
+                // ADR 0541: a function its layer returns (an apply's cleanup,
+                // a helper's result) runs where the returned value is called,
+                // which nothing here follows: the code around it is walked,
+                // and any origin is an obligation, never silence.
                 if !slot {
-                    return None;
+                    return if returned_by_its_function(file, literal) {
+                        self.unplaced_layer(file, literal.span, helper_calls)
+                    } else {
+                        None
+                    };
                 }
                 // ADR 0538: a slot read only through its object, or an object
                 // handed on whole: unplaced, unless the object itself is handed
@@ -1044,6 +1086,30 @@ pub(crate) fn package_root(path: &str) -> Option<String> {
         first.len()
     };
     Some(path[..at + name_len].to_owned())
+}
+
+/// ADR 0541: whether `literal` is returned by the function around it (an
+/// expression body or a `return` of exactly that function).
+fn returned_by_its_function(file: &FileFacts, literal: &FunctionFact) -> bool {
+    let Some(outer) = crate::owners::owning_function(&file.ast, literal.span) else {
+        return false;
+    };
+    outer.body.contains(literal.span)
+        && outer
+            .expression_return
+            .iter()
+            .chain(
+                file.ast
+                    .returns
+                    .iter()
+                    .filter(|ret| outer.body.contains(ret.span)),
+            )
+            .any(|ret| {
+                ret.argument
+                    .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument) == literal.span)
+                    && crate::owners::owning_function(&file.ast, ret.span)
+                        .is_some_and(|owner| owner.span == outer.span)
+            })
 }
 
 #[cfg(test)]

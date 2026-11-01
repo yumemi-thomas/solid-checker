@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-windows/App.tsx",
+      "start": 2515,
+      "end": 2521,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-windows/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}
