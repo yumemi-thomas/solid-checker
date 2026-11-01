@@ -226,6 +226,61 @@ export function foldGrids(dirs, { logs = [], inventory = armInventory(), against
   return report;
 }
 
+/**
+ * The run-wide report from the grids' own `roles.json` (`foldGrids` per grid): `--prune-cases` deletes each raw log once its grid is
+ * folded, so the run is the sum of the grid reports. Per-arm counts add; a decision is a grid's, never shared between grids, so the sum
+ * is the run's; programs add for the same reason. Yield is recomputed from every grid's rows.
+ */
+export function mergeGridReports(dirs, { inventory = armInventory(), against = null } = {}) {
+  const arms = {};
+  const rows = [];
+  let decisions = 0, unframed = 0, malformed = 0;
+  const silent = {};
+  const sources = [];
+  for (const dir of dirs) {
+    const report = JSON.parse(readFileSync(join(dir, "roles.json"), "utf8"));
+    for (const row of readRows(dir)) rows.push(row);
+    decisions += report.decisions ?? 0;
+    unframed += report.unframed ?? 0;
+    malformed += report.malformed ?? 0;
+    sources.push(...(report.sources ?? []));
+    for (const [id, count] of Object.entries(report.silentByDefault ?? {})) silent[id] = (silent[id] ?? 0) + count;
+    for (const [id, arm] of Object.entries(report.arms ?? {})) {
+      const into = (arms[id] ??= { passed: 0, answered: 0, programs: 0, silent: 0, roles: {}, kinds: {} });
+      into.passed += arm.passed ?? 0;
+      into.answered += arm.answered ?? 0;
+      if (arm.unframed) into.unframed = (into.unframed ?? 0) + arm.unframed;
+      into.programs += arm.programs ?? 0;
+      into.silent += arm.silent ?? 0;
+      for (const [k, v] of Object.entries(arm.roles ?? {})) into.roles[k] = (into.roles[k] ?? 0) + v;
+      for (const [k, v] of Object.entries(arm.kinds ?? {})) into.kinds[k] = (into.kinds[k] ?? 0) + v;
+      if (arm.default) into.default = true;
+    }
+  }
+  const hit = Object.keys(arms).sort().filter((id) => arms[id].passed > 0 || arms[id].answered > 0 || (arms[id].unframed ?? 0) > 0);
+  const earlier = against ? new Set(against.hit ?? []) : null;
+  const newArms = earlier ? hit.filter((id) => !earlier.has(id)) : null;
+  const silentTotal = Object.values(silent).reduce((x, y) => x + y, 0);
+  return {
+    sources,
+    armsKnown: inventory ? inventory.size : null,
+    armsHit: hit.length,
+    decisions,
+    unframed,
+    malformed,
+    saturation: {
+      yield: slicesYield(rows),
+      growth: { against: against ? (against.path ?? true) : null, newArms: newArms?.length ?? null, arms: newArms },
+      silentByDefault: silentTotal,
+    },
+    neverHit: inventory ? [...inventory.keys()].filter((id) => !hit.includes(id)).sort() : [],
+    notInInventory: inventory ? hit.filter((id) => !inventory.has(id)) : [],
+    silentByDefault: Object.fromEntries(Object.entries(silent).sort()),
+    hit,
+    arms: Object.fromEntries(Object.entries(arms).sort()),
+  };
+}
+
 /** One line for a person: the three numbers and the arm coverage. */
 export function summaryLine(report) {
   const { yield: y, growth, silentByDefault } = report.saturation;

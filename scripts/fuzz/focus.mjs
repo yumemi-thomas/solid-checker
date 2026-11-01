@@ -30,7 +30,7 @@ import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
-import { foldGrids, summaryLine } from "./roles.mjs";
+import { foldGrids, mergeGridReports, summaryLine } from "./roles.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -202,7 +202,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     process.exitCode = 2;
   }
   if (folded.length) {
-    const report = foldGrids(folded, { against });
+    // From the grids' roles.json: --prune-cases has deleted their raw logs by now.
+    const report = mergeGridReports(folded, { against });
     writeFileSync(join(out, "roles.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(`\n${summaryLine(report)} (${join(out, "roles.json")})`);
   }

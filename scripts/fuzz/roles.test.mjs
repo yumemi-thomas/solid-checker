@@ -103,3 +103,25 @@ describe("focus --role-log", () => {
     expect(() => parse(["--codes", "A", "--roles-against", "/r.json"])).toThrow(/needs --role-log/);
   });
 });
+
+describe("the run-wide merge", () => {
+  it("adds the grids' roles.json reports, so pruned raw logs are not needed", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { mergeGridReports } = await import("./roles.mjs");
+    const root = mkdtempSync(join(tmpdir(), "roles-merge-"));
+    const grid = (name, arm, passed, outcome) => {
+      const dir = join(root, name);
+      mkdirSync(dir);
+      writeFileSync(join(dir, "programs.jsonl"), `${JSON.stringify({ id: name, outcome })}\n`);
+      writeFileSync(join(dir, "roles.json"), JSON.stringify({ decisions: passed, arms: { [arm]: { passed, answered: passed, programs: 1, silent: 0, roles: { Unknown: passed }, kinds: { read: passed } } }, silentByDefault: { [arm]: 1 } }));
+      return dir;
+    };
+    const report = mergeGridReports([grid("a", "f.a", 2, "agree"), grid("b", "f.a", 3, "false-clean"), grid("c", "f.b", 1, "agree")], { inventory: new Map([["f.a", { default: true }], ["f.b", { default: false }], ["f.c", { default: false }]]) });
+    expect(report).toMatchObject({ decisions: 6, armsHit: 2, armsKnown: 3, neverHit: ["f.c"] });
+    expect(report.arms["f.a"]).toMatchObject({ passed: 5, programs: 2, roles: { Unknown: 5 } });
+    expect(report.saturation.silentByDefault).toBe(3);
+    expect(report.saturation.yield).toMatchObject({ programs: 3, candidates: 1 });
+  });
+});
