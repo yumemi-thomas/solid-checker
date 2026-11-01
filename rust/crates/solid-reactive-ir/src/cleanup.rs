@@ -416,6 +416,54 @@ pub(super) fn leaf_owner_operations_for_file(
                 via: None,
             });
         }
+        // ADR 0537: a tagged template written in the callback's own extent
+        // calls its tag there (ADR 0531), as a call of it would.
+        for template in &callback_file.ast.tagged_templates {
+            if !callback_region.contains(template.span)
+                || !direct_callback_runs(callback_file, leaf_callback.span, template.span)
+            {
+                continue;
+            }
+            let mut kinds = Vec::new();
+            let mut visited = Vec::new();
+            let complete = tag_forbidden_operations(
+                resolution,
+                callback_file,
+                template,
+                &mut kinds,
+                &mut visited,
+                8,
+                true,
+            );
+            let via = callback_file
+                .source_text(template.tag)
+                .unwrap_or_default()
+                .to_owned();
+            for (kind, guaranteed) in kinds {
+                operations.push(LeafOwnerOperation {
+                    kind,
+                    owner: owner.to_string(),
+                    location: location(callback_file.path.shared(), template.tag),
+                    fix: None,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: false,
+                    possible: !guaranteed,
+                    via: Some(via.clone()),
+                });
+            }
+            if !complete {
+                operations.push(LeafOwnerOperation {
+                    kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+                    owner: owner.to_string(),
+                    location: location(callback_file.path.shared(), template.tag),
+                    fix: None,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: true,
+                    possible: false,
+                    via: Some(via),
+                });
+            }
+        }
     }
     // An operation in an instance field initializer runs when an instance is
     // constructed, not while the leaf callback the class is written in runs
@@ -1610,7 +1658,97 @@ fn function_forbidden_operations(
             record(kinds, kind, guaranteed);
         }
     }
+    // ADR 0537: a tagged template written in the body calls its tag there.
+    // It is in no completion census, so what its tag does is possible only.
+    for template in &helper_file.ast.tagged_templates {
+        if !helper.body.contains(template.span)
+            || !crate::owners::written_directly_in(&helper_file.ast, helper, template.span)
+        {
+            continue;
+        }
+        if crate::execution_role::inside_instance_field(helper_file, template.span) {
+            return false;
+        }
+        if helper_file
+            .ast
+            .unconditional_awaits
+            .iter()
+            .any(|await_span| {
+                await_span.end <= template.span.start
+                    && containing_ast_function(&helper_file.ast, *await_span)
+                        .is_some_and(|function| function.span == helper.span)
+            })
+        {
+            continue;
+        }
+        complete &= tag_forbidden_operations(
+            resolution,
+            helper_file,
+            template,
+            kinds,
+            visited,
+            depth - 1,
+            matches!(entry, Entry::LeafBody),
+        );
+    }
     complete
+}
+
+/// ADR 0537: what the tag of a tagged template runs where the template is
+/// written. The tag is called there with the strings and substitutions, as a
+/// call of it is: an exact, current project function (or a literal tag) runs
+/// its synchronous extent in the scope. Any other tag, a member's or a
+/// package's, is not followed and leaves the scope unproven.
+fn tag_forbidden_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    template: &solid_facts::ast::TaggedTemplateFact,
+    kinds: &mut Reached,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+    guaranteed: bool,
+) -> bool {
+    let lookup = resolution.lookup;
+    if depth == 0 {
+        return false;
+    }
+    let tag = file.ast.peel_ts_sugar_span(template.tag);
+    let helper = callback_argument_literal(file, tag)
+        .map(|helper| (file, helper))
+        .or_else(|| {
+            // The tag's binding, through the exact reference resolution: a
+            // tag position carries no value entity of its own.
+            let symbol = lookup
+                .entities()
+                .value_symbol(file, template.tag)
+                .cloned()
+                .or_else(|| {
+                    lookup
+                        .binding_at_reference(file.path.as_str(), tag)
+                        .map(|(_, _, symbol)| symbol)
+                })?;
+            if resolution.safe_call_symbols.contains(&symbol) {
+                return None;
+            }
+            lookup
+                .function_for_symbol(&symbol)
+                .filter(|(helper_file, helper)| {
+                    lookup.function_value_is_current(helper_file, helper)
+                })
+        });
+    let Some((helper_file, helper)) = helper else {
+        return false;
+    };
+    function_forbidden_operations(
+        resolution,
+        helper_file,
+        helper,
+        kinds,
+        visited,
+        depth,
+        None,
+        Entry::Called { guaranteed },
+    )
 }
 
 /// What one `return` in a cleanup-accepting callback proves about the value

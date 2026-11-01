@@ -2877,9 +2877,57 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
+                // ADR 0537: as `discover_call` (ADR 0531/0535), a read in a
+                // named function handed to a carrier is placed there, and an
+                // unplaced hand-off, an escape or a member's function value
+                // places it nowhere: the lexical role of the callback around
+                // the function (a control-flow child's) is no proof for it.
+                let handed = (inside_non_component_function(file, call.callee, self.lookup)
+                    || nested_named_function(file, call.callee, self.lookup))
+                .then(|| {
+                    handed_read_role(
+                        file,
+                        call.callee,
+                        &allowed,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    )
+                })
+                .flatten();
+                if let Some((role, Some(carrier))) = handed
+                    && role.reports_untracked_read()
+                {
+                    self.push_async_read(
+                        file,
+                        call,
+                        symbol.as_str(),
+                        accessor,
+                        role,
+                        Some(carrier),
+                        &mut result,
+                    );
+                } else if !crate::execution_role::named_at_tracked_position(
+                    file,
+                    call.callee,
+                    self.lookup,
+                ) && ((nested_named_function(file, call.callee, self.lookup)
+                    && (handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
+                        || handed_to_unknown_code(file, call.callee, self.lookup)))
+                    || escapes_nested(file, call.callee, self.lookup))
+                {
+                    self.push_async_read(
+                        file,
+                        call,
+                        symbol.as_str(),
+                        accessor,
+                        ExecutionRole::Unknown,
+                        None,
+                        &mut result,
+                    );
                 // As `discover_call`: a read in a non-component function is
                 // placed by its callers, so only an obligation here.
-                if !inside_non_component_function(file, call.callee, self.lookup)
+                } else if !inside_non_component_function(file, call.callee, self.lookup)
                     || named_callback_execution_role(file, call.callee, self.lookup).is_some()
                 {
                     self.push_async_read(
@@ -4350,7 +4398,10 @@ pub(crate) fn function_literal_runs_nothing(
 /// runs. `f.call(…)` with no spread at the receiver's place, and
 /// `f.bind(…)(…)`, do; `f.apply(t, x)` does where `x` is absent, `null`,
 /// `undefined` or an array literal (another value may throw first).
-fn dispatch_invokes(file: &solid_facts::FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+pub(crate) fn dispatch_invokes(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
     let ast = &file.ast;
     let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
         return true;
@@ -4875,9 +4926,61 @@ pub(crate) fn handed_write_execution(
     root_body: RootBodyGuard,
     execution: ExecutionRole,
 ) -> ExecutionRole {
+    handed_write_execution_within(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        execution,
+        &mut HelperWriteWalk {
+            visiting: HashSet::default(),
+            depth: HELPER_WRITE_DEPTH,
+        },
+    )
+}
+
+/// ADR 0537: how many helper calls [`helper_call_write_execution`] follows
+/// outward from a write before the climb is exhausted (ADR 0532: unplaced).
+const HELPER_WRITE_DEPTH: usize = 8;
+
+/// The state of one [`helper_call_write_execution`] climb: the helpers being
+/// placed, and the calls left to follow.
+struct HelperWriteWalk {
+    visiting: HashSet<(String, solid_facts::core::Span)>,
+    depth: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handed_write_execution_within(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    execution: ExecutionRole,
+    walk: &mut HelperWriteWalk,
+) -> ExecutionRole {
     if execution.reports_disallowed_write() {
         return execution;
     }
+    let execution = match helper_call_write_execution(
+        file,
+        span,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        walk,
+    ) {
+        Some(role) if role.reports_disallowed_write() => return role,
+        Some(_) => ExecutionRole::Unknown,
+        None => execution,
+    };
     if (inside_non_component_function(file, span, lookup)
         || nested_named_function(file, span, lookup))
         && let Some((role, carrier)) = handed_write_role(
@@ -4907,6 +5010,67 @@ pub(crate) fn handed_write_execution(
         return ExecutionRole::Unknown;
     }
     execution
+}
+
+/// ADR 0537: ADR 0536's summary placement for a write. A write that runs
+/// during its helper's call (`const wrapUse = () => { setX(1); }`) runs
+/// wherever that call runs, so a call written in a named function handed to
+/// an inline carrier (`const hf = () => { wrapUse(); }; [1].forEach(hf)`) or
+/// left unplaced takes ADR 0535's answer there, as a write written at the
+/// call would. `Some` is a proven disallowed write or `Unknown`; `None` says
+/// nothing, and the write's own role stands. The compiler places a helper's
+/// body by where it is called (a handler) and knows no carrier between.
+#[allow(clippy::too_many_arguments)]
+fn helper_call_write_execution(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    walk: &mut HelperWriteWalk,
+) -> Option<ExecutionRole> {
+    let function = containing_ast_function(&file.ast, span)?;
+    if lookup.function_may_be_component(file, function)
+        || !crate::interproc::body_site_runs_during_call(file, function, span)
+    {
+        return None;
+    }
+    let key = (file.path.to_string(), function.span);
+    if !walk.visiting.insert(key.clone()) {
+        return None;
+    }
+    let mut unplaced = false;
+    let mut proven = None;
+    for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        if walk.depth == 0 {
+            unplaced = true;
+            break;
+        }
+        walk.depth -= 1;
+        let caller_allowed = allowed_callback_spans(caller_file, lookup);
+        let role = handed_write_execution_within(
+            caller_file,
+            callee,
+            &caller_allowed,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            ExecutionRole::Unreported,
+            walk,
+        );
+        walk.depth += 1;
+        if role.reports_disallowed_write() {
+            proven = Some(role);
+            break;
+        }
+        if role == ExecutionRole::Unknown {
+            unplaced = true;
+        }
+    }
+    walk.visiting.remove(&key);
+    proven.or(unplaced.then_some(ExecutionRole::Unknown))
 }
 
 /// ADR 0535: [`handed_read_role`] for a write: the role of a setter call

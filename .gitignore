@@ -769,6 +769,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/read-handed-in-callback/node_modules/**
 !fixtures/reactive-ir/read-handed-through-summary/node_modules/
 !fixtures/reactive-ir/read-handed-through-summary/node_modules/**
+!fixtures/reactive-ir/handed-residuals/node_modules/
+!fixtures/reactive-ir/handed-residuals/node_modules/**
 
 !fixtures/reactive-ir/owner-region-no-edge/node_modules/
 !fixtures/reactive-ir/owner-region-no-edge/node_modules/**

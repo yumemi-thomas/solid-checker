@@ -1,0 +1,265 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 720,
+      "end": 727,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 1176,
+      "end": 1185,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 1697,
+      "end": 1704,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 2670,
+      "end": 2672,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 3027,
+      "end": 3033,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4075,
+      "end": 4082,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4075,
+      "end": 4082,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4075,
+      "end": 4082,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4180,
+      "end": 4187,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4180,
+      "end": 4187,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4180,
+      "end": 4187,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4595,
+      "end": 4602,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4595,
+      "end": 4602,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4595,
+      "end": 4602,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4627,
+      "end": 4631,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5002,
+      "end": 5009,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5002,
+      "end": 5009,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5294,
+      "end": 5298,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5294,
+      "end": 5298,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5396,
+      "end": 5403,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5396,
+      "end": 5403,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 6210,
+      "end": 6212,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 6799,
+      "end": 6801,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 7106,
+      "end": 7108,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 7429,
+      "end": 7431,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 7803,
+      "end": 7805,
+      "fixes": 0
+    }
+  ]
+}
