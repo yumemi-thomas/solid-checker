@@ -4434,6 +4434,34 @@ pub(crate) fn escapes_nested(
     })
 }
 
+/// ADR 0537: the inline carriers `function`'s binding is handed to by name
+/// (ADR 0531's `HandOff::Inline`): the calls that run it before returning.
+pub(crate) fn inline_carriers(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<solid_facts::core::Span> {
+    let named_expression =
+        function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some();
+    let name = if named_expression {
+        crate::execution_role::named_expression_binding(file, function, lookup)
+    } else {
+        crate::owners::function_binding_name(file, function)
+    };
+    let Some(name) = name else {
+        return Vec::new();
+    };
+    let mut hand_offs = Vec::new();
+    binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+    hand_offs
+        .into_iter()
+        .filter_map(|hand_off| match hand_off {
+            HandOff::Inline(at) => Some(at),
+            _ => None,
+        })
+        .collect()
+}
+
 /// ADR 0535: whether the named function around `span` is handed whole to
 /// project code or an unresolved call (`run(hf)`, `box.forEach(hf)`), which
 /// may run it anywhere, or written as a member's value. A host that keeps it
@@ -4465,7 +4493,7 @@ fn handed_to_unknown_code(
 
 /// ADR 0535: whether `function` is written as a member's value (`o.m = () =>
 /// …`, `this.m = …`): it runs wherever that member is called.
-fn member_assigned(
+pub(crate) fn member_assigned(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
 ) -> bool {

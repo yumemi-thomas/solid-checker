@@ -979,7 +979,16 @@ fn action_step_body(
     if let Some(body) = action_step_body_at(file, site, context) {
         return Some((body, false));
     }
-    action_step_body_through(file, site, context, 4)
+    action_step_body_through(file, site, context, 4).or_else(|| {
+        // ADR 0537: a site inside an enclosing named function some call of
+        // which runs in a step, where the layers between them are not
+        // placed (a member's value, a climb past its bound): an
+        // obligation.
+        crate::execution_role::functions_around(file, site)
+            .into_iter()
+            .filter(|function| function.body.contains(site) && function.body != site)
+            .find_map(|function| action_step_body_through(file, function.body, context, 4))
+    })
 }
 
 /// ADR 0516: the layers [`action_step_body_at`] does not cross, as an
@@ -1043,6 +1052,12 @@ fn action_step_body_through(
                 calls.push((caller, call.span));
             }
         }
+        // ADR 0537: a carrier it is handed to by name runs it in place there.
+        calls.extend(
+            crate::local_access::inline_carriers(file, function, context.lookup)
+                .into_iter()
+                .map(|carrier| (file, carrier)),
+        );
     }
     calls.into_iter().find_map(|(caller, call)| {
         action_step_body_at(caller, call, context)
