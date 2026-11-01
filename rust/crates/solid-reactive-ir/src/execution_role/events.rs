@@ -515,7 +515,14 @@ pub(super) fn member_reaches_only_events(
                         .ast
                         .functions_within(callback.span)
                         .max_by_key(|handler| handler.span.end - handler.span.start)
-                        .is_some_and(|handler| handler.body.contains(member))
+                        .is_some_and(|handler| {
+                            handler.body.contains(member)
+                                && crate::owners::yielded_value_contains(
+                                    file,
+                                    callback.span,
+                                    handler.span,
+                                )
+                        })
             }) {
                 return true;
             }

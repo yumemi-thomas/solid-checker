@@ -327,6 +327,24 @@ pub(super) fn read_execution_role(
     if role == ExecutionRole::DirectiveApply {
         return ExecutionRole::Unknown;
     }
+    dynamic_read_role(file, span, role, lookup)
+}
+
+pub(crate) fn dynamic_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    if role == ExecutionRole::UntrackedRendering
+        && let Some(exclusive) = dynamic_component_entry(file, span, lookup)
+    {
+        return if exclusive {
+            ExecutionRole::UntrackedUnwindowed
+        } else {
+            ExecutionRole::Unknown
+        };
+    }
     role
 }
 
@@ -432,3 +450,91 @@ pub(crate) enum RootBodyGuard {
 
 #[cfg(test)]
 mod tests;
+
+/// A closed reference census for a component returned directly by the source
+/// literal of an exact dynamic factory. Other entries withhold the placement.
+fn dynamic_component_entry(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let mut span = span;
+    for _ in 0..32 {
+        if let Some((climb, generator)) = in_place_run_site(file, span, lookup) {
+            if generator || climb.suspended.is_some() || climb.in_list || climb.among_others {
+                return None;
+            }
+            span = climb.at;
+        }
+        let function = containing_ast_function(&file.ast, span)?;
+        let inherited = file
+            .ast
+            .arguments_containing(function.span)
+            .find_map(|(call, index)| {
+                (!call.arguments[index].spread
+                    && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_preserves_read_window(primitive, index)
+                        }))
+                .then_some(call.span)
+            });
+        let Some(call) = inherited else {
+            break;
+        };
+        span = call;
+    }
+    let function = containing_ast_function(&file.ast, span)?;
+    let name = function_binding_name(file, function)?;
+    if lookup.program_has_eval() {
+        return None;
+    }
+    let symbol = lookup.callee_symbol(file, name.span)?;
+    let references = lookup.symbol_references_if_present(symbol)?;
+    let mut dynamic = false;
+    let mut exclusive = !flow_binding_exported(file, name.span);
+    for reference in references {
+        // file_by_path records the selected file slot (or missing-path probe).
+        let Some(candidate) = lookup.file_by_path(&reference.path) else {
+            exclusive = false;
+            continue;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            exclusive = false;
+            continue;
+        };
+        let at = Span::new(start, end);
+        if candidate.path == file.path && at == name.span {
+            continue;
+        }
+        let source = candidate.ast.functions.iter().find(|source| {
+            !source.generator
+                && source.expression_body
+                && candidate.ast.peel_ts_sugar_span(source.body) == at
+        });
+        let mounted = source.is_some_and(|source| {
+            candidate
+                .ast
+                .arguments_containing(source.span)
+                .any(|(call, index)| {
+                    index == 0
+                        && !call.arguments[0].spread
+                        && candidate.ast.peel_ts_sugar_span(call.arguments[0].span) == source.span
+                        && lookup
+                            .primitive_at_call(candidate, call.span)
+                            .is_some_and(|primitive| {
+                                lookup.dialect.dynamic_mount_is_unwindowed(primitive)
+                            })
+                })
+        });
+        dynamic |= mounted;
+        exclusive &= mounted;
+    }
+    dynamic.then_some(exclusive)
+}

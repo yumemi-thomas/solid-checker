@@ -319,3 +319,5 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — the async variant, which throws
 
 A read in a callback named at its sole `createRoot`/`runWithOwner` position, or in a layer that callback runs in place, is placed at the call as the inline callback is; any other entry is an obligation (ADR 0517). So is a read through `r.call(…)` or `r.bind(…)()` in a closure the body calls, and a read written after a mention that may precede its declarator.
+
+ADRs 0528–0530: eager IIFEs in handler expressions do not inherit the yielded handler's dispatch exemption. Binding-dispatched reads in proven in-place layers retain an undecided enclosing-summary row (an obligation). A closed dynamic-only component entry has the unwindowed role: a stale snapshot, with no promise of a runtime diagnostic; mixed entries stay unproven.

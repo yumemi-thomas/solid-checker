@@ -112,3 +112,45 @@ export const StaticAsync = dynamicComponent(async () => Plain, { static: true })
 
 // Negative: the default form settles the source in its memo.
 export const DefaultAsync = dynamicComponent(async () => Plain);
+
+// ADR 0530: an exact dynamic-only entry runs untracked, without a window.
+function DynamicOnlyBody() {
+  const [read] = createSignal(1);
+  read();
+  return <div />;
+}
+export function DynamicOnlyMount() {
+  const D = dynamicComponent(() => DynamicOnlyBody);
+  return <D />;
+}
+function DynamicOnlyLegal() {
+  const [read] = createSignal(1);
+  return <div>{read()}</div>;
+}
+export function DynamicLegalMount() {
+  const D = dynamicComponent(() => DynamicOnlyLegal);
+  return <D />;
+}
+function MixedDynamicBody() {
+  const [read] = createSignal(1);
+  read();
+  return <div />;
+}
+export function MixedDynamicMount() {
+  const D = dynamicComponent(() => MixedDynamicBody);
+  return <div><D /><MixedDynamicBody /></div>;
+}
+
+import { flush } from "solid-js";
+
+function inlineLayer(cb: () => unknown) { cb(); }
+function DynamicLayerBody() {
+  const [read] = createSignal(1);
+  const wrapUse = () => { read(); };
+  flush(() => { inlineLayer(() => { wrapUse(); }); });
+  return <div />;
+}
+export function DynamicLayerMount() {
+  const D = dynamicComponent(() => DynamicLayerBody);
+  return <D />;
+}

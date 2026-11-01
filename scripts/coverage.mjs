@@ -179,6 +179,8 @@ if (stubProblems.length > 0) {
  * `rust/crates/solid-reactive-ir/src/findings.rs` instead.
  */
 const KEEPS_WORDING = new Set([
+  // ADR 0530: an unwindowed read must promise no runtime warning.
+  "reactive-ir/rc17-dynamic-component",
   "reactive-ir/dialect-solid-2",
   "reactive-ir/jsx-census-gap-solid-2",
   "reactive-ir/jsx-void-child-divergence-solid-2",

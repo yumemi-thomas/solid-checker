@@ -1327,7 +1327,7 @@ impl LocalAccessContext<'_, '_> {
     ) -> bool {
         if file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && callback.span.contains(caller.span)
+                && crate::owners::yielded_value_contains(file, callback.span, caller.span)
                 && file
                     .ast
                     .functions_within(callback.span)
@@ -3397,12 +3397,17 @@ impl LocalAccessContext<'_, '_> {
         let execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
             ExecutionRole::Unknown
         } else {
-            semantic_execution_role(
+            crate::execution_role::dynamic_read_role(
                 file,
                 member.span,
-                allowed,
-                self.entities,
-                self.symbol_names,
+                semantic_execution_role(
+                    file,
+                    member.span,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                ),
                 self.lookup,
             )
         };

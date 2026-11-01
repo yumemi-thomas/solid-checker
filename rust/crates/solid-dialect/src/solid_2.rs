@@ -2031,6 +2031,18 @@ impl Dialect for Solid2 {
     /// component body, with and without `name`: `observers(source)` is `[]`, a
     /// write leaves the mapper's run count and output unchanged, and only the
     /// named calls raise `STRICT_READ_UNTRACKED`.
+    // rc.17 signals dist/dev.js:2657-2660 calls fn() without replacing
+    // tracking or strictRead, before draining the queue.
+    fn callback_preserves_read_window(&self, primitive: Primitive, argument: usize) -> bool {
+        self.callback_inherits_calling_window(primitive, argument)
+            || (self.rc17_callback_exports && primitive == Primitive::Flush && argument == 0)
+    }
+
+    fn dynamic_mount_is_unwindowed(&self, primitive: Primitive) -> bool {
+        self.rc17_callback_exports
+            && matches!(primitive, Primitive::Dynamic | Primitive::DynamicComponent)
+    }
+
     fn callback_runs_untracked_without_window(
         &self,
         primitive: Primitive,

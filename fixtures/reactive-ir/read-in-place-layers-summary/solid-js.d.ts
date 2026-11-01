@@ -21,6 +21,10 @@ declare namespace JSX {
 }
 
 declare module "solid-js" {
+  // Published rc.17 dist/types/core/action.d.ts:70, generator overload.
+  export function action<Args extends any[], Y, R>(
+    genFn: (...args: Args) => Generator<Y, R, any> | AsyncGenerator<Y, R, any>
+  ): (...args: Args) => Promise<R>;
   export type Accessor<T> = () => T;
   export type Setter<T> = (value: T) => T;
   export function createSignal<T>(value: T): [get: Accessor<T>, set: Setter<T>];

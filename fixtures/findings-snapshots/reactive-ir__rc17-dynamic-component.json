@@ -9,7 +9,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 1107,
       "end": 1119,
-      "fixes": 0
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
       "rule": "missing-owner",
@@ -19,7 +21,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 1392,
       "end": 1404,
-      "fixes": 0
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
       "rule": "missing-owner",
@@ -29,7 +33,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 1530,
       "end": 1542,
-      "fixes": 0
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
       "rule": "missing-owner",
@@ -39,7 +45,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 1731,
       "end": 1743,
-      "fixes": 0
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -49,7 +57,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 2292,
       "end": 2304,
-      "fixes": 0
+      "fixes": 0,
+      "message": "accessor setter \"setKind\" is called inside owned scope dynamicComponent compute; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
+      "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -59,7 +69,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 2512,
       "end": 2524,
-      "fixes": 0
+      "fixes": 0,
+      "message": "accessor setter \"setKind\" is called inside owned scope dynamicComponent compute; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
+      "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -69,7 +81,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 2628,
       "end": 2640,
-      "fixes": 0
+      "fixes": 0,
+      "message": "accessor setter \"setKind\" is called inside owned scope dynamicComponent compute; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
+      "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -79,7 +93,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 2899,
       "end": 2911,
-      "fixes": 0
+      "fixes": 0,
+      "message": "accessor setter \"setKind\" is called inside owned scope BodyStaticWrite; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
+      "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -89,7 +105,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 3581,
       "end": 3593,
-      "fixes": 0
+      "fixes": 0,
+      "message": "setter \"setKind\" is called in code the analysis cannot place, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+      "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -99,7 +117,9 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 3756,
       "end": 3768,
-      "fixes": 0
+      "fixes": 0,
+      "message": "setter \"setKind\" is called in code the analysis cannot place, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+      "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
       "rule": "static-dynamic-async-source",
@@ -109,7 +129,45 @@
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 4084,
       "end": 4100,
-      "fixes": 0
+      "fixes": 0,
+      "message": "dynamicComponent() is called with { static: true } and a source that is an async function, which always returns a Promise; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing",
+      "hint": "Drop static: true so dynamicComponent() settles the source in its memo (and render it under a <Loading> boundary), or resolve the component before calling dynamicComponent() and pass a synchronous source."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 4408,
+      "end": 4414,
+      "fixes": 0,
+      "message": "reactive accessor \"read\" is read directly in DynamicOnlyBody, which does not track; the read sees the current value once and never updates when \"read\" changes; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. No strict-read window is open for this read (a map function opens one only when the call passes a `name`), so Solid's development warning does not point out the stale value."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 4816,
+      "end": 4822,
+      "fixes": 0,
+      "message": "reactive accessor \"read\" is read in MixedDynamicBody, but no compiler or semantic fact places where this code runs (tracked, untracked, in a callback, or never), so whether this read is untracked cannot be proven either way",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 5208,
+      "end": 5217,
+      "fixes": 0,
+      "message": "reactive accessor \"read\" is read through wrapUse in a callback that runs with tracking off, which does not track; the read sees the current value once and never updates when \"read\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. No strict-read window is open for this read (a map function opens one only when the call passes a `name`), so Solid's development warning does not point out the stale value."
     }
   ]
 }

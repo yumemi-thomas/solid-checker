@@ -93,6 +93,9 @@
   "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
     "file_by_path": 1
   },
+  "rust/crates/solid-reactive-ir/src/execution_role.rs": {
+    "file_by_path": 1
+  },
   "rust/crates/solid-reactive-ir/src/identity.rs": {
     "typescript-table": 1
   },
@@ -188,7 +191,7 @@
   },
   "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
     "facts.files": 15,
-    "file_by_path": 2,
+    "file_by_path": 3,
     "hashmap-iteration": 3
   },
   "rust/crates/solid-reactive-ir/src/interproc/refresh.rs": {

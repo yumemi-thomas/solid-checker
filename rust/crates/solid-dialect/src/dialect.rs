@@ -1129,6 +1129,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether this inline callback keeps the caller's strict-read window.
+    fn callback_preserves_read_window(&self, primitive: Primitive, argument: usize) -> bool {
+        self.callback_inherits_calling_window(primitive, argument)
+    }
+
+    /// Whether the non-static dynamic factory mounts its returned component
+    /// under untrack in a computation, without a strict-read window.
+    fn dynamic_mount_is_unwindowed(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// Whether this primitive mounts a component tree at a DOM root, taking
     /// the root component (or a function returning it) as its first argument.
     ///

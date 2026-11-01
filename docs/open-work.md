@@ -11,15 +11,12 @@ Defects the runtime reports and the checker does not. Each is a missing violatio
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
-- Fuzzer `ref-factory-body` with a helper or IIFE layer and a `hook-member`, `or-assign` or `bind` binding (about 190 recall programs, ADR 0527): the read reaches the layer through a binding dispatch, ADR 0522's non-layer edge; certified clean.
-- Fuzzer `pos-handler-expr` with some non-direct bindings (about 25 recall programs, ADR 0527): a read in the IIFE of a handler expression reached through an alias, tuple or hook binding of the memo variant; certified clean.
 - Hand-off of the site's function by name (saturation research 2026-11-01, held hand-off layers): an owner operation in a closure a wrapper or a timer runs is placed owned by the region it is written in (13 probes; a first fix turned ADR 0347's dormant exports into violations and was not landed), a read in a function handed by name to `forEach`, `sort`, `new Promise`, `.call` or `Reflect.apply` is attributed only at named calls (13 probes), and a write climb that exhausts its 16-layer bound takes the lexical role (2 probes). Main has all three.
 
 - `c2d-method-tracked` (App.tsx:19, :32): a function registered from a method or helper called in tracked JSX, then run by a later component body, keeps its registrant's lexical role. Same family: c2, c2c, c3d.
 - `r10-destructured` (App.tsx:12): destructuring `useParams()` in setup reads the reactive parameter proxy, which the checker does not take as a reactive read.
 - `r9-b3-childrenreadinbody` (App.tsx:14): the accessor returned by `children()` is called in the component body.
 - `r9-d1-mixmemoslotreadinbody` (App.tsx:7): a helper builds a memo from a callback and reads `m()` in the helper body.
-- A read that reaches an in-place layer's summary through a non-layer edge (a helper called twice inside `h1(() => { g(); })`), or a store head Get in such a layer, is not carried to the function around the layer's call (ADR 0522 climbs direct-call and `Function.prototype` rows only): `dir1()` in the body is certified clean.
 
 - `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable. An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
 
@@ -193,7 +190,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 ## 4. Open questions and live approximations
 
-- A body read in a component `dynamic()` mounts (`@solidjs/web` `dynamicCore` renders it under an unlabelled `untrack`: no strict-read window) is reported `strict-read-untracked` as a violation, while rc.17 warns nothing (the read is stale all the same). The recall generator skips `dynamic` mounts for the strict-read body cells; the store cells do not, and 12 `pos-flush-fn` programs (a nested store write through a module wrapper, `dynamic` mount) judge wrong-rule for it (ADR 0527). Main has it too. Decide: the unwindowed role (ADR 0443) there, or an accepted louder-than-Solid trade.
+- Dynamic-only component bodies returned directly from an inline source of an exact rc.17 non-static factory have the unwindowed role (ADR 0530): a stale snapshot, deliberately reported like unnamed map reads (ADR 0443), with no runtime-warning promise. Mixed entries remain obligations. Not followed: block-bodied sources, aliases and wrappers; a dynamic-only mount through those forms retains the old component-placement uncertainty. The 12 store `pos-flush-fn` programs still need the store rule itself to claim the site; a strict-read finding alone is correctly wrong-rule, not agreement.
 
 - Import edits on app-game: the producer's update round trip is about 100 ms (module-graph work for the new specifier, producer side). The IR reruns 2 graph chunks and its result reads take about 13 ms, as for a code edit: the inserted line no longer renumbers the file's later local ids (ADR 0415; before, about 60 graph chunks and 65 ms).
 - Body edits of an unexported declaration move its `Local` id (ADR 0415), so the two `function_for_symbol` buckets it leaves and joins (`hand_outs.rs`, 1024 buckets by a hash of the id) rerun their readers: app-game body edit reruns 77 graph chunks (28 before), wall +2 to +9 ms across two runs. Widening the buckets to 16384 restores the reruns but grows the bucket memos from about 9k to 24k and adds 13 to 20 ms to mid-file and import edits.
