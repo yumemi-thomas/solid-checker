@@ -5,3 +5,5 @@ ADR 0535: full-6 (2026-11-01) certified 2,094 STRICT_READ_UNTRACKED misuse progr
 A function written as a member's value (`o.m = () => …`, `this.m = …`) runs wherever the member is called, which nothing follows: ReturnedMember and RootThisMember are obligations, never silent. RootProjectCarrier (a project object's `forEach`) is never a violation. HandlerForEach and RootTimeout stay legal.
 
 The stub reduces the published rc.17 signal, root and effect declarations. The complete source also type-checks against published solid-js rc.17 with strict ES2022 settings. Package bytes are not copied here.
+
+Writes take the same placement (setter, action and `refresh` calls): OwnerForEachWrite, OwnerProjectHelperWrite and OwnerMemberWrite (a handler re-entering a component owner; rc.17 throws REACTIVE_WRITE_IN_OWNED_SCOPE) were certified clean and are obligations, as the direct write there is. EffectDocumentListener stays legal: every DOM redeclaration of `addEventListener` keeps its listener for the host, and `removeEventListener` only names it.

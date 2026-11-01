@@ -1,4 +1,4 @@
-import { createEffect, createRoot, createSignal } from "solid-js";
+import { createEffect, createOwner, createRoot, createSignal, runWithOwner } from "solid-js";
 
 // ADR 0535: a read in a named function handed by name to an inline carrier
 // (ADR 0531) inside a primitive's callback runs at the carrier, in that
@@ -98,6 +98,81 @@ export function RootThisMember() {
       }
     }
     new Holder().m?.();
+  });
+  return <p />;
+}
+
+// Writes (ADR 0535): the same placement for a setter call. A handler that
+// re-enters a component's owner (`runWithOwner`) runs the write in an owned
+// scope; rc.17 throws REACTIVE_WRITE_IN_OWNED_SCOPE. The direct write there is
+// an obligation (no fact proves the owner is not disposed), so is each hand-off.
+
+// Obligation: a `forEach` carrier in a re-entered owner.
+export function OwnerForEachWrite() {
+  const [, setW] = createSignal(0);
+  const owner = createOwner();
+  return (
+    <button
+      onClick={() => {
+        runWithOwner(owner, () => {
+          const f = () => {
+            setW(1);
+          };
+          [1].forEach(f);
+        });
+      }}
+    />
+  );
+}
+
+// Obligation: a project helper that calls what it is given.
+export function OwnerProjectHelperWrite() {
+  const [, setW] = createSignal(0);
+  const owner = createOwner();
+  return (
+    <button
+      onClick={() => {
+        runWithOwner(owner, () => {
+          const f = () => {
+            setW(2);
+          };
+          const run = (g: () => void) => {
+            g();
+          };
+          run(f);
+        });
+      }}
+    />
+  );
+}
+
+// Obligation: a setter call in a function written as a member's value.
+export function OwnerMemberWrite() {
+  const [, setW] = createSignal(0);
+  const owner = createOwner();
+  return (
+    <button
+      onClick={() => {
+        runWithOwner(owner, () => {
+          const holder: { m?: () => void } = {};
+          holder.m = () => {
+            setW(3);
+          };
+          holder.m?.();
+        });
+      }}
+    />
+  );
+}
+
+// Legal: a listener `document` keeps runs later, from the host; its removal in
+// the cleanup only names it.
+export function EffectDocumentListener() {
+  const [open, setOpen] = createSignal(false);
+  createEffect(open, () => {
+    const close = () => setOpen(false);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
   });
   return <p />;
 }

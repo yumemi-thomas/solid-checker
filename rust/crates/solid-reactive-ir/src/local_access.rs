@@ -2061,7 +2061,7 @@ impl LocalAccessContext<'_, '_> {
             // this role.
             && !(nested_named_function(file, call.callee, self.lookup)
                 && (handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
-                    || function_escapes_unfollowed(file, call.callee, self.lookup)))
+                    || handed_to_unknown_code(file, call.callee, self.lookup)))
             && !escapes_nested(file, call.callee, self.lookup)
             && seen.insert(key.clone())
         {
@@ -2670,6 +2670,16 @@ impl LocalAccessContext<'_, '_> {
                     root_body,
                 )
             };
+            write_execution = handed_write_execution(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+                root_body,
+                write_execution,
+            );
             // Where the resolved release's optimistic-store setter meets no
             // owned-scope guard (rc.0), a store setter is reported only when
             // it is proven to be `createStore`'s, whose writes do reach the
@@ -2753,17 +2763,28 @@ impl LocalAccessContext<'_, '_> {
             let action_execution = if alias_withheld {
                 ExecutionRole::Unknown
             } else {
-                crate::role_log::decide("action", file.path.as_str(), call.callee, || {
-                    semantic_write_execution_role(
-                        file,
-                        call.callee,
-                        allowed,
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                        RootBodyGuard::Rejects,
-                    )
-                })
+                let role =
+                    crate::role_log::decide("action", file.path.as_str(), call.callee, || {
+                        semantic_write_execution_role(
+                            file,
+                            call.callee,
+                            allowed,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                            RootBodyGuard::Rejects,
+                        )
+                    });
+                handed_write_execution(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                    role,
+                )
             };
             for _ in 0..multiplicity {
                 result.action_invocations.push(Arc::new(ActionInvocation {
@@ -4413,6 +4434,35 @@ fn escapes_nested(
     })
 }
 
+/// ADR 0535: whether the named function around `span` is handed whole to
+/// project code or an unresolved call (`run(hf)`, `box.forEach(hf)`), which
+/// may run it anywhere, or written as a member's value. A host that keeps it
+/// (`addEventListener`) runs it later, as the lexical role already says.
+fn handed_to_unknown_code(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if member_assigned(file, function) {
+        return true;
+    }
+    let named_expression =
+        function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some();
+    let name = if named_expression {
+        crate::execution_role::named_expression_binding(file, function, lookup)
+    } else {
+        crate::owners::function_binding_name(file, function)
+    };
+    name.is_some_and(|name| {
+        let mut hand_offs = Vec::new();
+        binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+        hand_offs.contains(&HandOff::Unfollowed)
+    })
+}
+
 /// ADR 0535: whether `function` is written as a member's value (`o.m = () =>
 /// …`, `this.m = …`): it runs wherever that member is called.
 fn member_assigned(
@@ -4449,9 +4499,12 @@ fn function_escapes_unfollowed(
         };
         let mut hand_offs = Vec::new();
         binding_hand_offs(file, name.span, lookup, &mut hand_offs);
-        hand_offs
-            .iter()
-            .any(|hand_off| matches!(hand_off, HandOff::Inline(_) | HandOff::Unfollowed))
+        hand_offs.iter().any(|hand_off| {
+            matches!(
+                hand_off,
+                HandOff::Inline(_) | HandOff::Unfollowed | HandOff::Retained
+            )
+        })
     })
 }
 
@@ -4553,7 +4606,9 @@ fn function_handed_unfollowed(
     // references; an object slot handed on through a `const` holder as before.
     let mut hand_offs = Vec::new();
     binding_hand_offs(file, name.span, lookup, &mut hand_offs);
-    hand_offs.contains(&HandOff::Unfollowed) || references(name.span).into_iter().any(slot_handed)
+    hand_offs.contains(&HandOff::Unfollowed)
+        || hand_offs.contains(&HandOff::Retained)
+        || references(name.span).into_iter().any(slot_handed)
 }
 
 /// ADR 0531: how one reference of a function's binding hands the function
@@ -4577,9 +4632,12 @@ enum HandOff {
     /// A standard-library call the table proves does not invoke the argument
     /// (`removeEventListener(type, f)`).
     Value,
+    /// The whole argument of a standard-library call that may keep or defer
+    /// it (`addEventListener`, `Set.add`): unfollowed too, but run by the
+    /// host later, never by project code (ADR 0535).
+    Retained,
     /// Handed to a call nothing here follows: the whole argument of a project
-    /// call, of a standard-library call that may keep or defer it
-    /// (`addEventListener`, `Set.add`) or of an unresolved one, a part of a
+    /// call or of an unresolved one, a part of a
     /// value an argument builds (`run([f])`, `defineProperty(o, "v", { get: f
     /// })`), `f.bind(…)`, a spread.
     Unfollowed,
@@ -4676,8 +4734,30 @@ fn hand_off_at(
             Some(RuntimeArgumentBehavior::ValueOnly) => HandOff::Value,
             Some(
                 RuntimeArgumentBehavior::DeferredCallback | RuntimeArgumentBehavior::RetainedValue,
-            )
-            | None => HandOff::Unfollowed,
+            ) => HandOff::Retained,
+            // Every DOM redeclaration of `addEventListener` registers its
+            // listener the same way (`runs_on_invoker_stack`).
+            None if crate::runtime_semantics::runs_on_invoker_stack(
+                resolved,
+                callability,
+                index,
+            ) =>
+            {
+                HandOff::Retained
+            }
+            // ...and every redeclaration of `removeEventListener` only removes
+            // it: argument 1 of a default-library declaration of that name.
+            None if index == 1
+                && resolved.declaration.as_ref().is_some_and(|declaration| {
+                    declaration.standard_library
+                        && declaration.qualified_name.rsplit_once('.').is_some_and(
+                            |(owner, member)| !owner.is_empty() && member == "removeEventListener",
+                        )
+                }) =>
+            {
+                HandOff::Value
+            }
+            None => HandOff::Unfollowed,
         };
     }
     // `f.call(…)`, `f.apply(…)`: `Function.prototype`'s run the receiver
@@ -4743,6 +4823,105 @@ fn handed_read_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
+    handed_role(
+        file,
+        span,
+        lookup,
+        |at| read_execution_role(file, at, allowed, entities, symbol_names, lookup),
+        ExecutionRole::reports_untracked_read,
+    )
+}
+
+/// ADR 0535: a write or an action call in a named function handed by name
+/// to an inline carrier runs at the carrier; an unplaced hand-off, or a
+/// function written as a member's value, is an obligation. A role already
+/// proving the write stands.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn handed_write_execution(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    execution: ExecutionRole,
+) -> ExecutionRole {
+    if execution.reports_disallowed_write() {
+        return execution;
+    }
+    if (inside_non_component_function(file, span, lookup)
+        || nested_named_function(file, span, lookup))
+        && let Some((role, carrier)) = handed_write_role(
+            file,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+        )
+        // Outside the blind spot the write walk follows the other hand-offs
+        // itself: only a placed carrier adds to it there.
+        && (carrier.is_some()
+            || (role == ExecutionRole::Unknown
+                && !inside_non_component_function(file, span, lookup)))
+    {
+        return role;
+    }
+    if escapes_nested(file, span, lookup)
+        // Only where `inside_non_component_function` answers for a primitive's
+        // callback around the function (the summaries follow the rest).
+        || (!inside_non_component_function(file, span, lookup)
+            && nested_named_function(file, span, lookup)
+            && handed_to_unknown_code(file, span, lookup))
+    {
+        return ExecutionRole::Unknown;
+    }
+    execution
+}
+
+/// ADR 0535: [`handed_read_role`] for a write: the role of a setter call
+/// written directly in a named function, placed by its inline carriers.
+#[allow(clippy::too_many_arguments)]
+fn handed_write_role(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
+    handed_role(
+        file,
+        span,
+        lookup,
+        |at| {
+            semantic_write_execution_role(
+                file,
+                at,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+            )
+        },
+        ExecutionRole::reports_disallowed_write,
+    )
+}
+
+/// The placement shared by [`handed_read_role`] and [`handed_write_role`]:
+/// `role_at` is the role of an operation written at a carrier, `reports`
+/// whether that role is a proven defect.
+fn handed_role(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+    role_at: impl Fn(solid_facts::core::Span) -> ExecutionRole,
+    reports: impl Fn(ExecutionRole) -> bool,
+) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
     let function = containing_ast_function(&file.ast, span)?;
     if lookup.function_may_be_component(file, function) {
         return None;
@@ -4771,7 +4950,7 @@ fn handed_read_role(
         match hand_off {
             HandOff::Call | HandOff::Value => {}
             HandOff::FreshStack => silent = silent.or(Some(ExecutionRole::DeferredCallback)),
-            HandOff::Unfollowed => unplaced = true,
+            HandOff::Unfollowed | HandOff::Retained => unplaced = true,
             HandOff::Inline(at) => {
                 // A carrier inside another unplaced named function has no
                 // proven execution at its lexical component position either.
@@ -4780,11 +4959,11 @@ fn handed_read_role(
                 {
                     ExecutionRole::Unknown
                 } else {
-                    read_execution_role(file, at, allowed, entities, symbol_names, lookup)
+                    role_at(at)
                 };
                 if role == ExecutionRole::Unknown {
                     unplaced = true;
-                } else if role.reports_untracked_read() {
+                } else if reports(role) {
                     return Some((role, Some(at)));
                 } else {
                     silent = silent.or(Some(role));

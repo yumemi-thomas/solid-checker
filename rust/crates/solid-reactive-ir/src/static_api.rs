@@ -513,7 +513,7 @@ impl StaticApiContext<'_> {
                         .get(&location(file.path.shared(), call.callee))
                         .copied()
                 {
-                    let role = semantic_write_execution_role(
+                    let role = crate::local_access::handed_write_execution(
                         file,
                         call.callee,
                         &allowed,
@@ -521,6 +521,15 @@ impl StaticApiContext<'_> {
                         self.symbol_names,
                         self.lookup,
                         RootBodyGuard::RejectsOutsideDisposal,
+                        semantic_write_execution_role(
+                            file,
+                            call.callee,
+                            &allowed,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                            RootBodyGuard::RejectsOutsideDisposal,
+                        ),
                     );
                     if role.reports_disallowed_write() || role.reports_unplaced() {
                         for _ in 0..multiplicity {
@@ -618,7 +627,7 @@ impl StaticApiContext<'_> {
                     declaration: declaration.clone(),
                     // `refresh`'s guard has no root exemption on any release
                     // (probed rc.0-rc.9, dev).
-                    execution: semantic_write_execution_role(
+                    execution: crate::local_access::handed_write_execution(
                         file,
                         call.callee,
                         &allowed,
@@ -626,6 +635,15 @@ impl StaticApiContext<'_> {
                         self.symbol_names,
                         self.lookup,
                         RootBodyGuard::RejectsOutsideDisposal,
+                        semantic_write_execution_role(
+                            file,
+                            call.callee,
+                            &allowed,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                            RootBodyGuard::RejectsOutsideDisposal,
+                        ),
                     ),
                     owned_write: self
                         .source_owned_write

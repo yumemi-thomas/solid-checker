@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
-      "start": 591,
-      "end": 595,
+      "start": 618,
+      "end": 622,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
-      "start": 844,
-      "end": 848,
+      "start": 871,
+      "end": 875,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
-      "start": 1644,
-      "end": 1648,
+      "start": 1671,
+      "end": 1675,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
-      "start": 1661,
-      "end": 1672,
+      "start": 1688,
+      "end": 1699,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
-      "start": 1987,
-      "end": 1991,
+      "start": 2014,
+      "end": 2018,
       "fixes": 0
     },
     {
@@ -57,8 +57,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
-      "start": 2314,
-      "end": 2318,
+      "start": 2341,
+      "end": 2345,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
+      "start": 3021,
+      "end": 3028,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
+      "start": 3399,
+      "end": 3406,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-handed-in-callback/App.tsx",
+      "start": 3896,
+      "end": 3903,
       "fixes": 0
     },
     {
