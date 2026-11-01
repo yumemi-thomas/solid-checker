@@ -94,6 +94,29 @@ fn effect_apply_argument(
     })
 }
 
+/// ADR 0540: the function an effect runs as its apply at `argument` of
+/// `call`. An exact bundle literal (`createEffect(compute, { effect, error })`,
+/// rc.17's `EffectBundle`) runs only its `effect` member there: `runEffect`
+/// calls the `error` member before it opens the strict-read window
+/// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1966-1989`). `None` for an
+/// object whose members are not exact (no member is proven the apply).
+pub(crate) fn effect_apply_span(
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+) -> Option<Span> {
+    let argument = call.arguments.get(argument)?;
+    if argument.runtime_value_kind != solid_facts::ast::RuntimeValueKind::Object {
+        return Some(argument.span);
+    }
+    argument
+        .literal_members
+        .iter()
+        .rev()
+        .find(|member| member.key == "effect")
+        .map(|member| member.value)
+        .filter(|_| !argument.literal_members.is_empty())
+}
+
 fn callback_runs_outside_tracking(
     dialect: &dyn Dialect,
     primitive: Primitive,

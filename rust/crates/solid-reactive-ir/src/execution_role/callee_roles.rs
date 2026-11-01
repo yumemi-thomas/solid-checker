@@ -333,17 +333,31 @@ pub(super) fn semantic_role_before_awaits(
         return role_arm!("callee_roles.own-jsx-compiler", role);
     }
     let dialect = lookup.dialect;
+    let mut bundle_unplaced = false;
     if file.ast.arguments_containing(span).any(|(call, index)| {
         crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
             == Some(index)
-            && direct_callback_contains(file, call.arguments[index].span, span)
+            && match effect_apply_span(call, index) {
+                Some(apply) => direct_callback_contains(file, apply, span),
+                None => {
+                    bundle_unplaced = true;
+                    false
+                }
+            }
     }) {
         return role_arm!(
             "callee_roles.effect-apply-argument",
             ExecutionRole::EffectApply
+        );
+    }
+    // ADR 0540: a bundle whose members are not exact proves no apply.
+    if bundle_unplaced {
+        return role_arm!(
+            "callee_roles.effect-bundle-unplaced",
+            ExecutionRole::Unknown
         );
     }
     // ADR 0323 (review round 10): a callback that runs synchronously at its

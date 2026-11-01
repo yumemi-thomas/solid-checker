@@ -333,6 +333,25 @@ fn detached_in_place(
                     _ => {}
                 }
             }
+            // ADR 0540: a callback its call runs with no owner whenever it
+            // runs (`createReaction`'s, run as its effect's apply from the
+            // flush; `createEffect`'s apply): the guard has no owner to key
+            // on, there or in a layer run in place on its stack.
+            if execution.is_some()
+                && !lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index)
+                && callback_owner_at_call(file, call, primitive, index, lookup)
+                    == Some(solid_dialect::CallbackOwner::None)
+            {
+                if by_name_others {
+                    return None;
+                }
+                if among_others {
+                    return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                return Some(WriteRegionAdjustment::Detached);
+            }
             // ADR 0460: the layers run on the stack of a callback that shares
             // its call's owner on its first run (`createRenderEffect`'s apply),
             // so the write is placed as one written directly in it. A site in a

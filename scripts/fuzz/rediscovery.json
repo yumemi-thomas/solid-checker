@@ -257,5 +257,31 @@
    "mx-strict-read-untracked-effect-cleanup-rerun-named-signal-wrapper-helper"
   ],
   "rediscovered": "5d848b2cf: the five are certified clean (full-7 rows; the named ones by batch3); the ADR 0539 build: obligations"
+ },
+ {
+  "finding": "A read in an effect bundle's error member, through a closure, was proven SC1001 (the bundle's largest function was taken as the apply); rc.17 calls the error arm outside the strict-read window (ADR 0540)",
+  "found": "VM run full-7 on 5d848b2cf: 400 false positives in lg-recall effect-error-arm",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-effect-error-arm-signal-direct-closure",
+   "lg-strict-read-untracked-effect-error-arm-signal-direct-closure-helper",
+   "lg-strict-read-untracked-effect-error-arm-memo-hook-closure"
+  ],
+  "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
+ },
+ {
+  "finding": "A write in a helper or IIFE a createReaction callback runs in place was proven SC2001 (the write climb took the component body's role); the callback runs from the flush with no owner (ADR 0540)",
+  "found": "VM run full-7 on 5d848b2cf: 1,484 false positives in lg-recall reaction",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-reaction-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-reaction-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-reaction-signal-direct-module-helper"
+  ],
+  "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
  }
 ]

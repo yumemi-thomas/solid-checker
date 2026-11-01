@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
+      "start": 1017,
+      "end": 1024,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
+      "start": 1107,
+      "end": 1114,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
+      "start": 1357,
+      "end": 1369,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
+      "start": 1421,
+      "end": 1428,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
+      "start": 2282,
+      "end": 2289,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-window-arms/App.tsx",
+      "start": 2590,
+      "end": 2601,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-window-arms/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}
