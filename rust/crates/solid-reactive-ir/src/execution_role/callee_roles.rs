@@ -256,7 +256,13 @@ pub(super) fn semantic_role_before_awaits(
             return ExecutionRole::Unknown;
         }
     }
-    if let Some(role) = named_callback_execution_role(file, span, lookup) {
+    if classifying.contains(&write_classification_marker()) {
+        if let Some(role) =
+            super::named_callbacks::named_callback_write_execution_role(file, span, lookup)
+        {
+            return role;
+        }
+    } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
         return role;
     }
     if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
@@ -413,7 +419,11 @@ pub(super) fn semantic_role_before_awaits(
         // there, some of it or none, so a role that reports nothing at that
         // call is its role; anything else is unplaced. A generator that is
         // itself the primitive's callback (`action(function* () { … })`) is
-        // that callback, placed as it was.
+        // that callback, placed as it was. A write or an action is placed by
+        // the write walk's own arm (ADR 0521, `stepped_generator_in_place`),
+        // which asks the call's write role: this read role knows no write
+        // adjustment, so a root between the call and a handler would be
+        // skipped.
         if let Some(function) =
             crate::owners::containing_ast_function(&file.ast, span).filter(|function| {
                 function.generator
@@ -423,6 +433,9 @@ pub(super) fn semantic_role_before_awaits(
                     })
             })
         {
+            if classifying.contains(&write_classification_marker()) {
+                return ExecutionRole::Unknown;
+            }
             // An async generator's body past an `await` runs on a later task.
             if let Some(created) = crate::owners::generator_iterator_used(file, function)
                 .filter(|_| !function.r#async)
@@ -437,15 +450,7 @@ pub(super) fn semantic_role_before_awaits(
                     lookup,
                     classifying,
                 );
-                // A write's or an action's rule decides more than the role (a
-                // render apply's first run, the owner of an `untrack` body):
-                // only an event handler's role is passed through for them.
-                let legal = if classifying.contains(&write_classification_marker()) {
-                    role == ExecutionRole::EventCallback
-                } else {
-                    !role.reports_untracked_read() && !role.reports_unplaced()
-                };
-                if legal {
+                if !role.reports_untracked_read() && !role.reports_unplaced() {
                     return role;
                 }
             }
@@ -454,6 +459,44 @@ pub(super) fn semantic_role_before_awaits(
         return ExecutionRole::DeferredCallback;
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
+        // A read in a function nested in the flow callback that runs in
+        // place there (a helper's callback, an IIFE, an inline library
+        // callback; `climb_in_place_layers`) runs on the stack of the layer's
+        // call in the callback's body, so it is placed as a read written at
+        // that call (ADR 0469's climb). rc.17 runs a `For`/`Repeat` row body
+        // in a fresh row root under `setStrictRead("<For>")` and a
+        // one-parameter `Show`/`Match` child under `untrack(child, "<Show>")`
+        // (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:1548-1570`, `:1588`,
+        // `:1635`; `@solidjs/signals` `dist/dev.js:3093-3101`): the window is
+        // the synchronous extent of the body, and a layer called in it is in
+        // the window. A layer past an await, a site in a layer's parameter
+        // list, or a generator stepped at its own call (ADR 0516: some of
+        // its body runs, or none) is unplaced. Writes keep their own
+        // classification; a nested function no layer places keeps the
+        // callback's deferred answer.
+        if role == ExecutionRole::DeferredCallback
+            && !classifying.contains(&write_classification_marker())
+            && let Some((climb, through_generator)) =
+                super::write_roles::in_place_run_site(file, span, lookup)
+        {
+            let placed = semantic_execution_role_within(
+                file,
+                climb.at,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+            if placed.reports_untracked_read() {
+                return match climb.suspended {
+                    Some(true) => ExecutionRole::Unreported,
+                    Some(false) => ExecutionRole::Unknown,
+                    None if climb.in_list || through_generator => ExecutionRole::Unknown,
+                    None => placed,
+                };
+            }
+        }
         return role;
     }
     {
@@ -1456,6 +1499,15 @@ pub(super) fn callee_callback_timing_within(
         let Some(literal) = containing_ast_function(&file.ast, span) else {
             return false;
         };
+        // A function an intrinsic `ref` applies runs while its element is
+        // created, in the window of the code creating it: that is the
+        // rendering role `read_execution_role` gave the read, from the
+        // element's own role, so the timing is the element's.
+        if execution == ExecutionRole::UntrackedRendering
+            && super::ref_applied_in_body(file, literal, lookup)
+        {
+            return false;
+        }
         // ADR 0334/0335: an audited router renders a function written as its
         // component value with `createComponent`; it is no callback of the
         // call it is written in, and its body is a component body.

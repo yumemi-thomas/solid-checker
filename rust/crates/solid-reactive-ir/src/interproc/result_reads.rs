@@ -283,8 +283,16 @@ fn call_result_reads(
     // position that runs it. The direct-read path asks the same question
     // (`LocalAccess::discover`), so the two paths agree on which function
     // a read is written in.
-    let execution =
-        semantic_execution_role(file, call.callee, allowed, entities, symbol_names, lookup);
+    // The read's role: a call in a function an intrinsic `ref` applies runs
+    // where its element is created (`read_execution_role`).
+    let execution = crate::execution_role::read_execution_role(
+        file,
+        call.callee,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+    );
     // ADR 0202: an unresolved dispatch decides a claim only where the
     // reads it hides could be reported. Reads at an event, a deferred
     // callback, a tracked JSX position or deleted code are reported by no
@@ -323,12 +331,23 @@ fn call_result_reads(
         dispatch_obligations.truncate(obligations_before);
     }
     let object_callable = runs_in_unrendered_object_callable(file, call.callee, lookup);
+    let mut execution = execution;
     if !object_callable
         && (inside_non_component_function(file, call.callee, lookup)
             || runs_in_unproven_stored_literal(file, call.callee, entities, symbol_names, lookup))
         && named_callback_execution_role(file, call.callee, lookup).is_none()
     {
-        return;
+        // ADR 0516: a class member's body (`class K { constructor() { h(); } }
+        // new K();` in a component body) is run by a construction or a member
+        // call that neither the role proofs nor the summaries follow, so the
+        // reads the call carries are placed nowhere: an obligation, never
+        // silence. The direct-read path makes the same answer for a read
+        // written in the member (`local_access`); a call there of a helper or
+        // a hook's accessor returned silence.
+        if !crate::execution_role::inside_class_member(file, call.callee, lookup) {
+            return;
+        }
+        execution = ExecutionRole::Unknown;
     }
     let mut context = None::<String>;
     let get_context = property_gets::ReadContext {
@@ -369,24 +388,27 @@ fn call_result_reads(
     // callee among them, stays attributed unless the entered-call proof
     // below covers it. An async body's reads additionally need a prefix
     // proof: ordinary async calls enter immediately, but resume detached.
-    let direct_callee = (ambiguous_candidates.is_none() && !file.ast.any_jsx_containing(call.span))
-        .then(|| match transported {
-            Some(accessor_provenance::Callable::Function { path, span }) => {
-                let file = lookup.file_by_path(path)?;
-                Some((file, file.ast.function_at(*span)?))
-            }
-            _ => lookup.function_for_symbol(symbol),
-        })
-        .flatten()
-        .filter(|(callee_file, callee)| {
-            !call.construct
-                && !callee.generator
-                && (!callee.r#async || call.direct_callee)
-                && (matches!(
-                    transported,
-                    Some(accessor_provenance::Callable::Function { .. })
-                ) || lookup.function_value_is_current(callee_file, callee))
-        });
+    // A call in a function written in the JSX, or one a ref application
+    // yields, is not a JSX expression's (`jsx_evaluates`).
+    let direct_callee = (ambiguous_candidates.is_none()
+        && !crate::owners::jsx_evaluates(file, call.span))
+    .then(|| match transported {
+        Some(accessor_provenance::Callable::Function { path, span }) => {
+            let file = lookup.file_by_path(path)?;
+            Some((file, file.ast.function_at(*span)?))
+        }
+        _ => lookup.function_for_symbol(symbol),
+    })
+    .flatten()
+    .filter(|(callee_file, callee)| {
+        !call.construct
+            && !callee.generator
+            && (!callee.r#async || call.direct_callee)
+            && (matches!(
+                transported,
+                Some(accessor_provenance::Callable::Function { .. })
+            ) || lookup.function_value_is_current(callee_file, callee))
+    });
     let activated_defaults =
         activated_default_reads(scope, dependencies, call, direct_callee, &label);
     let proof = DirectReadProof::new(scope, call, transported, direct_callee, target);
@@ -1695,8 +1717,33 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
                         entities,
                         lookup.dialect,
                     ))))
-            && body_site_runs_during_call(owner_file, owner, origin)
+            && body_site_runs_during_call_through_layers(owner_file, owner, origin, lookup)
     }
+}
+
+/// [`body_site_runs_during_call`], also for a site written in layers that run
+/// in place on the function's stack (ADR 0522, ADR 0469's climb): the site
+/// runs during the call when the layers' outermost call in the function's own
+/// body does, and no layer on the way is a parameter list, a generator stepped
+/// at its own call, or past an await.
+fn body_site_runs_during_call_through_layers(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if body_site_runs_during_call(file, function, site) {
+        return true;
+    }
+    let Some((climb, through_generator)) =
+        crate::execution_role::in_place_run_site_within(file, site, lookup, Some(function.span))
+    else {
+        return false;
+    };
+    !through_generator
+        && climb.suspended.is_none()
+        && !climb.in_list
+        && body_site_runs_during_call(file, function, climb.at)
 }
 
 fn decide_reads_by_arguments(

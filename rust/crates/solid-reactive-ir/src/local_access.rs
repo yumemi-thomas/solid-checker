@@ -25,7 +25,7 @@ use crate::execution_role::{
     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
     control_flow_execution_role, direct_control_flow_body_role, host_callback_timing,
     missing_jsx_census, named_callback_execution_role, nested_literal_runs_during_body,
-    pending_accessor_probe, read_analysis_context, semantic_execution_role,
+    pending_accessor_probe, read_analysis_context, read_execution_role, semantic_execution_role,
     semantic_write_execution_role, unclassified_callback_reaches_modelled_consumer,
 };
 use crate::identity::SymbolId;
@@ -1475,7 +1475,7 @@ impl LocalAccessContext<'_, '_> {
                 }
                 continue;
             };
-            let execution = semantic_execution_role(
+            let execution = read_execution_role(
                 file,
                 call.span,
                 allowed,
@@ -1913,7 +1913,7 @@ impl LocalAccessContext<'_, '_> {
                 .is_none()
             && self.handed_member_callee(file, call.callee)
         {
-            let execution = semantic_execution_role(
+            let execution = read_execution_role(
                 file,
                 call.callee,
                 allowed,
@@ -1959,7 +1959,7 @@ impl LocalAccessContext<'_, '_> {
         let execution = if alias_withheld {
             ExecutionRole::Unknown
         } else {
-            semantic_execution_role(
+            read_execution_role(
                 file,
                 call.callee,
                 allowed,
@@ -2022,10 +2022,14 @@ impl LocalAccessContext<'_, '_> {
             // role index does not admit, an alias, an object literal slot)
             // may run there: an obligation, never silence. The reachable-call
             // index and the role proofs above answer only for the calls and
-            // positions they model; "no row" is not "never runs".
+            // positions they model; "no row" is not "never runs". A class
+            // member's body (`class K { constructor() { r1(); } } new K();`
+            // in a component body) is such a place: the construction or the
+            // member call that runs it is followed by neither.
             if let Some(accessor) = self.accessors.get(symbol)
                 && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
-                && function_escapes_unfollowed(file, call.callee, self.lookup)
+                && (function_escapes_unfollowed(file, call.callee, self.lookup)
+                    || crate::execution_role::inside_class_member(file, call.callee, self.lookup))
                 && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
             {
                 self.push_accessor_read(
@@ -2048,12 +2052,14 @@ impl LocalAccessContext<'_, '_> {
             self.push_accessor_read(file, call, symbol, accessor, execution, result);
         } else if let Some(accessor) = self.accessors.get(symbol)
             && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
-            && function_escapes_unfollowed(file, call.callee, self.lookup)
+            && (function_escapes_unfollowed(file, call.callee, self.lookup)
+                || crate::execution_role::inside_class_member(file, call.callee, self.lookup))
             && seen.insert(key.clone())
         {
             // ADR 0516: a function no named role places, handed where the
-            // analysis does not follow: the read is placed nowhere, so it is
-            // an obligation (as at the unreached arm above).
+            // analysis does not follow, or a class member's body: the read is
+            // placed nowhere, so it is an obligation (as at the unreached arm
+            // above).
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
         }
         // ADR 0294: a typed candidate read where an accessor read would be
@@ -2221,7 +2227,7 @@ impl LocalAccessContext<'_, '_> {
         let execution = if alias_withheld {
             ExecutionRole::Unknown
         } else {
-            semantic_execution_role(
+            read_execution_role(
                 file,
                 call.callee,
                 allowed,
@@ -2453,8 +2459,12 @@ impl LocalAccessContext<'_, '_> {
         }
         let may_write =
             may_write_or_act && (write.reports_disallowed_write() || write.reports_unplaced());
+        // A read no fact places (an instance field initializer, which runs
+        // at construction) is as unproven as one in a reporting role: the
+        // callee cannot be selected exactly and nothing rules the window out.
         if may_write
             || execution.reports_untracked_read()
+            || execution.reports_unplaced()
             || self.may_run_in_leaf_owner(file, call.callee)
         {
             result.dispatch_obligations.push(crate::StaticDefect {
@@ -3286,7 +3296,7 @@ impl LocalAccessContext<'_, '_> {
         // the longer path is no read, so the Get of this one is the chain's.
         let read_as_part = |candidate: &solid_facts::ast::MemberFact| {
             file.ast.peel_ts_sugar_span(candidate.object) == member.span
-                && !(file.ast.is_plain_assignment_target(candidate.span)
+                && !(file.ast.is_plain_write_target(candidate.span)
                     || file
                         .ast
                         .deleted_targets
@@ -3302,10 +3312,12 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         // A plain assignment writes this exact member without reading its
-        // old value. Compound assignments, updates, and members nested
-        // inside a target (a computed key, a destructuring default) are
-        // retained as reads.
-        if file.ast.is_plain_assignment_target(member.span)
+        // old value, as does a plain destructuring assignment at each leaf of
+        // its pattern (`({ v: store.v } = source)`, ADR 0526: the Get is the
+        // source's). Compound assignments, updates, and members nested inside
+        // a target (a computed key, a destructuring default) are retained as
+        // reads.
+        if file.ast.is_plain_write_target(member.span)
             || file
                 .ast
                 .deleted_targets

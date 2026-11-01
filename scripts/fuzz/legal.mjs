@@ -13,7 +13,7 @@
 //   uncertifiable     the checker declined at the site
 //   clean             no finding at the site
 //
-//   node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid] [--codes A,B] [--confirm-with-chrome]
+//   node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid] [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--checker-bin …] [--typefacts …] [--tsc …] [--cache-dir <dir>] [--no-cache]
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -29,7 +29,7 @@ import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
 import { fnv, regionOf, runtimeDifferential, siteOf } from "./matrix.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
-import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./misuse.mjs";
+import { LAYERS, LEGAL_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
 import { axesKey, combined, mountSuffix, mountsOption, recallAxes, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
@@ -99,16 +99,17 @@ export function judgeLegalProgram({ built, ...input }) {
   return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
 }
 
-/** The cells: every code with legal contexts, each legal context. */
-export function legalCells({ codes } = {}) {
-  return LEGAL_CODES().filter((code) => !codes || codes.includes(code)).flatMap((code) => SPEC[code].legal.map((context) => ({ code, context })));
+/** The cells: every code with legal contexts, each legal context; `recall` adds the contexts only the recall grids list (`recallLegal`). */
+export function legalCells({ codes, recall = false } = {}) {
+  const contextsOf = (code) => [...(SPEC[code].legal ?? []), ...(recall ? recallLegalOf(code) : [])];
+  return (recall ? TEMPLATE_CODES.filter((code) => contextsOf(code).length) : LEGAL_CODES()).filter((code) => !codes || codes.includes(code)).flatMap((code) => contextsOf(code).map((context) => ({ code, context })));
 }
 
 /** The legal shapes of a code (`--grid`): its legal variants x its grid bindings x the layers. */
 export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** `--recall`: the shapes the recall axes add to a legal cell (matrix.mjs `recallAxes`), on the legal grid's base shapes. */
-export const recallLegalShapes = (code, context) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code));
+export const recallLegalShapes = (code, context) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true });
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 export function generateLegal(options, { code, context }, { index, shape }) {
@@ -128,7 +129,7 @@ export async function runLegal(options) {
   mkdirSync(out, { recursive: true });
   const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
-    const cells = legalCells({ codes: options.codes?.split(",") });
+    const cells = legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) }).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
     let entries = [];
     for (const cell of cells) {
       const shapes = options.recall ? recallLegalShapes(cell.code, cell.context) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
@@ -238,7 +239,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

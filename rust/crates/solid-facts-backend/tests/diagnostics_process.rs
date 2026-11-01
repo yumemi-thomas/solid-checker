@@ -2392,8 +2392,10 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         };
         // ADR 0332: a read no fact places is an uncertifiable obligation at
         // the read itself (the method bodies of `interprocedural-methods-v2`'s
-        // exported readers, which nothing in the project calls). The calling
-        // component's findings are the rest.
+        // exported readers, which nothing in the project calls, and the class
+        // method `Reader.read`, whose read is an ADR 0516 obligation at its
+        // definition as well as at its call sites). The calling component's
+        // findings are the rest.
         let (unplaced, strict): (Vec<_>, Vec<_>) =
             findings_for_rule(&findings, "strict-read-untracked")
                 .into_iter()
@@ -2405,7 +2407,7 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         assert_eq!(
             unplaced.len(),
             if fixture == "interprocedural-methods-v2" {
-                3
+                4
             } else {
                 0
             },

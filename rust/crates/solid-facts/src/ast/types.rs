@@ -393,6 +393,14 @@ pub struct AstFacts {
     /// innermost enclosing function.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub implicit_suspensions: Vec<Span>,
+    /// Every `yield` expression, by span, sorted (facts schema 88). A sync
+    /// generator does not suspend its caller at a `yield`, so the span is not
+    /// an [`AstFacts::implicit_suspensions`] entry; what a consumer that steps
+    /// the generator (an action body) does at it depends on the operand, which
+    /// the fact carries. Recorded for the function the `yield` is written in;
+    /// a consumer attributes each to its innermost enclosing function.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub yields: Vec<YieldFact>,
     /// Module-level string directives (`"use server"`, `"use strict"`, …):
     /// the statements the parser classifies as the module's directive
     /// prologue, in source order, carrying the cooked directive text. A
@@ -1325,6 +1333,27 @@ pub enum IdentifierRole {
     Reference,
 }
 
+/// One `yield` expression (facts schema 88).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YieldFact {
+    pub span: Span,
+    /// The yielded operand; `None` for a bare `yield`, which yields `undefined`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operand: Option<Span>,
+    /// `yield* operand`: the values come from the delegate, one per step.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub delegate: bool,
+    /// The rest of the innermost block after the `yield`, when the `yield` is
+    /// in that block's straight-line flow (no conditional, logical, loop,
+    /// switch or try construct between the block's start and the expression,
+    /// not in a skippable chain), as [`AstFacts::dominating_awaits`] records
+    /// for an await. A block is entered only at its start, so code in the
+    /// region runs only after that `yield` handed its value out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<Span>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TryHeadAwaitFact {
@@ -1929,6 +1958,65 @@ impl AstFacts {
             .any(|assignment| !assignment.reads_target && assignment.target == span)
     }
 
+    /// Whether `span` is written by a plain `=` that never reads it: the whole
+    /// target of a plain assignment, or a leaf of a plain destructuring
+    /// assignment's pattern (`store.v` in `({ v: store.v } = source)`), which
+    /// the assignment writes while the Get is the source object's (ADR 0526).
+    #[must_use]
+    pub fn is_plain_write_target(&self, span: Span) -> bool {
+        self.is_plain_assignment_target(span) || self.destructuring_assignment_leaf(span).is_some()
+    }
+
+    /// The plain destructuring assignment (`({ v: store.v } = source)`,
+    /// `[store.v] = list`) whose pattern `span` is a leaf of: a written target
+    /// (`write_targets`) inside an object or array pattern that is not itself
+    /// an assignment's target (a plain assignment inside a default initializer
+    /// is its own fact). A `for` head's pattern has no assignment fact.
+    #[must_use]
+    pub fn destructuring_assignment_leaf(&self, span: Span) -> Option<&AssignmentFact> {
+        if self.write_targets.binary_search(&span).is_err()
+            || self
+                .assignments
+                .iter()
+                .any(|assignment| assignment.target == span)
+        {
+            return None;
+        }
+        self.assignments.iter().find(|assignment| {
+            !assignment.reads_target
+                && assignment.target.contains(span)
+                && self
+                    .pattern_values
+                    .iter()
+                    .any(|(pattern, _)| *pattern == assignment.target)
+        })
+    }
+
+    /// The leaves of `assignment`'s destructuring pattern
+    /// ([`Self::destructuring_assignment_leaf`]), in source order; empty when
+    /// its target is not a pattern.
+    #[must_use]
+    pub fn destructuring_assignment_leaves(&self, assignment: &AssignmentFact) -> Vec<Span> {
+        if assignment.reads_target
+            || !self
+                .pattern_values
+                .iter()
+                .any(|(pattern, _)| *pattern == assignment.target)
+        {
+            return Vec::new();
+        }
+        self.write_targets
+            .iter()
+            .copied()
+            .filter(|&leaf| {
+                assignment.target.contains(leaf)
+                    && self
+                        .destructuring_assignment_leaf(leaf)
+                        .is_some_and(|found| std::ptr::eq(found, assignment))
+            })
+            .collect()
+    }
+
     /// Peel only syntax that preserves the runtime value of an expression.
     ///
     /// The parser already exposes the equivalent node-level operation as
@@ -2200,6 +2288,7 @@ impl AstFacts {
             loop_repeats: Vec::new(),
             pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
+            yields: Vec::new(),
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),

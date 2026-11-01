@@ -2676,6 +2676,32 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if expression.delegate {
             self.implicit_suspensions.push(span(expression.span));
         }
+        // Facts schema 88: the `yield` itself, with the rest of its block when
+        // the block's straight-line flow reaches it (as a dominating await).
+        let yield_span = span(expression.span);
+        let skippable = self.skippable_chain_sites.contains(&yield_span)
+            || self
+                .skippable_chain_ranges
+                .iter()
+                .any(|range| range.contains(yield_span));
+        let level = self.function_flow_depths.len();
+        let region = match self.open_blocks.last() {
+            Some(&(block, depth, block_level))
+                if !skippable && block_level == level && depth == self.conditional_flow_depth =>
+            {
+                Some(Span::new(yield_span.end, block.end))
+            }
+            _ => None,
+        };
+        self.yields.push(YieldFact {
+            span: yield_span,
+            operand: expression
+                .argument
+                .as_ref()
+                .map(|argument| span(argument.span())),
+            delegate: expression.delegate,
+            region,
+        });
         if expression.delegate
             && let Some(argument) = &expression.argument
         {

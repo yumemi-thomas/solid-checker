@@ -212,7 +212,10 @@ pub(crate) fn generator_iterator_used<'f>(
     file: &'f solid_facts::FileFacts,
     generator: &solid_facts::ast::FunctionFact,
 ) -> Option<&'f solid_facts::ast::CallFact> {
-    if !generator.generator || generator.method_name.is_some() {
+    // A generator *method* is not an iterator its own call creates; a nested
+    // function inherits its enclosing method's `method_name` fact, so the
+    // function's own name is asked (`own_method_name`).
+    if !generator.generator || own_method_name(file, generator).is_some() {
         return None;
     }
     file.ast
@@ -433,16 +436,26 @@ pub(crate) fn argument_may_be_generator(
 /// runs on that call's stack, under the owner of the code around it, and
 /// nowhere else through this iterator.
 pub(crate) fn iterator_stepped_at(file: &solid_facts::FileFacts, call: Span) -> bool {
+    iterator_stepped_at_by(file, call, &["next", "throw", "return"])
+}
+
+/// ADR 0521: [`iterator_stepped_at`] by `next` alone: the one step that runs
+/// a fresh generator's body up to its first `yield`. A `return` or `throw` on
+/// a fresh generator completes it without running any of the body.
+pub(crate) fn iterator_next_stepped_at(file: &solid_facts::FileFacts, call: Span) -> bool {
+    iterator_stepped_at_by(file, call, &["next"])
+}
+
+fn iterator_stepped_at_by(file: &solid_facts::FileFacts, call: Span, methods: &[&str]) -> bool {
     let ast = &file.ast;
     ast.calls.iter().any(|step| {
         let callee = ast.peel_ts_sugar_span(step.callee);
         ast.member_at(callee).is_some_and(|member| {
             ast.peel_ts_sugar_span(member.object) == call
                 && ast.computed_members.binary_search(&member.span).is_err()
-                && matches!(
-                    file.source_text(member.property),
-                    Some("next" | "throw" | "return")
-                )
+                && file
+                    .source_text(member.property)
+                    .is_some_and(|property| methods.contains(&property))
         })
     })
 }
@@ -591,6 +604,13 @@ pub(crate) enum OwnerEdgeKind {
     Preserve,
     /// The source owner on an unsuspended path, or no owner after suspension.
     MayResumeUnowned,
+    /// A call the stepped generator of an action makes only after one of its
+    /// `yield`s handed a promise out ([`action_step_resumption`]): the next
+    /// step runs from that promise's continuation, where no owner is current.
+    /// Proven unowned wherever the source runs at all, nothing where it never
+    /// runs; an unnamed escape withholds the proof as it does for
+    /// [`OwnerEdgeKind::Unowned`].
+    ResumesUnowned,
     Owned,
     Unowned,
     Conditional,

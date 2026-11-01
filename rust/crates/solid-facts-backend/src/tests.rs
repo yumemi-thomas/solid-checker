@@ -716,6 +716,47 @@ fn an_argumentless_call_before_a_suspension_is_demanded_its_resolved_call() {
     assert!(!resolved("Math.floor"), "a function that never suspends");
 }
 
+/// The owner walk asks whether a `yield`'s operand in an action body is a
+/// native promise (`Promise.resolve()`), which only an exactly resolved
+/// standard-library declaration answers; an argumentless call elsewhere in a
+/// sync generator stays as it was.
+#[test]
+fn an_argumentless_yield_operand_is_demanded_its_resolved_call() {
+    let file = test_file_facts(
+        "src/step.ts",
+        "export function* body() {\n\
+           yield Promise.resolve();\n\
+           Date.now();\n\
+           yield local();\n\
+         }\n\
+         function local() {}",
+    );
+    let demands = semantic_demands(
+        dialect::default_dialect(),
+        std::slice::from_ref(&file),
+        SemanticDemandOptions::NONE,
+    )
+    .unwrap();
+    let resolved = |spelling: &str| {
+        let call = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some(spelling))
+            .expect(spelling);
+        let location = typefacts_location(file.path.as_str(), call.callee);
+        demands
+            .iter()
+            .any(|demand| demand.location == location && demand.resolved_call)
+    };
+    assert!(resolved("Promise.resolve"), "the yielded operand");
+    assert!(
+        !resolved("Date.now"),
+        "not an operand, in a function that never suspends"
+    );
+    assert!(!resolved("local"), "a project function is not a global");
+}
+
 #[test]
 fn argumentless_factory_result_calls_demand_validity_by_exact_binding() {
     let file = test_file_facts(

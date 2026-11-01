@@ -13,8 +13,8 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
-  button, child, show, forEach, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  HANDOFF_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -163,6 +163,8 @@ export const CALLBACK_FORMS = ["const", "function", "alias", "named", "let", "bu
 /** The recall layers: control flow around the site (model.mjs CTL_FORMS), and the helper imported from `helpers.ts` in other forms. */
 export const CONTROL_LAYERS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator"];
 export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "module-ns"];
+// The hand-off layers (model.mjs HANDOFF_FORMS) are measured with the owner-region, read-hand-off and climb-bound fixes they
+// expose (saturation research B1-B3: false cleans on main as well), not in this grid yet.
 export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS];
 /**
  * The recall bindings. Of an API: destructurings of the namespace other than the base `const { flush: flushD } = S` (nested, with a
@@ -195,6 +197,21 @@ const member = (object, text) => ({ kind: "member", object, text });
  *   setup(variant, name) -> signals   (name(prefix) -> a fresh identifier)
  *   call(node, sigs) -> api | local | member
  */
+/** Store proxy operations (`STORE_WRITE_OUTSIDE_SETTER` `recallVariants`): the text of each on `object`; `nested` needs the nested store. */
+const STORE_OPERATIONS = {
+  compound: { text: (o) => `${o}.v += 1` },
+  increment: { text: (o) => `${o}.v++` },
+  bracket: { text: (o) => `${o}["v"] = 7` },
+  "object-assign": { text: (o) => `Object.assign(${o}, { v: 7 })` },
+  "reflect-set": { text: (o) => `Reflect.set(${o}, "v", 7)` },
+  "define-property": { text: (o) => `Object.defineProperty(${o}, "v", { value: 7 })` },
+  "destructure-assign": { text: (o) => `({ v: ${o}.v } = { v: 7 })` },
+  "nested-held": { nested: true, text: (o) => `(() => { const held = ${o}.a; held.v = 7; })()` },
+  ...Object.fromEntries([["pop", "pop()"], ["shift", "shift()"], ["unshift", "unshift(3)"], ["splice", "splice(0, 1, 3)"], ["sort", "sort((a, b) => b - a)"],
+    ["reverse", "reverse()"], ["fill", "fill(7)"], ["copy-within", "copyWithin(0, 1)"]].map(([name, call]) => [`items-${name}`, { list: true, text: (o) => `${o}.items.${call}` }])),
+  "items-length": { list: true, text: (o) => `${o}.items.length = 0` },
+};
+
 export const SPEC = {
   REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -215,12 +232,23 @@ export const SPEC = {
     variantContexts: { "deferred-micro": ["handler", "timer", "then"], "deferred-timer": ["handler", "timer", "then"], "deferred-then": ["handler", "timer", "then"] },
     // Legal (legal.mjs): a write through the draft, and one through the read proxy inside its own setter, synchronously; both commit.
     legalVariants: ["draft", "in-setter"],
-    setup: (variant, name) => [variant === "delete" ? storeOptSignal(name("s"), 0) : variant?.startsWith("nested") ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    // Recall only (`recallVariants`, catalogue rank 6): the other ways code mutates a store proxy, each measured on rc.17 (2026-11-01,
+    // 700 runs): every one warns this code outside the store's setter (a body, a handler), and none commits. Under the setter they
+    // are legal, as is a write to a copy (`recallLegalVariants`).
+    recallVariants: Object.keys(STORE_OPERATIONS),
+    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound"],
+    setup: (variant, name) => [variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
     call: (node, [sig]) => member(sig.name, (object) => {
       const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
       if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
       if (node.variant === "in-setter") return `${sig.setter}(() => { ${object}.v = 7; })`;
       if (node.variant === "draft") return `${sig.setter}((draft) => { draft.v = 7; })`;
+      if (STORE_OPERATIONS[node.variant]) return STORE_OPERATIONS[node.variant].text(object);
+      if (node.variant === "copy-spread") return `({ ...${object} }).v = 7`;
+      if (node.variant === "copy-assign") return `Object.assign({}, ${object}, { v: 7 })`;
+      if (node.variant === "slice-push") return `${object}.items.slice().push(7)`;
+      if (node.variant === "draft-push") return `${sig.setter}((draft) => { draft.items.push(7); })`;
+      if (node.variant === "draft-compound") return `${sig.setter}((draft) => { draft.v += 1; })`;
       return node.variant === "delete" ? `delete ${object}.v` : node.variant === "nested-assign" ? `${object}.a.v = 7` : node.variant === "nested-push" ? `${object}.items.push(1)` : `${object}.v = 7`;
     }),
   },
@@ -323,6 +351,82 @@ export const SPEC = {
 };
 
 /**
+ * The ref contexts (`--recall` grids only; catalogue rank 1, zero coverage before): the site in a `ref` callback on an intrinsic.
+ * rc.17's `ref` (`@solidjs/web`) runs the callback while the element is created, under `runWithOwner(null)`: no owner, so an owner
+ * operation there is NO_OWNER_*, and a signal write or an action call is legal. `ref-factory` is a two-phase directive
+ * (`ref={d()}`): the site in the apply `d` returns, which runs like an inline callback; `ref-factory-body` is the site in `d`'s own
+ * body, which the component body calls, so it runs owned there. `ref-row` is an inline callback in a `For` row.
+ */
+export const REF_CONTEXTS = ["ref", "ref-named", "ref-array", "ref-cond", "ref-factory", "ref-row"];
+/** Per code: the ref contexts that are its misuse cells (`misuse`) and its legal cells (`legal`). */
+const REF_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { misuse: [...REF_CONTEXTS, "ref-factory-body"] },
+  PENDING_ASYNC_UNTRACKED_READ: { misuse: REF_CONTEXTS },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: [...REF_CONTEXTS, "ref-factory-body"] },
+  NO_OWNER_CLEANUP: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
+  NO_OWNER_EFFECT: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
+  NO_OWNER_BOUNDARY: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
+  NO_OWNER_CONTEXT: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
+  SETTLED_CLEANUP_UNOWNED: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: ["ref-factory-body"], legal: REF_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: ["ref-factory-body"], legal: REF_CONTEXTS },
+};
+/**
+ * The owned and legal positions the base contexts miss (`--recall` only; catalogue ranks 5 and 10), each measured on rc.17's fast
+ * runtime first (2026-11-01, 165 probes): a JSX attribute expression (compiled into a render effect: owned and tracked); a class
+ * static block, field initializer, constructor and method run in the body (`new K()`, `new K().m()`); a body `forEach` callback;
+ * a root, a bound owner or `untrack` inside a handler. rc.17's owner and window there:
+ *   pos-attr            owned, tracked, no window: a write or an action throws, a read and `onCleanup` are silent
+ *   pos-class-*, pos-foreach   the component body's (owned, labelled): a write, an action and a read report, `onCleanup` registers
+ *   pos-handler-root, pos-handler-owner   a root (a bound owner), unlabelled: a write and an action throw, a read and `onCleanup` are silent
+ *   pos-handler-untrack the handler's (no owner, no window): a write and an action are legal, `onCleanup` warns
+ * A store proxy write warns in each. Existing contexts gain cells there too: a write or an action in an `onSettled` or tracked
+ * effect block, under `runWithOwner(null)` and in an action body is legal (no children-capable owner); a read under
+ * `runWithOwner(null)` warns (the body's label survives the owner change) and `onCleanup` in an action body warns (no owner).
+ */
+export const POS_CONTEXTS = ["pos-attr", "pos-class-sblock", "pos-class-field", "pos-class-ctor", "pos-class-method", "pos-foreach", "pos-handler-expr", "pos-flush-fn", "pos-handler-root", "pos-handler-owner", "pos-handler-untrack"];
+// `pos-handler-expr` (the expression of `onClick={(…, h)}`, evaluated at the element's setup) and `pos-flush-fn` (`flush(fn)`) run in
+// the body too.
+const POS_BODY = ["pos-class-sblock", "pos-class-field", "pos-class-ctor", "pos-class-method", "pos-foreach", "pos-handler-expr", "pos-flush-fn"];
+const POS_OWNED = ["pos-attr", ...POS_BODY, "pos-handler-root", "pos-handler-owner"];
+const POS_PLACEMENT = {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: POS_OWNED, legal: ["pos-handler-untrack", "settled", "tracked", "owner-null", "action"] },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: POS_OWNED, legal: ["pos-handler-untrack", "settled", "tracked", "owner-null", "action"] },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: [...POS_CONTEXTS, "settled", "tracked", "owner-null", "action"] },
+  STRICT_READ_UNTRACKED: { misuse: [...POS_BODY, "owner-null"], legal: ["pos-attr", "pos-handler-root", "pos-handler-owner", "pos-handler-untrack", "action"] },
+  NO_OWNER_CLEANUP: { misuse: ["pos-handler-untrack", "action", "action-after-yield"], legal: ["pos-attr", ...POS_BODY, "pos-handler-root", "pos-handler-owner"] },
+  // An action body runs on its caller's stack (`@solidjs/signals` dist/dev.js:1573-1607), a handler here: no owner (ADR 0520).
+  NO_OWNER_EFFECT: { misuse: ["action", "action-after-yield"] },
+  NO_OWNER_BOUNDARY: { misuse: ["action", "action-after-yield"] },
+  NO_OWNER_CONTEXT: { misuse: ["action", "action-after-yield"] },
+  SETTLED_CLEANUP_UNOWNED: { misuse: ["action", "action-after-yield"] },
+};
+/**
+ * The flow callback bodies (`--recall` only; catalogue rank 2): the site in the body of a flow component's function child,
+ * `<For each={[1]}>{() => { …; return <li/>; }}</For>`. Measured on rc.17 (2026-11-01, 168 programs, Happy DOM and Chrome alike):
+ * `For` (keyed or not) and `Repeat` run the body in a fresh row root, untracked, under the label "<For>"/"<Repeat>"; a
+ * one-parameter `Show`/`Match` child runs under `untrack(child, "<Show>")` in the flow's memo. So a read warns, a pending read
+ * throws, a write or an action throws (an owner), a store proxy write warns, and an owner operation is legal.
+ */
+export const FLOW_CONTEXTS = FLOW_FORMS.map((form) => `flow-${form}`);
+const FLOW_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { misuse: FLOW_CONTEXTS },
+  PENDING_ASYNC_UNTRACKED_READ: { misuse: FLOW_CONTEXTS },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: FLOW_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: FLOW_CONTEXTS },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: FLOW_CONTEXTS },
+  NO_OWNER_CLEANUP: { legal: FLOW_CONTEXTS },
+  NO_OWNER_EFFECT: { legal: FLOW_CONTEXTS },
+  NO_OWNER_CONTEXT: { legal: FLOW_CONTEXTS },
+};
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+  const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
+  const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
+  SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
+  SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...legal.filter((context) => !hasLegal.has(context))];
+}
+
+/**
  * The codes the matrix measures, in the policy table's order: the defects, claimed by a rule or not ("never quieter than Solid": an
  * unclaimed defect the checker is silent on is a false clean too). An advisory code (Solid documents it as legal) is not measured.
  */
@@ -334,10 +438,14 @@ export const RECALL_TEMPLATE_CODES = MISUSE_CODES.filter((code) => SPEC[code].re
 export const contextsOf = (code) => SPEC[code].contexts;
 /** The recall contexts of a code (`--recall` grids only). */
 export const recallContextsOf = (code) => SPEC[code].recallContexts ?? [];
+/** The legal contexts only the recall grids list (`lg-recall`): cells of their own, like a recall context of the misuse grid. */
+export const recallLegalOf = (code) => SPEC[code].recallLegal ?? [];
 export const bindingsOf = (code, variant) => SPEC[code].bindingsFor?.(variant) ?? SPEC[code].bindings;
 export const variantsOf = (code) => SPEC[code].variants ?? [null];
 /** The variants of a code's legal programs (legal.mjs): `legalVariants`, else the misuse variants. */
 export const legalVariantsOf = (code) => SPEC[code].legalVariants ?? variantsOf(code);
+/** The variants only the recall grids cross (`recallVariants`, `recallLegalVariants`), each on the base bindings and layers. */
+export const recallVariantsOf = (code, { legal = false } = {}) => (legal ? SPEC[code].recallLegalVariants : SPEC[code].recallVariants) ?? [];
 /** The codes that have legal contexts. */
 export const LEGAL_CODES = () => TEMPLATE_CODES.filter((code) => SPEC[code].legal?.length);
 /** The variants the grid enumerates: the random draw's, then `gridVariants` (never drawn at random, so the random matrix keeps its programs). */
@@ -476,7 +584,7 @@ function valueBinding(bind, name) {
 
 /** Wraps `stmts` in a layer (a closure called in place, a helper taking the callback, an IIFE). */
 function applyLayer(layer, stmts, kit) {
-  if (CONTROL_LAYERS.includes(layer)) return [ctl(layer, stmts)];
+  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer)) return [ctl(layer, stmts)];
   if (FILE_LAYERS.includes(layer)) return [expr(call(ref(kit.ensureHelper("call", { module: true, via: layer.slice("module-".length) })), [fn(stmts)]))];
   switch (layer) {
     case "closure": { const f = kit.name("f"); return [decl(f, fn(stmts)), expr(call(ref(f)))]; }
@@ -599,13 +707,34 @@ function recallContext(context, stmts, kit) {
       const t = trigger();
       return { body: [expr(prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
+    case "ref": case "ref-array": case "ref-cond": return { body: [], view: [refEl(kit.name("v"), fn(stmts), context === "ref" ? "inline" : context.slice("ref-".length))] };
+    case "ref-named": { const r = kit.name("rf"); return { body: [decl(r, fn(stmts))], view: [refEl(kit.name("v"), ref(r))] }; }
+    case "ref-factory": { const d = kit.name("dir"); return { body: [decl(d, fn([ret(fn(stmts))]))], view: [refEl(kit.name("v"), call(ref(d)))] }; }
+    case "ref-factory-body": { const d = kit.name("dir"); return { body: [decl(d, fn([...stmts, ret(fn([]))]))], view: [refEl(kit.name("v"), call(ref(d)))] }; }
+    case "ref-row": return { body: [], view: [forEach([refEl(kit.name("v"), fn(stmts))])] };
+    case "pos-attr": return { body: [], view: [attr(kit.name("v"), iife(fn([...stmts, ret(num(1))])))] };
+    case "pos-class-sblock": return { body: [contain("class-sblock", 9, stmts)], view: [] };
+    case "pos-class-field": return { body: [contain("class-field", 9, stmts, { use: "new" })], view: [] };
+    case "pos-class-ctor": return { body: [contain("class-ctor", 9, stmts, { use: "new" })], view: [] };
+    case "pos-class-method": return { body: [contain("class-method", 9, stmts, { use: "call" })], view: [] };
+    case "pos-foreach": return { body: [expr(iter("forEach", fn(stmts)))], view: [] };
+    case "pos-handler-expr": return { body: [], view: [handlerExpr(kit.name("v"), iife(fn([...stmts, ret(num(1))])))] };
+    case "pos-flush-fn": return { body: [expr(flush(fn(stmts)))], view: [] };
+    case "pos-handler-root": return { body: [], view: [button(kit.name("b"), [expr(prim("root", fn(stmts)))])] };
+    case "pos-handler-untrack": return { body: [], view: [button(kit.name("b"), [expr(prim("untrack", fn(stmts)))])] };
+    case "pos-handler-owner": return { body: [decl("boundOwner", createOwnerExpr())], view: [button(kit.name("b"), [expr(prim("owner", fn(stmts), { ownerArg: "bound" }))])] };
     // LOADING_ON_OUTSIDE_HOLD: the async memo (setup) reads the trigger; `<Loading on={t()}>` holds a read of it, the site reads it
     // outside, and a button writes the trigger, which re-arms the boundary while the outside read holds the frame.
     case "loading-on-outside": {
       const item = child(kit.name("v"), iife(fn([...stmts, ret(num(1))])));
       return { body: [], view: [item], loading: true };
     }
-    default: throw new Error(`unknown misuse context ${context}`);
+    default: {
+      // `flow-<form>` (FLOW_CONTEXTS): the site in the body of a flow component's function child.
+      const flow = /^flow-(.+)$/.exec(context)?.[1];
+      if (flow && FLOW_FORMS.includes(flow)) return { body: [], view: [flowEl(kit.name("v"), flow, stmts)] };
+      throw new Error(`unknown misuse context ${context}`);
+    }
   }
 }
 
@@ -704,7 +833,7 @@ function buildOne(kit, plan = {}) {
   // `plan.legal` (legal.mjs): the same call where it is correct Solid, one of the template's `legal` contexts.
   const contexts = plan.legal ? spec.legal ?? [] : spec.contexts;
   const context = plan.context ?? rng.pick(contexts);
-  const recall = plan.legal ? [] : recallContextsOf(code);
+  const recall = plan.legal ? recallLegalOf(code) : recallContextsOf(code);
   if (!contexts.includes(context) && !recall.includes(context)) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
   // A variant one source carries (`variantSources`) is the grid's, never drawn: every random draw sees the variants it saw before.
   const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick((plan.legal ? legalVariantsOf(code) : variantsOf(code)).filter((v) => !spec.variantSources?.[v]));

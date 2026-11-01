@@ -1200,9 +1200,21 @@ fn plan_call_demands(
                         )
                     )
                 });
+        // The owner walk asks whether the operand of an action body's `yield`
+        // is a native promise, which only an exactly resolved standard-library
+        // declaration answers (`yield Promise.resolve()`; the action's next
+        // step runs from the promise's continuation, with no owner).
+        let argumentless_yield_operand = call.arguments.is_empty()
+            && callee_rooted_at_global(file, call.callee)
+            && file.ast.yields.iter().any(|yielded| {
+                yielded
+                    .operand
+                    .is_some_and(|operand| file.ast.peel_ts_sugar_span(operand) == call.span)
+            });
         planned.resolved_call = !call.arguments.is_empty()
             || argumentless_array_mutator
             || argumentless_before_suspension
+            || argumentless_yield_operand
             || returned_callees.contains(&call.callee)
             || computed_dispatch
             || argumentless_primitive

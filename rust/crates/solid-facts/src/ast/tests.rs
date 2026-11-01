@@ -2615,6 +2615,49 @@ fn only_the_written_target_itself_is_a_plain_assignment_target() {
 }
 
 #[test]
+fn destructuring_assignment_leaves_are_plain_write_targets() {
+    // ADR 0526: each leaf of a plain destructuring assignment is written, never
+    // read; a default's read, a compound target, a `for` head's pattern and an
+    // assignment nested in a default are not leaves of it.
+    let source = "({ a: store.a, b: [store.b, local = store.c] } = input); store.d = 1; store.e += 1; for ({ f: store.f } of rows) {} ({ g: store.g = (other.h = 2) } = input);";
+    let facts = extract("targets.ts", source).unwrap();
+    let span_of = |text: &str| {
+        let start = u32::try_from(source.find(text).unwrap()).unwrap();
+        Span::new(start, start + u32::try_from(text.len()).unwrap())
+    };
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let leaves = facts
+        .assignments
+        .iter()
+        .map(|assignment| {
+            facts
+                .destructuring_assignment_leaves(assignment)
+                .into_iter()
+                .map(text)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        leaves,
+        vec![
+            vec!["store.a", "store.b", "local"],
+            vec![],
+            vec![],
+            vec!["store.g"],
+            vec![],
+        ]
+    );
+    for written in [
+        "store.a", "store.b", "local", "store.d", "store.g", "other.h",
+    ] {
+        assert!(facts.is_plain_write_target(span_of(written)), "{written}");
+    }
+    for read in ["store.c", "store.e", "store.f", "input", "rows"] {
+        assert!(!facts.is_plain_write_target(span_of(read)), "{read}");
+    }
+}
+
+#[test]
 fn retains_complete_jsx_rule_structure() {
     let source = r#"<Button use:focus style={{ fontSize: 12 }} {...props}>
   {ready && <Content />}
@@ -3029,6 +3072,57 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
     assert_eq!(
         facts.awaits.iter().map(text).collect::<Vec<_>>(),
         ["await 0"]
+    );
+}
+
+/// Facts schema 88: every `yield` is recorded with its operand and, in a
+/// block's straight-line flow, the rest of that block.
+#[test]
+fn records_yields_with_their_operand_and_block_region() {
+    let source = r#"
+function* body(flag: boolean) {
+  yield Promise.resolve();
+  const v = yield;
+  if (flag) { yield 1; }
+  for (;;) { yield* other(); }
+  return v;
+}
+"#;
+    let facts = extract("/project/body.ts", source).unwrap();
+    let text = |span: &Span| &source[span.start as usize..span.end as usize];
+    let rows = facts
+        .yields
+        .iter()
+        .map(|fact| {
+            (
+                text(&fact.span),
+                fact.operand.as_ref().map(text),
+                fact.delegate,
+                fact.region.as_ref().map(|region| {
+                    text(region)
+                        .trim_start_matches(';')
+                        .trim()
+                        .lines()
+                        .next()
+                        .unwrap()
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            (
+                "yield Promise.resolve()",
+                Some("Promise.resolve()"),
+                false,
+                Some("const v = yield;")
+            ),
+            ("yield", None, false, Some("if (flag) { yield 1; }")),
+            // In a branch or a loop body: that block's own flow, not the body's.
+            ("yield 1", Some("1"), false, Some("}")),
+            ("yield* other()", Some("other()"), true, Some("}")),
+        ]
     );
 }
 

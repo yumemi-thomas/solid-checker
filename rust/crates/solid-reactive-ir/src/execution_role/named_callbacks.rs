@@ -47,6 +47,18 @@ pub(super) struct NamedCallbackRole {
     /// the read-context wording only.
     pub(super) effect_apply_primitive: EffectApplyPrimitive,
     pub(super) tracked: bool,
+    /// Named, as the whole argument, at a proven position whose callback
+    /// runs under a children-forbidden leaf owner
+    /// ([`solid_dialect::CallbackOwner::Leaf`]: `createTrackedEffect`'s
+    /// compute, `onSettled`'s callback). The runtime's write guard exempts
+    /// such an owner (`@solidjs/signals` dist/dev.js:2046-2090, dev-shared.js
+    /// :5619-5638), so the tracked read role the position gives says nothing
+    /// against a write there: [`named_callback_write_execution_role`].
+    pub(super) leaf: bool,
+    /// Named, as the whole argument, at a tracked position whose callback
+    /// runs in an owned computation the write guard rejects (a memo's or
+    /// projection's compute): every tracked position that is not a leaf.
+    pub(super) tracked_owned: bool,
     /// Named, as the whole argument, at an effect's tracked compute: a
     /// computation the effect owns, where a write is rejected as in a memo
     /// (ADR 0466). Reads are not admitted by it (see `admitted`).
@@ -57,6 +69,12 @@ pub(super) struct NamedCallbackRole {
     /// time and scope are the reader's, which this index cannot see, so the
     /// function's own role is unknown and outranks every arm above.
     pub(super) result_access: bool,
+    /// An intrinsic `ref` applies the function
+    /// ([`crate::owners::ref_applied_element`]): named in the attribute
+    /// (`ref={apply}`), or returned by the exact factory a two-phase directive
+    /// calls (`ref={dir()}`). It runs while the element is created, which
+    /// [`super::read_execution_role`] places from the element.
+    pub(super) ref_applied: bool,
 }
 
 /// The effect primitive(s) whose apply position names a function.
@@ -443,9 +461,17 @@ pub(crate) fn named_callback_roles(
             // The tracked and deferred arms have always demanded that the whole
             // argument *be* the function, never that an options object mention
             // it.
+            // The leaf owner is the inline path's question too
+            // (`write_region_adjustment`): asked of the same call and
+            // position, so a by-name callback answers as its literal would.
+            let leaf = dialect.leaf_scopes_allow_writes()
+                && callback_owner_at_call(file, call, primitive, argument_index, lookup)
+                    == Some(solid_dialect::CallbackOwner::Leaf);
             for candidate in index.identity_at(file, entities, argument.span) {
                 let entry = roles.entry(index.functions[*candidate]);
                 entry.tracked |= proven && tracked;
+                entry.leaf |= proven && leaf;
+                entry.tracked_owned |= proven && tracked && !leaf;
                 entry.effect_compute |= proven
                     && is_effect(primitive)
                     && dialect
@@ -495,6 +521,26 @@ pub(crate) fn named_callback_roles(
             entry.admitted = true;
             entry.deferred = true;
             roles.admit_at(function, callback.span);
+        }
+    }
+    // A function an intrinsic `ref` applies, by name or through the factory
+    // of a two-phase directive. The attribute's own literal has its body
+    // inside the compiler's `DirectiveApply` span and needs no entry here.
+    for function in &file.ast.functions {
+        if function.generator
+            || file
+                .compiler
+                .callback_roles
+                .iter()
+                .any(|callback| callback.span.contains(function.span))
+        {
+            continue;
+        }
+        if let Some(element) = crate::owners::ref_applied_element(file, function, lookup) {
+            let entry = roles.entry(function.span);
+            entry.admitted = true;
+            entry.ref_applied = true;
+            roles.admit_at(function.span, element.name.span);
         }
     }
     for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
@@ -651,6 +697,22 @@ pub(crate) fn named_callback_execution_role(
     if role.result_access {
         return Some(ExecutionRole::Unknown);
     }
+    if role.ref_applied {
+        // Also named at a primitive's callback position: two entries, no one
+        // role.
+        return Some(
+            if role.untracked_callback
+                || role.untracked_unwindowed
+                || role.effect_apply
+                || role.tracked
+                || role.deferred
+            {
+                ExecutionRole::Unknown
+            } else {
+                ExecutionRole::DirectiveApply
+            },
+        );
+    }
     if role.untracked_callback {
         return Some(ExecutionRole::UntrackedCallback);
     }
@@ -675,6 +737,32 @@ pub(crate) fn named_callback_execution_role(
     } else {
         Some(ExecutionRole::UntrackedRendering)
     }
+}
+
+/// [`named_callback_execution_role`] read for a write: the tracked role a
+/// leaf position gives (`createTrackedEffect(cb)`) is a read fact, the
+/// callback runs under a children-forbidden owner the write guard exempts, as
+/// the inline callback's [`super::write_roles::WriteRegionAdjustment::LeafScope`]
+/// says. That position is then as permissive as a deferred one, and the
+/// function's other entries decide, as for a named effect apply. A function
+/// also named at an owned tracked position (`createMemo(cb)`) keeps the
+/// rejecting role: that position proves the violation.
+pub(crate) fn named_callback_write_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let role = named_callback_execution_role(file, span, lookup)?;
+    if role != ExecutionRole::TrackedJsx {
+        return Some(role);
+    }
+    let callback = named_callback_containing(file, span, lookup)?;
+    let entry = lookup.named_callback_roles(file).get(callback.span);
+    Some(if entry.tracked && entry.leaf && !entry.tracked_owned {
+        ExecutionRole::DeferredCallback
+    } else {
+        role
+    })
 }
 
 pub(crate) fn function_symbol<'a>(

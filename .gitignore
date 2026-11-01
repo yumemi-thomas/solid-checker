@@ -109,6 +109,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-callback-by-name/node_modules/**
 !fixtures/reactive-ir/write-named-closure-in-root/node_modules/
 !fixtures/reactive-ir/write-named-closure-in-root/node_modules/**
+!fixtures/reactive-ir/write-stepped-generator-in-root/node_modules/
+!fixtures/reactive-ir/write-stepped-generator-in-root/node_modules/**
 !fixtures/reactive-ir/write-named-function-one-call/node_modules/
 !fixtures/reactive-ir/write-named-function-one-call/node_modules/**
 !fixtures/reactive-ir/local-alias-literal-slots/node_modules/
@@ -746,6 +748,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-chain-links-loose/node_modules/**
 !fixtures/reactive-ir/store-write-literal-links/node_modules/
 !fixtures/reactive-ir/store-write-literal-links/node_modules/**
+!fixtures/reactive-ir/store-standard-library-writes/node_modules/
+!fixtures/reactive-ir/store-standard-library-writes/node_modules/**
 !fixtures/reactive-ir/callee-spelling/node_modules/
 !fixtures/reactive-ir/callee-spelling/node_modules/**
 !fixtures/reactive-ir/typed-setter-unknown-source/node_modules/
@@ -754,3 +758,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/transported-setters-actions/node_modules/**
 !fixtures/reactive-ir/props-passed-sources/node_modules/
 !fixtures/reactive-ir/props-passed-sources/node_modules/**
+!fixtures/reactive-ir/read-in-place-layers-summary/node_modules/
+!fixtures/reactive-ir/read-in-place-layers-summary/node_modules/**

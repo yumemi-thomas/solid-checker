@@ -173,6 +173,11 @@ pub(super) fn literal_invocation_unproven(
     {
         return false;
     }
+    // A function an intrinsic `ref` applies while creating an element in the
+    // body runs during the body.
+    if super::ref_applied_in_body(file, literal, lookup) {
+        return false;
+    }
     if literal.method_name.is_none() && function_binding_name(file, literal).is_some() {
         return !named_helper_runs_during_body(
             file,
@@ -279,7 +284,7 @@ pub(super) fn named_helper_runs_during_body(
         // call in a tracked JSX attribute or child, a memo or a deferred
         // callback runs in that scope, not in the body's strict-read window.
         omits_argument
-            && semantic_execution_role(
+            && super::read_execution_role(
                 caller,
                 *callee,
                 &allowed_callback_spans(caller, lookup),

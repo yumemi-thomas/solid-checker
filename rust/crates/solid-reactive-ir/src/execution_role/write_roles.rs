@@ -376,6 +376,98 @@ fn detached_in_place(
     })
 }
 
+/// ADR 0521: the call that creates the iterator of the generator `span` is
+/// written in, when that generator is stepped there and nowhere else
+/// (`(function* () { … })().next()`: the iterator is the call expression
+/// itself, so no other code holds it). `None` for a site outside a
+/// generator's body, in an async generator (its steps run on later tasks), in
+/// a generator that is itself a primitive's callback (placed as that
+/// callback), or in one whose iterator is stored or never stepped.
+pub(super) struct SteppedGenerator {
+    /// The call that creates the iterator, where the first step runs.
+    pub(super) created: Span,
+    /// Whether the one step reaches the site.
+    pub(super) first_step: StepReach,
+}
+
+/// Whether the one step of a [`SteppedGenerator`] runs the site.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum StepReach {
+    /// The step is a `next`, and no `yield` of the generator's own body may
+    /// run before the site (none written before it outside an exclusive arm,
+    /// none in a loop that repeats the site): the first step reaches the
+    /// site, on the stack of the creating call.
+    Reaches,
+    /// The site never runs: the only step is a `return` or `throw` on the
+    /// fresh generator, which runs none of the body, or a `yield` in the
+    /// body's straight-line flow precedes the site on every path
+    /// ([`solid_facts::ast::YieldFact::region`]) and no second step exists.
+    Never,
+    /// A `yield` may precede the site: the first step may stop before it.
+    Unproven,
+}
+
+/// [`SteppedGenerator`] for `span`, when its own function is such a generator.
+pub(super) fn stepped_generator_in_place(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+) -> Option<SteppedGenerator> {
+    let function = crate::owners::containing_ast_function(&file.ast, span)?;
+    if !function.generator || function.r#async || !function.body.contains(span) {
+        return None;
+    }
+    if allowed.iter().any(|region| {
+        file.ast.peel_ts_sugar_span(*region) == function.span || *region == function.span
+    }) {
+        return None;
+    }
+    let created = crate::owners::generator_iterator_used(file, function)?;
+    if !crate::owners::iterator_stepped_at(file, created.span) {
+        return None;
+    }
+    let own = |point: Span| {
+        function.body.contains(point)
+            && crate::owners::containing_ast_function(&file.ast, point)
+                .is_some_and(|owner| owner.span == function.span)
+    };
+    let yield_may_precede = file
+        .ast
+        .yields
+        .iter()
+        .filter(|fact| own(fact.span))
+        .any(|fact| {
+            // Written before the site (or inside it), outside an exclusive arm.
+            let before = fact.span.start < span.end && !in_exclusive_arms(file, fact.span, span);
+            // In a loop whose repeated part holds the site: a later iteration
+            // reaches the site after the `yield`.
+            let repeated = file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                repeated.contains(span)
+                    && looped.contains(fact.span)
+                    && function.body.contains(looped)
+            });
+            before || repeated
+        });
+    let yield_dominates = file
+        .ast
+        .yields
+        .iter()
+        .filter(|fact| own(fact.span))
+        .any(|fact| fact.region.is_some_and(|region| region.contains(span)));
+    let first_step =
+        if !crate::owners::iterator_next_stepped_at(file, created.span) || yield_dominates {
+            StepReach::Never
+        } else if yield_may_precede {
+            StepReach::Unproven
+        } else {
+            StepReach::Reaches
+        };
+    Some(SteppedGenerator {
+        created: created.span,
+        first_step,
+    })
+}
+
 /// Whether a write under a proven owner runs in a disposal, for the release
 /// whose write guards stand down there ([`runs_in_disposal`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1446,6 +1538,37 @@ fn write_role_walk(
             }
         }
     }
+    // ADR 0521: a generator stepped at its own call runs its first step on
+    // the stack of that call, under that call's owner, so the write is as
+    // legal as one written at the call: a root in a handler rejects it, the
+    // handler itself does not. The write walk places the call (the read walk
+    // knows no write adjustment, so a root between would be skipped).
+    if let Some(step) = stepped_generator_in_place(file, span, allowed) {
+        let role = semantic_write_execution_role_within(
+            file,
+            step.created,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            visiting,
+        );
+        if role.reports_disallowed_write() {
+            // The step must be a `next` that reaches the write: a `return`
+            // or `throw` on a fresh generator runs none of the body, and a
+            // write a `yield` may precede runs on no step there is.
+            return match step.first_step {
+                StepReach::Reaches => role,
+                StepReach::Never => ExecutionRole::Unreported,
+                StepReach::Unproven => ExecutionRole::Unknown,
+            };
+        }
+        // Legal where the call is, or never run: legal. Unplaced stays so;
+        // the read walk's answer at the call would claim more than the
+        // write's own adjustments allow.
+        return role;
+    }
     // ADR 0315: write legality keeps the role it had before the use-site arm;
     // that arm places only reads.
     let direct = semantic_execution_role_within(
@@ -1667,7 +1790,10 @@ fn write_role_walk(
     let named_callback = (direct != ExecutionRole::Unknown && !direct.reports_disallowed_write())
         .then(|| named_callback_containing(file, span, lookup))
         .flatten()
-        .filter(|_| named_callback_execution_role(file, span, lookup) == Some(direct));
+        .filter(|_| {
+            super::named_callbacks::named_callback_write_execution_role(file, span, lookup)
+                == Some(direct)
+        });
     let named = named_callback.filter(|callback| {
         innermost.is_some_and(|innermost| runs_inline_within(file, innermost, callback, lookup))
     });
@@ -1716,8 +1842,17 @@ fn write_role_walk(
     let current = lookup.function_value_is_current(file, function)
         || function_binding_name(file, function).is_none();
     // A tracked position (`createMemo(reset)`) runs the callback in an owned
-    // computation, whichever role the other positions name it in.
-    if named.is_some() && !nested && lookup.named_callback_roles(file).get(function.span).tracked {
+    // computation, whichever role the other positions name it in. A leaf
+    // position (`createTrackedEffect(reset)`) is tracked too, but its owner
+    // is one the write guard exempts (`NamedCallbackRole::leaf`): it is one
+    // permissive entry, and the walk below places the rest.
+    if named.is_some()
+        && !nested
+        && lookup
+            .named_callback_roles(file)
+            .get(function.span)
+            .tracked_owned
+    {
         return if current {
             ExecutionRole::TrackedJsx
         } else {
@@ -3300,6 +3435,31 @@ pub(crate) fn climb_in_place_layers(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<InPlaceClimb> {
+    climb_in_place_layers_within(file, span, lookup, None)
+}
+
+/// [`climb_in_place_layers`] that does not cross the function at `within`:
+/// the climb ends at the call in that function's body which runs the site,
+/// however that function itself is run. A summary claims the site at that
+/// call (`interproc::reads`, ADR 0522).
+pub(crate) fn climb_in_place_layers_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+) -> Option<InPlaceClimb> {
+    climb_in_place_layers_recording(file, span, lookup, within, &mut Vec::new())
+}
+
+/// [`climb_in_place_layers_within`], appending to `passed` the call of each
+/// layer crossed, innermost first.
+fn climb_in_place_layers_recording(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+    passed: &mut Vec<Span>,
+) -> Option<InPlaceClimb> {
     let mut climb = InPlaceClimb {
         at: span,
         in_list: false,
@@ -3311,7 +3471,7 @@ pub(crate) fn climb_in_place_layers(
         let Some(function) = crate::owners::owning_function(&file.ast, climb.at) else {
             break;
         };
-        if function.generator {
+        if function.generator || within == Some(function.span) {
             break;
         }
         let call = match layer_run(file, function, lookup) {
@@ -3324,8 +3484,17 @@ pub(crate) fn climb_in_place_layers(
         };
         // A layer called in a JSX expression runs where the compiler places
         // that expression (an insert's tracked computation), which the
-        // compiler roles decide, not the code around the element.
-        if file.ast.jsx_containing(call).next().is_some() {
+        // compiler roles decide, not the code around the element. A call in
+        // the body of a function written inside JSX (a flow component's
+        // children callback, `<For>{() => { h(() => r()); … }}</For>`, a ref
+        // callback, a handler) is in no JSX expression: the element around it is outside the call's own
+        // function, and the call runs when that function does.
+        let own = crate::owners::owning_function(&file.ast, call);
+        if file
+            .ast
+            .jsx_containing(call)
+            .any(|element| own.is_none_or(|function| function.span.contains(element.span)))
+        {
             break;
         }
         climb.in_list |= !function.body.contains(climb.at);
@@ -3340,8 +3509,89 @@ pub(crate) fn climb_in_place_layers(
             climb.suspended = Some(false);
         }
         climb.at = call;
+        passed.push(call);
     }
     (climb.at != span).then_some(climb)
+}
+
+/// [`climb_in_place_layers`] continued through the generators stepped at
+/// their own call (ADR 0516): `(function* () { r(); yield 1; })().next()`
+/// runs some of its body, or none, on the stack of that call, so the climb
+/// goes on from there. `through_generator` records that such a step was
+/// crossed, where a proven run is no proof of the site's run. `None` when
+/// `span` crosses no layer.
+pub(crate) fn in_place_run_site(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(InPlaceClimb, bool)> {
+    in_place_run_site_within(file, span, lookup, None)
+}
+
+/// [`in_place_run_site`] that does not cross the function at `within`
+/// ([`climb_in_place_layers_within`]).
+pub(crate) fn in_place_run_site_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+) -> Option<(InPlaceClimb, bool)> {
+    in_place_run_site_recording(file, span, lookup, within, &mut Vec::new())
+}
+
+/// The calls [`in_place_run_site`] passes from `span` outwards, innermost
+/// first: each layer's call and each stepped generator's creating call. Empty
+/// when `span` crosses no layer.
+pub(crate) fn in_place_run_calls(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let mut passed = Vec::new();
+    in_place_run_site_recording(file, span, lookup, None, &mut passed);
+    passed
+}
+
+fn in_place_run_site_recording(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+    passed: &mut Vec<Span>,
+) -> Option<(InPlaceClimb, bool)> {
+    let mut climb = InPlaceClimb {
+        at: span,
+        in_list: false,
+        among_others: false,
+        suspended: None,
+    };
+    let mut through_generator = false;
+    for _ in 0..8 {
+        if let Some(next) = climb_in_place_layers_recording(file, climb.at, lookup, within, passed)
+        {
+            climb.in_list |= next.in_list;
+            climb.among_others |= next.among_others;
+            climb.suspended = match (climb.suspended, next.suspended) {
+                (Some(true), _) | (_, Some(true)) => Some(true),
+                (Some(false), _) | (_, Some(false)) => Some(false),
+                (None, None) => None,
+            };
+            climb.at = next.at;
+        }
+        let Some(created) = crate::owners::owning_function(&file.ast, climb.at)
+            .filter(|function| {
+                function.generator && !function.r#async && within != Some(function.span)
+            })
+            .and_then(|function| crate::owners::generator_iterator_used(file, function))
+            .filter(|created| crate::owners::iterator_stepped_at(file, created.span))
+        else {
+            break;
+        };
+        through_generator = true;
+        climb.at = created.span;
+        passed.push(created.span);
+    }
+    (climb.at != span).then_some((climb, through_generator))
 }
 
 /// ADR 0466: a primitive call that names a function as its callback by its

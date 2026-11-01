@@ -54,6 +54,8 @@ export function frameKind(label) {
   if (label === undefined) return null;
   if (label.startsWith("prim:")) return label;
   if (label === "button") return "handler";
+  if (label === "ref") return "ref";
+  if (label === "flow") return "flow";
   if (["child", "attr", "show", "for", "probe"].includes(label)) return "jsx";
   return null;
 }

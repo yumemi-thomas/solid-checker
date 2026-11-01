@@ -57,6 +57,7 @@ pub(super) fn check_file(
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
     no_store_mutator_call(file, context, defects);
+    no_store_standard_library_write(file, context, defects);
     no_store_delete(file, context, defects);
     expected_function_got_expression(file, context, defects);
     reactive_source_uncaptured(file, context, defects);
@@ -1115,21 +1116,28 @@ fn no_direct_mutation(
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
-    for assignment in &file.ast.assignments {
+    // Every leaf of a destructuring pattern is a written member of its own
+    // (ADR 0526).
+    let written_members = file
+        .ast
+        .assignments
+        .iter()
+        .flat_map(|assignment| assignment_write_targets(file, assignment));
+    for written in written_members {
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
         // the same reference-index fallback `uncalled-accessor` uses: an
         // assignment target is an ordinary operator operand, exactly the
         // expression shape entity facts may skip (see the field doc on
         // `source_reference_index`).
-        let root = member_root(file, assignment.target).unwrap_or(assignment.target);
+        let root = member_root(file, written).unwrap_or(written);
         let Some(symbol) = source_symbol_at(context, file, root).filter(|symbol| {
             context.accessors.contains_key(*symbol)
                 || context.prop_sources.contains_key(*symbol)
                 || typed_store_name(context, symbol).is_some()
         }) else {
-            if root != assignment.target {
-                push_unproven_container_write(file, context, assignment.target, root, defects);
+            if root != written {
+                push_unproven_container_write(file, context, written, root, defects);
             }
             continue;
         };
@@ -1165,7 +1173,7 @@ fn no_direct_mutation(
             continue;
         }
         let name = name.as_str();
-        let through_member = root != assignment.target;
+        let through_member = root != written;
         let kind = context
             .source_kinds
             .get(symbol)
@@ -1230,14 +1238,14 @@ fn no_direct_mutation(
                 .any(|identifier| identifier.span == file.ast.peel_ts_sugar_span(root))
                 || !file
                     .ast
-                    .member_at(file.ast.peel_ts_sugar_span(assignment.target))
+                    .member_at(file.ast.peel_ts_sugar_span(written))
                     .is_some_and(|member| {
                         file.ast.peel_ts_sugar_span(member.object)
                             == file.ast.peel_ts_sugar_span(root)
                     }))
         {
             // ADR 0509: the caller may have passed a store for the prop.
-            push_unproven_container_write(file, context, assignment.target, root, defects);
+            push_unproven_container_write(file, context, written, root, defects);
             continue;
         }
         // A member written on an accessor function (`memo.a = 1`) is not a
@@ -1263,8 +1271,8 @@ fn no_direct_mutation(
                 file,
                 context,
                 StoreWriteSite {
-                    span: assignment.target,
-                    member: assignment.target,
+                    span: written,
+                    member: written,
                     root,
                 },
                 symbol,
@@ -1278,8 +1286,7 @@ fn no_direct_mutation(
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
         // TypeScript's where a link may be nullish, and unproven otherwise.
         let past_root = if store {
-            let Some(past_root) = chain_links_verdict(file, context, assignment.target, root)
-            else {
+            let Some(past_root) = chain_links_verdict(file, context, written, root) else {
                 continue;
             };
             past_root
@@ -1291,7 +1298,7 @@ fn no_direct_mutation(
                 name: name.to_owned(),
                 target,
             },
-            location: location(file.path.shared(), assignment.target),
+            location: location(file.path.shared(), written),
             analysis_context: String::new(),
             fixes: vec![],
             // A write through a 2.0 props object, or a `merge`/`omit` view of
@@ -1305,6 +1312,24 @@ fn no_direct_mutation(
                 || past_root
                 || standing == WriteStanding::Unproven,
         });
+    }
+}
+
+/// The members a plain assignment writes: its target, or, for a destructuring
+/// pattern (`({ v: store.v } = source)`, `[store.v] = list`), each leaf of the
+/// pattern (ADR 0526). A leaf is written exactly as `store.v = source.v` is:
+/// the proxy's `set` trap drops it outside the store's setter (rc.17 warns
+/// STORE_WRITE_OUTSIDE_SETTER at it), and the Get is the source's, not the
+/// store's. A compound assignment or an update has one target.
+fn assignment_write_targets(
+    file: &FileFacts,
+    assignment: &solid_facts::ast::AssignmentFact,
+) -> Vec<Span> {
+    let leaves = file.ast.destructuring_assignment_leaves(assignment);
+    if leaves.is_empty() {
+        vec![assignment.target]
+    } else {
+        leaves
     }
 }
 
@@ -2959,6 +2984,143 @@ fn no_store_mutator_call(
         // root; only a store that is itself the array (`list.push(1)`) has none.
         let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
             continue;
+        };
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::DirectMutation {
+                name: name.as_str().to_owned(),
+                target: store_target(context, symbol),
+            },
+            location: location(file.path.shared(), call.span),
+            analysis_context: String::new(),
+            fixes: vec![],
+            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
+        });
+    }
+}
+
+/// The standard-library calls that write properties of their first argument,
+/// by the exact declaration Type Facts resolved the callee to (a project
+/// function named `assign`, a shadowed `Object` and an unresolved callee are
+/// silent): `Object.assign(target, …)`, `Reflect.set(target, key, value)` and
+/// `Object.defineProperty(target, key, descriptor)`.
+const STANDARD_LIBRARY_WRITES: [(&str, &str); 3] = [
+    ("assign", "ObjectConstructor.assign"),
+    ("set", "Reflect.set"),
+    ("defineProperty", "ObjectConstructor.defineProperty"),
+];
+
+/// A standard-library write whose target is a proven store's read proxy (ADR
+/// 0526): `Object.assign(store, { v: 7 })`, `Reflect.set(store, "v", 7)` and
+/// `Object.defineProperty(store, "v", { value: 7 })` reach the proxy's `set`
+/// or `defineProperty` trap, which outside the store's setter warns
+/// STORE_WRITE_OUTSIDE_SETTER and returns `true` without storing (rc.17
+/// `dist/dev.js:5420-5451`, `:5691-5697`, `:5743-5749`; measured 2026-11-01,
+/// every context outside the setter, no value committed). TypeScript accepts
+/// all three (`Store<T> = T`; `Reflect.set` and `defineProperty` take `object`
+/// and `any`). The store is a source, not a target, anywhere but the first
+/// argument (`Object.assign({}, store, …)` is a copy), and a copy's write
+/// lands (`Object.assign({ ...store }, …)`), so only the first argument is
+/// read, through the exemptions every store write has
+/// ([`store_write_standing`]). A target past the root (`Object.assign(store.o,
+/// …)`) writes through a link no fact proves wrapped (ADR 0465, 0476):
+/// uncertifiable, and silent where TypeScript reports a nullish link.
+fn no_store_standard_library_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    for call in &file.ast.calls {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(member) = file.ast.member_at(callee) else {
+            continue;
+        };
+        if call.construct
+            || file.ast.computed_members.binary_search(&callee).is_ok()
+            || !STANDARD_LIBRARY_WRITES
+                .iter()
+                .any(|(name, _)| *name == text(file, member.property))
+        {
+            continue;
+        }
+        let Some(declaration) =
+            context
+                .lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+        else {
+            continue;
+        };
+        if !STANDARD_LIBRARY_WRITES
+            .iter()
+            .any(|(_, qualified)| declaration.qualified_name.as_ref() == *qualified)
+        {
+            continue;
+        }
+        let Some(argument) = call.arguments.first().filter(|argument| !argument.spread) else {
+            continue;
+        };
+        let target = file.ast.peel_ts_sugar_span(argument.span);
+        let root = member_root(file, target).unwrap_or(target);
+        let source = source_symbol_at(context, file, root);
+        let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
+        let proven = source.and_then(|symbol| {
+            context
+                .accessors
+                .get(symbol)
+                .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+                .map(|(name, _)| name)
+                .or(typed_store)
+                .map(|name| (symbol, name))
+        });
+        let Some((symbol, name)) = proven else {
+            // ADR 0509: a container a caller handed in may hold a store.
+            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+                push_unproven_container_write(file, context, call.span, root, defects);
+            }
+            continue;
+        };
+        // A target rooted at a call is what the call returned, and a root that
+        // is not a bare identifier is not the proxy (`store.items.slice()`,
+        // `(store as T)`).
+        if file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(root))
+            .is_some()
+            || !bare_root(file, root)
+        {
+            continue;
+        }
+        // Where the dialect's store type is `Readonly` at the root (rc.0-rc.6,
+        // or a release nobody compared), a root write is TypeScript's; these
+        // calls type-check there, but the claim was measured on rc.17 only.
+        if root == target && context.dialect.store_root_properties_are_readonly() {
+            continue;
+        }
+        // The site's member is the call: the readonly-root exemption inside
+        // was answered above, and a past-root target is a whole link written,
+        // not a root property.
+        let standing = store_write_standing(
+            file,
+            context,
+            StoreWriteSite {
+                span: call.span,
+                member: call.span,
+                root,
+            },
+            symbol,
+        );
+        if standing == WriteStanding::Exempt {
+            continue;
+        }
+        // ADR 0465: the target itself is a link past the root, written as a
+        // whole: no fact proves it wrapped, so the write is uncertifiable, and
+        // TypeScript's where a link may be nullish.
+        let past_root = if root == target {
+            false
+        } else {
+            if chain_links_verdict(file, context, target, root).is_none() {
+                continue;
+            }
+            true
         };
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {

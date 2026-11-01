@@ -188,6 +188,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) loop_repeats: Vec<(Span, Span)>,
     pub(super) pattern_values: Vec<(Span, Span)>,
     pub(super) implicit_suspensions: Vec<Span>,
+    pub(super) yields: Vec<YieldFact>,
     pub(super) module_directives: Vec<DirectiveFact>,
     pub(super) stray_directives: Vec<StrayDirectiveFact>,
     /// Spans of the string and template statements that are direct children
@@ -435,6 +436,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             loop_repeats: Vec::new(),
             pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
+            yields: Vec::new(),
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
             direct_string_statements: Vec::new(),
@@ -530,6 +532,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.loop_repeats.sort_unstable();
         self.pattern_values.sort_unstable();
         self.implicit_suspensions.sort_unstable();
+        self.yields.sort_unstable_by_key(|fact| fact.span);
         self.module_directives.sort_by_key(|fact| fact.span);
         self.stray_directives.sort_by_key(|fact| fact.span);
         self.tagged_templates.sort_by_key(|fact| fact.span);
@@ -752,6 +755,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             loop_repeats: self.loop_repeats,
             pattern_values: self.pattern_values,
             implicit_suspensions: self.implicit_suspensions,
+            yields: self.yields,
             module_directives: self.module_directives,
             stray_directives: self.stray_directives,
             suppression_comments: Vec::new(),

@@ -203,6 +203,14 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         }
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        // Only a generator that runs resumes: context zero stays zero.
+        OwnerEdgeKind::ResumesUnowned => {
+            if source == 0 {
+                0
+            } else {
+                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+            }
+        }
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
         // Not proven unowned: a later run happens only if the primitive runs
         // the callback again, which needs a change nothing here proves. A
@@ -288,12 +296,174 @@ pub(super) fn possible_await_continuation_context(
         .then_some(owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
 }
 
-pub(super) fn call_owner_edge(file: &solid_facts::FileFacts, site: Span) -> OwnerEdgeKind {
+pub(super) fn call_owner_edge(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> OwnerEdgeKind {
     if crate::execution_role::may_follow_own_await(file, site) {
-        OwnerEdgeKind::MayResumeUnowned
-    } else {
-        OwnerEdgeKind::Preserve
+        return OwnerEdgeKind::MayResumeUnowned;
     }
+    match action_step_resumption(file, site, lookup) {
+        Some(StepResumption::Proven) => OwnerEdgeKind::ResumesUnowned,
+        Some(StepResumption::Possible) => OwnerEdgeKind::MayResumeUnowned,
+        None => OwnerEdgeKind::Preserve,
+    }
+}
+
+/// Where a site of an action's stepped generator stands to the generator's
+/// `yield`s ([`action_step_resumption`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StepResumption {
+    /// Every run of the site follows a `yield` whose operand is a promise:
+    /// the site runs from that promise's continuation, with no owner.
+    Proven,
+    /// Some run of the site may follow a `yield` whose operand may be a
+    /// thenable: the site may run with no owner, and nothing proves it.
+    Possible,
+}
+
+/// How an action's stepped generator reaches the site at `span` after one of
+/// its own `yield`s, or `None` where no `yield` can run before it (or the
+/// site is not in such a generator's body).
+///
+/// `action(genFn)` runs the generator step by step: `step` calls
+/// `it.next(v)` on the stack of whoever called the action for the first
+/// step, and settles the yielded value from the result. A yielded thenable
+/// is assimilated -- `r.value.then(v => inTransaction(t, q, () => step(v)))`
+/// -- so the next step runs from the promise's continuation on an empty
+/// stack, where the dialect's fresh-stack answer says no owner is current
+/// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1618-1636`); any other
+/// yielded value steps again synchronously, `inTransaction(t, q, () =>
+/// step(r.value))`, under the owner the previous step had (`:1637`). An
+/// async generator's `it.next()` returns a promise, so there every `yield`
+/// moves the next step to a continuation, whatever it yields (`:1605`).
+/// Probed on rc.17 (dev, from a `createTrackedEffect` body): `getOwner()` is
+/// the tracked owner before `yield Promise.resolve()` and after `yield 1`,
+/// and `null` after the promise.
+///
+/// Proven: the site is in the block region a `yield` dominates
+/// ([`solid_facts::ast::YieldFact::region`]) and that `yield`'s operand is
+/// a call the compiler resolved to the standard library's
+/// `PromiseConstructor` (`Promise.resolve(…)`, `new Promise(…)`, `Promise.all`
+/// and its siblings), or the generator is async. Possible: a `yield` written
+/// before the site (not in the other arm of one `if` or `?:`), or in a loop
+/// whose repeated part holds the site, whose operand is not a plain value (a
+/// number, a string, `true`, `false`, `null`, `undefined`, or absent); a
+/// delegating `yield*` hands out whatever the delegate yields. A site in a
+/// nested function is that function's: its call edge carries the answer.
+pub(crate) fn action_step_resumption(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<StepResumption> {
+    let function = containing_body_function(&file.ast, span)?;
+    stepped_action_generator(file, function, lookup)?;
+    if lookup.dialect.fresh_stack_callback_owner() != Some(solid_dialect::CallbackOwner::None) {
+        return None;
+    }
+    let own = |point: Span| {
+        function.body.contains(point)
+            && containing_ast_function(&file.ast, point)
+                .is_some_and(|owner| owner.span == function.span)
+    };
+    let mut possible = false;
+    for yielded in file.ast.yields.iter().filter(|fact| own(fact.span)) {
+        let suspends = function.r#async || yield_operand_promise(file, yielded, lookup);
+        if !suspends && !yielded.delegate && yield_operand_plain(file, yielded) {
+            continue;
+        }
+        if suspends && yielded.region.is_some_and(|region| region.contains(span)) {
+            return Some(StepResumption::Proven);
+        }
+        let before = yielded.span.end <= span.start
+            && !crate::execution_role::in_exclusive_arms(file, yielded.span, span);
+        let repeated = file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+            repeated.contains(span)
+                && looped.contains(yielded.span)
+                && function.body.contains(looped)
+        });
+        possible |= before || repeated;
+    }
+    possible.then_some(StepResumption::Possible)
+}
+
+/// Whether the `yield`'s operand is a call the compiler resolved to the
+/// standard library's `PromiseConstructor` (a call of `resolve`, `reject`,
+/// `all`, `allSettled`, `race` or `any`, or `new Promise(…)`): a native
+/// promise, which the action step assimilates. A same-named project
+/// declaration, a shadowed `Promise`, or an unresolved call proves nothing.
+fn yield_operand_promise(
+    file: &solid_facts::FileFacts,
+    yielded: &solid_facts::ast::YieldFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(operand) = yielded
+        .operand
+        .map(|operand| file.ast.peel_ts_sugar_span(operand))
+    else {
+        return false;
+    };
+    let Some(call) = file.ast.calls.iter().find(|call| call.span == operand) else {
+        return false;
+    };
+    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+        return false;
+    };
+    if resolved.validity != typefacts::ResolvedCallValidity::Valid {
+        return false;
+    }
+    let Some(declaration) = resolved.declaration.as_ref() else {
+        return false;
+    };
+    declaration.standard_library
+        && matches!(
+            (
+                declaration.qualified_name.as_ref(),
+                resolved.kind,
+                call.construct,
+            ),
+            (
+                "PromiseConstructor.resolve"
+                    | "PromiseConstructor.reject"
+                    | "PromiseConstructor.all"
+                    | "PromiseConstructor.allSettled"
+                    | "PromiseConstructor.race"
+                    | "PromiseConstructor.any",
+                typefacts::CallKind::Call,
+                false,
+            ) | (
+                "PromiseConstructor.construct",
+                typefacts::CallKind::Construct,
+                true
+            )
+        )
+}
+
+/// Whether the `yield`'s operand is a value that is not a thenable, which the
+/// action step passes back synchronously: absent (`undefined`), a numeric or
+/// string literal, `true`, `false`, `null`, or the global `undefined`
+/// resolved by the absence of a declaration (a binding of that name is a
+/// value). Anything else may be a thenable.
+fn yield_operand_plain(
+    file: &solid_facts::FileFacts,
+    yielded: &solid_facts::ast::YieldFact,
+) -> bool {
+    let Some(operand) = yielded
+        .operand
+        .map(|operand| file.ast.peel_ts_sugar_span(operand))
+    else {
+        return true;
+    };
+    let Some(text) = file.source_text(operand).map(str::trim) else {
+        return false;
+    };
+    matches!(text, "true" | "false" | "null")
+        || (text == "undefined" && file.ast.reference_declaration(operand).is_none())
+        || text.parse::<f64>().is_ok()
+        || (text.len() >= 2
+            && (text.starts_with('"') && text.ends_with('"')
+                || text.starts_with('\'') && text.ends_with('\'')))
 }
 
 pub(super) fn callback_call_owner_edge(
@@ -305,7 +475,7 @@ pub(super) fn callback_call_owner_edge(
     if kind == OwnerEdgeKind::Preserve {
         lookup
             .file_by_path(source_path)
-            .map_or(kind, |file| call_owner_edge(file, site))
+            .map_or(kind, |file| call_owner_edge(file, site, lookup))
     } else {
         kind
     }
@@ -454,6 +624,7 @@ pub(crate) fn push_owner_requirement(
             component_uncertain: status.component_uncertain,
             provider_open: status.provider_open,
             after_await: status.after_await,
+            after_yield: status.after_yield,
             missing_jsx_census,
             through_dependency: None,
             report: status.report,
@@ -666,26 +837,77 @@ pub(crate) fn ref_value_marks(
                 });
             }
         }
+        // A two-phase directive (`ref={dir()}`): the call runs while the
+        // expression evaluates, and the ref application receives what it
+        // returns. When the callee is exactly a function of this file, each
+        // function literal one of its own completions returns is applied, with
+        // no owner, like a literal written in the attribute. Anything else it
+        // returns stays where the owner walk places it.
+        for (_, call) in &calls {
+            if !yielded_value_contains(file, callback.span, call.span) {
+                continue;
+            }
+            let Some((factory_file, factory)) =
+                lookup.function_called_at(file.path.as_str(), call.callee)
+            else {
+                continue;
+            };
+            if factory_file.path != file.path {
+                continue;
+            }
+            for returned in returned_functions(file, factory) {
+                marks.push(
+                    if file.ast.function_at(returned).is_some_and(|f| f.generator) {
+                        RefValueMark::Unproven { function: returned }
+                    } else {
+                        RefValueMark::Applied { function: returned }
+                    },
+                );
+            }
+        }
     }
     marks
 }
 
-/// Whether `function` is one of the values a ref expression yields: the
-/// expression's own value (parentheses and type wrappers are transparent), or
-/// an element, a branch or an operand of a value it yields. A ref application
+/// The function literals `factory`'s own completions return: an arrow's
+/// expression body, or the argument of a `return` no nested function holds.
+pub(crate) fn returned_functions(
+    file: &solid_facts::FileFacts,
+    factory: &solid_facts::ast::FunctionFact,
+) -> Vec<Span> {
+    let returns = factory.expression_return.as_ref().map_or_else(
+        || {
+            file.ast
+                .returns
+                .iter()
+                .filter(|returned| {
+                    containing_ast_function(&file.ast, returned.span)
+                        .is_some_and(|owner| owner.span == factory.span)
+                })
+                .collect::<Vec<_>>()
+        },
+        |returned| vec![returned],
+    );
+    returns
+        .into_iter()
+        .filter_map(|returned| {
+            returned
+                .argument
+                .map(|span| file.ast.peel_ts_sugar_span(span))
+        })
+        .filter(|argument| file.ast.function_at(*argument).is_some())
+        .collect()
+}
+
+/// The values a ref expression yields: the expression's own value
+/// (parentheses and type wrappers are transparent), or an element, a branch
+/// or an operand of a value it yields, down to the leaves. A ref application
 /// receives exactly those values, so only they run in its apply phase. A
 /// function anywhere else is evaluated by something the expression does: a
 /// getter's body when `.x` reads it, a tagged template's substitution, an
 /// operand of `void` (never called at all).
-pub(crate) fn yielded_value_contains(
-    file: &solid_facts::FileFacts,
-    value: Span,
-    function: Span,
-) -> bool {
+pub(crate) fn yielded_values(file: &solid_facts::FileFacts, value: Span) -> Vec<Span> {
     let value = file.ast.peel_ts_sugar_span(value);
-    if value == function {
-        return true;
-    }
     if let Some(conditional) = file
         .ast
         .conditional_expressions
@@ -694,7 +916,8 @@ pub(crate) fn yielded_value_contains(
     {
         return [conditional.consequent, conditional.alternate]
             .into_iter()
-            .any(|branch| yielded_value_contains(file, branch, function));
+            .flat_map(|branch| yielded_values(file, branch))
+            .collect();
     }
     if let Some(logical) = file
         .ast
@@ -712,7 +935,17 @@ pub(crate) fn yielded_value_contains(
         };
         return operands
             .iter()
-            .any(|operand| yielded_value_contains(file, *operand, function));
+            .flat_map(|operand| yielded_values(file, *operand))
+            .collect();
+    }
+    // `(a, b)` yields `b`: `a` is evaluated for its effect and discarded.
+    if let Some(sequence) = file
+        .ast
+        .sequences
+        .iter()
+        .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == value)
+    {
+        return yielded_values(file, sequence.tail);
     }
     if let Some(array) = file
         .ast
@@ -720,12 +953,121 @@ pub(crate) fn yielded_value_contains(
         .iter()
         .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == value)
     {
-        return array.elements.iter().any(|element| {
-            element.kind == solid_facts::ast::ArrayElementKind::Value
-                && yielded_value_contains(file, element.span, function)
-        });
+        return array
+            .elements
+            .iter()
+            .filter(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)
+            .flat_map(|element| yielded_values(file, element.span))
+            .collect();
     }
-    false
+    vec![value]
+}
+
+/// Whether `function` is one of the values a ref expression yields
+/// ([`yielded_values`]).
+pub(crate) fn yielded_value_contains(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    function: Span,
+) -> bool {
+    yielded_values(file, value).contains(&function)
+}
+
+/// The intrinsic element whose `ref` application receives `function`: rc.17's
+/// `ref` (`@solidjs/web` `dist/web.dev.js:1016-1022`) resolves the attribute
+/// expression under `untrack` and then applies every function it yields to
+/// the element, synchronously, under `runWithOwner(null)`, while the element
+/// is created. The function is received when it is a value the expression
+/// yields ([`yielded_values`]): the literal itself; the function a yielded
+/// bare identifier holds, resolved exactly and never reassigned
+/// (`ref={apply}`, compiled `ref(() => apply, el)`); or a literal that the
+/// exact, same-file callee of a yielded call returns (`ref={dir()}`: the call
+/// runs eagerly where the element is created and its result is applied,
+/// [`returned_functions`]). A generator yields nothing when applied, and an
+/// async factory returns a promise, which the application does not call.
+/// Anything else (a member call, an imported binding, a value a getter
+/// computes) is unplaced here.
+pub(crate) fn ref_applied_element<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::JsxElementFact> {
+    if function.generator {
+        return None;
+    }
+    let path = file.path.as_str();
+    let same_function = |target_file: &solid_facts::FileFacts,
+                         target: &solid_facts::ast::FunctionFact| {
+        target_file.path == file.path && target.span == function.span
+    };
+    let applied = file
+        .compiler
+        .callback_roles
+        .iter()
+        .filter(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                && ref_application_on_intrinsic(file, callback.span)
+        })
+        .find(|callback| {
+            yielded_values(file, callback.span).into_iter().any(|leaf| {
+                if leaf == function.span {
+                    return true;
+                }
+                if file.ast.identifiers.iter().any(|identifier| {
+                    identifier.span == leaf
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                }) {
+                    return lookup.function_called_at(path, leaf).is_some_and(
+                        |(target_file, target)| {
+                            same_function(target_file, target)
+                                && lookup.function_value_is_current(file, target)
+                        },
+                    );
+                }
+                if let Some(call) = file
+                    .ast
+                    .calls
+                    .iter()
+                    .find(|call| call.span == leaf && call.direct_callee && !call.construct)
+                {
+                    return lookup.function_called_at(path, call.callee).is_some_and(
+                        |(factory_file, factory)| {
+                            factory_file.path == file.path
+                                && !factory.r#async
+                                && !factory.generator
+                                && lookup.function_value_is_current(file, factory)
+                                && returned_functions(file, factory).contains(&function.span)
+                        },
+                    );
+                }
+                false
+            })
+        })?;
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(applied.span))
+        .min_by_key(|element| element.span.end - element.span.start)
+}
+
+/// Whether a JSX expression the compiler lowers evaluates `span`: an element
+/// contains it with no function written in that element between them (an
+/// attribute's or child's expression becomes a getter, an effect or a static
+/// value, which the compiler roles place), and it is not a value a ref
+/// application yields, which runs where the element is created (a two-phase
+/// directive's factory call `ref={dir()}` is evaluated eagerly there,
+/// [`ref_applied_element`]). Code in a function written in the JSX (a ref
+/// callback, a handler) is that function's.
+pub(crate) fn jsx_evaluates(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let owner = owning_function(&file.ast, span);
+    file.ast
+        .jsx_containing(span)
+        .any(|element| !owner.is_some_and(|function| element.span.contains(function.span)))
+        && !file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                && ref_application_on_intrinsic(file, callback.span)
+                && yielded_values(file, callback.span).contains(&span)
+        })
 }
 
 /// The innermost function whose whole span, parameters included, contains

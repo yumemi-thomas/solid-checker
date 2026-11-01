@@ -70,7 +70,8 @@ export const awaitStmt = () => ({ k: "await" });
 /** `try { <body> } finally { <fin> }` (the disposal profile). */
 export const tryStmt = (body, fin = []) => ({ k: "try", body, fin });
 /** `flush()` (the disposal profile). */
-export const flush = () => ({ k: "flush" });
+/** `flush()`, or `flush(fn)`: rc.17 runs `fn` at once on the caller's stack (`@solidjs/signals` dist/dev-shared.js:2646-2670), then drains. */
+export const flush = (fn) => (fn ? { k: "flush", fn } : { k: "flush" });
 /** `null` (a component's return). */
 export const nul = () => ({ k: "nul" });
 /** `<span />` (a component's return: the checker reads a function that returns JSX as a component). */
@@ -84,7 +85,15 @@ export const createOwnerExpr = () => ({ k: "createOwner" });
  * after a suspension: a loop whose `await` is written after the body, which runs on the second pass only (after it), `for await`,
  * a `finally` after an `await`.
  */
-export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await"];
+/**
+ * The hand-off forms (T1 `handoff`, saturation research 2026-11-01): the site in a function `hf` that is handed on BY NAME to
+ * something that runs it at once, on the same stack (the base layers hand literals to helpers and call closures directly): an
+ * array callback, `Array.from`'s map, a comparator, `.call`/`.apply`/`Reflect.apply`, a tagged template, a project wrapper, a
+ * member of a literal, a member assigned later, a hoisted `function`. Each is a block, so `hf` shadows nothing around it.
+ */
+export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", "handoff-sort", "handoff-call", "handoff-apply", "handoff-reflect",
+  "handoff-tagged", "handoff-wrapper", "handoff-member", "handoff-assign", "handoff-function"];
+export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS];
 export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
@@ -119,6 +128,18 @@ export const child = (id, e) => ({ k: "child", id, e });
 export const attr = (id, e) => ({ k: "attr", id, e });
 export const show = (when, children, fallback = []) => ({ k: "show", when, children, fallback });
 export const forEach = (children) => ({ k: "for", children });
+/**
+ * `<p ref={e}>` on an intrinsic: `e` is the callback (a function, a name, a factory call); `form` prints it bare (`inline`), in
+ * an array beside a no-op (`array`), or as the true arm of a conditional (`cond`). rc.17 runs it during the element's creation
+ * under `runWithOwner(null)` (`@solidjs/web` `ref`).
+ */
+export const refEl = (id, e, form = "inline") => ({ k: "ref", id, e, form });
+/** `<p onClick={(e, () => {})}>`: the handler expression, which the element's setup evaluates (`e` runs once there, in the body). */
+export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
+/** The flow components whose function child the `flow` item writes a body for (`FLOW_FORMS`, misuse.mjs `FLOW_CONTEXTS`). */
+export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
+/** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
+export const flowEl = (id, flow, body) => ({ k: "flow", id, flow, body });
 /** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD). */
 export const loadingView = (on, children) => ({ k: "loading", on, children });
 
@@ -137,6 +158,8 @@ export const memoSignal = (name) => ({ ...signal(name, 0, "src"), kind: "memo" }
 export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-opt" });
 /** A store with a nested record and an array (`{ v, a: { v }, items: [v] }`): writes past its root. */
 export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-nested" });
+/** `createStore({ v, items: [1, 2] })`: an array an order-changing mutator (`sort`, `reverse`, `copyWithin`) does change. */
+export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-list" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 /** `const a = createMemo(async () => { t(); await Promise.resolve(); return 1; })`: an async memo that reads `dep`, so a write to it refetches. */
@@ -304,6 +327,17 @@ export function validate(program, { maxNodes = 400 } = {}) {
           break;
         }
         case "for": for (const c of item.children) checkView(c, scope); break;
+        case "handler-expr": typeOf(item.e, scope); break;
+        case "flow": {
+          if (!FLOW_FORMS.includes(item.flow)) fail(`${where}: unknown flow ${item.flow}`);
+          checkBlock(item.body, scopeOf(scope), "free");
+          break;
+        }
+        case "ref": {
+          const type = typeOf(item.e, scope);
+          if (type && type.t !== "fn") fail(`${where}: a ref must be a function, not ${type.t}`);
+          break;
+        }
         case "loading": sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
         default: fail(`${where}: unknown view kind ${item.k}`);
       }
@@ -339,7 +373,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
             if (!CTL_FORMS.includes(stmt.form)) fail(`${where}: unknown control form ${stmt.form}`);
             if (CTL_ASYNC_FORMS.has(stmt.form) && !scope.async) fail(`${where}: ${stmt.form} outside an async function`);
             // A generator's body is its own function: no await, and its own return.
-            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" ? false : scope.async }), "free");
+            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || HANDOFF_FORMS.includes(stmt.form) ? false : scope.async }), "free");
             break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
@@ -435,7 +469,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
         }
         case "getOwner": case "createOwner": return { t: "owner" };
         case "nul": case "jsx": return T.unknown;
-        case "flush": return T.void;
+        case "flush": if (e.fn) typeOf(e.fn, scope); return T.void;
         case "set": {
           sigCheck(e.sig, "set");
           const type = typeOf(e.e, scope);

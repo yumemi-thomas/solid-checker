@@ -133,7 +133,9 @@ pub(crate) fn attribute_dependency_requirements(
         // After an `await` the operation is proven unowned on its own; its
         // function's entry context does not matter.
         let proven = !requirement.uncertain
-            && (requirement.after_await || contexts[owner] & OWNER_CONTEXT_PROVEN_UNOWNED != 0);
+            && (requirement.after_await
+                || requirement.after_yield
+                || contexts[owner] & OWNER_CONTEXT_PROVEN_UNOWNED != 0);
         let mask = if proven {
             OWNER_CONTEXT_PROVEN_UNOWNED
         } else {
@@ -225,7 +227,9 @@ pub(crate) fn attribute_dependency_requirements(
         // context its function was entered with (review round 1 of ADR 0290,
         // Sol): every project call that runs it is attributed.
         let carries = |kind: OwnerEdgeKind, caller: usize| {
-            requirement.after_await || owner_edge_context(kind, contexts[caller]) & mask != 0
+            requirement.after_await
+                || requirement.after_yield
+                || owner_edge_context(kind, contexts[caller]) & mask != 0
         };
         let enters =
             |file: &solid_facts::FileFacts, call: &solid_facts::ast::CallFact, node: usize| {
@@ -332,7 +336,7 @@ pub(crate) fn attribute_dependency_requirements(
                 // The project caller creates the bit itself (it schedules the
                 // package function, `setTimeout(f)`): the unowned run is that
                 // reference's, not a direct call's (review round 1).
-                if created && !requirement.after_await {
+                if created && !requirement.after_await && !requirement.after_yield {
                     continue;
                 }
                 for call in calls {
@@ -404,6 +408,7 @@ pub(crate) fn attribute_dependency_requirements(
                 component_uncertain: requirement.component_uncertain,
                 provider_open: requirement.provider_open,
                 after_await: false,
+                after_yield: false,
                 report: true,
             },
             lookup,
