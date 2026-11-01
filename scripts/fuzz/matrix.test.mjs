@@ -10,6 +10,12 @@ const finding = (rule, kind, line = 10, endLine = line) => ({ rule, kind, line, 
 const verdict = (over) => judge({ code: "FLUSH_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker: ok, runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 10)]), ...over });
 
 describe("judge", () => {
+  it("judges a thrown code an <Errored> boundary logged instead of rethrowing (unplaced)", () => {
+    const logged = run([], { consoleErrors: ["Error: Context must either be created with a default value or a value must be provided before accessing it."] });
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: logged }).outcome).toBe("false-clean");
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-context-provider", "violation")] }, runtime: logged }).outcome).toBe("agree");
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: run([], { consoleErrors: ["unrelated"] }) }).outcome).toBe("not-fired");
+  });
   it("regions are the site line and the wrapper's line", () => expect(regionOf(site)).toEqual([10, 4]));
   it("agree: a violation of a rule that claims the code covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 9, 11)] } }).outcome).toBe("agree");

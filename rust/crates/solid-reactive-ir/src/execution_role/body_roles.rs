@@ -806,7 +806,30 @@ pub(super) fn named_callback_write_role(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> Option<ExecutionRole> {
-    let function = containing_ast_function(&file.ast, span)?;
+    // ADR 0517: a write in a layer the named callback runs in place (an IIFE,
+    // a closure called once, a helper's callback) runs where that layer's call
+    // does, in the callback's body: judge the callback's positions. A layer
+    // that holds the site in its parameter list or past an await proves no
+    // run here; this function only proves rejections, so it answers nothing.
+    // A library callback may run zero times (ADR 0493 review): no rejection.
+    let at = match super::write_roles::climb_in_place_layers(file, span, lookup) {
+        Some(climb)
+            if !climb.in_list
+                && climb.suspended.is_none()
+                && !super::write_roles::climb_crosses_library_callback(
+                    file, span, climb.at, lookup,
+                ) =>
+        {
+            climb.at
+        }
+        Some(_) => return None,
+        None => span,
+    };
+    let function = if at == span {
+        containing_ast_function(&file.ast, span)?
+    } else {
+        crate::owners::containing_body_function(&file.ast, at)?
+    };
     let symbol = function_symbol(file, function, entities)?;
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
@@ -977,7 +1000,7 @@ pub(crate) fn inside_component_element_children(file: &solid_facts::FileFacts, s
 /// `await` (`if (c) await p`, `x ??= await p`) is not an implicit suspension;
 /// [`may_follow_own_await`] covers it (ADR 0354). The loop's iterated operand
 /// is evaluated before the first suspension.
-pub(super) fn follows_any_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
+pub(crate) fn follows_any_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
     let Some(function) = containing_ast_function(&file.ast, span) else {
         return false;
     };

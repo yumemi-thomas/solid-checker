@@ -81,6 +81,10 @@ pub(crate) struct EffectPhaseOrigin {
     /// helper's own body before it calls its parameter, so one that may run
     /// before the span does.
     pub(crate) earlier_call: bool,
+    /// ADR 0516: some run of the code is in the effect phase and some other
+    /// run (another call site, a use the walk does not follow) is not proven
+    /// to be: the claim is an obligation, not a violation.
+    pub(crate) mixed: bool,
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -129,6 +133,7 @@ fn walk_to_effect_phase(
         budget: BUDGET,
         earlier: false,
         from: None,
+        stepped: false,
     };
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
@@ -158,6 +163,9 @@ struct Walk<'l, 'a> {
     earlier: bool,
     /// The layer the walk just left, whose own calls are the path's.
     from: Option<Span>,
+    /// ADR 0516: the path crosses a generator called in place, whose body
+    /// runs only where its iterator is stepped: any origin is mixed.
+    stepped: bool,
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
@@ -178,10 +186,21 @@ impl<'l, 'a> Walk<'l, 'a> {
         if !written_directly_in(&file.ast, literal, span) {
             return None;
         }
-        // Calling a generator runs none of its body; a method or accessor is
-        // reached through a receiver this walk does not resolve.
-        if literal.generator || literal.method_name.is_some() {
+        // A method or accessor is reached through a receiver this walk does
+        // not resolve. Calling a generator runs none of its body; stepping
+        // its iterator runs it (ADR 0516), so one called in place keeps the
+        // path, never as a proof.
+        if literal.method_name.is_some() {
             return None;
+        }
+        if literal.generator {
+            if literal.r#async || argument_position(file, literal).is_some() {
+                return None;
+            }
+            let call = crate::owners::generator_iterator_used(file, literal)?;
+            self.stepped = true;
+            self.from = Some(literal.span);
+            return self.layer(file, call.span, helper_calls);
         }
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
@@ -269,6 +288,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         helper_calls,
                         apply: call.arguments[index].span,
                         earlier_call: self.earlier,
+                        mixed: self.stepped,
                     });
             }
             if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
@@ -323,9 +343,7 @@ impl<'l, 'a> Walk<'l, 'a> {
             && (self.owner_preserving
                 || self
                     .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(|resolved| resolved.declaration.as_ref())
-                    .and_then(|declaration| package_root(declaration.location.path.as_ref()))
+                    .callee_package_root(file, call.callee)
                     .is_some_and(|root| root == self.package_root))
     }
 
@@ -538,45 +556,157 @@ impl<'l, 'a> Walk<'l, 'a> {
         literal: &FunctionFact,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        let binding = function_binding_name(file, literal)?;
-        if !self.lookup.function_value_is_current(file, literal)
-            || exported(self.lookup, file, literal)
-        {
+        if exported(self.lookup, file, literal) {
             return None;
         }
         let path = file.path.as_str();
-        let symbol = self.lookup.entities().at(path, binding.span)?;
-        let sites = self.lookup.function_call_sites(path, literal.span);
-        if sites.is_empty() {
+        let dialect = self.lookup.dialect;
+        // ADR 0516: a reference at a primitive's effect-phase position
+        // (`createEffect(c, apply)`) runs the function in that phase, as the
+        // same literal written there does.
+        let effect_position = |walk: &mut Self, at: Span| -> Option<EffectPhaseOrigin> {
+            let (call, index) = file.ast.arguments_containing(at).find(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+            })?;
+            let primitive = walk.lookup.primitive_at_call(file, call.span)?;
+            (dialect.callback_runs_in_effect_phase(primitive, index)
+                && !call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+                && walk.same_package_instance(file, call))
+            .then(|| EffectPhaseOrigin {
+                path: file.path.to_string(),
+                helper_calls,
+                apply: call.arguments[index].span,
+                earlier_call: walk.earlier,
+                mixed: false,
+            })
+        };
+        let references_of = |symbol: &str| -> Vec<(String, Span)> {
+            self.lookup
+                .symbol_references(symbol)
+                .iter()
+                .map(|reference| {
+                    let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
+                    let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
+                    (reference.path.to_string(), Span::new(start, end))
+                })
+                .collect()
+        };
+        let mut positions = Vec::new();
+        let mut escapes = false;
+        // ADR 0516: an object literal's member that names the function
+        // exactly (ADR 0358's receiver closure) is read only as a callee, a
+        // handler or a whole argument: each read is a position or a run the
+        // walk does not follow.
+        // A property's symbol may name another object's property of the same
+        // type, so a function written as a data property is followed through
+        // its receiver alone.
+        let slot = file.ast.object_properties.iter().any(|property| {
+            property.data && file.ast.peel_ts_sugar_span(property.value) == literal.span
+        });
+        let binding = (!slot)
+            .then(|| {
+                super::execution_role::named_expression_binding(file, literal, self.lookup)
+                    .or_else(|| function_binding_name(file, literal))
+            })
+            .flatten();
+        let Some(binding) = binding else {
+            for member in &file.ast.members {
+                if self
+                    .lookup
+                    .object_member_function(file, member.span)
+                    .is_none_or(|(target, function)| {
+                        target.path.as_str() != path || function.span != literal.span
+                    })
+                {
+                    continue;
+                }
+                match effect_position(self, member.span) {
+                    Some(origin) => positions.push(origin),
+                    None => escapes = true,
+                }
+            }
+            return positions
+                .into_iter()
+                .next()
+                .map(|origin| EffectPhaseOrigin {
+                    mixed: escapes,
+                    ..origin
+                });
+        };
+        if !self.lookup.function_value_is_current(file, literal) {
             return None;
         }
+        let symbol = self.lookup.entities().at(path, binding.span)?.clone();
+        let sites = self.lookup.function_call_sites(path, literal.span);
         let accounted: HashSet<(String, u32, u32)> = self
             .lookup
             .function_call_site_references(path, literal.span)
             .into_iter()
             .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
             .collect();
-        let escapes = self
-            .lookup
-            .symbol_references(symbol.as_str())
-            .iter()
-            .any(|reference| {
-                let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
-                let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
-                let declaration = reference.path.as_ref() == path
-                    && start == binding.span.start
-                    && end == binding.span.end;
-                !declaration && !accounted.contains(&(reference.path.to_string(), start, end))
-            });
-        if escapes {
+        // ADR 0516: the binding's `const` copies (ADR 0463's alias facts,
+        // followed transitively) hold the function too: each of their
+        // references is a position, or a run the walk does not follow.
+        let mut names = vec![(binding.span, symbol, true)];
+        let mut index = 0;
+        while index < names.len() && names.len() < 9 {
+            let (declaration, symbol, primary) = names[index].clone();
+            index += 1;
+            for (reference_path, at) in references_of(symbol.as_str()) {
+                let same_file = reference_path == path;
+                if same_file && at == declaration {
+                    continue;
+                }
+                let alias = same_file
+                    .then(|| {
+                        file.ast.bindings.iter().find(|candidate| {
+                            candidate
+                                .initializer_identifier
+                                .as_ref()
+                                .is_some_and(|identifier| identifier.span == at)
+                        })
+                    })
+                    .flatten()
+                    .and_then(|candidate| match candidate.names.as_slice() {
+                        [alias]
+                            if file
+                                .ast
+                                .local_alias_binding(alias.span)
+                                .is_some_and(|fact| fact.source == declaration) =>
+                        {
+                            Some(alias.span)
+                        }
+                        _ => None,
+                    });
+                if let Some(alias) = alias
+                    && let Some(alias_symbol) = self.lookup.entities().at(path, alias)
+                {
+                    names.push((alias, alias_symbol.clone(), false));
+                    continue;
+                }
+                if same_file && let Some(origin) = effect_position(self, at) {
+                    positions.push(origin);
+                    continue;
+                }
+                // A call site the call graph enumerates is followed below.
+                if !(primary && accounted.contains(&(reference_path, at.start, at.end))) {
+                    escapes = true;
+                }
+            }
+        }
+        if sites.is_empty() && positions.is_empty() {
             return None;
         }
         let key = (file.path.to_string(), literal.span);
         if !self.visiting.insert(key.clone()) {
             return None;
         }
-        let mut found: Option<EffectPhaseOrigin> = None;
-        let mut every = true;
+        let mut found: Option<EffectPhaseOrigin> = positions.into_iter().next();
+        let mut every = !escapes;
         for (caller, callee) in sites {
             if self.budget == 0 {
                 every = false;
@@ -616,12 +746,16 @@ impl<'l, 'a> Walk<'l, 'a> {
                 }
                 None => {
                     every = false;
-                    break;
                 }
             }
         }
         self.visiting.remove(&key);
-        if every { found } else { None }
+        // ADR 0516: one proven effect-phase run with other runs the walk did
+        // not prove is an obligation; no proven run at all stays silent.
+        found.map(|origin| EffectPhaseOrigin {
+            mixed: origin.mixed || !every,
+            ..origin
+        })
     }
 }
 

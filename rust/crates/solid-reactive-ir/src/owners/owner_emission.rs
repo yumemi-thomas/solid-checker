@@ -180,9 +180,17 @@ pub(super) fn emit_file(
             || (continuation_placed
                 && (starts.contains(&u64::from(candidate.operation_span.start))
                     || climbed_after_await(candidate.operation_span)));
-        let possible_continuation = (!after_await && continuation_placed)
-            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
-            .flatten();
+        // ADR 0516: a settled cleanup's `onSettled` call that may follow an
+        // await (a later loop iteration, a skippable await) may run with no
+        // owner: its possible continuation is the call's, not the callback's.
+        let possible_site = if continuation_placed {
+            Some(candidate.operation_span)
+        } else {
+            settled_call.map(|call| call.span)
+        };
+        let possible_continuation = possible_site
+            .filter(|_| !after_await)
+            .and_then(|site| possible_await_continuation_context(file, site, context));
         let context = if after_await {
             await_continuation_context(context)
         } else {
@@ -302,11 +310,15 @@ pub(super) fn emit_file(
             || cleanup_return_uncertain
             || candidate.in_parameter_list
             || returned_unplaced;
+        // ADR 0517: in an open program a provider outside the analyzed code
+        // may supply the context; the census proves only what it sees.
+        let provider_open = provider && !inputs.lookup.program_closed;
         let uncertain = runtime_uncertain
             || conditional_owner
             || later_run_unowned
             || caller_uncertain
-            || component_uncertain;
+            || component_uncertain
+            || provider_open;
         push_owner_requirement(
             &mut emission.requirements,
             &mut seen,
@@ -320,6 +332,7 @@ pub(super) fn emit_file(
                 conditional_owner,
                 later_run_unowned,
                 component_uncertain,
+                provider_open,
                 after_await,
                 // A cleanup in a leaf that is not owned is reported; in an
                 // owned leaf it is SC3001's claim (ADR 0347 amendment).

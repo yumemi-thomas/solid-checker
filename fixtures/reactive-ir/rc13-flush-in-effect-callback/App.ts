@@ -23,7 +23,7 @@ import { flush as signalsFlush } from "@solidjs/signals";
 import { commitFromOtherFile } from "./commit";
 
 // ADR 0459: a `const` destructuring of the namespace binds the export itself;
-// a `let` one may be reassigned, so it binds nothing this proof names.
+// ADR 0516: so does a `let` one nothing writes.
 const { flush: destructuredFlush } = Solid;
 let { flush: reassignableFlush } = Solid;
 
@@ -63,7 +63,7 @@ createRoot(() => {
     destructuredFlush();
   });
 
-  // Negative: the `let` slot names nothing.
+  // ADR 0516: the unwritten `let` slot is the export.
   createEffect(value, () => {
     reassignableFlush();
   });
@@ -176,8 +176,8 @@ createRoot(() => {
     void loadThenSettle();
   });
 
-  // Negative: a helper also called from a handler may flush outside the
-  // effect, so one call from an effect proves nothing.
+  // Uncertifiable (ADR 0516): a helper also called from a handler may flush
+  // outside the effect, so one call from an effect proves no violation.
   function sharedHelper(): void {
     flush();
   }
@@ -298,7 +298,7 @@ createRoot(() => {
     api.commitMember();
   });
 
-  // Negative: a helper an effect calls and an alias also reaches.
+  // Uncertifiable (ADR 0516): a helper an effect calls and an alias also reaches.
   function aliasedHelper(): void {
     flush();
   }
@@ -308,7 +308,7 @@ createRoot(() => {
     aliasedHelper();
   });
 
-  // Negative: a helper called from the apply and from the module body.
+  // Uncertifiable (ADR 0516): a helper called from the apply and from the module body.
   function moduleAndEffect(): void {
     flush();
   }
@@ -329,11 +329,45 @@ createRoot(() => {
     stored.push(() => flush());
   });
 
-  // Negative: an apply named rather than written is not placed here.
+  // ADR 0516: an apply named rather than written runs in the same phase.
   function namedApply(): void {
     flush();
   }
   createEffect(value, namedApply);
+
+  // ADR 0516 (effect phase by value): an apply named by a `const` copy, by a
+  // named function expression's binding, and by an object literal's slot.
+  const copiedApply = (): void => {
+    flush();
+  };
+  const applyCopy = copiedApply;
+  createEffect(value, applyCopy);
+  const expressionApply = function step(): void {
+    flush();
+  };
+  createEffect(value, expressionApply);
+  const applyBox = {
+    apply: (): void => {
+      flush();
+    },
+  };
+  createEffect(value, applyBox.apply);
+
+  // Uncertifiable (ADR 0516): the copy and the slot also run outside the
+  // effect phase (called from the root body), so the claim is not universal.
+  const sharedApply = (): void => {
+    flush();
+  };
+  const sharedCopy = sharedApply;
+  createEffect(value, sharedCopy);
+  sharedCopy();
+  const sharedBox = {
+    apply: (): void => {
+      flush();
+    },
+  };
+  createEffect(value, sharedBox.apply);
+  sharedBox.apply();
 
   // Negative: the bundle form's `effect` is the same phase, but its position is
   // not one this proof places.

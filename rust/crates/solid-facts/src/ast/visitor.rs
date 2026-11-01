@@ -30,6 +30,50 @@ fn static_data_properties<'e, 'a>(
     Some(values)
 }
 
+/// The value each static key of an object literal yields when read: a data
+/// property's value, or (ADR 0516) the returned expression of a getter whose
+/// body is exactly `return <expression>;`. `None` for a literal with any other
+/// member (a spread, a computed key, a method, a setter, `__proto__`, a getter
+/// doing more).
+fn static_slot_values<'e, 'a>(
+    literal: &'e oxc_ast::ast::ObjectExpression<'a>,
+) -> Option<Vec<(&'e str, &'e Expression<'a>)>> {
+    let mut values = Vec::new();
+    for property in &literal.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        if property.computed || property.method {
+            return None;
+        }
+        let key = match &property.key {
+            PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
+            PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+            _ => return None,
+        };
+        if key == "__proto__" {
+            return None;
+        }
+        match property.kind {
+            PropertyKind::Init => values.push((key, &property.value)),
+            PropertyKind::Get => {
+                let Expression::FunctionExpression(getter) = &property.value else {
+                    return None;
+                };
+                let body = getter.body.as_ref()?;
+                let [oxc_ast::ast::Statement::ReturnStatement(returned)] =
+                    body.statements.as_slice()
+                else {
+                    return None;
+                };
+                values.push((key, returned.argument.as_ref()?));
+            }
+            PropertyKind::Set => return None,
+        }
+    }
+    Some(values)
+}
+
 fn unwrapped<'e, 'a>(mut expression: &'e Expression<'a>) -> &'e Expression<'a> {
     loop {
         expression = match expression {
@@ -140,6 +184,23 @@ fn string_statement(
     }
 }
 
+/// The own properties of `Object.prototype`, which every ordinary object
+/// literal inherits: a destructuring default for one of these keys never runs.
+const OBJECT_PROTOTYPE_KEYS: &[&str] = &[
+    "constructor",
+    "toString",
+    "toLocaleString",
+    "valueOf",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+];
+
 impl Collector<'_, '_> {
     /// The declaration the binder resolves `identifier` to, if any.
     fn declaration_of(&self, identifier: &IdentifierReference<'_>) -> Option<Span> {
@@ -166,7 +227,11 @@ impl Collector<'_, '_> {
     /// a nested pattern and the rest element bind no single member and are
     /// skipped; a `let`, a `var` and an ambient declarator record nothing.
     fn record_namespace_member_candidates(&mut self, declaration: &VariableDeclarator<'_>) {
-        if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const
+        // ADR 0516: a `let` slot nothing writes or redeclares holds its
+        // initial value as a `const` does (its temporal dead zone is the
+        // same); a `var` is hoisted and reads `undefined` before it runs.
+        let unwritten_let = declaration.kind == oxc_ast::ast::VariableDeclarationKind::Let;
+        if (declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const && !unwritten_let)
             || self.ambient_variable
             || self.ambient_module_depth != 0
         {
@@ -175,6 +240,41 @@ impl Collector<'_, '_> {
         let BindingPattern::ObjectPattern(pattern) = &declaration.id else {
             return;
         };
+        // ADR 0516: a pattern inside a pattern over an object literal the
+        // destructuring consumes (`const { inner: { flush: f } } = { inner: S }`):
+        // the literal is reachable from nowhere else, so its slot holds exactly
+        // the value it was given; a static data property, its key once.
+        if let Some(Expression::ObjectExpression(literal)) =
+            declaration.init.as_ref().map(unwrapped)
+            && let Some(values) = static_data_properties(literal)
+        {
+            for outer in &pattern.properties {
+                let BindingPattern::ObjectPattern(inner) = &outer.value else {
+                    continue;
+                };
+                let key = match &outer.key {
+                    PropertyKey::StaticIdentifier(identifier) if !outer.computed => {
+                        identifier.name.as_str()
+                    }
+                    PropertyKey::StringLiteral(literal) if !outer.computed => {
+                        literal.value.as_str()
+                    }
+                    _ => continue,
+                };
+                let mut matching = values.iter().filter(|(candidate, _)| *candidate == key);
+                let (Some((_, value)), None) = (matching.next(), matching.next()) else {
+                    continue;
+                };
+                let Expression::Identifier(held) = unwrapped(value) else {
+                    continue;
+                };
+                let Some(namespace) = self.declaration_of(held) else {
+                    continue;
+                };
+                self.push_namespace_slots(inner, namespace, unwritten_let);
+            }
+            return;
+        }
         let Some(Expression::Identifier(initializer)) = declaration.init.as_ref().map(unwrapped)
         else {
             return;
@@ -182,6 +282,18 @@ impl Collector<'_, '_> {
         let Some(namespace) = self.declaration_of(initializer) else {
             return;
         };
+        self.push_namespace_slots(pattern, namespace, unwritten_let);
+    }
+
+    /// The static, bare-binding slots of `pattern` as namespace member
+    /// candidates of the declaration `namespace` (`finish` keeps those over a
+    /// namespace import binding).
+    fn push_namespace_slots(
+        &mut self,
+        pattern: &oxc_ast::ast::ObjectPattern<'_>,
+        namespace: Span,
+        unwritten: bool,
+    ) {
         for property in &pattern.properties {
             if property.computed {
                 continue;
@@ -189,6 +301,17 @@ impl Collector<'_, '_> {
             let BindingPattern::BindingIdentifier(local) = &property.value else {
                 continue;
             };
+            if unwritten
+                && local.symbol_id.get().is_none_or(|symbol| {
+                    !self.scoping.symbol_redeclarations(symbol).is_empty()
+                        || self
+                            .scoping
+                            .get_resolved_references(symbol)
+                            .any(|reference| reference.is_write())
+                })
+            {
+                continue;
+            }
             let key = match &property.key {
                 PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
                 PropertyKey::StringLiteral(literal) => literal.value.as_str(),
@@ -196,6 +319,31 @@ impl Collector<'_, '_> {
             };
             self.namespace_member_candidates
                 .push((span(local.span), namespace, key.into()));
+        }
+    }
+
+    /// ADR 0515: a non-ambient `const` bound to an identifier the binder
+    /// resolves (`const N = S`), with that identifier's declaration
+    /// (`namespace_holders`; `finish` follows it when `S` is a namespace import
+    /// binding). A module namespace object is frozen, so `N` holds exactly the
+    /// object `S` names, and a slot of `const { key: local } = N` holds the
+    /// export `key` as `S.key` would read it.
+    fn record_namespace_holders(&mut self, declaration: &VariableDeclarator<'_>) {
+        if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const
+            || self.ambient_variable
+            || self.ambient_module_depth != 0
+        {
+            return;
+        }
+        let BindingPattern::BindingIdentifier(holder) = &declaration.id else {
+            return;
+        };
+        let Some(Expression::Identifier(initializer)) = declaration.init.as_ref().map(unwrapped)
+        else {
+            return;
+        };
+        if let Some(target) = self.declaration_of(initializer) {
+            self.namespace_holders.push((span(holder.span), target));
         }
     }
 
@@ -229,6 +377,64 @@ impl Collector<'_, '_> {
             .symbol_flags(symbol)
             .contains(oxc_semantic::SymbolFlags::ConstVariable)
             .then(|| span(self.scoping.symbol_span(symbol)))
+    }
+
+    /// The `const` variable an initializer evaluates to exactly: the variable
+    /// itself (`const_variable_of`), a conditional both of whose arms are that
+    /// same variable (`c ? r : r`: the test runs, then either arm yields `r`),
+    /// or a call of an inline identity arrow on it (`((x: T) => x)(r)`: a
+    /// synchronous, non-generator arrow with one plain parameter, no default
+    /// and no rest, whose expression body is that parameter, called once,
+    /// not optionally, with one non-spread argument). Each yields the very
+    /// value of the variable; nothing else is an exact copy.
+    fn exact_const_copy_of(&self, expression: &Expression<'_>) -> Option<Span> {
+        if let Some(source) = self.const_variable_of(expression) {
+            return Some(source);
+        }
+        match unwrapped(expression) {
+            Expression::ConditionalExpression(conditional) => {
+                let consequent = self.exact_const_copy_of(&conditional.consequent)?;
+                (self.exact_const_copy_of(&conditional.alternate)? == consequent)
+                    .then_some(consequent)
+            }
+            Expression::CallExpression(call) if !call.optional && call.arguments.len() == 1 => {
+                let Expression::ArrowFunctionExpression(arrow) = unwrapped(&call.callee) else {
+                    return None;
+                };
+                if arrow.r#async
+                    || !arrow.expression
+                    || arrow.params.rest.is_some()
+                    || arrow.params.items.len() != 1
+                {
+                    return None;
+                }
+                let parameter = &arrow.params.items[0];
+                if parameter.initializer.is_some() || parameter.optional {
+                    return None;
+                }
+                let BindingPattern::BindingIdentifier(parameter) = &parameter.pattern else {
+                    return None;
+                };
+                let Some(oxc_ast::ast::Statement::ExpressionStatement(body)) =
+                    arrow.body.statements.first()
+                else {
+                    return None;
+                };
+                let Expression::Identifier(returned) = unwrapped(&body.expression) else {
+                    return None;
+                };
+                let returns_parameter = returned
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                    .is_some_and(|symbol| Some(symbol) == parameter.symbol_id.get());
+                if !returns_parameter {
+                    return None;
+                }
+                self.exact_const_copy_of(call.arguments[0].as_expression()?)
+            }
+            _ => None,
+        }
     }
 
     /// Records the local aliases of a non-ambient `const` declarator
@@ -268,7 +474,7 @@ impl Collector<'_, '_> {
         };
         match &declaration.id {
             BindingPattern::BindingIdentifier(local) => {
-                if let Some(source) = self.const_variable_of(init) {
+                if let Some(source) = self.exact_const_copy_of(init) {
                     self.local_alias_candidates.push((span(local.span), source));
                 }
                 // ADR 0480: a holder a later pattern may read through.
@@ -382,15 +588,29 @@ impl Collector<'_, '_> {
                 let Expression::ObjectExpression(literal) = unwrapped(init) else {
                     return;
                 };
-                let Some(values) = static_data_properties(literal) else {
+                // ADR 0516: a getter whose body is `return <identifier>;` yields
+                // that identifier when the destructuring reads it, once; any other
+                // accessor, method, spread or computed key still records nothing.
+                let Some(values) = static_slot_values(literal) else {
                     return;
                 };
                 for slot in &pattern.properties {
                     if slot.computed {
                         continue;
                     }
-                    let BindingPattern::BindingIdentifier(local) = &slot.value else {
-                        continue;
+                    // ADR 0516: `{ local = source }` over a literal without the key
+                    // reads `undefined`, so the slot holds the default -- unless
+                    // `Object.prototype` supplies the key (`toString`, …), which
+                    // the literal inherits and the default never replaces.
+                    let (local, default) = match &slot.value {
+                        BindingPattern::BindingIdentifier(local) => (local, None),
+                        BindingPattern::AssignmentPattern(assignment) => match &assignment.left {
+                            BindingPattern::BindingIdentifier(local) => {
+                                (local, Some(&assignment.right))
+                            }
+                            _ => continue,
+                        },
+                        _ => continue,
                     };
                     let key = match &slot.key {
                         PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
@@ -398,10 +618,14 @@ impl Collector<'_, '_> {
                         _ => continue,
                     };
                     let mut matching = values.iter().filter(|(name, _)| *name == key);
-                    let (Some((_, value)), None) = (matching.next(), matching.next()) else {
-                        continue;
+                    let source = match (matching.next(), matching.next(), default) {
+                        (Some((_, value)), None, None) => self.const_variable_of(value),
+                        (None, None, Some(default)) if !OBJECT_PROTOTYPE_KEYS.contains(&key) => {
+                            self.const_variable_of(default)
+                        }
+                        _ => None,
                     };
-                    if let Some(source) = self.const_variable_of(value) {
+                    if let Some(source) = source {
                         self.local_alias_candidates.push((span(local.span), source));
                     }
                 }
@@ -620,7 +844,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.lazy_import_glob_callees.push(span(member.span));
         }
         // ADR 0468: `(void 0, f)()` calls `f` as `f()` does.
-        let invoked = invoked_identifier(&call.callee);
+        let invoked = invoked_identifier(
+            !self.function_async.last().copied().unwrap_or(false),
+            &call.callee,
+        );
         let callee_span = invoked.map_or_else(|| call.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
             span: span(call.span),
@@ -651,7 +878,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_constructs.push(span(expression.span));
         }
         self.record_completion_site(expression.span);
-        let invoked = invoked_identifier(&expression.callee);
+        let invoked = invoked_identifier(
+            !self.function_async.last().copied().unwrap_or(false),
+            &expression.callee,
+        );
         let callee_span =
             invoked.map_or_else(|| expression.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
@@ -686,6 +916,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .push((span(declaration.id.span()), span(init.span())));
         }
         self.record_namespace_member_candidates(declaration);
+        self.record_namespace_holders(declaration);
         self.record_local_alias_candidates(declaration);
         // `const { a, b } = await import(x)`: the export names the pattern reads.
         if let BindingPattern::ObjectPattern(pattern) = &declaration.id
@@ -833,11 +1064,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         self.function_flow_depths.push(self.conditional_flow_depth);
+        self.function_async.push(function.r#async);
         self.function_exits.push(false);
         self.function_try_blocks.push(0);
         walk::walk_function(self, function, flags);
         self.function_try_blocks.pop();
         self.function_exits.pop();
+        self.function_async.pop();
         self.function_flow_depths.pop();
     }
 
@@ -975,6 +1208,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             },
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
+        self.function_async.push(function.r#async);
         self.function_exits.push(false);
         self.function_try_blocks.push(0);
         let concise = function.get_expression().map(GetSpan::span);
@@ -987,6 +1221,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         }
         self.function_try_blocks.pop();
         self.function_exits.pop();
+        self.function_async.pop();
         self.function_flow_depths.pop();
     }
 

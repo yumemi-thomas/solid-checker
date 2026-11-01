@@ -89,7 +89,7 @@ export function WrappedCallee(props: Props) {
   return <div>{(visible as () => number[])().length}</div>;
 }
 
-// A mutable function binding is not covered by this proof.
+// ADR 0516: a `let` nothing reassigns holds its function: its helper is resolved, no obligation.
 export function MutableHelper(props: Props) {
   let visible = () => pageSlice(props.items);
   return <div>{visible().length}</div>;

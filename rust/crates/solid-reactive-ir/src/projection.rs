@@ -1211,7 +1211,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
-            // ADR 0513: a top-level `await` may settle the source before the
+            // ADR 0518: a top-level `await` may settle the source before the
             // read runs; a settled read neither needs a boundary (SC5003) nor
             // throws (SC5001). SC5003's `ssrSource: "client"` wording throws
             // on the server whatever the client's timing, and an apply's

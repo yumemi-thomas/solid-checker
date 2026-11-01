@@ -1,3 +1,4 @@
+import { browserCache, pinnedHeadlessShell } from "../playwright-browser.mjs";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -279,7 +280,7 @@ describe("what is really installed", () => {
 
   it("the browser key moves with its build's files", () => {
     const home = scratch();
-    const build = join(home, "Library/Caches/ms-playwright/chromium_headless_shell-1200");
+    const build = join(browserCache({ home }), pinnedHeadlessShell().directory);
     mkdirSync(build, { recursive: true });
     writeFileSync(join(build, "chrome"), "1");
     const one = browserKey(undefined, home);

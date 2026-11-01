@@ -176,3 +176,5 @@ the value still will not update).
   family for actions
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — how
   pending values are meant to be read
+
+A call in a layer of a function a memo or effect compute names by its binding runs under that compute's observer (ADR 0517).

@@ -4,6 +4,7 @@
 // all of those match, a recorded row is as good as running the program again, so rounds after the first
 // reuse it. Anything that changes the key (a rebuilt checker, a new lockfile, an edit to classify.mjs) makes
 // the old rows unreachable; nothing is ever patched in place.
+import { browserCache, pinnedHeadlessShell } from "../playwright-browser.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -243,15 +244,13 @@ export function chromeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle =
 export function browserKey(explicit, home = process.env.HOME) {
   if (explicit) return JSON.stringify([explicit, treeStat(dirname(explicit))]);
   const name = defaultBrowserName(home);
-  return JSON.stringify([name, name === "none" ? "none" : treeStat(join(home, "Library/Caches/ms-playwright", name))]);
+  return JSON.stringify([name, name === "none" ? "none" : treeStat(join(browserCache({ home }), name))]);
 }
 
-/** The browser the oracle picks without `--browser` (scripts/runtime-oracle.mjs `defaultChromium`): its build directory names it. */
+/** The browser the oracle picks without `--browser` (scripts/playwright-browser.mjs): the pinned build's directory, "none" when absent. */
 export function defaultBrowserName(home = process.env.HOME) {
-  const cache = join(home ?? "", "Library/Caches/ms-playwright");
-  if (!existsSync(cache)) return "none";
-  const builds = readdirSync(cache).filter((name) => /^chromium_headless_shell-\d+$/.test(name)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
-  return builds[0] ?? "none";
+  const { directory } = pinnedHeadlessShell();
+  return existsSync(join(browserCache({ home }), directory)) ? directory : "none";
 }
 
 /** The program half of a runtime or Chrome key: what is asked (`part`) of which files (a case's `executionFiles`, by name and text). */

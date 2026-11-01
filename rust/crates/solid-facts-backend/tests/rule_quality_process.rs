@@ -21,7 +21,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // Two of them are uncertifiable reads in the closures the two `nested`
         // memos return (ADR 0452), pinned below.
         ("strict-read-untracked", 20),
-        ("reactive-read-after-await", 19),
+        // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
+        // pinned below.
+        ("reactive-read-after-await", 20),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
         ("reactive-dispatch-unresolved", 3),
         ("no-destructure", 1),
@@ -150,9 +152,15 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "after-await-extended-valid.tsx",
             [("strict-read-untracked", 1)].as_slice(),
         ),
+        // ADR 0516: the read after `loopAwait`'s `while` loop may follow an
+        // await the loop ran (an uncertifiable result, no violation).
         (
             "await-control-flow-valid.tsx",
-            [("strict-read-untracked", 1)].as_slice(),
+            [
+                ("strict-read-untracked", 1),
+                ("reactive-read-after-await", 1),
+            ]
+            .as_slice(),
         ),
         (
             "effect-apply-valid.tsx",
@@ -214,10 +222,6 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             &["strict-read-untracked"][..],
         ),
         ("after-await-valid.tsx", &["reactive-read-after-await"][..]),
-        (
-            "await-control-flow-valid.tsx",
-            &["reactive-read-after-await"][..],
-        ),
         (
             "after-await-extended-valid.tsx",
             &["reactive-read-after-await"][..],

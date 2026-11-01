@@ -193,6 +193,113 @@ pub(super) fn run<'a>(
             }
         }
     }
+    unlisted_async_computations(ctx, &reach, draft);
+}
+
+/// ADR 0517: an async compute the producer lists no fact for (an object
+/// literal's member, `createMemo(box.compute)` over `{ compute: async () =>
+/// … }` or `{ async compute() {} }`), named exactly at a tracked position
+/// (ADR 0516's `exact_function_argument`). No dominance fact describes its
+/// body, so an accessor read written in it after its first suspension
+/// (`await`, `for await`) is an obligation, never silence.
+fn unlisted_async_computations(
+    ctx: &AnalysisContext<'_>,
+    reach: &Reach<'_, '_>,
+    draft: &mut ProgramDraft,
+) {
+    for file in &ctx.facts.files {
+        let path = file.path.as_str();
+        for call in &file.ast.calls {
+            let Some(argument) = call.arguments.first() else {
+                continue;
+            };
+            let Some(primitive) = crate::call_primitive_name_cached(
+                ctx.semantic_lookup,
+                file,
+                call,
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.dialect,
+            )
+            .and_then(|name| name.primitive()) else {
+                continue;
+            };
+            if !ctx
+                .dialect
+                .callback_semantics_at(primitive, 0, call.arguments.len())
+                .tracks_reads
+            {
+                continue;
+            }
+            let Some((target, span)) =
+                crate::owners::exact_function_argument(file, argument.span, ctx.semantic_lookup)
+            else {
+                continue;
+            };
+            if target != path
+                || reach
+                    .facts_by_end
+                    .contains_key(&(path, u64::from(span.end)))
+            {
+                continue;
+            }
+            let Some(function) = file.ast.function_at(span) else {
+                continue;
+            };
+            if !function.r#async || function.generator {
+                continue;
+            }
+            let Some(boundary) = file
+                .ast
+                .awaits
+                .iter()
+                .chain(&file.ast.implicit_suspensions)
+                .filter(|point| {
+                    function.body.contains(**point)
+                        && written_directly_in(&file.ast, function, **point)
+                })
+                .map(|point| point.start)
+                .min()
+            else {
+                continue;
+            };
+            // Every read after the boundary, in the body or in a function
+            // written in it (an in-place layer may run it there), and a call
+            // there of a project function whose own body reads an accessor
+            // (a wrapper): each may read after the suspension.
+            let accessor_read = |in_file: &FileFacts, call: &CallFact| {
+                ctx.semantic_lookup
+                    .callee_symbol(in_file, call.callee)
+                    .and_then(|symbol| ctx.accessors.get(symbol))
+                    .map(|(name, _)| name.to_string())
+            };
+            for read in &file.ast.calls {
+                if read.span.start < boundary || !function.body.contains(read.span) {
+                    continue;
+                }
+                let name = accessor_read(file, read).or_else(|| {
+                    let (callee_file, callee) =
+                        ctx.semantic_lookup.function_called_at(path, read.callee)?;
+                    callee_file
+                        .ast
+                        .calls
+                        .iter()
+                        .filter(|inner| callee.body.contains(inner.span))
+                        .find_map(|inner| accessor_read(callee_file, inner))
+                });
+                let Some(name) = name else {
+                    continue;
+                };
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ReactiveReadAfterAwait { accessor: name },
+                    location: location(file.path.shared(), read.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
+    }
 }
 
 /// The AST function an async-function fact describes.
@@ -209,21 +316,45 @@ fn ast_function<'f>(
     }
     // ADR 0351: an object method's producer span starts at its key or `async`,
     // its function at the parameter list: the same end, with method-header text between.
-    let found = file.ast.functions.iter().find(|candidate| {
+    if let Some(found) = file.ast.functions.iter().find(|candidate| {
         candidate.span.end == end
             && candidate.span.start > start
             && method_header(file.source_text(Span::new(start, candidate.span.start)))
-    })?;
-    Some((file, found))
+    }) {
+        return Some((file, found));
+    }
+    // ADR 0517: an object literal's member (`{ cb: async () => … }`, `{ async
+    // cb() {} }`) whose producer span holds more of the property: the
+    // outermost function inside the span that ends where it does.
+    let found = file
+        .ast
+        .functions
+        .iter()
+        .filter(|candidate| candidate.span.end == end && candidate.span.start > start)
+        .min_by_key(|candidate| candidate.span.start)?;
+    // Exactly one property's span: the producer named the property.
+    file.ast
+        .object_properties
+        .iter()
+        .any(|property| property.span == Span::new(start, end))
+        .then_some((file, found))
 }
 
 /// Text a method's producer span may hold before its parameter list and no
-/// other function: `async`, `*`, a key name, whitespace.
+/// other function: `async`, `*`, a key name, whitespace; and (ADR 0517) an
+/// object literal property's `key:` before the function it holds
+/// (`{ compute: async () => … }`), whose producer span starts at the key.
 fn method_header(text: Option<&str>) -> bool {
     text.is_some_and(|text| {
         !text.is_empty()
+            && text.chars().filter(|c| *c == ':').count() <= 1
             && text.chars().all(|c| {
-                c.is_alphanumeric() || c == '_' || c == '$' || c == '*' || c.is_whitespace()
+                c.is_alphanumeric()
+                    || c == '_'
+                    || c == '$'
+                    || c == '*'
+                    || c == ':'
+                    || c.is_whitespace()
             })
     })
 }
@@ -526,7 +657,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             file.ast.implicit_suspensions.iter().any(|suspension| {
                 ast_function.body.contains(*suspension)
                     && written_directly_in(&file.ast, ast_function, *suspension)
-            })
+            }) || loop_suspension_start(file, ast_function).is_some()
         })
     }
 
@@ -668,6 +799,87 @@ impl<'f, 'a> Reach<'f, 'a> {
                 uncertain: tracking == Tracking::Possible,
             });
         }
+        // ADR 0517: a comma, conditional, logical or assignment callee
+        // (`(slot = r)()`) names no symbol, so the producer's after-await
+        // calls never list it. Written in the function's own body after one of
+        // its awaits and able to yield an accessor, the call may read it there.
+        // A total callee every operand of which names one accessor, after an
+        // await that dominates it, is that accessor's read; any other is an
+        // obligation, never silence.
+        if let Some((file, ast_function)) = ast_function(&self.files, function) {
+            for candidate in &file.ast.calls {
+                if !ast_function.body.contains(candidate.span)
+                    || crate::owners::containing_ast_function(&file.ast, candidate.span)
+                        .is_none_or(|owner| owner.span != ast_function.span)
+                    || ctx
+                        .semantic_lookup
+                        .callee_symbol(file, candidate.callee)
+                        .is_some()
+                {
+                    continue;
+                }
+                let references = file.ast.composite_callee_references(candidate.callee);
+                let accessors = references
+                    .iter()
+                    .filter_map(|operand| ctx.entities.at(file.path.as_str(), *operand))
+                    .filter(|symbol| ctx.accessors.contains_key(*symbol))
+                    .collect::<Vec<_>>();
+                let Some(&symbol) = accessors.first() else {
+                    continue;
+                };
+                let dominated =
+                    crate::execution_role::follows_unconditional_await(file, candidate.span)
+                        || crate::execution_role::follows_dominating_await(file, candidate.span);
+                // A later pass of a loop that awaits, and a `finally` or
+                // `catch` after an awaited `try` head, may run after a
+                // suspension too (ADR 0516's loop and try-head facts).
+                let may_follow =
+                    crate::execution_role::follows_any_suspension(file, candidate.span)
+                        || crate::execution_role::follows_try_head_await(
+                            file,
+                            candidate.span,
+                            ctx.semantic_lookup,
+                        )
+                        || loop_suspension_start(file, ast_function)
+                            .is_some_and(|start| candidate.span.start >= start)
+                        || file.ast.awaits.iter().any(|awaited| {
+                            awaited.end <= candidate.span.start
+                                && written_directly_in(&file.ast, ast_function, *awaited)
+                        });
+                if !dominated && !may_follow {
+                    continue;
+                }
+                let tracking = self.tracking(member, symbol);
+                if tracking == Tracking::Tracked {
+                    continue;
+                }
+                let exact = dominated
+                    && accessors.len() == references.len()
+                    && references.len()
+                        == file.ast.composite_callee_operands(candidate.callee).len()
+                    && accessors.iter().all(|other| *other == symbol)
+                    && file.ast.composite_callee_total(candidate.callee);
+                let callee = location(file.path.shared(), candidate.callee);
+                if !walk.reported.insert((
+                    callee.path.to_string(),
+                    callee.start_byte,
+                    callee.end_byte,
+                )) {
+                    continue;
+                }
+                let name = ctx
+                    .accessors
+                    .get(symbol)
+                    .map_or_else(|| symbol.to_string(), |(name, _)| name.to_string());
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ReactiveReadAfterAwait { accessor: name },
+                    location: callee,
+                    analysis_context: member.context.clone(),
+                    fixes: vec![],
+                    uncertain: !exact || tracking == Tracking::Possible,
+                });
+            }
+        }
         // The promise chain first: it records which function literals become
         // members, so the callback walk below leaves their obligations to them.
         if let Some((file, ast_function)) = ast_function(&self.files, function) {
@@ -772,7 +984,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         file: &'f FileFacts,
         function: &'f FunctionFact,
     ) {
-        let Some(boundary) = file
+        let implicit = file
             .ast
             .implicit_suspensions
             .iter()
@@ -781,6 +993,15 @@ impl<'f, 'a> Reach<'f, 'a> {
                     && written_directly_in(&file.ast, function, **suspension)
             })
             .map(|suspension| suspension.end)
+            .min();
+        // ADR 0516: a loop holding an own `await` suspends on its back edge,
+        // so code written anywhere in it (before the `await` too) may run after
+        // a suspension on a later pass, as may everything after the loop: from
+        // the loop's start every read is an obligation (the first pass's reads
+        // before the `await` are dependencies, ADR 0195, never violations).
+        let Some(boundary) = implicit
+            .into_iter()
+            .chain(loop_suspension_start(file, function))
             .min()
         else {
             return;
@@ -845,9 +1066,18 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .function_at(file.ast.peel_ts_sugar_span(call.callee))
             && function.kind != FunctionKind::Declaration
             && function.method_name.is_none()
-            && !function.generator
+            && (!function.generator
+                || crate::owners::generator_iterator_used(file, function)
+                    .is_some_and(|created| created.span == call.span))
         {
+            // ADR 0516: calling a generator runs none of its body; stepping
+            // the iterator it returns runs it on this stack, which nothing
+            // follows: its reads are obligations.
+            let mark = draft.static_defects.len();
             self.report_prefix(draft, walk, file, function, depth);
+            if function.generator {
+                mark_uncertain(draft, mark);
+            }
             return;
         }
         // `runWithOwner(owner, fn)` runs `fn` at once with `owner` as the
@@ -1132,17 +1362,48 @@ impl<'f, 'a> Reach<'f, 'a> {
         call: &CallFact,
     ) {
         let ctx = self.ctx;
-        let Some(symbol) = call_accessor_symbol(ctx, file, call) else {
-            return;
-        };
         let key = (
             file.path.to_string(),
             u64::from(call.callee.start),
             u64::from(call.callee.end),
         );
+        let symbol = call_accessor_symbol(ctx, file, call);
+        // ADR 0516: as on the dominance path (ADR 0509), a callee that is a
+        // value a caller supplied (a prop, a context or hook member) may be an
+        // accessor: after an implicit suspension its read is an obligation too.
+        let handed = |walk: &mut Walk<'_>, draft: &mut ProgramDraft| {
+            if symbol.is_none_or(|symbol| {
+                !ctx.setters.contains_key(symbol) && !ctx.actions.contains_key(symbol)
+            }) && crate::local_access::handed_value(
+                &crate::local_access::HandedTables {
+                    lookup: ctx.semantic_lookup,
+                    entities: ctx.entities,
+                    prop_sources: ctx.prop_sources,
+                    source_kinds: ctx.source_kinds,
+                    accessors: ctx.accessors,
+                    setters: ctx.setters,
+                    actions: ctx.actions,
+                    props_reactivity: ctx.props_reactivity,
+                },
+                file,
+                call.callee,
+                crate::local_access::HANDED_DEPTH,
+            ) && walk.reported.insert(key.clone())
+            {
+                let mut obligation = typed_after_await_obligation(file, call.callee);
+                obligation.analysis_context = "handed-read-after-await".to_owned();
+                draft.push_defect(obligation);
+            }
+        };
+        let Some(symbol) = symbol else {
+            handed(walk, draft);
+            return;
+        };
         let Some((name, _)) = ctx.accessors.get(symbol) else {
-            if typed_unknown(ctx, symbol) && walk.reported.insert(key) {
+            if typed_unknown(ctx, symbol) && walk.reported.insert(key.clone()) {
                 draft.push_defect(typed_after_await_obligation(file, call.callee));
+            } else {
+                handed(walk, draft);
             }
             return;
         };
@@ -1990,4 +2251,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .is_some_and(|argument| self.pending_promise(helper_file, argument, depth + 1))
         })
     }
+}
+
+/// ADR 0516: the start of the earliest loop written directly in `function`
+/// that holds an `await` written directly in `function`: a back edge that
+/// suspends (the dominance facts model an `await` by what follows it, not
+/// what runs again after it).
+fn loop_suspension_start(file: &FileFacts, function: &FunctionFact) -> Option<u32> {
+    file.ast
+        .loop_statements
+        .iter()
+        .filter(|lp| function.body.contains(**lp) && written_directly_in(&file.ast, function, **lp))
+        .filter(|lp| {
+            file.ast.awaits.iter().any(|awaited| {
+                lp.contains(*awaited) && written_directly_in(&file.ast, function, *awaited)
+            })
+        })
+        .map(|lp| lp.start)
+        .min()
 }

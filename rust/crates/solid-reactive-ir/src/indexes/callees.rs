@@ -347,6 +347,41 @@ impl<'a> SemanticLookup<'a> {
             .and_then(|index| index.call_by_callee(callee))
     }
 
+    /// ADR 0517: the installed package directory the function `callee` calls
+    /// is declared in: the selected signature's declaration, or, where the
+    /// call carries none (a callee imported through a project module that
+    /// re-exports it, whose signature row Type Facts does not relocate), the
+    /// declarations of the callee's exact symbol (a static member of a
+    /// namespace import: its property's), which the binder resolves through
+    /// the re-export. Declarations in two packages answer nothing.
+    pub(crate) fn callee_package_root(&self, file: &FileFacts, callee: Span) -> Option<String> {
+        if let Some(root) = self
+            .resolved_callee_call(file, callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .and_then(|declaration| {
+                crate::effect_phase::package_root(declaration.location.path.as_ref())
+            })
+        {
+            return Some(root);
+        }
+        let peeled = file.ast.peel_ts_sugar_span(callee);
+        let named = super::callee_world::namespace_member_property(file, peeled).unwrap_or(peeled);
+        if file.ast.call_at(named).is_some() {
+            return None;
+        }
+        let symbol = self.entities.at(file.path.as_str(), named)?;
+        let mut roots = self
+            .symbol_declarations(symbol.as_str())?
+            .iter()
+            .map(|declaration| {
+                crate::effect_phase::package_root(declaration.location.path.as_ref())
+            });
+        let first = roots.next()??;
+        roots
+            .all(|root| root.as_deref() == Some(first.as_str()))
+            .then_some(first)
+    }
+
     /// The compiler-selected signature and argument mapping for this call.
     ///
     /// Resolved-call facts are demanded at the complete callee expression,
@@ -938,8 +973,15 @@ pub(crate) fn function_value_is_current_in(
             .as_ref()
             .is_some_and(|name| !binding_written(file, name.span));
     }
+    // ADR 0516: a `let` nothing writes holds its initializer as a `const`
+    // does (a `var` may be redeclared and is not this).
     file.ast.bindings.iter().any(|binding| {
-        binding.immutable
+        (binding.immutable
+            || (binding.runtime_let
+                && binding
+                    .names
+                    .first()
+                    .is_some_and(|name| !binding_written(file, name.span))))
             && binding.shape == solid_facts::ast::BindingShape::Identifier
             && binding.initializer.is_some_and(|initializer| {
                 file.ast.peel_ts_sugar_span(initializer) == function.span

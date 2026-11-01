@@ -32,7 +32,7 @@ user`, `const { read } = { read: user }`) is the accessor (ADR 0463).
 Where a project module awaits at its top level (or a load the analysis cannot
 see may), the finding is **uncertifiable**: the await's checkpoint may settle
 the source (a module-scope memo, a hook's instance created at module scope)
-before the read first runs, and a settled read needs no boundary (ADR 0513).
+before the read first runs, and a settled read needs no boundary (ADR 0518).
 Premise: no installed dependency awaits at its top level.
 
 This is the static counterpart of Solid's dev-mode `ASYNC_OUTSIDE_LOADING_BOUNDARY`

@@ -863,6 +863,15 @@
       "code": "import { createMemo } from \"solid-js\";\nconst width = createMemo(() => 1, { ssrSource: \"client\" });\nexport const Case = () => <div>{width()}</div>;\n"
     },
     {
+      "rule": "loading-on-outside-hold",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "`Loading`'s `on` is typed `any` and reading an async memo inside and outside the boundary is type-correct; the claim (an obligation, ADR 0517) is that an outside reader may hold the frame the re-armed boundary waits on, a runtime fact no type expresses.",
+      "code": "import { Loading, createMemo, createSignal } from \"solid-js\";\nexport const Case = () => {\n  const [t, setT] = createSignal(1);\n  const a = createMemo(async () => { t(); await Promise.resolve(); return 1; });\n  return (\n    <div>\n      <Loading fallback={0} on={t()}>\n        <p>{a()}</p>\n      </Loading>\n      <p>{a()}</p>\n      <button onClick={() => setT(2)}>go</button>\n    </div>\n  );\n};\n"
+    },
+    {
       "rule": "http-response-after-flush",
       "dialect": "v2",
       "expect": "silent",

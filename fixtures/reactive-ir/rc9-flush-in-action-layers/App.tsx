@@ -75,3 +75,30 @@ export const namedClosure = action(function* () {
   const f = () => flush();
   f();
 });
+
+// Uncertifiable (ADR 0516): a generator called in place whose iterator is stepped
+// runs its body inside the step, which no call edge follows.
+export const steppedGenerator = action(function* () {
+  (function* () {
+    flush();
+    yield 1;
+  })().next();
+});
+
+// Negative (ADR 0516): a generator whose iterator a statement discards runs none of its body.
+export const discardedGenerator = action(function* () {
+  (function* () {
+    flush();
+  })();
+});
+
+// Uncertifiable (ADR 0516): a named helper an action body calls, also called elsewhere.
+function sharedFlush() {
+  flush();
+}
+export const viaShared = action(function* () {
+  sharedFlush();
+});
+export function alsoOutside() {
+  sharedFlush();
+}

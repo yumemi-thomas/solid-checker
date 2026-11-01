@@ -1071,6 +1071,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0517: whether a `primitive` boundary whose `on` dependencies change
+    /// may wait on a source an outside reader holds, so its fallback is never
+    /// seen (rc.17's development warning `LOADING_ON_OUTSIDE_HOLD`). The
+    /// analysis only ever records an obligation for it, so `true` is the
+    /// fail-closed answer for any release that has the boundary; the default
+    /// is `false` (no such boundary).
+    fn boundary_on_may_hold_outside(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether creating `primitive`'s computation or root with no owner inside
     /// a `createEffect` apply callback throws in the dev build (ADR 0483:
     /// `PRIMITIVE_IN_EFFECT_CALLBACK`). Only the creating call, given its

@@ -860,7 +860,6 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
             "nested-after-await-accessor.tsx",
             "reactive-read-after-await",
         ),
-        ("loop-await-accessor.tsx", "reactive-read-after-await"),
         ("component-props-tracked.tsx", "strict-read-untracked"),
         ("component-props-tracked-destructure.tsx", "no-destructure"),
         ("noncomponent-object-read.ts", "strict-read-untracked"),
@@ -877,6 +876,23 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
             "no-write-in-pure-computation",
         ),
     ];
+    // ADR 0516: a read after a loop that may await may follow a suspension:
+    // an uncertifiable result, never a violation.
+    assert!(
+        findings.iter().any(|finding| {
+            finding["rule"] == "reactive-read-after-await"
+                && finding["kind"] == "uncertifiable"
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("loop-await-accessor.tsx"))
+        }) && !findings.iter().any(|finding| {
+            finding["kind"] == "violation"
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("loop-await-accessor.tsx"))
+        }),
+        "loop-await-accessor.tsx: one uncertifiable read after the loop, no violation"
+    );
     for (file, rule) in negatives {
         assert!(
             !findings.iter().any(|finding| {

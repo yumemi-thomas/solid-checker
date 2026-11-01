@@ -58,7 +58,18 @@ pub(super) fn transparent_inner_expression<'a>(
 /// - `eval` after a comma: an indirect eval, not the direct one;
 /// - a TypeScript wrapper: the facts ask for the type at the callee, and the
 ///   wrapper's type is not the identifier's.
+///
+/// ADR 0515: a plain assignment to a binding identifier is peeled to its right
+/// operand, `(slot = f)()`: the expression's value is the right operand's
+/// value (`f`, read once), the assignment to a plain binding runs no code, and
+/// the call has an undefined receiver, as `f()` does. A compound or logical
+/// assignment (`(slot ||= f)()`) yields `slot`'s value or `f`'s, and is not
+/// peeled; nor is an assignment to a member or a pattern. `assignments` is
+/// false in an `async` function: the after-await owner placement there reads
+/// the assignment's operands, not this peel, and a peeled call was silent
+/// where the plain call is a violation (fuzzer recall grid, 2026-10-31).
 pub(super) fn invoked_identifier<'b, 'a>(
+    assignments: bool,
     callee: &'b Expression<'a>,
 ) -> Option<&'b oxc_ast::ast::IdentifierReference<'a>> {
     fn inert(operand: &Expression<'_>) -> bool {
@@ -86,6 +97,18 @@ pub(super) fn invoked_identifier<'b, 'a>(
             }
             Expression::Identifier(identifier) => {
                 return (!(through_comma && identifier.name == "eval")).then_some(identifier);
+            }
+            Expression::AssignmentExpression(assignment)
+                if assignments
+                    && assignment.operator == oxc_ast::ast::AssignmentOperator::Assign
+                    && matches!(
+                        assignment.left,
+                        oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(_)
+                    ) =>
+            {
+                // Like a comma, the value is the operand, read with no receiver.
+                through_comma = true;
+                expression = &assignment.right;
             }
             _ => return None,
         }

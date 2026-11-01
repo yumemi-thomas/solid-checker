@@ -61,6 +61,12 @@ pub(crate) fn discover_owner_file(
                     .find(|index| nodes[*index].span == span)
             })
             .map(|index| OwnerTarget::LocalSpan(nodes[index].span))
+            // ADR 0516: a copy, a `const` holding a function expression, or an
+            // object literal's slot names exactly one function.
+            .or_else(|| {
+                crate::owners::exact_function_argument(file, argument, lookup)
+                    .map(|(path, span)| OwnerTarget::Function(path, span))
+            })
             .or_else(|| {
                 if !is_identifier_span(file, argument) {
                     return None;
@@ -214,6 +220,46 @@ pub(crate) fn discover_owner_file(
                     },
                 });
             }
+        }
+        // ADR 0516: a generator called in place whose iterator is stepped at
+        // the call runs its body there, up to a `yield`, under the owner of
+        // the code around it: it may run, never a proof that it does.
+        if let Some(function) = file
+            .ast
+            .function_at(file.ast.peel_ts_sugar_span(call.callee))
+            .filter(|function| function.generator && !call.construct)
+            && crate::owners::generator_iterator_used(file, function)
+                .is_some_and(|created| created.span == call.span)
+            && crate::owners::iterator_stepped_at(file, call.span)
+        {
+            let invoker =
+                enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call.span);
+            let under_owner = invocation_runs_under_owner(
+                file,
+                call.span,
+                invoker.map(|index| nodes[index].span),
+            );
+            edges.push(SymbolicOwnerEdge {
+                source: invoker
+                    .filter(|_| !in_list && under_owner)
+                    .map(|index| OwnerSource {
+                        path: file.path.to_string(),
+                        span: nodes[index].span,
+                    }),
+                target: OwnerTarget::LocalSpan(function.span),
+                // After a suspension the step runs with whatever owner the
+                // continuation has, which the source's context does not say.
+                kind: if in_list
+                    || !under_owner
+                    || invoker.is_none()
+                    || crate::execution_role::may_follow_own_await(file, call.span)
+                    || crate::execution_role::follows_any_suspension(file, call.span)
+                {
+                    OwnerEdgeKind::MayBeUnowned
+                } else {
+                    OwnerEdgeKind::MayRun
+                },
+            });
         }
         let callback_edges = owner_callback_edges(file, call, &call_primitives[call_index], lookup);
         let helper_call =

@@ -1148,11 +1148,26 @@ fn tracked_async_computation_context(
                 continue;
             }
             for (call_index, call) in file.ast.calls.iter().enumerate() {
-                if call
-                    .arguments
-                    .first()
-                    .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument.span) == range)
-                {
+                // ADR 0517: also an argument naming the function exactly
+                // (ADR 0516's `exact_function_argument`): the binding of a
+                // named function expression (`const cb = async function
+                // named() {}`, whose own symbol is the inner name), a `const`
+                // copy, an object literal's member (`createMemo(box.cb)`).
+                if call.arguments.first().is_some_and(|argument| {
+                    file.ast.peel_ts_sugar_span(argument.span) == range
+                        || crate::owners::exact_function_argument(
+                            file,
+                            argument.span,
+                            ctx.semantic_lookup,
+                        )
+                        .is_some_and(|(path, span)| {
+                            // An object literal property's producer span starts
+                            // at its key; the function ends where it does.
+                            path == file.path.as_str()
+                                && span.end == range.end
+                                && span.start >= range.start
+                        })
+                }) {
                     candidates.insert((file_index, call_index));
                 }
             }

@@ -452,6 +452,7 @@ pub(crate) fn push_owner_requirement(
             conditional_owner: status.conditional_owner,
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
+            provider_open: status.provider_open,
             after_await: status.after_await,
             missing_jsx_census,
             through_dependency: None,
@@ -934,11 +935,20 @@ pub(crate) fn fresh_stack_scheduler_edges(
                     | solid_facts::ast::ArgumentValueKind::AsyncFunction
                     | solid_facts::ast::ArgumentValueKind::Identifier
             )
+            // ADR 0516: an object literal's member that names one function.
+            || (!argument.spread
+                && lookup
+                    .object_member_function(file, file.ast.peel_ts_sugar_span(argument.span))
+                    .is_some())
         })
         .filter(|(index, argument)| {
+            let exact_member = lookup
+                .object_member_function(file, file.ast.peel_ts_sugar_span(argument.span))
+                .is_some();
             let callability = lookup
                 .entity_at(file.path.as_str(), argument.span)
-                .and_then(|entity| entity.callability);
+                .and_then(|entity| entity.callability)
+                .or_else(|| exact_member.then_some(typefacts::Callability::Callable));
             crate::runtime_semantics::argument_behavior(resolved, callability, *index).map_or_else(
                 // ADR 0438: a reviewed test runner invokes a registered callback
                 // from its own scheduler.
@@ -949,9 +959,15 @@ pub(crate) fn fresh_stack_scheduler_edges(
                 crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack,
             )
         })
-        .map(|(argument, _)| OwnerCallbackEdge {
+        .map(|(argument, value)| OwnerCallbackEdge {
             argument,
-            kind: callback_owner_edge_kind(owner),
+            // ADR 0516: a generator the scheduler calls runs none of its
+            // body there, so nothing is proven about its owner.
+            kind: if crate::owners::argument_may_be_generator(file, value.span, lookup) {
+                OwnerEdgeKind::MayBeUnowned
+            } else {
+                callback_owner_edge_kind(owner)
+            },
             source_path: file.path.to_string(),
             source: call.span,
         })
@@ -1053,6 +1069,62 @@ pub(crate) fn owner_providing_argument(
 }
 
 pub(crate) fn containing_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    lexical_leaf_owner(file, span, entities, symbol_names, lookup)
+        .or_else(|| named_leaf_owner(file, span, entities, symbol_names, lookup))
+}
+
+/// ADR 0516: the leaf owner a callback handed by name (`onSettled(cb)`, a
+/// copy, a slot) runs under: the function around `span`, or the function
+/// the in-place climb from `span` lands in, whose every value position is a
+/// leaf slot of one owner, with no other use.
+fn named_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let direct = crate::owners::containing_body_function(&file.ast, span)?;
+    let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
+        .filter(|climb| !climb.in_list && climb.suspended.is_none())
+        .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
+    [Some(direct), climbed]
+        .into_iter()
+        .flatten()
+        .find_map(|function| {
+            let (positions, other) = crate::owners::exact_value_positions(file, function, lookup)?;
+            if other || positions.is_empty() {
+                return None;
+            }
+            let mut owners = positions.iter().map(|(call_span, index)| {
+                let call = file.ast.calls.iter().find(|call| call.span == *call_span)?;
+                let owner = crate::call_primitive_name_cached(
+                    lookup,
+                    file,
+                    call,
+                    entities,
+                    symbol_names,
+                    lookup.dialect,
+                )?;
+                let primitive = owner.primitive()?;
+                (callback_owner_at_call(file, call, primitive, *index, lookup)
+                    == Some(solid_dialect::CallbackOwner::Leaf))
+                .then(|| owner.to_string())
+            });
+            let first = owners.next()??;
+            owners
+                .all(|owner| owner.as_deref() == Some(first.as_str()))
+                .then_some(first)
+        })
+}
+
+fn lexical_leaf_owner(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,

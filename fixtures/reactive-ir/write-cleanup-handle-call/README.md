@@ -8,6 +8,6 @@ Legal (rc.17 never throws): a handle nothing calls (`HandleNeverCalled`, `OwnerH
 
 Uncertifiable: a handle stored, passed, returned, or aliased (`HandleStored`, `HandlePassed`, `HandleReturned`, `HandleAliased`), and a write in an object member the callback builds (`HandleObjectMember`). Checked on the rc.17 dev build; stub as `write-owner-in-cleanup`'s. On a release nobody read for `onCleanup`'s return, a used handle is uncertifiable.
 
-By name: exact is a violation (`HandleByNameInMemo`); a `let` or conditional argument is uncertifiable. A handle call in an unrendered or opaque child or an instance field is uncertifiable; a rendered child is a violation. A write after an await is legal where proven, uncertifiable inside JSX.
+By name: exact is a violation (`HandleByNameInMemo`, and ADR 0516 a `let` nothing reassigns, `HandleByNameMutable`); a conditional argument is uncertifiable. A handle call in an unrendered or opaque child or an instance field is uncertifiable; a rendered child is a violation. A write after an await is legal where proven, uncertifiable inside JSX.
 
 Reached: a handle call in a dead branch (`if (false)`), after a `return`, or in code nothing runs is uncertifiable; `if (true)`, a runtime condition and a called closure are violations.

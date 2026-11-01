@@ -209,6 +209,7 @@ impl Finding {
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
         let missing_jsx_census = requirement.missing_jsx_census;
+        let provider_open = requirement.provider_open;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
         // row with no explicit reason as caller uncertainty.
         let through_dependency = requirement.through_dependency.as_ref();
@@ -219,7 +220,8 @@ impl Finding {
                 && !conditional_owner
                 && !later_run_unowned
                 && !component_uncertain
-                && !missing_jsx_census);
+                && !missing_jsx_census
+                && !provider_open);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
         if missing_jsx_census {
@@ -243,7 +245,7 @@ impl Finding {
         }
         let mut evidence = vec![EvidenceStep {
             message: if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
-                "the read runs under a reactive owner, and the closed program has no provider for this context, so Solid finds no value".into()
+                "the read runs under a reactive owner, and the analyzed program has no provider for this context, so Solid finds no value".into()
             } else if requirement.after_await {
                 "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
                     .into()
@@ -299,6 +301,14 @@ impl Finding {
                 message: "the operation, in the package's source".into(),
                 location: Some(operation.clone()),
             });
+        }
+        if provider_open {
+            message.push_str(
+                "; but the program is open, and code the analysis does not see may render a provider above this reader, so this is not proven",
+            );
+            hint.push_str(
+                " Declare the program closed (`--program-boundary closed`) when every entry is analyzed, so the provider census can decide it.",
+            );
         }
         if runtime_uncertain {
             let (clause, guidance, evidence_message) = match requirement.operation {

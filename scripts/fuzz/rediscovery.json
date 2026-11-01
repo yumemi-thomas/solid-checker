@@ -24,7 +24,7 @@
   {
     "finding": "async-outside-loading-boundary proven on a module-scope async memo that settled before the mount (the module awaits after a root reads it), read in a render effect's compute: rc.17 reports nothing",
     "found": "the fuzzer (source module-hook-shared, 2026-10-30), confirmed by the oracle (static-only)",
-    "fixed": "ADR 0513",
+    "fixed": "ADR 0518",
     "grid": "lg-src",
     "code": "STRICT_READ_UNTRACKED",
     "ids": [
@@ -83,8 +83,8 @@
   },
   {
     "finding": "pending-async-unsuspendable-read (SC5001) proven on a component-body or root read of a module-scope async memo that settled before the mount (a root reads it, then the module awaits a timer): rc.17 warns STRICT_READ_UNTRACKED, no pending throw",
-    "found": "review of ADR 0513, Chrome-confirmed (probe settled-body)",
-    "fixed": "ADR 0513 review",
+    "found": "review of ADR 0518, Chrome-confirmed (probe settled-body)",
+    "fixed": "ADR 0518 review",
     "grid": "mx-src",
     "code": "STRICT_READ_UNTRACKED",
     "ids": [

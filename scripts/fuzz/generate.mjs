@@ -144,10 +144,11 @@ function name(ctx, prefix) { return `${prefix}${counter(ctx, prefix)}`; }
 const probeWitness = (sig, value) => ({ selector: `[data-probe="${sig}"]`, text: String(value) });
 const viewWitness = (id, value) => ({ selector: `[data-view="${id}"]`, text: String(value) });
 
-function ensureHelper(ctx, form, { module = false } = {}) {
-  for (const existing of ctx.helpers.values()) if (existing.form === form && Boolean(existing.module) === module) return existing.name;
+function ensureHelper(ctx, form, { module = false, via } = {}) {
+  for (const existing of ctx.helpers.values()) if (existing.form === form && Boolean(existing.module) === module && existing.via === via) return existing.name;
   // With containers the helpers are `hfN`: a cleanup handle is `hN`, and a helper of the same name would shadow it (a type error).
-  const added = helper(`${ctx.containers ? "hf" : "h"}${ctx.helpers.size + 1}`, form, { module });
+  // `via` (misuse.mjs FILE_LAYERS): how App.tsx imports a module helper (default, a barrel, `export *`, a namespace).
+  const added = { ...helper(`${ctx.containers ? "hf" : "h"}${ctx.helpers.size + 1}`, form, { module }), ...(via ? { via } : {}) };
   ctx.helpers.set(added.name, added);
   return added.name;
 }

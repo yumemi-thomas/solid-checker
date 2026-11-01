@@ -1724,6 +1724,46 @@ fn write_role_walk(
             unknown
         };
     }
+    // ADR 0516: the permissive role a named position gives is that
+    // position's alone. A binding that may hold another function proves
+    // nothing about this one; and where the same literal written inline is
+    // adjusted to its call site -- a render effect's apply, whose first run is
+    // unproven (ADR 0460), and an untracked callback, which runs at the call
+    // (ADR 0466) -- a function named at several positions has no one call
+    // site to adjust to. Neither is a legal write.
+    if named.is_some() && !nested {
+        let role = lookup.named_callback_roles(file).get(function.span);
+        let several = lookup
+            .named_callback_roles(file)
+            .positions(function.span)
+            .len()
+            > 1;
+        let adjusted_inline = role.untracked_callback
+            || role.effect_apply_primitive.single() == Some(Primitive::CreateRenderEffect)
+            || matches!(role.effect_apply_primitive, EffectApplyPrimitive::Several);
+        // ADR 0517: an owner-keeping position (`untrack(cb)`) gives a read
+        // fact, not a write one: the write there is as legal as the call,
+        // which only `named_callback_write_role` judges, for rejections. With
+        // several such positions and no rejection found, nothing proved the
+        // write legal.
+        let owner_keeping =
+            primitive_positions(file, function, lookup)
+                .into_iter()
+                .any(|(primitive, _)| {
+                    lookup
+                        .dialect
+                        .callback_preserves_owner_write_context(primitive)
+                });
+        let distinct = lookup
+            .named_callback_roles(file)
+            .positions(function.span)
+            .iter()
+            .collect::<HashSet<_>>()
+            .len();
+        if !current || (several && adjusted_inline) || (distinct > 1 && owner_keeping) {
+            return unknown;
+        }
+    }
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
         return unknown;
@@ -3009,7 +3049,7 @@ pub(super) fn render_runs_first(
         && !ast.tagged_template_tags.iter().any(|tag| before(*tag))
         && !ast.jsx_elements.iter().any(|element| before(element.span))
         && !ast.jsx_fragments.iter().any(|fragment| before(*fragment))
-        // ADR 0513 review: `for await` and `await using` suspend as `await` does.
+        // ADR 0518 review: `for await` and `await using` suspend as `await` does.
         && !ast
             .awaits
             .iter()
@@ -3324,22 +3364,28 @@ pub(super) struct ByNamePosition<'f> {
 /// this function now ([`SemanticLookup::function_value_is_current`]). A `const`
 /// named before its declarator is evaluated throws instead of passing the
 /// function, so the argument must follow the declarator in the same function.
-/// A method, a generator, a named function expression (entered by its own name
-/// too) and a function two primitive positions name answer nothing.
+/// A method, a generator, a named function expression entered by its own name
+/// too (ADR 0515: one its own name never references is named by its binding,
+/// `named_expression_binding`) and a function two primitive positions name
+/// answer nothing.
 pub(super) fn by_name_position<'f>(
     file: &'f solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ByNamePosition<'f>> {
     use solid_facts::ast::FunctionKind;
+    let named_expression = function.kind == FunctionKind::Expression && function.name.is_some();
     if function.method_name.is_some()
         || function.generator
-        || (function.kind == FunctionKind::Expression && function.name.is_some())
         || !lookup.function_value_is_current(file, function)
     {
         return None;
     }
-    let name = function_binding_name(file, function)?;
+    let name = if named_expression {
+        super::named_callbacks::named_expression_binding(file, function, lookup)?
+    } else {
+        function_binding_name(file, function)?
+    };
     let path = file.path.as_str();
     let symbol = lookup.entities().at(path, name.span)?;
     let mut found = None;

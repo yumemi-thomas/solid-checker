@@ -232,13 +232,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
       "start": 4583,
-      "end": 4586,
+      "end": 4588,
       "fixes": 0
     },
     {

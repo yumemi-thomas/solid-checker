@@ -507,6 +507,10 @@ fn receiver_closed(
                         .composite_callee_operands(call.callee)
                         .contains(&member.span)
             });
+        // ADR 0516: so is a member handed whole to a call (`setTimeout(o.cb)`):
+        // the callee gets the function, never the object, and calls it with
+        // no receiver of the program's.
+        let invoked = invoked || handed_whole(file, member.span);
         if !invoked {
             return false;
         }
@@ -521,6 +525,15 @@ fn receiver_closed(
         }
     }
     true
+}
+
+/// Whether the member expression at `member` is a call's whole, non-spread
+/// argument (under transparent TypeScript wrappers).
+fn handed_whole(file: &FileFacts, member: Span) -> bool {
+    file.ast.arguments_containing(member).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        !call.construct && !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == member
+    })
 }
 
 /// A receiver's closure, keyed by the owner's slot, the literal and the
@@ -629,6 +642,14 @@ impl Memo<BuildSchema> for ObjectMemberTargets {
                     .filter(|call| !call.construct)
                     .flat_map(|call| file.ast.composite_callee_operands(call.callee))
                     .map(|operand| (operand, operand)),
+            )
+            // ADR 0516: a member handed whole to a call (`setTimeout(o.cb)`).
+            .chain(
+                file.ast
+                    .members
+                    .iter()
+                    .filter(|member| handed_whole(file, member.span))
+                    .map(|member| (member.span, member.span)),
             )
             .chain(
                 read.compiler()

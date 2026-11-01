@@ -17,8 +17,8 @@ helper with no resolved caller, a JSX attribute function, code after an
 `await`) is **uncertifiable**. A helper is resolved by its exact binding: a
 declaration, or an arrow or function expression bound to a `const` identifier
 (`const useMenu = () => ...`), is proven to run where its direct callers run.
-A `let` or `var` binding is not exact, so a helper held in one stays
-uncertifiable.
+A `let` nothing reassigns is exact too (ADR 0516); a written `let` and a
+`var` are not, so a helper held in one stays uncertifiable.
 
 A `createRoot` body runs during the call with the new root as the ambient
 owner, and the action guard has no root exemption on any release: an action

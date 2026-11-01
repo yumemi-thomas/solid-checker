@@ -180,3 +180,5 @@ effect.
   action step runs, where it throws
 - [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md): the throw for
   `flush` in `createTrackedEffect` and owned `onSettled` callbacks
+
+Through a project module that re-exports Solid, the called function's package is that of its exact symbol's declarations (ADR 0517).

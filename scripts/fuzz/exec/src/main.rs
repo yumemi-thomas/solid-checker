@@ -409,6 +409,8 @@ const BROWSER_ARGS: &[&str] = &[
 const VIRTUAL_BUDGET_MS: u64 = 5000;
 const VIRTUAL_CAP_MS: u64 = 60000;
 const PAGE_TIMEOUT: Duration = Duration::from_secs(30);
+/// What a page that spent VIRTUAL_CAP_MS still gets of wall time for a record already in flight (`run_on`).
+const CAP_GRACE: Duration = Duration::from_secs(1);
 
 struct Chrome {
     cdp: Arc<Cdp>,
@@ -574,7 +576,7 @@ impl Chrome {
             return Err(format!("navigation: {error}"));
         }
         let loader = navigated.get("loaderId").and_then(Value::as_str).unwrap_or("").to_string();
-        let deadline = Instant::now() + PAGE_TIMEOUT;
+        let mut deadline = Instant::now() + PAGE_TIMEOUT;
         let mut evaluate: Option<u64> = None;
         // Until the new document commits, the last program's document still runs and may spend budgets; those grants do not count
         // toward this program's cap (the old document is gone at the commit).
@@ -592,12 +594,21 @@ impl Chrome {
             let message = match page.events.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
                 Ok(message) => message,
                 Err(RecvTimeoutError::Timeout) => {
-                    return Err(format!("no record within {} ms (committed {committed}, loaded {loaded}, record asked {}, virtual time granted {granted} ms)", PAGE_TIMEOUT.as_millis(), evaluate.is_some()));
+                    return Err(format!("no record (committed {committed}, loaded {loaded}, record asked {}, virtual time granted {granted} ms)", evaluate.is_some()));
                 }
                 Err(RecvTimeoutError::Disconnected) => return Err("the browser closed".into()),
             };
             match message.get("method").and_then(Value::as_str) {
-                Some("Emulation.virtualTimeBudgetExpired") => grant(&mut granted, committed),
+                Some("Emulation.virtualTimeBudgetExpired") => {
+                    // A page that spent the whole cap and asks for more is paused for good: its record can only be one already in
+                    // flight. It gets CAP_GRACE of wall time for that, not the rest of PAGE_TIMEOUT, then fails and is run again on a
+                    // fresh page, where the same program has always finished (2026-10-30: about one such page per two-code grid,
+                    // each holding its batch idle for 30 s).
+                    if committed && granted >= VIRTUAL_CAP_MS {
+                        deadline = deadline.min(Instant::now() + CAP_GRACE);
+                    }
+                    grant(&mut granted, committed)
+                }
                 Some("Page.lifecycleEvent") if !committed && message["params"]["loaderId"] == loader.as_str() => {
                     committed = true;
                     if message["params"]["name"] == "DOMContentLoaded" {
@@ -674,6 +685,10 @@ impl Chrome {
                         }
                         // A page that gave no record is the host's failure, not the program's: once more, on a fresh page.
                         let mut outcome = chrome.run_on(page.as_ref().unwrap(), &id);
+                        if let Err(error) = &outcome {
+                            // The first attempt's error is the only trace of a page that hung (each costs PAGE_TIMEOUT of the batch).
+                            eprintln!("fuzz-exec: {id}: retried on a fresh page: {error}");
+                        }
                         if outcome.is_err() {
                             chrome.close_page(page.take().unwrap());
                             outcome = chrome.open_page().and_then(|fresh| {

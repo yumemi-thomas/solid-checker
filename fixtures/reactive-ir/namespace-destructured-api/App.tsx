@@ -90,24 +90,28 @@ export function ShadowLocal() {
   return <i>local</i>;
 }
 
-// Negative: a computed key, a default value, a rest element and a `let`
-// destructuring bind no single export this resolution names.
+// Negative: a computed key, a default value, a rest element and a written
+// `let` destructuring bind no single export this resolution names. ADR 0516:
+// a `let` nothing writes (`reassignableCleanup`) holds the export: a violation.
 const { ["onCleanup"]: computedCleanup } = S;
 const { onCleanup: defaultedCleanup = (fn: () => void) => fn } = S;
 const { createMemo: _memo, ...rest } = S;
 let { onCleanup: reassignableCleanup } = S;
+let { onCleanup: writtenCleanup } = S;
+writtenCleanup = ((fn: () => void) => fn) as typeof writtenCleanup;
 export function Refused() {
   setTimeout(() => {
     computedCleanup(() => {});
     defaultedCleanup(() => {});
     rest.onCleanup(() => {});
     reassignableCleanup(() => {});
+    writtenCleanup(() => {});
   }, 0);
   return <i>refused</i>;
 }
 
-// Negative: a slot the module exports (a declaration, a specifier, the default)
-// is referenced from other modules too; it is not resolved.
+// ADR 0516: a slot the module exports (a declaration, a specifier, the default)
+// holds the export wherever it is read: violations.
 export const { onCleanup: exportedCleanup } = S;
 const { onCleanup: specifiedCleanup } = S;
 const { onCleanup: defaultCleanup } = S;
@@ -120,4 +124,18 @@ export function ExportedSlot() {
     defaultCleanup(() => {});
   }, 0);
   return <i>exported</i>;
+}
+
+// ADR 0515: a slot over a `const` holding the namespace is the namespace's.
+const HeldS = S;
+const { onCleanup: heldCleanup } = HeldS;
+
+export function HeldTimer() {
+  setTimeout(() => heldCleanup(() => {}), 0);
+  return <div />;
+}
+
+export function HeldOwned() {
+  heldCleanup(() => {});
+  return <div />;
 }

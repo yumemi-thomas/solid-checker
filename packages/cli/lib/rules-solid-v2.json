@@ -23,6 +23,7 @@
     { "code": "SC4002", "name": "missing-context-provider", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC5001", "name": "pending-async-unsuspendable-read", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC5003", "name": "async-outside-loading-boundary", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
+    { "code": "SC5006", "name": "loading-on-outside-hold", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC6001", "name": "primitive-in-directive-application", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC6002", "name": "primitive-in-effect-callback", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC7001", "name": "missing-effect-function", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },

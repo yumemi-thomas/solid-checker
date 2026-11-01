@@ -202,6 +202,251 @@ pub(crate) fn component_props_parameter_fix(
     })
 }
 
+/// ADR 0516: the call that creates `generator`'s iterator in place
+/// (`(function* () { … })()`, under TypeScript wrappers) when that iterator
+/// reaches something: stepped there (`.next()`), iterated, kept or handed on,
+/// each of which may run the body where nothing follows. A call whose result
+/// a statement discards (`(function* () { … })();`) runs none of the body, and
+/// a generator created any other way is not answered here.
+pub(crate) fn generator_iterator_used<'f>(
+    file: &'f solid_facts::FileFacts,
+    generator: &solid_facts::ast::FunctionFact,
+) -> Option<&'f solid_facts::ast::CallFact> {
+    if !generator.generator || generator.method_name.is_some() {
+        return None;
+    }
+    file.ast
+        .calls
+        .iter()
+        .filter(|call| {
+            !call.construct && file.ast.peel_ts_sugar_span(call.callee) == generator.span
+        })
+        .min_by_key(|call| call.span.end - call.span.start)
+        .filter(|call| !call.result_discarded)
+}
+
+/// ADR 0516: the one function an argument names by value, where the owner
+/// graph's symbol edges see another binding: a `const` copy (ADR 0463's alias
+/// fact, followed to its source), a `const` whose initializer is the function
+/// expression itself (also a named one), and a static member of an object
+/// literal [`SemanticLookup::object_member_function`] resolves. A mention that
+/// may run before its binding's declarator names nothing.
+pub(crate) fn exact_function_argument(
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    lookup: &crate::SemanticLookup<'_>,
+) -> Option<(String, Span)> {
+    let ast = &file.ast;
+    let argument = ast.peel_ts_sugar_span(argument);
+    if lookup.may_precede_initialization(file.path.as_str(), argument)
+        || lookup.local_alias_mention_withheld(file, argument)
+    {
+        return None;
+    }
+    if ast.member_at(argument).is_some() {
+        return lookup
+            .object_member_function(file, argument)
+            .filter(|(_, function)| !function.generator)
+            .map(|(file, function)| (file.path.to_string(), function.span));
+    }
+    let mut declaration = ast.reference_declaration(argument)?;
+    for _ in 0..8 {
+        match ast.local_alias_binding(declaration) {
+            Some(alias) => declaration = alias.source,
+            None => break,
+        }
+    }
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable && matches!(binding.names.as_slice(), [name] if name.span == declaration)
+    })?;
+    let function = ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))?;
+    // A generator handed on runs none of its body when called.
+    (function.method_name.is_none() && !function.generator)
+        .then(|| (file.path.to_string(), function.span))
+}
+
+/// ADR 0516: every place the value of `function` is handed whole to a call,
+/// as `(call span, argument index)`, and whether anything else uses it (a
+/// call, a store, an export, a reference this cannot classify). The value is
+/// named by its binding (a named function expression's outer `const`, ADR
+/// 0515), that binding's `const` copies (alias facts, transitively), or,
+/// for a function written as an object literal's data property, the member
+/// reads ADR 0358's receiver closure resolves to it. `None` where no name
+/// reaches the function exactly.
+pub(crate) fn exact_value_positions(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &crate::SemanticLookup<'_>,
+) -> Option<(Vec<(Span, usize)>, bool)> {
+    let ast = &file.ast;
+    let path = file.path.as_str();
+    let whole_argument = |at: Span| {
+        ast.arguments_containing(at)
+            .find(|(call, index)| {
+                !call.construct
+                    && !call.arguments[*index].spread
+                    && ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+            })
+            .map(|(call, index)| (call.span, index))
+    };
+    let mut positions = Vec::new();
+    let mut other = false;
+    let slot = ast
+        .object_properties
+        .iter()
+        .any(|property| property.data && ast.peel_ts_sugar_span(property.value) == function.span);
+    if slot {
+        let mut any = false;
+        for member in &ast.members {
+            if lookup
+                .object_member_function(file, member.span)
+                .is_none_or(|(target, found)| {
+                    target.path.as_str() != path || found.span != function.span
+                })
+            {
+                continue;
+            }
+            any = true;
+            match whole_argument(member.span) {
+                Some(position) => positions.push(position),
+                None => other = true,
+            }
+        }
+        return any.then_some((positions, other));
+    }
+    if !lookup.function_value_is_current(file, function)
+        || crate::execution_role::module_exports(file, function, lookup)
+    {
+        return None;
+    }
+    let binding = crate::execution_role::named_expression_binding(file, function, lookup)
+        .or_else(|| function_binding_name(file, function))?;
+    let symbol = lookup.entities().at(path, binding.span)?.clone();
+    let mut names = vec![(binding.span, symbol)];
+    let mut index = 0;
+    while index < names.len() && names.len() < 9 {
+        let (declaration, symbol) = names[index].clone();
+        index += 1;
+        for reference in lookup.symbol_references(symbol.as_str()) {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                other = true;
+                continue;
+            };
+            let at = Span::new(start, end);
+            if reference.path.as_ref() != path {
+                other = true;
+                continue;
+            }
+            if at == declaration {
+                continue;
+            }
+            let alias = ast
+                .bindings
+                .iter()
+                .find(|candidate| {
+                    candidate
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| identifier.span == at)
+                })
+                .and_then(|candidate| match candidate.names.as_slice() {
+                    [alias]
+                        if ast
+                            .local_alias_binding(alias.span)
+                            .is_some_and(|fact| fact.source == declaration) =>
+                    {
+                        Some(alias.span)
+                    }
+                    _ => None,
+                });
+            if let Some(alias) = alias
+                && let Some(alias_symbol) = lookup.entities().at(path, alias)
+            {
+                names.push((alias, alias_symbol.clone()));
+                continue;
+            }
+            match whole_argument(at) {
+                Some(position) => positions.push(position),
+                None => other = true,
+            }
+        }
+    }
+    Some((positions, other))
+}
+
+/// ADR 0516: whether the argument may name a generator function: written
+/// there, an object literal's member, a `const` copy or function expression,
+/// or the function its symbol declares. Calling one runs none of its body.
+pub(crate) fn argument_may_be_generator(
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    lookup: &crate::SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let argument = ast.peel_ts_sugar_span(argument);
+    if ast
+        .function_at(argument)
+        .is_some_and(|function| function.generator)
+    {
+        return true;
+    }
+    if ast.member_at(argument).is_some() {
+        return lookup
+            .object_member_function(file, argument)
+            .is_some_and(|(_, function)| function.generator);
+    }
+    let mut declaration = ast.reference_declaration(argument);
+    for _ in 0..8 {
+        match declaration.and_then(|at| ast.local_alias_binding(at)) {
+            Some(alias) => declaration = Some(alias.source),
+            None => break,
+        }
+    }
+    let by_binding = declaration.is_some_and(|declaration| {
+        ast.bindings.iter().any(|binding| {
+            matches!(binding.names.as_slice(), [name] if name.span == declaration)
+                && binding
+                    .initializer
+                    .and_then(|initializer| ast.function_at(ast.peel_ts_sugar_span(initializer)))
+                    .is_some_and(|function| function.generator)
+        }) || ast.functions.iter().any(|function| {
+            function.generator
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
+        })
+    });
+    by_binding
+        || lookup
+            .entities()
+            .at(file.path.as_str(), argument)
+            .and_then(|symbol| lookup.function_for_symbol(symbol.as_str()))
+            .is_some_and(|(_, function)| function.generator)
+}
+
+/// ADR 0516: whether the iterator `call` returns is stepped right there
+/// (`(function* () { … })().next()`, also `.throw`/`.return`), so the body
+/// runs on that call's stack, under the owner of the code around it, and
+/// nowhere else through this iterator.
+pub(crate) fn iterator_stepped_at(file: &solid_facts::FileFacts, call: Span) -> bool {
+    let ast = &file.ast;
+    ast.calls.iter().any(|step| {
+        let callee = ast.peel_ts_sugar_span(step.callee);
+        ast.member_at(callee).is_some_and(|member| {
+            ast.peel_ts_sugar_span(member.object) == call
+                && ast.computed_members.binary_search(&member.span).is_err()
+                && matches!(
+                    file.source_text(member.property),
+                    Some("next" | "throw" | "return")
+                )
+        })
+    })
+}
+
 /// The function whose *body* is written around `span`: the innermost one whose
 /// body holds it, so a site in a parameter list (a default value, a pattern) is
 /// the function around the function whose list it is. That is where the role

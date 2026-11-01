@@ -11,16 +11,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_FAST_INSTALL, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
 import { EXECUTOR_SOURCES } from "./exec.mjs";
+import { pinnedBrowser } from "../playwright-browser.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ORACLE_INSTALL = join(here, "../runtime-oracle-install");
 
-/** The oracle's default browser: Playwright's headless shell (scripts/runtime-oracle.mjs `defaultChromium`). */
+/** The oracle's default browser: the headless shell the pinned Playwright names (scripts/playwright-browser.mjs). */
 export function defaultChromium(home = process.env.HOME) {
-  const cache = join(home, "Library/Caches/ms-playwright");
-  const builds = existsSync(cache) ? readdirSync(cache).filter((name) => /^chromium_headless_shell-\d+$/.test(name)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1])) : [];
-  if (!builds.length) throw new Error("no playwright chromium headless shell; pass --browser");
-  return join(cache, builds[0], "chrome-headless-shell-mac-arm64/chrome-headless-shell");
+  return pinnedBrowser({ home }).executable;
 }
 
 const dbg = (m) => { if (process.env.CHROME_HOST_DEBUG) console.error(`chrome-host: ${m}`); };

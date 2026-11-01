@@ -49,7 +49,10 @@ fn directly_in_tracked_compute(
 /// the receiving component reads it. Either runs wherever the JSX is evaluated
 /// and never in the window of the call that evaluates it. Any other narrowest
 /// placement (an untracked once-evaluated value, a handler factory) is `None`.
-fn own_jsx_compiler_role(file: &solid_facts::FileFacts, span: Span) -> Option<ExecutionRole> {
+pub(super) fn own_jsx_compiler_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<ExecutionRole> {
     let compiler = &file.compiler;
     let tracked = compiler
         .tracked_regions
@@ -80,7 +83,11 @@ fn own_jsx_compiler_role(file: &solid_facts::FileFacts, span: Span) -> Option<Ex
 
 /// Whether a compiler-tracked JSX region that lies inside `argument` holds
 /// `span`: the callback wrote JSX, and that JSX tracks its own expressions.
-fn tracked_region_within(file: &solid_facts::FileFacts, argument: Span, span: Span) -> bool {
+pub(super) fn tracked_region_within(
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    span: Span,
+) -> bool {
     file.compiler.tracked_regions.iter().any(|region| {
         region.span.contains(span) && argument.contains(region.span) && region.span != argument
     })
@@ -207,6 +214,48 @@ pub(super) fn semantic_role_before_awaits(
     if assigned_member_function_contains(file, span, entities) {
         return ExecutionRole::DeferredCallback;
     }
+    // A read in a function nested in a named callback runs where the in-place
+    // layers between them (a helper's callback, an IIFE, an inline library
+    // callback; `climb_in_place_layers`) put it: at a call in the callback's
+    // body, whose role the named callback gives. The same climb places the
+    // inline callback's nested reads (the `allowed` arm below); without it a
+    // helper's callback in a named apply (`const cb = () => { h(() => r()) };
+    // createEffect(c, cb)`) was placed deferred, a read no rule reports. A
+    // nested function no layer places (stored, handed on, a timer's) stays
+    // deferred, as before.
+    if !classifying.contains(&write_classification_marker())
+        && super::named_callbacks::nested_in_named_callback(file, span, lookup)
+        && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
+    {
+        let role = semantic_execution_role_within(
+            file,
+            climb.at,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        );
+        // Only a climb that reaches a reporting role answers here: a tracked or
+        // deferred role at the call keeps the named arm's answer below, which
+        // other rules read (a named memo compute's `TrackedJsx` is SC5003's), so
+        // no legal shape moves.
+        if role.reports_untracked_read() {
+            return match climb.suspended {
+                Some(true) => ExecutionRole::Unreported,
+                Some(false) => ExecutionRole::Unknown,
+                None if climb.in_list => ExecutionRole::Unknown,
+                None => role,
+            };
+        }
+        // ADR 0517: the layers run the read at a call in the callback's body
+        // whose own role is unknown (a named `createRoot` or `untrack`
+        // callback no fact places): the read is not deferred, it runs there,
+        // so its role is unknown too, never the named arm's deferred.
+        if role == ExecutionRole::Unknown {
+            return ExecutionRole::Unknown;
+        }
+    }
     if let Some(role) = named_callback_execution_role(file, span, lookup) {
         return role;
     }
@@ -283,69 +332,16 @@ pub(super) fn semantic_role_before_awaits(
                     })
                 })
     {
-        if clears_tracking == Some(true) {
-            return ExecutionRole::DeferredCallback;
-        }
-        let clears_tracking = clears_tracking.is_some();
-        let at_call = semantic_execution_role_within(
+        return inheriting_call_role(
             file,
-            call.callee,
+            call,
+            clears_tracking,
             allowed,
             entities,
             symbol_names,
             lookup,
             classifying,
         );
-        // The `allowed` deferred spans (an enclosing `createRoot` callback, an
-        // `untrack`) outrank a tracked computation written inside them, which
-        // answers `DeferredCallback` for the whole span. A clearing call
-        // directly in such a computation is in its tracked scope all the same:
-        // ask again without them, and keep the answer only if it is that
-        // computation. Any other answer there (a call directly in an `untrack`
-        // callback) stays the silent deferred role.
-        let at_call = if clears_tracking
-            && at_call == ExecutionRole::DeferredCallback
-            && !allowed.is_empty()
-            && directly_in_tracked_compute(file, call.callee, lookup, entities, symbol_names)
-            && semantic_execution_role_within(
-                file,
-                call.callee,
-                &[],
-                entities,
-                symbol_names,
-                lookup,
-                classifying,
-            ) == ExecutionRole::TrackedJsx
-        {
-            ExecutionRole::TrackedJsx
-        } else {
-            at_call
-        };
-        return match at_call {
-            // The listener is cleared and no window is open there. For a call
-            // that clears tracking and leaves the window as it found it
-            // (`runWithOwner`, ADR 0443) the read is stale and unwarned: it is
-            // reported. For one the engine does not model that way
-            // (`createRoot`) it stays the silent deferred role.
-            ExecutionRole::TrackedJsx if clears_tracking => {
-                // A call `tsc` rejects is its subject, not this rule's.
-                if lookup
-                    .resolved_callee_call(file, call.callee)
-                    .is_some_and(|resolved| {
-                        resolved.validity == typefacts::ResolvedCallValidity::Valid
-                    })
-                {
-                    unwindowed_role_at_call(file, call.callee, lookup)
-                } else {
-                    ExecutionRole::Unreported
-                }
-            }
-            ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
-            // One-shot module evaluation is no component window, and the
-            // role before this ADR was the silent deferred one.
-            ExecutionRole::ModuleInitialization => ExecutionRole::Unreported,
-            other => other,
-        };
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
         crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
@@ -410,6 +406,50 @@ pub(super) fn semantic_role_before_awaits(
                 None if climb.in_list => ExecutionRole::Unknown,
                 None => role,
             };
+        }
+        // ADR 0516: the climb stops at a generator, whose body runs when its
+        // iterator is stepped, not when it is created: no deferral is proven.
+        // One stepped at its own call (`(function* () { … })().next()`) runs
+        // there, some of it or none, so a role that reports nothing at that
+        // call is its role; anything else is unplaced. A generator that is
+        // itself the primitive's callback (`action(function* () { … })`) is
+        // that callback, placed as it was.
+        if let Some(function) =
+            crate::owners::containing_ast_function(&file.ast, span).filter(|function| {
+                function.generator
+                    && !allowed.iter().any(|region| {
+                        file.ast.peel_ts_sugar_span(*region) == function.span
+                            || *region == function.span
+                    })
+            })
+        {
+            // An async generator's body past an `await` runs on a later task.
+            if let Some(created) = crate::owners::generator_iterator_used(file, function)
+                .filter(|_| !function.r#async)
+                .filter(|created| crate::owners::iterator_stepped_at(file, created.span))
+            {
+                let role = semantic_execution_role_within(
+                    file,
+                    created.span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                );
+                // A write's or an action's rule decides more than the role (a
+                // render apply's first run, the owner of an `untrack` body):
+                // only an event handler's role is passed through for them.
+                let legal = if classifying.contains(&write_classification_marker()) {
+                    role == ExecutionRole::EventCallback
+                } else {
+                    !role.reports_untracked_read() && !role.reports_unplaced()
+                };
+                if legal {
+                    return role;
+                }
+            }
+            return ExecutionRole::Unknown;
         }
         return ExecutionRole::DeferredCallback;
     }
@@ -1530,5 +1570,85 @@ pub(super) fn callee_callback_timing_within(
             }
         }
         return true;
+    }
+}
+
+/// ADR 0323's at-call role of a callback that runs synchronously at its call
+/// with the listener cleared but the strict-read window untouched
+/// (`createRoot`, `runWithOwner`): the role at `call`, shared by an inline
+/// callback and (ADR 0517) one named at the call's sole by-name position.
+/// `clears_tracking` is the dialect's `callback_clears_tracking_in_calling_window`
+/// with whether a compiler tracked region holds the site inside the callback.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn inheriting_call_role(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    clears_tracking: Option<bool>,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    if clears_tracking == Some(true) {
+        return ExecutionRole::DeferredCallback;
+    }
+    let clears_tracking = clears_tracking.is_some();
+    let at_call = semantic_execution_role_within(
+        file,
+        call.callee,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        classifying,
+    );
+    // The `allowed` deferred spans (an enclosing `createRoot` callback, an
+    // `untrack`) outrank a tracked computation written inside them, which
+    // answers `DeferredCallback` for the whole span. A clearing call
+    // directly in such a computation is in its tracked scope all the same:
+    // ask again without them, and keep the answer only if it is that
+    // computation. Any other answer there (a call directly in an `untrack`
+    // callback) stays the silent deferred role.
+    let at_call = if clears_tracking
+        && at_call == ExecutionRole::DeferredCallback
+        && !allowed.is_empty()
+        && directly_in_tracked_compute(file, call.callee, lookup, entities, symbol_names)
+        && semantic_execution_role_within(
+            file,
+            call.callee,
+            &[],
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        ) == ExecutionRole::TrackedJsx
+    {
+        ExecutionRole::TrackedJsx
+    } else {
+        at_call
+    };
+    match at_call {
+        // The listener is cleared and no window is open there. For a call
+        // that clears tracking and leaves the window as it found it
+        // (`runWithOwner`, ADR 0443) the read is stale and unwarned: it is
+        // reported. For one the engine does not model that way
+        // (`createRoot`) it stays the silent deferred role.
+        ExecutionRole::TrackedJsx if clears_tracking => {
+            // A call `tsc` rejects is its subject, not this rule's.
+            if lookup
+                .resolved_callee_call(file, call.callee)
+                .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+            {
+                unwindowed_role_at_call(file, call.callee, lookup)
+            } else {
+                ExecutionRole::Unreported
+            }
+        }
+        ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
+        // One-shot module evaluation is no component window, and the
+        // role before this ADR was the silent deferred one.
+        ExecutionRole::ModuleInitialization => ExecutionRole::Unreported,
+        other => other,
     }
 }

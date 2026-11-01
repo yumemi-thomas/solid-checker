@@ -212,7 +212,7 @@ impl ModuleCensus {
         self.unknown_load
     }
 
-    /// ADR 0513: whether some project module has a top-level `await`, or a
+    /// ADR 0518: whether some project module has a top-level `await`, or a
     /// load the census cannot see may run one. Its checkpoint can settle a
     /// node created before it (a module-scope async memo, a hook's instance)
     /// by the time the mount reads it, and which nodes it settles depends on

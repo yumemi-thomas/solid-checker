@@ -194,7 +194,7 @@ impl CatalogWording for Catalog {
                         "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner.",
                     ),
                     OwnerRequirementOperation::ContextProvider => (
-                        "useContext reads a context created with no default, and no provider for it exists in this closed program; Solid throws ContextNotFoundError here, so the read never returns a value",
+                        "useContext reads a context created with no default, and no provider for it exists in the analyzed program; Solid throws ContextNotFoundError here, so the read never returns a value",
                         "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree.",
                     ),
                     OwnerRequirementOperation::Effect => (
@@ -641,6 +641,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         }
         Rule::FlushInEffectCallback => {
             "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
+        }
+        Rule::LoadingOnOutsideHold => {
+            "a Loading boundary with `on` holds an async source the analysis cannot prove only it reads, so whether the frame waits on an outside read of the same flight is not decided"
         }
         Rule::StaticDynamicAsyncSource => {
             "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"

@@ -296,3 +296,5 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — consuming async computations
+
+The async computation may be named exactly (a named function expression's binding, an object literal's member), and a comma, conditional, logical or assignment callee after an await (`(slot = r)()`) is a read when it always yields one accessor, else an obligation (ADR 0517).

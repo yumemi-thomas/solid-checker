@@ -850,6 +850,19 @@ fn helper_forbidden_operations(
         && let Some(helper) =
             callback_argument_literal(call_file, call_file.ast.peel_ts_sugar_span(call.callee))
     {
+        // ADR 0516: stepping the iterator a generator called in place returns
+        // (`(function* () { … })().next()`) runs the body there, which no call
+        // edge follows: a call in the body leaves the obligation open.
+        if crate::owners::generator_iterator_used(call_file, helper)
+            .is_some_and(|created| created.span == call.span)
+            && call_file
+                .ast
+                .calls
+                .iter()
+                .any(|inner| helper.body.contains(inner.span))
+        {
+            return false;
+        }
         let values = crate::argument_values::parameter_values_for_literal_call(
             call_file, call, call_file, helper, lookup,
         );
