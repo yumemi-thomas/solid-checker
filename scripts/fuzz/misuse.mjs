@@ -164,9 +164,9 @@ export const CALLBACK_FORMS = ["const", "function", "alias", "named", "let", "bu
 /** The recall layers: control flow around the site (model.mjs CTL_FORMS), and the helper imported from `helpers.ts` in other forms. */
 export const CONTROL_LAYERS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator"];
 export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "module-ns"];
-// The hand-off layers (model.mjs HANDOFF_FORMS) are measured with the owner-region, read-hand-off and climb-bound fixes they
-// expose (saturation research B1-B3: false cleans on main as well), not in this grid yet.
-export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS];
+// The saturation transforms (model.mjs): T1/T3 hand-off and member-assign layers (HANDOFF_FORMS) and T2 depth layers at the
+// 16-layer climb bound (DEPTH_FORMS), with the fixes they exposed (ADRs 0531, 0532, 0534).
+export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS];
 /**
  * The recall bindings. Of an API: destructurings of the namespace other than the base `const { flush: flushD } = S` (nested, with a
  * default, with a rest, `let`, exported, through another `const` holding the namespace), a `const` member alias, and Solid re-exported
