@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { caseFiles, caseKey, recordDigest } from "./cache.mjs";
 import { HALT_TEXT, HITS_SELECTOR, findingsDiff, haltable, parseHitsText } from "./hits.mjs";
+import { NODE } from "../lib/node-runtime.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const ORACLE = join(repo, "scripts/runtime-oracle.mjs");
@@ -86,7 +87,7 @@ export const chromeChecker = (row, cleanFindings) => {
 
 function spawnOracle(args, env, oracle = ORACLE) {
   return new Promise((done) => {
-    const child = spawn(process.execPath, [oracle, ...args], { cwd: repo, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(NODE, [oracle, ...args], { cwd: repo, env, stdio: ["ignore", "pipe", "pipe"] });
     let log = "";
     child.stdout.on("data", (chunk) => { log += chunk; });
     child.stderr.on("data", (chunk) => { log += chunk; });

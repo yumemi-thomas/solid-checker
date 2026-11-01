@@ -132,7 +132,7 @@ async function main(argv) {
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
   const config = attachDaemon(configFrom(options, out), options);
-  const cacheDir = resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache"));
+  const cacheDir = resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache.noindex"));
   const cache = options.noCache ? null : new BaselineCache(cacheDir, environmentKey(config));
   const history = options.order === "failing-first" || options.stopOnMismatch ? new MismatchHistory(cacheDir) : null;
   const wanted = (options.profiles ? String(options.profiles).split(",") : [options.profile]).map((name) => (name === "default" ? undefined : name));

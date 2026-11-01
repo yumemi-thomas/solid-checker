@@ -66,6 +66,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { NODE } from "./lib/node-runtime.mjs";
 import { recommendedConcurrency } from "./lib/pool.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -603,7 +604,7 @@ async function runCase(id) {
     writeFileSync(join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   }
   const started = Date.now();
-  const result = await run(process.execPath, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",
+  const result = await run(NODE, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",
     "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"),
     "--browser", browser, "--tooling", tooling, "--native-bin", process.env.SOLID_CHECKER_NATIVE_BIN,
     // The application's own stacks: the development source instrumentation wraps each analysed call in a `withOperation` arrow,

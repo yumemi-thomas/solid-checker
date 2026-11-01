@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, "exec/Cargo.toml");
@@ -33,12 +34,20 @@ function build() {
 }
 
 /**
+ * How long the executor may take before it is taken for hung: its start (the browser's and the Vite helper's included), one program's
+ * step 1 (its type checks and the checker have their own watchdogs), and a Chrome batch (per wave of pages: a page may retry and the
+ * browser restart, main.rs `MAX_RESTARTS`). A missed deadline kills the executor and fails every request it holds, so a grid stops
+ * with an error instead of waiting forever (a dead browser once held a grid for hours).
+ */
+export const EXECUTOR_DEADLINES = { readyMs: 300_000, prepareMs: 600_000, runBaseMs: 300_000, runPerWaveMs: 90_000, closeMs: 30_000 };
+
+/**
  * Starts the executor. `chrome` (optional): `{ browser, install, pages }` runs the pages too. Returns `{ prepare(job), run(cases),
  * close() }`; `prepare` and `run` answer as exec/src/main.rs says.
  */
-export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork = false, slotRoot, chrome = null }) {
-  build();
-  const child = spawn(EXECUTOR, [], { stdio: ["pipe", "pipe", "inherit"] });
+export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork = false, slotRoot, chrome = null, executable = null, deadlines = EXECUTOR_DEADLINES }) {
+  if (!executable) build();
+  const child = spawn(executable ?? EXECUTOR, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map();
   let seq = 0;
   let ready;
@@ -50,10 +59,18 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
     for (const { reject } of pending.values()) reject(error);
     pending.clear();
   };
-  child.on("exit", (code, signal) => fail(new Error(`the executor exited (${code ?? signal})`)));
-  child.on("error", fail);
-  createInterface({ input: child.stdout }).on("line", (line) => {
-    const message = JSON.parse(line);
+  const kill = (error) => {
+    if (!ended) fail(error);
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  };
+  child.on("exit", (code, signal) => { if (!ended) fail(new Error(`the executor exited (${code ?? signal})`)); });
+  child.on("error", (error) => kill(error));
+  child.stdin.on("error", (error) => kill(new Error(`the executor's input: ${error.message}`)));
+  const lines = createInterface({ input: child.stdout });
+  lines.on("close", () => { if (!ended) kill(new Error("the executor closed its output")); });
+  lines.on("line", (line) => {
+    let message;
+    try { message = JSON.parse(line); } catch { kill(new Error(`the executor printed ${JSON.stringify(line.slice(0, 200))}`)); return; }
     if (message.op === "ready") { if (message.error) ready.reject(new Error(`the executor did not start: ${message.error}`)); else ready.resolve(message); return; }
     const waiting = pending.get(message.seq);
     if (!waiting) return;
@@ -63,25 +80,31 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
   send({
     op: "init", tsc, checkerBin: bin, env, concurrency, keepWork, slotRoot,
-    chrome: chrome && { node: process.execPath, viteHost: join(here, "exec/vite-host.mjs"), browser: chrome.browser, install: chrome.install, oracleInstall: chrome.oracleInstall, pages: chrome.pages ?? 16, fontFamilies: FONT_FAMILIES },
+    chrome: chrome && { node: NODE, viteHost: join(here, "exec/vite-host.mjs"), browser: chrome.browser, install: chrome.install, oracleInstall: chrome.oracleInstall, pages: chrome.pages ?? 16, fontFamilies: FONT_FAMILIES },
   });
-  await readiness;
-  const request = (message) => {
+  const readyTimer = setTimeout(() => kill(new Error(`the executor was not ready within ${deadlines.readyMs / 1000} s`)), deadlines.readyMs);
+  try { await readiness; } finally { clearTimeout(readyTimer); }
+  const request = (message, deadlineMs) => {
     if (ended) return Promise.reject(ended);
     return new Promise((resolve, reject) => {
       seq += 1;
-      pending.set(seq, { resolve, reject });
-      send({ ...message, seq });
+      const id = seq;
+      const timer = setTimeout(() => kill(new Error(`the executor gave no answer to ${message.op} within ${Math.round(deadlineMs / 1000)} s`)), deadlineMs);
+      pending.set(id, { resolve: (value) => { clearTimeout(timer); resolve(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
+      send({ ...message, seq: id });
     });
   };
+  const waves = (count) => Math.max(1, Math.ceil(count / (chrome?.pages ?? 16)));
   return {
-    prepare: (job) => request({ op: "prepare", ...job }),
-    run: (cases) => request({ op: "run", cases }),
+    prepare: (job) => request({ op: "prepare", ...job }, deadlines.prepareMs),
+    run: (cases) => request({ op: "run", cases }, deadlines.runBaseMs + waves(cases.length) * deadlines.runPerWaveMs),
     async close() {
-      if (ended) return;
+      if (child.exitCode !== null || child.signalCode !== null) return;
       const exited = new Promise((resolve) => child.once("exit", resolve));
       child.stdin.end();
+      const timer = setTimeout(() => child.kill("SIGKILL"), deadlines.closeMs);
       await exited;
+      clearTimeout(timer);
     },
   };
 }

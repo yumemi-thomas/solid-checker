@@ -12,6 +12,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_FAST_INSTALL = join(here, "install");
@@ -109,7 +110,7 @@ export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers =
   stageCases(work, cases);
   const out = join(work, "out");
   const run = await new Promise((done) => {
-    const child = spawn(process.execPath, [vitest, "run", "--config", "vitest.config.mjs"], {
+    const child = spawn(NODE, [vitest, "run", "--config", "vitest.config.mjs"], {
       cwd: work, stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env, NODE_ENV: "development", FUZZ_FAST_OUT: out, FUZZ_FAST_WORKERS: String(workers),
