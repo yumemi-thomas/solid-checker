@@ -577,7 +577,7 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
                                         layers, callback forms, mounts and file sources, each across the base grid, and the recall contexts
   [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
                                         other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
-  [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
+  [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache.noindex)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
   node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>`;

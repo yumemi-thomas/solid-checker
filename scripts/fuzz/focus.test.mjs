@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_GRIDS, GRIDS, readGrid } from "./focus.mjs";
+import { DEFAULT_GRIDS, GRIDS, parse, readGrid, runGridProcess } from "./focus.mjs";
 
 describe("readGrid", () => {
   it("tallies the outcomes, flags what needs a look, and counts every difference from the oracle as behaviour", () => {
@@ -25,4 +25,30 @@ describe("readGrid", () => {
     expect(DEFAULT_GRIDS).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo"]);
     expect(Object.keys(GRIDS)).toEqual([...DEFAULT_GRIDS, "mx-recall", "lg-recall"]);
   });
+});
+
+describe("the grid process", () => {
+  it("parses the run options, and refuses splitting a smoke run by code", () => {
+    const options = parse(["--codes", "all", "--split-codes", "--prune-cases", "--grid-timeout", "5", "--heap-mb", "2048"]);
+    expect(options).toMatchObject({ codes: "all", splitCodes: true, pruneCases: true, gridTimeout: "5", heapMb: "2048" });
+    expect(() => parse(["--smoke", "--split-codes"])).toThrow(/--split-codes/);
+  });
+
+  it("streams the process's output to its log while it runs, passes the heap, and kills it at the deadline", () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-focus-run-"));
+    const script = join(dir, "grid.mjs");
+    writeFileSync(script, `
+      import { writeFileSync } from "node:fs";
+      import v8 from "node:v8";
+      console.log("heap", Math.round(v8.getHeapStatistics().heap_size_limit / 1048576));
+      if (process.argv[2] === "hang") setInterval(() => {}, 1000);
+    `);
+    const ok = runGridProcess(script, ["done"], { logPath: join(dir, "ok.log"), timeoutMs: 20_000, heapMb: 3000, runtime: "node" });
+    expect(ok).toMatchObject({ status: 0, timedOut: false });
+    const heap = Number(readFileSync(join(dir, "ok.log"), "utf8").match(/heap (\d+)/)[1]);
+    expect(heap).toBeGreaterThanOrEqual(2900);
+    const hung = runGridProcess(script, ["hang"], { logPath: join(dir, "hung.log"), timeoutMs: 1500, runtime: "node" });
+    expect(hung.timedOut).toBe(true);
+    expect(readFileSync(join(dir, "hung.log"), "utf8")).toMatch(/^heap/);
+  }, 30_000);
 });

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GENERATOR_VERSION } from "./generate.mjs";
+import { nodeVersion } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "../..");
@@ -170,10 +171,10 @@ const RUNNER_ENV = ["FUZZ_PAUSE_MS", "FUZZ_FINAL_MS", "FUZZ_FAST_POOL"];
  * The part of every cache key that says what the run executes with, beyond the lockfiles: Node's version, the runner's environment
  * settings, and what is installed in the fast and oracle installs.
  */
-export function installedKey(config, { env = process.env, node = process.version } = {}) {
+export function installedKey(config, { env = process.env, node = nodeVersion() } = {}) {
   return sha256(JSON.stringify({
-    // The runtime that hosts the fast path (fast/vitest.config.mjs picks its pool by it).
-    node, bun: process.versions.bun ?? null, env: Object.fromEntries(RUNNER_ENV.map((name) => [name, env[name] ?? null])),
+    // The Node that hosts the fast path (scripts/lib/node-runtime.mjs: never bun now; `bun: null` keeps the recorded keys valid).
+    node, bun: null, env: Object.fromEntries(RUNNER_ENV.map((name) => [name, env[name] ?? null])),
     fast: config.fastInstall ? treeStat(join(config.fastInstall, "node_modules")) : "none",
     oracle: config.install ? treeStat(join(config.install, "node_modules")) : "none",
   }));
@@ -223,10 +224,24 @@ export function executionFiles(files) {
 }
 
 /**
- * The environment of the fast path's record and the type check: the sources that produce them (`RECORD_SOURCES`), the oracle's
- * entry (the type check compiles its main.tsx), the clock, the type checker binary and both lockfiles. Not the checker.
+ * `scripts/runtime-oracle.mjs` as a fast record depends on it: the type check compiles its entry, but its `codeRules` table (which
+ * checker rules claim each diagnostic code) only judges a record after the fact. Editing the table to claim a code for a new rule
+ * re-ran every runtime record of every grid (2026-11-01: a cache half cold after SC5006 was added); without it a judge edit keeps
+ * them. The table is cut from `const codeRules = {` to the first line that closes it (`};` at column 0); a file without one is
+ * hashed whole.
  */
-export function runtimeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = fileHash(join(repo, "scripts/runtime-oracle.mjs")), installed = installedKey(config) } = {}) {
+export function oracleRecordHash(text = readFileSync(join(repo, "scripts/runtime-oracle.mjs"), "utf8")) {
+  const start = text.indexOf("\nconst codeRules = {");
+  const end = start < 0 ? -1 : text.indexOf("\n};", start);
+  return sha256(start < 0 || end < 0 ? text : text.slice(0, start) + text.slice(end + 3));
+}
+
+/**
+ * The environment of the fast path's record and the type check: the sources that produce them (`RECORD_SOURCES`), the oracle's
+ * entry (the type check compiles its main.tsx; `oracleRecordHash`), the clock, the type checker binary and both lockfiles. Not the
+ * checker, nor the oracle's claim table.
+ */
+export function runtimeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = oracleRecordHash(), installed = installedKey(config) } = {}) {
   return sha256(JSON.stringify({
     // The fast host's own key when it is not Happy DOM (chrome-host.mjs `chromeHostKey`): its sources, clock, page mode, browser.
     ...(config.fastHostKey ? { host: config.fastHostKey } : {}),
@@ -357,8 +372,8 @@ export const cacheableTypecheck = (typed) => Boolean(typed) && !typed.missing &&
  */
 export const cacheableRecord = (record) => Boolean(record) && !["vitest", "chrome-host", "import"].includes(record.failure?.phase);
 
-/** Where the caches live: `--cache-dir`, else `$TMPDIR/solid-checker-fuzz-cache` (the neutrality baseline's default too). */
-export const cacheDirectory = (options) => resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache"));
+/** Where the caches live: `--cache-dir`, else `$TMPDIR/solid-checker-fuzz-cache.noindex` (the neutrality baseline's default too). */
+export const cacheDirectory = (options) => resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache.noindex"));
 
 /**
  * Where `feedback run` keeps the browser half of a run (`--execution-cache`, packages/cli/scripts/feedback-execution-cache.mjs), or

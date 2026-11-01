@@ -20,7 +20,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -307,15 +307,24 @@ struct Cdp {
     next: AtomicU64,
     pending: Mutex<HashMap<u64, Sender<Value>>>,
     sessions: Mutex<HashMap<String, Sender<Value>>>,
+    /// The connection is gone (the socket closed, or the browser process exited, `fail`): every waiting command fails at once and
+    /// no new one is sent. A dead browser once left a whole grid waiting with no error.
+    closed: AtomicBool,
+    socket: Mutex<Option<TcpStream>>,
 }
 
 impl Cdp {
     fn connect(url: &str) -> Res<Arc<Cdp>> {
         let address = url.trim_start_matches("ws://").split('/').next().ok_or("bad DevTools URL")?.to_string();
-        let stream = TcpStream::connect(&address).map_err(|e| format!("connect {address}: {e}"))?;
+        let socket_address = address.parse().map_err(|e| format!("DevTools address {address}: {e}"))?;
+        let stream = TcpStream::connect_timeout(&socket_address, Duration::from_secs(10)).map_err(|e| format!("connect {address}: {e}"))?;
         stream.set_nodelay(true).ok();
         let writer_stream = stream.try_clone().map_err(|e| e.to_string())?;
+        let shutdown_stream = stream.try_clone().map_err(|e| e.to_string())?;
+        // The handshake reads Chrome's answer: bounded, then the reader blocks for good (frames arrive when they do).
+        stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
         let (mut socket, _) = tungstenite::client(url, stream).map_err(|e| format!("DevTools handshake: {e}"))?;
+        socket.get_ref().set_read_timeout(None).ok();
         // One thread writes, one reads, each blocking: a second WebSocket over the same connection carries the outgoing frames (Chrome
         // never pings, so the reader never writes).
         let mut writer = tungstenite::WebSocket::from_raw_socket(writer_stream, tungstenite::protocol::Role::Client, None);
@@ -327,7 +336,14 @@ impl Cdp {
                 }
             }
         });
-        let cdp = Arc::new(Cdp { outgoing: Mutex::new(outgoing), next: AtomicU64::new(1), pending: Mutex::new(HashMap::new()), sessions: Mutex::new(HashMap::new()) });
+        let cdp = Arc::new(Cdp {
+            outgoing: Mutex::new(outgoing),
+            next: AtomicU64::new(1),
+            pending: Mutex::new(HashMap::new()),
+            sessions: Mutex::new(HashMap::new()),
+            closed: AtomicBool::new(false),
+            socket: Mutex::new(Some(shutdown_stream)),
+        });
         let router = Arc::clone(&cdp);
         thread::spawn(move || {
             loop {
@@ -347,8 +363,7 @@ impl Cdp {
                     Ok(_) => {}
                     Err(_) => {
                         // The browser is gone: every waiting command fails.
-                        router.pending.lock().unwrap().clear();
-                        router.sessions.lock().unwrap().clear();
+                        router.fail();
                         return;
                     }
                 }
@@ -357,9 +372,28 @@ impl Cdp {
         Ok(cdp)
     }
 
-    /// Sends a command; its response goes to `reply`. Returns the command's id.
+    /// The connection is over: no command is sent again, every waiting one fails now (its reply channel dropped), and the socket is
+    /// shut so the reader and the writer stop. Idempotent.
+    fn fail(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        if let Some(socket) = self.socket.lock().unwrap().take() {
+            let _ = socket.shutdown(std::net::Shutdown::Both);
+        }
+        self.pending.lock().unwrap().clear();
+        self.sessions.lock().unwrap().clear();
+    }
+
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
+
+    /// Sends a command; its response goes to `reply`. Returns the command's id. On a closed connection nothing is sent and `reply`
+    /// is dropped, so its receiver fails at once.
     fn send(&self, session: Option<&str>, method: &str, params: Value, reply: Sender<Value>) -> u64 {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
+        if self.is_closed() {
+            return id;
+        }
         self.pending.lock().unwrap().insert(id, reply);
         let mut message = json!({ "id": id, "method": method, "params": params });
         if let Some(session) = session {
@@ -370,6 +404,9 @@ impl Cdp {
     }
 
     fn call(&self, session: Option<&str>, method: &str, params: Value) -> Res<Value> {
+        if self.is_closed() {
+            return Err(format!("{method}: the browser is gone"));
+        }
         let (reply, answer) = channel();
         let id = self.send(session, method, params, reply);
         match answer.recv_timeout(Duration::from_secs(30)) {
@@ -421,9 +458,12 @@ struct Chrome {
     pages: usize,
     idle: Mutex<Vec<Page>>,
     font_families: Value,
-    _browser: Mutex<std::process::Child>,
-    _vite: Mutex<std::process::Child>,
-    _profile: PathBuf,
+    browser: Arc<Mutex<std::process::Child>>,
+    vite: Arc<Mutex<std::process::Child>>,
+    profile: PathBuf,
+    /// A child (the browser or the Vite helper) exited: the supervisor logged it and failed the connection (`supervise`).
+    dead: Arc<AtomicBool>,
+    stopping: Arc<AtomicBool>,
 }
 
 struct Page {
@@ -434,12 +474,19 @@ struct Page {
     reply: Sender<Value>,
 }
 
+/// The longest a call to the Vite helper may take: a staging or a source-map lookup is milliseconds; a helper that hangs (a full disk,
+/// a stalled event loop) must fail the call, not the grid.
+const HELPER_TIMEOUT: Duration = Duration::from_secs(120);
+
 fn http_post(base: &str, path: &str, body: &str) -> Res<String> {
     let address = base.trim_start_matches("http://").trim_end_matches('/').to_string();
-    let mut stream = TcpStream::connect(&address).map_err(|e| format!("vite helper {address}: {e}"))?;
+    let socket_address = std::net::ToSocketAddrs::to_socket_addrs(&address).map_err(|e| format!("vite helper {address}: {e}"))?.next().ok_or(format!("vite helper {address}: no address"))?;
+    let mut stream = TcpStream::connect_timeout(&socket_address, Duration::from_secs(10)).map_err(|e| format!("vite helper {address}: {e}"))?;
+    stream.set_read_timeout(Some(HELPER_TIMEOUT)).ok();
+    stream.set_write_timeout(Some(HELPER_TIMEOUT)).ok();
     write!(stream, "POST {path} HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).map_err(|e| e.to_string())?;
     let mut response = Vec::new();
-    stream.read_to_end(&mut response).map_err(|e| e.to_string())?;
+    stream.read_to_end(&mut response).map_err(|e| format!("vite helper {path}: {e}"))?;
     let text = String::from_utf8_lossy(&response).into_owned();
     let (head, body) = text.split_once("\r\n\r\n").ok_or("vite helper: malformed response")?;
     if !head.starts_with("HTTP/1.1 200") {
@@ -448,7 +495,69 @@ fn http_post(base: &str, path: &str, body: &str) -> Res<String> {
     Ok(body.to_string())
 }
 
+/// The first line `reader` prints, within `limit`; EOF or the deadline is an error (the reading thread is left to end with the pipe).
+fn read_line_within(reader: impl Read + Send + 'static, limit: Duration) -> Res<String> {
+    let (line, read) = channel();
+    thread::spawn(move || {
+        let mut text = String::new();
+        let outcome = BufReader::new(reader).read_line(&mut text).map(|n| (n, text));
+        let _ = line.send(outcome);
+    });
+    match read.recv_timeout(limit) {
+        Ok(Ok((0, _))) => Err("exited before it was ready".into()),
+        Ok(Ok((_, text))) => Ok(text),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(_) => Err(format!("not ready within {} s", limit.as_secs())),
+    }
+}
+
+/// Watches a child of the executor: when it exits on its own, logs its status (and the browser's stderr tail), reaps it, marks the
+/// executor's browser dead and fails the DevTools connection, so every page waiting on it fails now and the batch can restart it
+/// (`Executor::run`). Before, an exited browser stayed a zombie and a grid waited on it with no error.
+fn supervise(name: &'static str, child: Arc<Mutex<std::process::Child>>, tail: Option<Arc<Mutex<std::collections::VecDeque<String>>>>, cdp: Arc<Cdp>, dead: Arc<AtomicBool>, stopping: Arc<AtomicBool>) {
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(250));
+            if stopping.load(Ordering::SeqCst) {
+                return;
+            }
+            let status = child.lock().unwrap().try_wait();
+            match status {
+                Ok(None) => {}
+                Ok(Some(status)) => {
+                    let tail = tail.map(|tail| tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join(" | ")).unwrap_or_default();
+                    eprintln!("fuzz-exec: {name} exited ({status}){}", if tail.is_empty() { String::new() } else { format!("; its last stderr lines: {tail}") });
+                    dead.store(true, Ordering::SeqCst);
+                    cdp.fail();
+                    return;
+                }
+                Err(error) => {
+                    eprintln!("fuzz-exec: {name}: cannot wait on it: {error}");
+                    return;
+                }
+            }
+        }
+    });
+}
+
 impl Chrome {
+    /// Kills both children and waits on them (no zombie), and removes the profile and the work directory.
+    fn stop(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
+        self.cdp.fail();
+        for child in [&self.browser, &self.vite] {
+            let mut child = child.lock().unwrap();
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let _ = std::fs::remove_dir_all(&self.profile);
+        let _ = std::fs::remove_dir_all(&self.work);
+    }
+
+    fn is_dead(&self) -> bool {
+        self.dead.load(Ordering::SeqCst) || self.cdp.is_closed()
+    }
+
     fn start(settings: &Value) -> Res<Chrome> {
         let text = |key: &str| settings.get(key).and_then(Value::as_str).map(str::to_string).ok_or(format!("chrome.{key} missing"));
         // The Vite helper: one line `{ base, work }` once it serves.
@@ -460,14 +569,19 @@ impl Chrome {
             .stderr(Stdio::inherit())
             .spawn()
             .map_err(|e| format!("vite helper: {e}"))?;
-        let mut line = String::new();
-        BufReader::new(vite.stdout.take().unwrap()).read_line(&mut line).map_err(|e| e.to_string())?;
+        let helper_out = vite.stdout.take().unwrap();
+        let line = read_line_within(helper_out, Duration::from_secs(120)).map_err(|e| {
+            let _ = vite.kill();
+            let _ = vite.wait();
+            format!("vite helper: {e}")
+        })?;
         let ready: Value = serde_json::from_str(line.trim()).map_err(|e| format!("vite helper said {line:?}: {e}"))?;
         let base = ready["base"].as_str().ok_or("vite helper: no base")?.to_string();
         let work = PathBuf::from(ready["work"].as_str().ok_or("vite helper: no work")?);
         let control = ready["control"].as_str().ok_or("vite helper: no control")?.to_string();
 
-        let profile = std::env::temp_dir().join(format!("fuzz-exec-profile-{}", std::process::id()));
+        static STARTS: AtomicU64 = AtomicU64::new(0);
+        let profile = std::env::temp_dir().join(format!("fuzz-exec-profile-{}-{}", std::process::id(), STARTS.fetch_add(1, Ordering::Relaxed)));
         let mut browser = Command::new(text("browser")?)
             .args(BROWSER_ARGS)
             .arg(format!("--user-data-dir={}", profile.display()))
@@ -478,23 +592,50 @@ impl Chrome {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("browser: {e}"))?;
-        let mut stderr = BufReader::new(browser.stderr.take().unwrap());
-        let url = loop {
-            let mut line = String::new();
-            if stderr.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
-                return Err("the browser exited before it listened".into());
-            }
-            if let Some(at) = line.find("ws://") {
-                break line[at..].trim().to_string();
+        // The browser's stderr: its DevTools endpoint, then a bounded tail kept for the log of an exit (`supervise`).
+        let tail = Arc::new(Mutex::new(std::collections::VecDeque::<String>::new()));
+        let (endpoint, found) = channel::<Option<String>>();
+        {
+            let tail = Arc::clone(&tail);
+            let mut stderr = BufReader::new(browser.stderr.take().unwrap());
+            thread::spawn(move || {
+                let mut endpoint = Some(endpoint);
+                let mut line = String::new();
+                while stderr.read_line(&mut line).is_ok_and(|n| n > 0) {
+                    if let Some(at) = line.find("ws://") {
+                        if let Some(endpoint) = endpoint.take() {
+                            let _ = endpoint.send(Some(line[at..].trim().to_string()));
+                        }
+                    }
+                    let mut tail = tail.lock().unwrap();
+                    tail.push_back(line.trim_end().chars().take(400).collect());
+                    if tail.len() > 20 {
+                        tail.pop_front();
+                    }
+                    line.clear();
+                }
+                if let Some(endpoint) = endpoint.take() {
+                    let _ = endpoint.send(None);
+                }
+            });
+        }
+        let url = match found.recv_timeout(Duration::from_secs(60)) {
+            Ok(Some(url)) => url,
+            outcome => {
+                let _ = browser.kill();
+                let _ = browser.wait();
+                let _ = vite.kill();
+                let _ = vite.wait();
+                return Err(if matches!(outcome, Ok(None)) { "the browser exited before it listened".into() } else { "the browser printed no DevTools endpoint within 60 s".into() });
             }
         };
-        thread::spawn(move || {
-            let mut sink = String::new();
-            while stderr.read_line(&mut sink).is_ok_and(|n| n > 0) {
-                sink.clear();
-            }
-        });
         let cdp = Cdp::connect(&url)?;
+        let dead = Arc::new(AtomicBool::new(false));
+        let stopping = Arc::new(AtomicBool::new(false));
+        let browser = Arc::new(Mutex::new(browser));
+        let vite = Arc::new(Mutex::new(vite));
+        supervise("the browser", Arc::clone(&browser), Some(tail), Arc::clone(&cdp), Arc::clone(&dead), Arc::clone(&stopping));
+        supervise("the Vite helper", Arc::clone(&vite), None, Arc::clone(&cdp), Arc::clone(&dead), Arc::clone(&stopping));
         let chrome = Chrome {
             cdp,
             base,
@@ -504,12 +645,21 @@ impl Chrome {
             pages: settings.get("pages").and_then(Value::as_u64).unwrap_or(16) as usize,
             idle: Mutex::new(Vec::new()),
             font_families: settings.get("fontFamilies").cloned().unwrap_or(Value::Null),
-            _browser: Mutex::new(browser),
-            _vite: Mutex::new(vite),
-            _profile: profile,
+            browser,
+            vite,
+            profile,
+            dead,
+            stopping,
         };
-        // Warm the dependency bundles and the runner once, then freeze the runner as transformed (chrome-host.mjs `start`).
-        let page = chrome.open_page()?;
+        // Warm the dependency bundles and the runner once, then freeze the runner as transformed (chrome-host.mjs `start`). A failure
+        // here stops both children (no browser left behind a failed start).
+        let page = match chrome.open_page() {
+            Ok(page) => page,
+            Err(error) => {
+                chrome.stop();
+                return Err(error);
+            }
+        };
         let warm = (|| -> Res<()> {
             let (reply, answer) = channel();
             chrome.cdp.send(Some(&page.session), "Page.navigate", json!({ "url": format!("{}index.html?id=__warm", chrome.base), "frameId": page.frame, "referrerPolicy": "unsafeUrl" }), reply);
@@ -523,8 +673,10 @@ impl Chrome {
             }
         })();
         chrome.close_page(page);
-        warm?;
-        http_post(&chrome.control, "/__sc/freeze", "{}")?;
+        if let Err(error) = warm.and_then(|()| http_post(&chrome.control, "/__sc/freeze", "{}").map(|_| ())) {
+            chrome.stop();
+            return Err(error);
+        }
         Ok(chrome)
     }
 
@@ -591,8 +743,13 @@ impl Chrome {
             }
         };
         let record = loop {
-            let message = match page.events.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            // In slices of a second: a browser that died is seen at once, not at the deadline (the page's own reply sender keeps
+            // its event channel open).
+            let left = deadline.saturating_duration_since(Instant::now());
+            let message = match page.events.recv_timeout(left.min(Duration::from_secs(1))) {
                 Ok(message) => message,
+                Err(RecvTimeoutError::Timeout) if cdp.is_closed() => return Err("the browser is gone".into()),
+                Err(RecvTimeoutError::Timeout) if !left.is_zero() => continue,
                 Err(RecvTimeoutError::Timeout) => {
                     return Err(format!("no record (committed {committed}, loaded {loaded}, record asked {}, virtual time granted {granted} ms)", evaluate.is_some()));
                 }
@@ -789,8 +946,15 @@ struct Executor {
     checker: Arc<Checker>,
     checks: Arc<Semaphore>,
     keep_work: bool,
-    chrome: Option<Arc<Chrome>>,
+    /// The browser in use, replaced when it dies (`restart_chrome`), with the settings it started from and the restarts so far.
+    chrome: Option<Mutex<Arc<Chrome>>>,
+    chrome_settings: Value,
+    restarts: AtomicU64,
 }
+
+/// How many times one executor starts a new browser after one died: each is logged; past the limit a dead browser's programs are the
+/// host's failures (harness rows, never verdicts), so a machine that kills browsers stops the run instead of looping.
+const MAX_RESTARTS: u64 = 3;
 
 impl Executor {
     fn init(out: Arc<Out>, request: &Value) -> Res<Executor> {
@@ -807,10 +971,8 @@ impl Executor {
             free: Mutex::new((0..concurrency * 2).map(|slot| (slot_root.join(format!("slot-{slot}")), slot_root.join(format!("slot-{slot}-run")))).collect()),
             ready: Condvar::new(),
         };
-        let chrome = match request.get("chrome") {
-            Some(settings) if !settings.is_null() => Some(Arc::new(Chrome::start(settings)?)),
-            _ => None,
-        };
+        let chrome_settings = request.get("chrome").cloned().unwrap_or(Value::Null);
+        let chrome = if chrome_settings.is_null() { None } else { Some(Mutex::new(Arc::new(Chrome::start(&chrome_settings)?))) };
         Ok(Executor {
             out,
             slots,
@@ -819,7 +981,60 @@ impl Executor {
             checks: Arc::new(Semaphore::new(concurrency)),
             keep_work: request.get("keepWork").and_then(Value::as_bool).unwrap_or(false),
             chrome,
+            chrome_settings,
+            restarts: AtomicU64::new(0),
         })
+    }
+
+    fn current_chrome(&self) -> Option<Arc<Chrome>> {
+        self.chrome.as_ref().map(|slot| Arc::clone(&slot.lock().unwrap()))
+    }
+
+    /// A new browser in place of `dead`, once per death (a run that finds it already replaced takes the new one), at most
+    /// MAX_RESTARTS times. `None` when the limit is spent or the new browser does not start.
+    fn restart_chrome(&self, dead: &Arc<Chrome>) -> Option<Arc<Chrome>> {
+        let slot = self.chrome.as_ref()?;
+        let mut current = slot.lock().unwrap();
+        if !Arc::ptr_eq(&current, dead) {
+            return Some(Arc::clone(&current));
+        }
+        let restart = self.restarts.fetch_add(1, Ordering::SeqCst) + 1;
+        if restart > MAX_RESTARTS {
+            eprintln!("fuzz-exec: the browser died again; {MAX_RESTARTS} restarts spent, its programs are harness failures");
+            return None;
+        }
+        dead.stop();
+        match Chrome::start(&self.chrome_settings) {
+            Ok(fresh) => {
+                eprintln!("fuzz-exec: browser restart {restart} of {MAX_RESTARTS}");
+                *current = Arc::new(fresh);
+                Some(Arc::clone(&current))
+            }
+            Err(error) => {
+                eprintln!("fuzz-exec: browser restart {restart} failed: {error}");
+                None
+            }
+        }
+    }
+
+    /// Runs `cases` on the browser; when it died during the batch, the programs it failed run once more on a new browser (the
+    /// records that came back stand: a program's record never mixes attempts).
+    fn run_chrome(&self, cases: Vec<Value>) -> Res<Value> {
+        let chrome = self.current_chrome().ok_or("no Chrome in this executor")?;
+        let mut records = chrome.run(cases.clone());
+        if chrome.is_dead() {
+            let host_failed = |record: &Value| record["failure"]["phase"] == "chrome-host";
+            let again: Vec<Value> = cases.into_iter().filter(|case| case["id"].as_str().is_some_and(|id| records.get(id).is_some_and(host_failed))).collect();
+            if !again.is_empty() {
+                if let Some(fresh) = self.restart_chrome(&chrome) {
+                    eprintln!("fuzz-exec: {} programs of the batch run again on the new browser", again.len());
+                    if let (Value::Object(records), Value::Object(retried)) = (&mut records, fresh.run(again)) {
+                        records.extend(retried);
+                    }
+                }
+            }
+        }
+        Ok(records)
     }
 
     /// One program's step 1 (pipeline.mjs `prepareEntries`): its files, its type checks, the checker on the clean text.
@@ -913,7 +1128,7 @@ fn main() {
             let request: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
             match Executor::init(Arc::clone(&out), &request) {
                 Ok(executor) => {
-                    out.emit(&json!({ "op": "ready", "chrome": executor.chrome.as_ref().map(|chrome| chrome.base.clone()) }));
+                    out.emit(&json!({ "op": "ready", "chrome": executor.current_chrome().map(|chrome| chrome.base.clone()) }));
                     Arc::new(executor)
                 }
                 Err(error) => {
@@ -949,30 +1164,87 @@ fn main() {
                 let executor = Arc::clone(&executor);
                 thread::spawn(move || {
                     let seq = request["seq"].clone();
-                    let Some(chrome) = executor.chrome.as_ref() else {
-                        executor.out.emit(&json!({ "seq": seq, "error": "no Chrome in this executor" }));
-                        return;
-                    };
                     let cases = request["cases"].as_array().cloned().unwrap_or_default();
-                    let records = chrome.run(cases);
-                    executor.out.emit(&json!({ "seq": seq, "records": records }));
+                    match executor.run_chrome(cases) {
+                        Ok(records) => executor.out.emit(&json!({ "seq": seq, "records": records })),
+                        Err(error) => executor.out.emit(&json!({ "seq": seq, "error": error })),
+                    }
                 });
             }
             _ => {}
         }
     }
-    // stdin closed: the run is over. The browser and the Vite helper die with this process's children.
-    if let Some(chrome) = executor.chrome.as_ref() {
-        let _ = chrome._browser.lock().unwrap().kill();
-        let _ = chrome._vite.lock().unwrap().kill();
-        let _ = std::fs::remove_dir_all(&chrome._profile);
-        let _ = std::fs::remove_dir_all(&chrome.work);
+    // stdin closed: the run is over. The browser and the Vite helper are killed and waited on.
+    if let Some(chrome) = executor.current_chrome() {
+        chrome.stop();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A DevTools endpoint that accepts one WebSocket, answers its first command, then closes: what a browser that dies looks like.
+    fn dying_endpoint() -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut socket = tungstenite::accept(stream).unwrap();
+            if let Ok(tungstenite::Message::Text(text)) = socket.read() {
+                let id = serde_json::from_str::<Value>(&text).unwrap()["id"].clone();
+                let _ = socket.send(tungstenite::Message::Text(json!({ "id": id, "result": { "ok": true } }).to_string().into()));
+            }
+            thread::sleep(Duration::from_millis(200));
+            let _ = socket.close(None);
+        });
+        format!("ws://{address}/devtools/browser/test")
+    }
+
+    #[test]
+    fn a_closed_connection_fails_waiting_and_later_commands_at_once() {
+        let cdp = Cdp::connect(&dying_endpoint()).unwrap();
+        assert_eq!(cdp.call(None, "Browser.getVersion", json!({})).unwrap()["ok"], true);
+        // The peer closes while this call waits: it fails when the connection does, not after the 30 s call deadline.
+        let started = Instant::now();
+        assert!(cdp.call(None, "Target.createTarget", json!({})).is_err());
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(cdp.is_closed());
+        let started = Instant::now();
+        let error = cdp.call(None, "Target.createTarget", json!({})).unwrap_err();
+        assert!(error.contains("the browser is gone"), "{error}");
+        assert!(started.elapsed() < Duration::from_millis(100));
+    }
+
+    #[test]
+    fn a_child_that_exits_is_reaped_and_marks_the_browser_dead() {
+        let cdp = Cdp::connect(&dying_endpoint()).unwrap();
+        let child = Arc::new(Mutex::new(Command::new("sh").arg("-c").arg("echo bye >&2; exit 3").stderr(Stdio::null()).spawn().unwrap()));
+        let dead = Arc::new(AtomicBool::new(false));
+        supervise("a test child", Arc::clone(&child), None, Arc::clone(&cdp), Arc::clone(&dead), Arc::new(AtomicBool::new(false)));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !dead.load(Ordering::SeqCst) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert!(dead.load(Ordering::SeqCst));
+        assert!(cdp.is_closed());
+        // Reaped: waiting again returns its status at once.
+        assert_eq!(child.lock().unwrap().try_wait().unwrap().and_then(|status| status.code()), Some(3));
+    }
+
+    #[test]
+    fn a_startup_line_that_never_comes_fails_at_its_deadline() {
+        let mut child = Command::new("sleep").arg("5").stdout(Stdio::piped()).spawn().unwrap();
+        let started = Instant::now();
+        let error = read_line_within(child.stdout.take().unwrap(), Duration::from_millis(300)).unwrap_err();
+        assert!(error.contains("not ready"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let _ = child.kill();
+        let _ = child.wait();
+        let mut quiet = Command::new("true").stdout(Stdio::piped()).spawn().unwrap();
+        assert!(read_line_within(quiet.stdout.take().unwrap(), Duration::from_secs(2)).unwrap_err().contains("exited"));
+        let _ = quiet.wait();
+    }
 
     fn dirs() -> Vec<String> {
         vec!["/w/a".into(), "/w/b".into()]

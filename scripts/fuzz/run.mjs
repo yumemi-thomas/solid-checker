@@ -175,7 +175,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--fast-host chrome|happy-dom]  the fast path's runtime (default chrome: real Chrome, the oracle's browser; happy-dom: the Vitest daemon)
   [--chrome-pages reuse|fresh-page|fresh-context] [--chrome-clock virtual-time|js|real]  (defaults reuse, virtual-time)
   [--executor node|rust]  rust (the default with Chrome's defaults): projects, type checks, checker runs and pages in the Rust executor (exec.mjs)
-  [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache)
+  [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache.noindex)
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
   [--keep-work]       keep the materialized checker directories`;

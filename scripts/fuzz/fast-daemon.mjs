@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DEFAULT_FAST_INSTALL, collectRecords, installedVersions, pinnedProblems, prepareWork, stageCases } from "./fast.mjs";
+import { NODE } from "../lib/node-runtime.mjs";
 
 export function createFastDaemon({ install = DEFAULT_FAST_INSTALL, workers = 4, pauseMs, finalMs, virtualClock = false, requestTimeoutMs = 600000 } = {}) {
   const root = resolve(install);
@@ -25,7 +26,7 @@ export function createFastDaemon({ install = DEFAULT_FAST_INSTALL, workers = 4, 
     if (problems.length) throw new Error(`the fast path needs the pinned install (${root}): ${problems.join("; ")}`);
     if (!existsSync(join(root, "node_modules/vitest/dist/node.js"))) throw new Error(`no vitest in ${root}/node_modules (npm install in scripts/fuzz/install)`);
     work = prepareWork(root, `daemon-${Date.now()}-${process.pid}`);
-    child = spawn(process.execPath, [join(work, "serve.mjs")], {
+    child = spawn(NODE, [join(work, "serve.mjs")], {
       cwd: work, stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env, NODE_ENV: "development", FUZZ_FAST_WORKERS: String(workers),

@@ -9,10 +9,15 @@
 #   scripts/fuzz/vm.sh run <command…>   sync, then run <command> in the VM clone (e.g. node scripts/fuzz/focus.mjs --codes A …)
 #   scripts/fuzz/vm.sh shell            a login shell in the VM clone, with the toolchains on PATH
 #   scripts/fuzz/vm.sh pull <vm path> <host dir>   copy a run's output out of the VM
+#   scripts/fuzz/vm.sh detach <log> <command…>     sync, then run <command> in the VM clone detached from this shell (it survives
+#                                       the SSH session, a host time limit and a sleeping host); output in <log> in the VM
 #
 # Environment: FUZZ_VM_PROFILE (the Colima profile, default `default`), FUZZ_VM_CPUS (default: the performance cores, so no vCPU
 # lands on an efficiency core), FUZZ_VM_MEMORY (GiB, 32), FUZZ_VM_DISK (GiB, 150), FUZZ_VM_ROOT (the workspace in the VM, default
-# /mnt/lima-colima/sc: Colima's data disk, which takes FUZZ_VM_DISK; the VM's root disk is small).
+# /mnt/lima-colima/sc). Grid outputs and caches go on the VM's largest data disk: when the workspace sits on the small root disk
+# (some Colima versions mount the data disk elsewhere, e.g. /var/lib/rancher), setup moves `runs/` and `tmp/` there and links them.
+# Before every sync the VM's free bytes and inodes are checked: a grid writes a directory of files per program, and a full disk
+# fails a run late with ENOSPC (seen as harness results and a hung Chrome).
 # The toolchains are the repository's pins: Rust from the Makefile's RUST_TOOLCHAIN, bun from packages/cli's packageManager, tsrs
 # at apps/solid-typefacts's revision, Chrome as the pinned Playwright names it (scripts/playwright-browser.mjs); Node is the host's
 # version. The checkout must be under the home directory, which Colima mounts at the same path.
@@ -45,6 +50,34 @@ start() {
   fi
 }
 
+# The workspace's runs/ and tmp/ on the VM's largest non-root filesystem when the workspace itself is on the root disk.
+place_storage() {
+  vm "set -euo pipefail
+    root_dev=\$(df --output=source / | tail -1); here_dev=\$(df --output=source $root | tail -1)
+    if [ \"\$root_dev\" = \"\$here_dev\" ]; then
+      # A local block device's filesystem, not the host's virtiofs share of the home directory.
+      data=\$(df --output=target,size,source,fstype -B1G | awk -v r=\"\$root_dev\" 'NR>1 && \$3!=r && \$3 ~ /^\\/dev\\// && \$4 ~ /^(ext4|xfs|btrfs)\$/ && \$2>=50 {print \$1; exit}')
+      if [ -n \"\$data\" ]; then
+        sudo mkdir -p \$data/sc-data && sudo chown \$(id -u):\$(id -g) \$data/sc-data
+        for d in runs tmp; do
+          if [ ! -L $root/\$d ]; then mkdir -p \$data/sc-data/\$d; [ -d $root/\$d ] && cp -a $root/\$d/. \$data/sc-data/\$d/ && rm -rf $root/\$d; ln -s \$data/sc-data/\$d $root/\$d; fi
+        done
+        echo \"vm.sh: runs/ and tmp/ on \$data (the data disk)\"
+      else
+        echo \"vm.sh: warning: $root is on the root disk and no data disk was found\" >&2
+      fi
+    fi"
+}
+
+# Refuse a run the VM's disk cannot hold: below 10 GiB or 10% of the inodes free where runs/ and tmp/ live.
+preflight() {
+  vm "set -euo pipefail; mkdir -p $root/runs $root/tmp
+    for d in $root/runs/ $root/tmp/; do
+      read -r avail ipct < <(df --output=avail,ipcent -B1G \$d | tail -1 | tr -d '%')
+      [ \"\$avail\" -ge 10 ] && [ \"\$ipct\" -le 90 ] || { echo \"vm.sh: \$d has \$avail GiB and \$((100 - ipct))% of its inodes free; delete old runs (their cases/ directories hold most of the files)\" >&2; exit 2; }
+    done"
+}
+
 setup() {
   start
   vm "set -euo pipefail
@@ -64,6 +97,7 @@ setup() {
       (cd $root/tsrs && cargo +$rust build --release -q -p tsrs_cli)
     fi
     [ -d $clone/.git ] || git clone -q --no-checkout $repo $clone"
+  place_storage
   sync
 }
 
@@ -72,6 +106,7 @@ setup() {
 # so the VM clone can fetch it.
 sync() {
   start
+  preflight
   local index tree ref
   index=$(mktemp)
   cp "$(git -C "$repo" rev-parse --absolute-git-dir)/index" "$index"
@@ -100,6 +135,8 @@ case "${1:-}" in
   sync) sync ;;
   run) shift; [ $# -gt 0 ] || die "run <command…>"; sync; vm "$vm_env; cd $clone && $(printf '%q ' "$@")" ;;
   shell) start; colima ssh --profile "$profile" -- bash -lc "$vm_env; cd $clone && exec bash -l" ;;
+  detach) shift; [ $# -gt 1 ] || die "detach <log> <command…>"; log=$1; shift; sync
+    vm "$vm_env; cd $clone && mkdir -p \$(dirname $(printf '%q' "$log")) && (setsid nohup $(printf '%q ' "$@") > $(printf '%q' "$log") 2>&1 < /dev/null &) ; echo vm.sh: detached, output in $(printf '%q' "$log")" ;;
   pull) [ $# -eq 3 ] || die "pull <vm path> <host dir>"; mkdir -p "$3"; vm "tar cf - -C $(printf '%q' "$2") ." | tar xf - -C "$3" ;;
-  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

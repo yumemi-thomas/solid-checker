@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BaselineCache, EntryCache, RECORD_SOURCES, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, programKey, runtimeEnvironmentKey, treeHash } from "./cache.mjs";
+import { BaselineCache, EntryCache, RECORD_SOURCES, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, oracleRecordHash, programKey, runtimeEnvironmentKey, treeHash } from "./cache.mjs";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "fuzz-cache-"));
 const config = (dir, text = "checker") => {
@@ -300,5 +300,16 @@ describe("the digests a spot check compares", () => {
     }
     expect(typecheckDigest({ ok: false, errors: ["/a/App.tsx(1,1): error TS2322: x"] })).toBe(typecheckDigest({ ok: false, errors: ["/b/App.tsx(1,1): error TS2322: x"] }));
     expect(typecheckDigest({ ok: true, errors: [] })).not.toBe(typecheckDigest({ ok: false, errors: ["error TS2322"] }));
+  });
+});
+
+describe("oracleRecordHash", () => {
+  it("ignores the oracle's claim table and keeps everything else", () => {
+    const text = "const a = 1;\nconst codeRules = {\n  X: [\"r\"],\n};\nconst b = 2;\n";
+    const claimed = text.replace('X: ["r"],', 'X: ["r"],\n  Y: ["s"],');
+    const entry = text.replace("const b = 2;", "const b = 3;");
+    expect(oracleRecordHash(claimed)).toBe(oracleRecordHash(text));
+    expect(oracleRecordHash(entry)).not.toBe(oracleRecordHash(text));
+    expect(oracleRecordHash("no table")).toBe(oracleRecordHash("no table"));
   });
 });
