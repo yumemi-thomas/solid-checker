@@ -103,11 +103,40 @@ pub(super) fn emit_file(
     let path = file.path.as_str();
     let starts = await_starts(inputs, path);
     let mut seen = HashSet::default();
+    // ADR 0534: whether a chain function nothing places ever runs (ADR 0458's
+    // query, memoized across this file's candidates). Its lookups are recorded
+    // with the emission's reads, so a moved answer reruns the emission.
+    let reach = crate::execution_role::SiteReach::new(lookup);
+    let context_of = |span: &Span| {
+        graph
+            .context(pid, *span)
+            .unwrap_or(OWNER_CONTEXT_LEAVES_REGION)
+    };
     for candidate in &entry.fragment.requirements {
         let owner = candidate
             .owner
             .and_then(|span| graph.node_context(pid, span));
         let mut context = owner.map_or(OWNER_CONTEXT_UNOWNED, |(_, context)| context);
+        // ADR 0347's closed-program export census is stronger than SiteReach,
+        // which deliberately treats module-scope declarations as possible entries.
+        // Do not invent a caller for a dormant export or its nested callbacks.
+        if file.ast.functions.iter().any(|function| {
+            function.body.contains(candidate.operation_span)
+                && graph
+                    .node_context(pid, function.span)
+                    .is_some_and(|(node, context)| node.namespace_candidate && context == 0)
+        }) {
+            // Gate decisions are consumed by leaf-owner discovery too. A dormant
+            // registration must keep its no-entry answer, not leave that gate
+            // undecided and turn its callback into a new leaf violation.
+            if let Some(gate) = candidate.settled_gate {
+                emission.gates.push((
+                    (path.to_owned(), u64::from(gate.start), u64::from(gate.end)),
+                    leaf_gate_decision(owner),
+                ));
+            }
+            continue;
+        }
         // A function no owner edge reaches holds context zero: its body never
         // runs from syntax. Its parameter list is no such claim (ADR 0454).
         if candidate.in_parameter_list && context == 0 {
@@ -124,6 +153,49 @@ pub(super) fn emit_file(
                 .owner
                 .is_some_and(|span| returned_unreached_function(graph, pid, file, span));
         if returned_unplaced {
+            context = OWNER_CONTEXT_UNOWNED;
+        }
+        // ADR 0534: a function proven never to run (ADR 0458's query) has no
+        // operation to place.
+        let unreached = |span: &Span| {
+            file.ast
+                .function_at(*span)
+                .is_some_and(|function| !reach.function_runs(file, function))
+        };
+        // ADR 0534: the region answers only for functions proven to run in
+        // its synchronous extent. Every chain span is one of this file's own
+        // nodes; one that did not resolve would withhold the lexical answer,
+        // not grant it.
+        let region_answers = candidate
+            .providing_region_chain
+            .as_deref()
+            .is_some_and(|chain| {
+                root_owned_at(Some(chain), context_of)
+                    && !region_run_unproven(
+                        chain,
+                        context_of,
+                        |span| Some(*span) == candidate.providing_region,
+                        unreached,
+                    )
+            });
+        // ADR 0534: context zero is no proof for a function that may run
+        // either: nothing calls it from syntax, so whoever runs it (a wrapper
+        // it was handed to, the holder of a member it was assigned to, a
+        // timer constructing its class, a getter's reader) is not followed,
+        // and no region it is written in answers for it. The operation is
+        // unplaced, never certified. A JSX boundary (`allow_uncertain` false)
+        // keeps today's answer.
+        let unplaced_callback = context
+            & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
+            == 0
+            && !candidate.in_parameter_list
+            && !returned_unplaced
+            && candidate.allow_uncertain
+            && !region_answers
+            && candidate.owner.is_some_and(|span| !unreached(&span));
+        if unplaced_callback {
+            // The caller nothing follows may supply no owner, as for an
+            // open-world seed; a context-zero function holds that bit alone.
             context = OWNER_CONTEXT_UNOWNED;
         }
         // As in the fragment: effects, cleanups, context reads and boundary
@@ -220,16 +292,17 @@ pub(super) fn emit_file(
                     free
                 })
             });
-        // Every chain span is one of this file's own nodes; one that did not
-        // resolve would withhold the lexical answer, not grant it.
+        // A JSX boundary keeps the answer by detaching bits alone (ADR 0534
+        // scopes the proven-run requirement to the operations that can be
+        // obligations).
         let root_owned = possible_continuation.is_none()
             && !candidate.in_parameter_list
             && !returned_unplaced
-            && root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
-                graph
-                    .context(pid, *span)
-                    .unwrap_or(OWNER_CONTEXT_LEAVES_REGION)
-            });
+            && if candidate.allow_uncertain {
+                region_answers
+            } else {
+                root_owned_at(candidate.providing_region_chain.as_deref(), context_of)
+            };
         // A providing region owns its reads, so a provider-free read there is
         // a provider finding, not an owner question (ADR 0352).
         let provider = provider_free_read && (root_owned || owned_on_every_path(context));
@@ -306,6 +379,7 @@ pub(super) fn emit_file(
             && context & OWNER_CONTEXT_UNOWNED != 0;
         let caller_uncertain = candidate.allow_uncertain
             && !proven_unowned
+            && !unplaced_callback
             && owner.is_some_and(|(node, node_context)| {
                 (node.exported
                     && node_context & OWNER_CONTEXT_UNOWNED != 0
@@ -327,11 +401,13 @@ pub(super) fn emit_file(
         // ADR 0517: in an open program a provider outside the analyzed code
         // may supply the context; the census proves only what it sees.
         let provider_open = provider && !inputs.lookup.program_closed;
+        let unplaced_callback = unplaced_callback && !proven_unowned;
         let uncertain = runtime_uncertain
             || conditional_owner
             || later_run_unowned
             || caller_uncertain
             || component_uncertain
+            || unplaced_callback
             || provider_open;
         push_owner_requirement(
             &mut emission.requirements,
@@ -343,6 +419,7 @@ pub(super) fn emit_file(
                 uncertain,
                 runtime_uncertain,
                 caller_uncertain,
+                unplaced_callback,
                 conditional_owner,
                 later_run_unowned,
                 component_uncertain,

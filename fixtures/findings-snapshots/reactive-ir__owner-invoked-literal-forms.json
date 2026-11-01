@@ -60,6 +60,16 @@
       "start": 1099,
       "end": 1111,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 1274,
+      "end": 1286,
+      "fixes": 0
     }
   ]
 }

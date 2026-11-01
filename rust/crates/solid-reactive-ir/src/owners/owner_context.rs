@@ -9,6 +9,10 @@ pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 = OWNER_CONTEXT_PROVEN_UNOWNED
     | OWNER_CONTEXT_LEAF
     | OWNER_CONTEXT_MAY_RESUME_UNOWNED;
 
+/// The owner context bits that prove a function runs on some path with an
+/// owner current: an owner edge reached it. See [`region_run_unproven`].
+pub(super) const OWNER_CONTEXT_RUNS_OWNED: u8 = OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED;
+
 /// The bits that describe a context's unowned part and its provenance: what
 /// an owner guard removes ([`OwnerEdgeKind::OwnerGuarded`]) and a no-owner
 /// guard keeps ([`OwnerEdgeKind::NoOwnerGuarded`]).
@@ -18,24 +22,31 @@ const OWNER_CONTEXT_UNOWNED_PART: u8 = OWNER_CONTEXT_UNOWNED
     | OWNER_CONTEXT_MAY_RESUME_UNOWNED
     | OWNER_CONTEXT_COMPONENT_UNCERTAIN;
 
+/// The innermost owner-providing region around `span`: `None` when no region
+/// contains it. The innermost region is the only one that needs asking: an
+/// outer region's chain is a superset of it, so an outer region answers only
+/// where the innermost does.
+pub(crate) fn providing_region(providing_regions: &[Span], span: Span) -> Option<Span> {
+    providing_regions
+        .iter()
+        .filter(|region| region.contains(span))
+        .min_by_key(|region| region.end - region.start)
+        .copied()
+}
+
 /// The functions standing between `span` and the innermost owner-providing
-/// region around it: every function whose body contains `span` and which is
-/// itself written inside that region, the region's own callback included.
-/// `None` when no region contains `span`.
+/// region around it ([`providing_region`]): every function whose body contains
+/// `span` and which is itself written inside that region, the region's own
+/// callback included. `None` when no region contains `span`.
 ///
 /// `functions` yields `(key, span, body)` for the file's owner nodes; the key
-/// comes back unchanged, so a caller can carry node indices or function spans. The innermost
-/// region is the only one that needs asking: an outer region's chain is a
-/// superset of it, so an outer region answers only where the innermost does.
+/// comes back unchanged, so a caller can carry node indices or function spans.
 pub(crate) fn providing_region_chain<K>(
     providing_regions: &[Span],
     functions: impl IntoIterator<Item = (K, Span, Span)>,
     span: Span,
 ) -> Option<Vec<K>> {
-    let region = providing_regions
-        .iter()
-        .filter(|region| region.contains(span))
-        .min_by_key(|region| region.end - region.start)?;
+    let region = providing_region(providing_regions, span)?;
     Some(
         functions
             .into_iter()
@@ -93,14 +104,40 @@ pub(crate) fn providing_region_chain<K>(
 /// `queueMicrotask`, `Promise.then`, an observer constructor, ...) gets the
 /// dialect's unowned edge ([`fresh_stack_scheduler_edges`]) and is judged on
 /// the graph like the positions above. A nested callback with no owner edge at
-/// all (one handed to an unmodelled function, or to a scheduler through a
-/// wrapper call) carries neither bit and is still answered by the region: a
-/// pre-existing approximation this does not widen.
+/// all, or only a possible-unowned one, carries neither bit; whether the
+/// region answers for it is [`region_run_unproven`]'s question (ADR 0534).
 pub(crate) fn root_owned_at<K>(chain: Option<&[K]>, context_of: impl Fn(&K) -> u8) -> bool {
     chain.is_some_and(|chain| {
         chain
             .iter()
             .all(|function| context_of(function) & OWNER_CONTEXT_LEAVES_REGION == 0)
+    })
+}
+
+/// ADR 0534: whether a chain [`root_owned_at`] answers for holds a function
+/// whose run inside the region nothing proves. The region's owner is current
+/// for an operation only while the region's callback runs it synchronously; a
+/// function nested in the region that no owner edge reaches (context zero: a
+/// closure handed to a wrapper that stores it or hands it to a scheduler, a
+/// class constructor or method, a getter, a function assigned to a member) or
+/// that only a possible-unowned edge reaches ([`OwnerEdgeKind::MayBeUnowned`],
+/// no bit of [`OWNER_CONTEXT_RUNS_OWNED`]) may run from a timer or a handler
+/// instead, with no owner (rc.17 warns `NO_OWNER_CLEANUP`/`NO_OWNER_EFFECT`
+/// there). Such an operation is unplaced: an obligation, never certified by
+/// position. Two functions are exempt: the region's own callback (`is_region`),
+/// which provides the owner whenever it runs, however it was entered; and a
+/// function proven never to run (`unreached`, ADR 0458's query), whose
+/// operation never happens and keeps the region's answer as before.
+pub(crate) fn region_run_unproven<K>(
+    chain: &[K],
+    context_of: impl Fn(&K) -> u8,
+    is_region: impl Fn(&K) -> bool,
+    unreached: impl Fn(&K) -> bool,
+) -> bool {
+    chain.iter().any(|function| {
+        context_of(function) & OWNER_CONTEXT_RUNS_OWNED == 0
+            && !is_region(function)
+            && !unreached(function)
     })
 }
 
@@ -622,6 +659,7 @@ pub(crate) fn push_owner_requirement(
             conditional_owner: status.conditional_owner,
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
+            unplaced_callback: status.unplaced_callback,
             provider_open: status.provider_open,
             after_await: status.after_await,
             after_yield: status.after_yield,

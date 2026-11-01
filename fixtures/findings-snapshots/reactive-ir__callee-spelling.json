@@ -287,8 +287,48 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 6186,
+      "end": 6195,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 6403,
+      "end": 6412,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 6646,
       "end": 6655,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 6798,
+      "end": 6807,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 6958,
+      "end": 6967,
       "fixes": 0
     },
     {

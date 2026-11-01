@@ -1,4 +1,75 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 540,
+      "end": 549,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 825,
+      "end": 834,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1103,
+      "end": 1112,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1487,
+      "end": 1496,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1753,
+      "end": 1762,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 2012,
+      "end": 2021,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 2467,
+      "end": 2476,
+      "fixes": 0
+    }
+  ]
 }

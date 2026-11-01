@@ -10,6 +10,16 @@
       "start": 323,
       "end": 332,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 583,
+      "end": 592,
+      "fixes": 0
     }
   ]
 }

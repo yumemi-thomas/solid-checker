@@ -55,6 +55,7 @@ pub(crate) fn discover_owner_file(
             })
         })
     };
+    let region_of = |span| providing_region(&providing_regions, span);
     // The callback an argument names, exactly as `owner_callback_index` reads
     // it: the function literal itself (or an event tuple's handler slot), or
     // the function a bare identifier names. A function literal inside any other
@@ -473,6 +474,7 @@ pub(crate) fn discover_owner_file(
                 settled_target,
                 settled_gate,
                 providing_region_chain,
+                providing_region: region_of(call.span),
                 context_argument,
                 in_parameter_list: in_list,
             });
@@ -560,6 +562,7 @@ pub(crate) fn discover_owner_file(
                 settled_target: None,
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
+                providing_region: region_of(element.span),
                 context_argument: None,
                 in_parameter_list: list_site(element.span),
             });

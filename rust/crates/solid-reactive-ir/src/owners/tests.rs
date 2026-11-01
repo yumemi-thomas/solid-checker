@@ -4,8 +4,8 @@ use super::{
     OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
     binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
     compose_owner_edge, owner_edge_context, possible_await_continuation_context,
-    propagate_owner_contexts, providing_region_chain, root_owned_at, seed_contexts,
-    seed_unnamed_hand_outs, settle_eager_owners,
+    propagate_owner_contexts, providing_region_chain, region_run_unproven, root_owned_at,
+    seed_contexts, seed_unnamed_hand_outs, settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -478,6 +478,62 @@ fn root_owned_at_withholds_for_either_detaching_bit() {
             "context {context:#b}"
         );
     }
+}
+
+/// ADR 0534: `createRoot(() => { later(() => { OP }) })` as a chain of the
+/// root callback ("root") and the handed closure ("handed"): the closure's
+/// run inside the region is unproven when no edge (context zero) or only a
+/// possible-unowned edge reaches it, unless it is proven never to run; the
+/// region's own callback is never asked.
+#[test]
+fn region_run_unproven_asks_each_nested_function_for_a_proven_run() {
+    let chain = ["root", "handed"];
+    let is_region = |function: &&str| *function == "root";
+    let never = |_: &&str| false;
+    for (handed, unproven) in [
+        (0, true),
+        (OWNER_CONTEXT_UNOWNED, true),
+        (
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN,
+            true,
+        ),
+        (OWNER_CONTEXT_OWNED, false),
+        (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED, false),
+        (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED, false),
+    ] {
+        let context = |function: &&str| match *function {
+            "handed" => handed,
+            _ => OWNER_CONTEXT_OWNED,
+        };
+        assert_eq!(
+            region_run_unproven(&chain, context, is_region, never),
+            unproven,
+            "handed context {handed:#b}"
+        );
+    }
+    // The region's own callback with context zero (written in a function
+    // nothing calls) still answers for what it runs.
+    assert!(!region_run_unproven(
+        &chain,
+        |function: &&str| if *function == "root" {
+            0
+        } else {
+            OWNER_CONTEXT_OWNED
+        },
+        is_region,
+        never
+    ));
+    // A handed closure proven never to run keeps the region's answer.
+    assert!(!region_run_unproven(
+        &chain,
+        |function: &&str| if *function == "root" {
+            OWNER_CONTEXT_OWNED
+        } else {
+            0
+        },
+        is_region,
+        |function: &&str| *function == "handed"
+    ));
 }
 
 // ---------------------------------------------------------------------------

@@ -208,6 +208,7 @@ impl Finding {
         let later_run_unowned = requirement.later_run_unowned;
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
+        let unplaced_callback = requirement.unplaced_callback;
         let missing_jsx_census = requirement.missing_jsx_census;
         let provider_open = requirement.provider_open;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
@@ -220,6 +221,7 @@ impl Finding {
                 && !conditional_owner
                 && !later_run_unowned
                 && !component_uncertain
+                && !unplaced_callback
                 && !missing_jsx_census
                 && !provider_open);
         let mut message = message.to_string();
@@ -365,6 +367,14 @@ impl Finding {
             );
             hint.push_str(
                 " If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+            );
+        }
+        if unplaced_callback {
+            message.push_str(
+                "; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
+            );
+            hint.push_str(
+                " Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner()).",
             );
         }
         Self {

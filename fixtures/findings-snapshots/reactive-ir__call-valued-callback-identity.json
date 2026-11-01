@@ -10,6 +10,16 @@
       "start": 781,
       "end": 793,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/call-valued-callback-identity/App.tsx",
+      "start": 1027,
+      "end": 1039,
+      "fixes": 0
     }
   ]
 }

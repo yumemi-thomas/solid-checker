@@ -30,6 +30,16 @@
       "start": 1168,
       "end": 1180,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-lazy-module/App.tsx",
+      "start": 1537,
+      "end": 1549,
+      "fixes": 0
     }
   ]
 }

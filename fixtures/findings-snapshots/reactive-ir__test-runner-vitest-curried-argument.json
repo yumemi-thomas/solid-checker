@@ -4,6 +4,16 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/curried-argument/App.test.tsx",
+      "start": 476,
+      "end": 494,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/test-runner-vitest/variants/curried-argument/App.test.tsx",

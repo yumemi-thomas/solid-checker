@@ -234,10 +234,15 @@ fn fresh_stack_scheduler_callbacks_get_the_same_owner_analysis_in_both_passes() 
         requirement("// root in microtask").is_none(),
         "a root created inside the callback answers for what it contains"
     );
-    for marker in ["// thenable", "// component body"] {
-        assert!(
-            requirement(marker).is_none_or(|found| !found.report),
-            "{marker}: not reported"
-        );
-    }
+    assert!(
+        requirement("// component body").is_none_or(|found| !found.report),
+        "// component body: not reported"
+    );
+    // A `PromiseLike.then` callback gets no fresh-stack edge, and no region
+    // answers for it either (ADR 0534): the thenable may call it at once, under
+    // the owner, or later, with none, so it is an obligation, never a violation.
+    assert!(
+        requirement("// thenable").is_none_or(|found| !found.report || found.uncertain),
+        "// thenable: an obligation at most"
+    );
 }

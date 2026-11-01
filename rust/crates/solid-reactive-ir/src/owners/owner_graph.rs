@@ -337,6 +337,10 @@ pub(crate) struct OwnerRequirementCandidate {
     /// it depends on those functions' propagated owner contexts, which a
     /// per-file fragment does not have yet; see [`root_owned_at`].
     pub(crate) providing_region_chain: Option<Vec<Span>>,
+    /// The region the chain belongs to ([`providing_region`]): the one chain
+    /// function it names is the region's own callback, which provides the
+    /// owner whenever it runs (ADR 0534, `region_run_unproven`).
+    pub(crate) providing_region: Option<Span>,
     /// For a `context-read` (ADR 0352): the one context argument's span. The
     /// emission pass resolves its binding against the closed provider census,
     /// which is program-wide, so the binding is not cached with the file.
@@ -479,6 +483,9 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) conditional_owner: bool,
     pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
+    /// ADR 0534: the operation's callback is written in an owner-providing
+    /// region, but nothing proves it runs there (`region_run_unproven`).
+    pub(crate) unplaced_callback: bool,
     /// ADR 0517: a provider-free read the census found in an open program.
     pub(crate) provider_open: bool,
     /// The operation runs after an `await` ([`AwaitContinuations`]).

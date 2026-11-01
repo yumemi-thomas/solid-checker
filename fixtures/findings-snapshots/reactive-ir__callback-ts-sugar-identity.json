@@ -105,6 +105,16 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 2086,
+      "end": 2098,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
       "start": 2185,

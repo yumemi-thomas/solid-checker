@@ -252,6 +252,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-member.tsx",
+      "start": 112,
+      "end": 124,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -262,6 +272,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-parameter.tsx",
+      "start": 101,
+      "end": 113,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -269,6 +289,26 @@
       "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-parameter.tsx",
       "start": 129,
       "end": 133,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-plain-function.tsx",
+      "start": 82,
+      "end": 94,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-structural-store.tsx",
+      "start": 97,
+      "end": 109,
       "fixes": 0
     },
     {

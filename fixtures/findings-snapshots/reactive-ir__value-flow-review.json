@@ -152,6 +152,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 202,
+      "end": 211,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -162,6 +172,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 471,
+      "end": 480,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -169,6 +189,16 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
       "start": 607,
       "end": 619,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 735,
+      "end": 744,
       "fixes": 0
     },
     {
@@ -202,6 +232,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 1572,
+      "end": 1581,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -222,6 +262,26 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 1829,
+      "end": 1838,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 196,
+      "end": 205,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -232,6 +292,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 551,
+      "end": 560,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -239,6 +309,16 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
       "start": 597,
       "end": 608,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 810,
+      "end": 819,
       "fixes": 0
     },
     {
@@ -289,6 +369,16 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
       "start": 1448,
       "end": 1463,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 1606,
+      "end": 1615,
       "fixes": 0
     },
     {

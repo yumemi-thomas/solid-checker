@@ -192,12 +192,10 @@ yielding it (a getter's body, a tagged template's substitution, an operand of
 `void`) is not placed. Each of these uncertain cases is uncertifiable, never a
 violation (ADR 0345).
 
-Two approximations remain. A nested callback the owner graph gives no owner
-edge at all, such as a callback handed to a function the analysis does not
-model, or handed to a scheduler through a wrapper call
-(`setTimeout(wrap(() => ...))`), is still treated as owned by the
-owner-creating callback it is written in, and is not reported inside a
-component. Where it runs with no owner, that is a false negative.
+A callback with no proven run under its lexical owner (a wrapper callback,
+stored member, class member or getter) is uncertifiable (ADR 0534). Dormant
+exports remain silent; unnamed namespace escapes remain uncertain. JSX
+boundaries retain the region's answer.
 
 An invoked function literal is an owner edge (ADR 0347): the call runs its body
 under the owner of the code around the call, so a plain IIFE at module scope or

@@ -1139,6 +1139,13 @@ pub struct OwnerRequirement {
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// ADR 0534: the operation's callback is written inside an owner-providing
+    /// region, but no owner edge proves it runs there: it is handed to a
+    /// wrapper, stored, a class member or a getter, and whoever calls it (a
+    /// timer, a handler) is not followed, so the region's owner is not proven
+    /// current when it runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unplaced_callback: bool,
     /// The operation runs after an `await` on every path through its async
     /// function's body: a promise continuation on an empty stack, where the
     /// dialect says no owner is current. Proven unowned whatever context the

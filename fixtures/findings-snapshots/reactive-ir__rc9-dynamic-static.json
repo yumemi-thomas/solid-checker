@@ -72,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 3480,
+      "end": 3492,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -79,6 +89,16 @@
       "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
       "start": 3522,
       "end": 3534,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 3646,
+      "end": 3658,
       "fixes": 0
     },
     {

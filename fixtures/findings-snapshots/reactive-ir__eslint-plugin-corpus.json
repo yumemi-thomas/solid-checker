@@ -522,6 +522,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
+      "start": 370,
+      "end": 382,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -559,6 +569,16 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-valid.tsx",
       "start": 247,
       "end": 259,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-valid.tsx",
+      "start": 389,
+      "end": 401,
       "fixes": 0
     },
     {

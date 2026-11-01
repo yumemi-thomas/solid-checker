@@ -1245,3 +1245,7 @@ The saturation ladder d11/d9/d2c/d2b/d2 writes inside a handler-created root at 
 <a id="adr-0531"></a>
 ## ADR 0531 — Named read hand-offs are placed at their carriers
 A named reader previously contributed only at direct calls or primitive callback positions; other references could certify clean. Resolve synchronous standard-library callback arguments, template tags and Function.call/apply receivers through exact facts and place their reads at the carrier. Any remaining hand-off is an obligation. Fresh-stack callbacks remain deferred. Fixture `read-handed-by-name` pins the saturation probes; stored getters and unknown carriers remain uncertifiable. Alias hand-offs conservatively remain obligations.
+
+<a id="adr-0534"></a>
+## ADR 0534 — Owner regions require a proven run
+Context zero or possible-unowned-only proves no run under the lexical owner. Such owner requirements become obligations, including unresolved assigned-member dispatch (B5). ADR 0347's dormant exports stay silent; unnamed namespace escapes stay uncertain. Fixture `owner-region-no-edge` pins 13 rc.17 warnings and legal controls. Never-read object members remain obligations; JSX boundaries keep their existing treatment.

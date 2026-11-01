@@ -34,8 +34,8 @@
       "start": 2029,
       "end": 2041,
       "fixes": 0,
-      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
-      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner())."
     },
     {
       "rule": "missing-effect-function",
@@ -70,8 +70,8 @@
       "start": 2166,
       "end": 2178,
       "fixes": 0,
-      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
-      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner())."
     },
     {
       "rule": "missing-effect-function",
@@ -106,8 +106,8 @@
       "start": 2988,
       "end": 3000,
       "fixes": 0,
-      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
-      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner())."
     },
     {
       "rule": "sync-computation-received-async",
@@ -154,8 +154,8 @@
       "start": 5769,
       "end": 5781,
       "fixes": 0,
-      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
-      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner())."
     },
     {
       "rule": "strict-read-untracked",

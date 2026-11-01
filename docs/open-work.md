@@ -11,7 +11,9 @@ Defects the runtime reports and the checker does not. Each is a missing violatio
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
-- Hand-off of the site's function by name (saturation research 2026-11-01, held hand-off layers): an owner operation in a closure a wrapper or a timer runs is placed owned by the region it is written in (13 probes; a first fix turned ADR 0347's dormant exports into violations and was not landed), a read in a function handed by name to `forEach`, `sort`, `new Promise`, `.call` or `Reflect.apply` is attributed only at named calls (13 probes), and a write climb that exhausts its 16-layer bound takes the lexical role (2 probes). Main has all three.
+
+- Fuzzer `ref-factory-body` with a helper or IIFE layer and a `hook-member`, `or-assign` or `bind` binding (about 190 recall programs, ADR 0527): the read reaches the layer through a binding dispatch, ADR 0522's non-layer edge; certified clean.
+- Fuzzer `pos-handler-expr` with some non-direct bindings (about 25 recall programs, ADR 0527): a read in the IIFE of a handler expression reached through an alias, tuple or hook binding of the memo variant; certified clean.
 
 - `c2d-method-tracked` (App.tsx:19, :32): a function registered from a method or helper called in tracked JSX, then run by a later component body, keeps its registrant's lexical role. Same family: c2, c2c, c3d.
 - `r10-destructured` (App.tsx:12): destructuring `useParams()` in setup reads the reactive parameter proxy, which the checker does not take as a reactive read.
@@ -140,6 +142,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
+- `missing-owner` (ADR 0534): unplaced callbacks, object members and module declarations are uncertain when `SiteReach` cannot prove dormancy.
 - A summary consumer's call inside a class member's body (`wrapUse()` or a hook's returned accessor in a constructor or method) is an uncertifiable `strict-read-untracked` wherever the class is constructed or called, in the body (rc.17 warns) as in a handler or a tracked attribute (rc.17 silent): the construction and member call are followed by nothing (ADRs 0516, 0522).
 - Instance field initializer: a violation whose primary location is in one is demoted to uncertifiable, whichever rule claimed it (`diagnostics.rs`, `site_in_instance_field`). Static fields and static blocks keep theirs.
 - Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); a read there is an uncertifiable `strict-read-untracked`, even where the runtime warns.
