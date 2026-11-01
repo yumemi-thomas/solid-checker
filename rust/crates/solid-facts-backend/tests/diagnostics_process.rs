@@ -1606,9 +1606,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         ("no-store-mutation-outside-setter", 7),
         ("leaf-owner-forbidden-call", 1),
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
-        // no longer named, so its cleanup is not reported; the rest of the
-        // breakdown is unchanged.
-        ("missing-owner", 7),
+        // no longer named, so its cleanup is not reported. Two more since ADR
+        // 0534: the wrapped and handed-on cleanups (lines 248 and 270) run in
+        // no proven region, so they are obligations, never silent.
+        ("missing-owner", 9),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -1631,8 +1632,8 @@ fn solid2_precision_corrections_are_end_to_end() {
             .iter()
             .filter(|start| **start > non_literal_leaf)
             .count(),
-        2,
-        "the referenced and out-of-band cleanups stay unowned; the wrapped one is not named (ADR 0345 review D)"
+        4,
+        "the referenced and out-of-band cleanups stay unowned; the wrapped and handed-on ones are obligations (ADR 0534)"
     );
 
     assert!(
@@ -2192,13 +2193,21 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
     if let Some(findings) = diagnostic_fixture("rc9-dynamic-static") {
         let owners = findings_for_rule(&findings, "missing-owner");
-        // StaticEffect, NamespaceStaticEffect, and the `untrack` reference.
+        // StaticEffect, NamespaceStaticEffect, and the `untrack` reference;
+        // the unproven-options effects are obligations (ADR 0534: no run of
+        // the source is proven under either form's owner), never violations.
         assert_eq!(
             owners
                 .iter()
-                .map(|finding| line(finding))
+                .map(|finding| (line(finding), finding["kind"].as_str()))
                 .collect::<Vec<_>>(),
-            [Some(20), Some(27), Some(33)],
+            [
+                (Some(20), Some("violation")),
+                (Some(27), Some("violation")),
+                (Some(33), Some("violation")),
+                (Some(91), Some("uncertifiable")),
+                (Some(99), Some("uncertifiable")),
+            ],
             "{findings:#?}"
         );
         let writes = findings_for_rule(&findings, "no-write-in-pure-computation");
@@ -2220,9 +2229,9 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             ],
             "{findings:#?}"
         );
-        // Nine findings, and the SC9014 notice: rc.9 is older than the
-        // audited rc.13 (ADR 0194).
-        assert_eq!(findings.len(), 10, "{findings:#?}");
+        // Eleven findings (two ADR 0534 owner obligations), and the SC9014
+        // notice: rc.9 is older than the audited rc.13 (ADR 0194).
+        assert_eq!(findings.len(), 12, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
