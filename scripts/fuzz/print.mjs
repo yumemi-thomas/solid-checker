@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "ref", "flow", "handler-expr", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -208,6 +208,8 @@ function render(program, instrument) {
   const ind = (depth) => INDENT.repeat(depth);
   // The line table: every lineable node's text is wrapped in span markers, read back (and stripped) below.
   const spans = [];
+  // The same-file children a callback prop renders (model.mjs `cbProp`): written after the components, which hoisting allows.
+  const kids = [];
   const span = (node, text) => {
     if (!LINE_KINDS.has(node.k)) return text;
     spans.push({ node, path: pathOf.get(node) });
@@ -502,6 +504,12 @@ function render(program, instrument) {
         const value = item.form === "array" ? `[${callback}, () => {}]` : item.form === "cond" ? `1 ? ${callback} : undefined` : callback;
         return [`${ind(depth)}<p ref={${value}} data-view="${item.id}">x</p>`];
       }
+      case "cbprop": {
+        const n = item.id.replace(/^\D+/, "");
+        const via = item.form === "forwarded" || item.form === "spread";
+        kids.push(...cbPropComponents(item, n));
+        return [`${ind(depth)}<${via ? "Fwd" : "Kid"}${n} run={${expr(item.e, depth)}} />`];
+      }
       case "show": {
         used.add("Show");
         return [`${ind(depth)}<Show when={${expr(item.when, depth)}}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Show>`];
@@ -520,6 +528,29 @@ function render(program, instrument) {
     }
   }
 
+  /**
+   * A callback prop's child `KidN` (model.mjs CBP_CALLS: where it calls `run`) and, for a forwarded or spread one, the `FwdN` between
+   * it and C1. Neither is exported: the runtime renders every exported component on its own, with no props.
+   */
+  function cbPropComponents(item, n) {
+    const type = "{ run: () => void }";
+    const run = item.form === "destructured" ? "run()" : "props.run()";
+    const element = `<p data-view="k${n}">x</p>`;
+    let body;
+    switch (item.call) {
+      case "body": body = [`${run};`, `return ${element};`]; break;
+      case "jsx": body = [`return <p data-view="k${n}">{(${run}, "x")}</p>;`]; break;
+      case "handler": body = [`return <button data-act="k${n}" onClick={() => { ${run}; }}>go</button>;`]; break;
+      case "apply": used.add("createEffect"); body = [`createEffect(() => 1, () => { ${run}; });`, `return ${element};`]; break;
+      case "settled": used.add("onSettled"); body = [`onSettled(() => { ${run}; });`, `return ${element};`]; break;
+      case "never": body = [`return ${element};`]; break;
+      default: throw new Error(`unknown callback prop call ${item.call}`);
+    }
+    const lines = [`function Kid${n}(${item.form === "destructured" ? `{ run }: ${type}` : `props: ${type}`}) {`, ...body.map((line) => `${INDENT}${line}`), "}", ""];
+    if (item.form === "forwarded") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} run={props.run} />;`, "}", "");
+    if (item.form === "spread") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} {...props} />;`, "}", "");
+    return lines;
+  }
   const signalLine = (sig) => signalText(sig, signals, used);
   const out = [];
   // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
@@ -553,6 +584,7 @@ function render(program, instrument) {
     });
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
+  out.push(...kids);
   // The parents of the mount axis: each renders its child component in its own JSX.
   // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
   const parentWeb = new Set();
@@ -799,6 +831,10 @@ export function drivingPlan(program) {
   const clicks = [];
   // A parent that mounts its child later (mounts.mjs LATER_MOUNTS) does so on its button, before the child's own buttons exist.
   program.components.filter((c) => c.mount).forEach((component, index) => { if (LATER_MOUNTS.includes(component.mount)) clicks.push(`pm${index + 1}`); });
-  for (const { node } of walk(program)) if (node.k === "button") clicks.push(node.id);
+  for (const { node } of walk(program)) {
+    if (node.k === "button") clicks.push(node.id);
+    // A callback prop called from its child's handler (model.mjs `cbProp`): the child's button.
+    if (node.k === "cbprop" && node.call === "handler") clicks.push(`k${node.id.replace(/^\D+/, "")}`);
+  }
   return { clicks, settleMs: 400 };
 }

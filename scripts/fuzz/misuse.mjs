@@ -15,6 +15,7 @@
 import {
   walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  CBP_CALLS, CBP_FORMS, cbProp,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -419,7 +420,52 @@ const FLOW_PLACEMENT = {
   NO_OWNER_EFFECT: { legal: FLOW_CONTEXTS },
   NO_OWNER_CONTEXT: { legal: FLOW_CONTEXTS },
 };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+/**
+ * The callback props (`--recall` only; catalogue rank 3, section 3.11): C1 hands the site's function to a same-file child as a prop,
+ * `<KidN run={() => { …site… }} />`, and the child calls `props.run()` in its body, its JSX, a click handler, an effect apply,
+ * `onSettled`, or never (model.mjs CBP_CALLS); `run` is written inline, named by C1 (`function runN() {}`), forwarded by a middle
+ * component, destructured by the child, or spread by a middle component (CBP_FORMS). `cbp-<call>` is the inline form,
+ * `cbp-<call>-<form>` the others. Measured on rc.17's fast runtime first (2026-11-01, 372 programs, probe in
+ * /tmp/sc-scratch.noindex/callback-props; the five forms agree on every site): the call runs where the child places it.
+ *   body      the child's body (owned, labelled "<KidN>"): a write, a refresh or an action throws, a read warns, a pending read
+ *             throws, a store proxy write warns, an owner operation is legal, a no-default `useContext` reports CONTEXT_NOT_FOUND
+ *   jsx       a render effect (owned, tracked): a write or an action throws, a read is silent, a pending read is
+ *             ASYNC_OUTSIDE_LOADING_BOUNDARY, a store proxy write warns, an owner operation is legal, CONTEXT_NOT_FOUND
+ *   handler   no owner: a write, an action and a read are legal; `onCleanup`, an effect, a boundary, `useContext` and `onSettled`
+ *             report NO_OWNER_*; a store proxy write warns
+ *   apply     an effect apply (no owner, strict-read window open): a write and an action are legal; a read warns, a pending read
+ *             throws; `onCleanup`, a boundary, `useContext`, `onSettled` report NO_OWNER_*; a primitive is PRIMITIVE_IN_EFFECT_CALLBACK,
+ *             `flush()` FLUSH_IN_EFFECT_CALLBACK
+ *   settled   onSettled's leaf owner: a write, an action, a read and `useContext` are legal; `onCleanup` is CLEANUP_IN_FORBIDDEN_SCOPE,
+ *             a primitive or boundary PRIMITIVE_IN_FORBIDDEN_SCOPE, a pending read PENDING_ASYNC_FORBIDDEN_SCOPE, `flush()`
+ *             FLUSH_IN_TRACKED_QUEUE_CALLBACK, `onSettled` SETTLED_CLEANUP_UNOWNED, CONTEXT_NOT_FOUND
+ *   never     the site never runs: legal for every code
+ * Not cells: an effect in an apply (PRIMITIVE_IN_EFFECT_CALLBACK, not NO_OWNER_EFFECT) or in onSettled, a boundary in onSettled,
+ * a pending read in JSX or onSettled for PENDING_ASYNC_UNTRACKED_READ (another code fires there, so neither misuse nor legal).
+ */
+export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
+const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.includes(/^cbp-([a-z]+)/.exec(context)[1]));
+const CBP_PLACEMENT = {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: cbp("body", "jsx", "handler", "apply", "settled"), legal: cbp("never") },
+  STRICT_READ_UNTRACKED: { misuse: cbp("body", "apply"), legal: cbp("jsx", "handler", "settled", "never") },
+  PENDING_ASYNC_UNTRACKED_READ: { misuse: cbp("body", "apply"), legal: cbp("handler", "never") },
+  NO_OWNER_CLEANUP: { misuse: cbp("handler", "apply"), legal: cbp("body", "jsx", "never") },
+  NO_OWNER_EFFECT: { misuse: cbp("handler"), legal: cbp("body", "jsx", "never") },
+  NO_OWNER_BOUNDARY: { misuse: cbp("handler", "apply"), legal: cbp("body", "jsx", "never") },
+  NO_OWNER_CONTEXT: { misuse: cbp("handler", "apply"), legal: cbp("body", "jsx", "settled", "never") },
+  SETTLED_CLEANUP_UNOWNED: { misuse: cbp("handler", "apply", "settled"), legal: cbp("body", "jsx", "never") },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { misuse: cbp("settled"), legal: cbp("body", "jsx", "never") },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { misuse: cbp("settled"), legal: cbp("body", "jsx", "never") },
+  PRIMITIVE_IN_EFFECT_CALLBACK: { misuse: cbp("apply"), legal: cbp("body", "jsx", "never") },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { misuse: cbp("settled"), legal: cbp("handler", "never") },
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { misuse: cbp("jsx"), legal: cbp("handler", "never") },
+  FLUSH_IN_EFFECT_CALLBACK: { misuse: cbp("apply"), legal: cbp("body", "jsx", "handler", "never") },
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { misuse: cbp("settled"), legal: cbp("body", "jsx", "handler", "never") },
+  CONTEXT_NOT_FOUND: { misuse: cbp("body", "jsx", "settled"), legal: cbp("never") },
+};
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -730,6 +776,14 @@ function recallContext(context, stmts, kit) {
       return { body: [], view: [item], loading: true };
     }
     default: {
+      // `cbp-<call>[-<form>]` (CBP_CONTEXTS): the site in a callback prop a same-file child calls.
+      const prop = /^cbp-([a-z]+)(?:-([a-z]+))?$/.exec(context);
+      if (prop && CBP_CALLS.includes(prop[1]) && CBP_FORMS.includes(prop[2] ?? "inline") && prop[2] !== "inline") {
+        const [, call, form = "inline"] = prop;
+        if (form !== "named") return { body: [], view: [cbProp(kit.name("v"), fn(stmts), call, form)] };
+        const r = kit.name("run");
+        return { body: [decl(r, fn(stmts, { form: "function" }))], view: [cbProp(kit.name("v"), ref(r), call, form)] };
+      }
       // `flow-<form>` (FLOW_CONTEXTS): the site in the body of a flow component's function child.
       const flow = /^flow-(.+)$/.exec(context)?.[1];
       if (flow && FLOW_FORMS.includes(flow)) return { body: [], view: [flowEl(kit.name("v"), flow, stmts)] };

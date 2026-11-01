@@ -144,6 +144,15 @@ export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
 export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
 /** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
 export const flowEl = (id, flow, body) => ({ k: "flow", id, flow, body });
+/**
+ * A callback prop (misuse.mjs CBP_CONTEXTS): `<KidN run={e} />`, where `KidN` is a component of the same file that calls
+ * `props.run()` at `call` (CBP_CALLS: in its body, its JSX, a click handler, an effect apply, `onSettled`, or never); `form`
+ * (CBP_FORMS) is how `run` reaches it: written inline or named by C1 (`e` a function or a name), forwarded by `FwdN`
+ * (`<KidN run={props.run} />`), destructured by `KidN` (`({ run })`), or spread by `FwdN` (`<KidN {...props} />`).
+ */
+export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never"];
+export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
+export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
 /** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD). */
 export const loadingView = (on, children) => ({ k: "loading", on, children });
 
@@ -340,6 +349,12 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "ref": {
           const type = typeOf(item.e, scope);
           if (type && type.t !== "fn") fail(`${where}: a ref must be a function, not ${type.t}`);
+          break;
+        }
+        case "cbprop": {
+          if (!CBP_CALLS.includes(item.call) || !CBP_FORMS.includes(item.form)) fail(`${where}: unknown callback prop ${item.call}/${item.form}`);
+          const type = typeOf(item.e, scope);
+          if (type && type.t !== "fn") fail(`${where}: a callback prop must be a function, not ${type.t}`);
           break;
         }
         case "loading": sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
