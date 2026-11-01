@@ -513,6 +513,20 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether a rerun of the effect calls the cleanup the callback at
+    /// `argument` of `primitive` returned inside the apply's strict-read
+    /// window, so that a reactive read in that cleanup warns as one in the
+    /// apply does (ADR 0539). `false` claims nothing: the cleanup keeps the
+    /// role of a nested function no layer places.
+    fn returned_cleanup_reruns_in_read_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// What the dev owned-scope write guards (signal and store setters,
     /// `refresh`) do while the runtime disposes an owner
     /// ([`WriteGuardInDisposal`]): throw (a release before the `!disposalDepth`

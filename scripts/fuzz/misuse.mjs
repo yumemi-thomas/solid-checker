@@ -471,7 +471,8 @@ const CBP_PLACEMENT = {
  * (`effect-cleanup-rerun`, `render-cleanup-rerun`: the compute reads a signal a button sets to 2) and when its owner is disposed (a
  * root's `dispose()` from a button, a `Show` turned off, a `For` row removed: a button sets the condition to 0), in a user effect's
  * `error` arm (the compute throws once the button sets 2), in a render effect's apply on its rerun only (`render-apply-guarded-rerun`)
- * and in a `createReaction` callback. Measured on rc.17's fast runtime first (2026-11-01, 247 probes; `@solidjs/signals`
+ * and in a `createReaction` callback. `effect-cleanup-rerun-named` names the apply by a binding (ADR 0539: the checker read only
+ * inline applies' cleanups). Measured on rc.17's fast runtime first (2026-11-01, 247 probes; `@solidjs/signals`
  * dist/dev.js, dev-shared.js):
  *   cleanup on a rerun, render apply rerun, reaction   `runEffect` (dev.js:1991-2026) runs the previous cleanup and the apply in the
  *                       effect-callback window (`setStrictRead("an effect callback")`, `setEffectCallback(true)`) with no owner (the
@@ -485,9 +486,9 @@ const CBP_PLACEMENT = {
  * A store proxy write warns in each. A `createReaction` callback runs as its effect's apply (dev.js:2653-2664); its `error` handler is
  * the effect's error arm, the same as `effect-error-arm`.
  */
-export const EFFECT_WINDOW_CONTEXTS = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-dispose", "effect-cleanup-show", "effect-cleanup-for",
+export const EFFECT_WINDOW_CONTEXTS = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-rerun-named", "effect-cleanup-dispose", "effect-cleanup-show", "effect-cleanup-for",
   "effect-error-arm", "render-apply-guarded-rerun", "reaction"];
-const WINDOWED = ["effect-cleanup-rerun", "render-cleanup-rerun", "render-apply-guarded-rerun", "reaction"];
+const WINDOWED = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-rerun-named", "render-apply-guarded-rerun", "reaction"];
 const UNWINDOWED = ["effect-cleanup-dispose", "effect-cleanup-show", "effect-error-arm"];
 const ROW_DISPOSAL = ["effect-cleanup-for"];
 const EFFECT_WINDOW_PLACEMENT = {
@@ -773,6 +774,12 @@ function recallContext(context, stmts, kit) {
     case "render-cleanup-rerun": {
       const t = trigger();
       return { body: [expr(prim("render", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // ADR 0539: the apply named by a binding, not written inline.
+    case "effect-cleanup-rerun-named": {
+      const t = trigger();
+      const a = kit.name("apply");
+      return { body: [decl(a, fn([ret(fn(stmts))])), expr(prim("effect", fn([ret(read(t.name))]), { apply: ref(a) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
     case "effect-cleanup-dispose": {
       const d = kit.name("disp");

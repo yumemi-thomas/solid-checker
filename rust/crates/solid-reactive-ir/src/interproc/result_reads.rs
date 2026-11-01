@@ -364,14 +364,16 @@ fn call_result_reads(
     } else if !crate::execution_role::named_at_tracked_position(file, call.callee, lookup)
         && !continuation
         && (crate::local_access::escapes_nested(file, call.callee, lookup)
+            // ADR 0539: a hand-off whose carrier is unplaced is unplaced in a
+            // function a named callback nests too.
             || (in_named
-                && named_callback_execution_role(file, call.callee, lookup).is_none()
                 && (handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
-                    || crate::local_access::function_escapes_unfollowed(
-                        file,
-                        call.callee,
-                        lookup,
-                    ))))
+                    || (named_callback_execution_role(file, call.callee, lookup).is_none()
+                        && crate::local_access::function_escapes_unfollowed(
+                            file,
+                            call.callee,
+                            lookup,
+                        )))))
     {
         execution = ExecutionRole::Unknown;
     } else if !object_callable
@@ -386,7 +388,12 @@ fn call_result_reads(
         // silence. The direct-read path makes the same answer for a read
         // written in the member (`local_access`); a call there of a helper or
         // a hook's accessor returned silence.
-        if !crate::execution_role::inside_class_member(file, call.callee, lookup) {
+        // ADR 0539: so is a call in the cleanup an effect's apply returns,
+        // which a rerun may run in the apply's window (its role is unplaced).
+        if !crate::execution_role::inside_class_member(file, call.callee, lookup)
+            && !(execution == ExecutionRole::Unknown
+                && crate::execution_role::inside_rerun_effect_cleanup(file, call.callee, lookup))
+        {
             return;
         }
         execution = ExecutionRole::Unknown;

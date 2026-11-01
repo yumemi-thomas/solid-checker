@@ -242,5 +242,20 @@
    "mx-store-write-outside-setter-body-object-assign-direct-closure",
    "mx-store-write-outside-setter-body-destructure-assign-direct-none"
   ]
+ },
+ {
+  "finding": "A read in the cleanup an effect apply returns (inline or a named apply) was certified clean; rc.17 warns STRICT_READ_UNTRACKED when the effect reruns (ADR 0539)",
+  "found": "VM run full-7 on 5d848b2cf (3,828 certified false cleans in effect-cleanup-rerun and render-cleanup-rerun); the named apply by review of the fix",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-cleanup-rerun-signal-direct-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-memo-direct-helper",
+   "mx-strict-read-untracked-effect-cleanup-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-named-signal-direct-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-named-signal-wrapper-helper"
+  ],
+  "rediscovered": "5d848b2cf: the five are certified clean (full-7 rows; the named ones by batch3); the ADR 0539 build: obligations"
  }
 ]

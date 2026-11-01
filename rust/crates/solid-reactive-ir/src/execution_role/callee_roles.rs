@@ -533,6 +533,21 @@ pub(super) fn semantic_role_before_awaits(
             }
             return role_arm!("callee_roles.allowed-generator", ExecutionRole::Unknown);
         }
+        // ADR 0539: the cleanup an effect's apply returns runs on the effect's
+        // rerun in the apply's strict-read window, where rc.17 warns on a
+        // read; the owner's disposal calls it outside the window, and nothing
+        // orders that disposal against the rerun: unplaced, unless the
+        // effect's compute provably tracks nothing.
+        if !classifying.contains(&write_classification_marker())
+            && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+            && super::write_roles::windowed_returned_cleanup(file, function, lookup)
+                == Some(super::write_roles::WindowedCleanup::MayRerun)
+        {
+            return role_arm!(
+                "callee_roles.allowed-effect-cleanup-rerun",
+                ExecutionRole::Unknown
+            );
+        }
         return role_arm!(default "callee_roles.allowed-unplaced-nested", ExecutionRole::DeferredCallback);
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {

@@ -2058,10 +2058,12 @@ impl LocalAccessContext<'_, '_> {
                 || named_callback_execution_role(file, call.callee, self.lookup).is_some())
             // ADR 0535: in a function no named-callback role places, an
             // unplaced hand-off or an escape is an obligation below, never
-            // this role.
+            // this role. ADR 0539: so is a hand-off whose carrier is unplaced
+            // in a function a named callback nests (its default role is no
+            // placement).
+            && !handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
             && !(nested_named_function(file, call.callee, self.lookup)
-                && (handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
-                    || handed_to_unknown_code(file, call.callee, self.lookup)))
+                && handed_to_unknown_code(file, call.callee, self.lookup))
             && !escapes_nested(file, call.callee, self.lookup)
             && seen.insert(key.clone())
         {

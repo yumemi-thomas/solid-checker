@@ -786,6 +786,24 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// Source: `runEffect` opens the window (`setStrictRead("an effect
+    /// callback")`) before it calls the previous cleanup, then the apply
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1991-2005`); a read there
+    /// takes the strict-read warning (`dist/dev-shared.js:5441`). A tracked
+    /// effect calls its cleanup inside its compute, where `recompute` turns
+    /// tracking on and the window off (`dist/dev.js:2063-2066`,
+    /// `dist/dev-shared.js:4195-4201`).
+    fn returned_cleanup_reruns_in_read_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+        )
+    }
+
     /// Answered from the resolved `@solidjs/signals` (`releases.rs`): rc.17
     /// adds `!disposalDepth` to `setSignal` (`dist/dev-shared.js:5620-5626`),
     /// `markRefresh` (`:5801-5806`) and `devGuardStoreSetterWrite`

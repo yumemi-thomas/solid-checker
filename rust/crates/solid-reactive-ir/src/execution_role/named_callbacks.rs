@@ -692,6 +692,16 @@ pub(crate) fn named_callback_execution_role(
         return None;
     }
     let owner = containing_ast_function(&file.ast, span)?;
+    // ADR 0539: the cleanup a named apply returns runs on a rerun in the
+    // apply's window, or in the owner's disposal outside it: unplaced.
+    if owner.span != callback.span
+        && super::write_roles::inside_rerun_effect_cleanup(file, span, lookup)
+    {
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.effect-cleanup-rerun",
+            ExecutionRole::Unknown
+        ));
+    }
     if owner.span != callback.span {
         return Some(role_arm!(
             "named_callbacks.named_callback_execution_role.deferred-callback",

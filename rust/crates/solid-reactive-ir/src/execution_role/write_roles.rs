@@ -822,13 +822,38 @@ fn returned_effect_cleanup(
     lookup: &SemanticLookup<'_>,
     prove_rerun: bool,
 ) -> bool {
-    let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
+    let Some(outer) = function_returning(file, function) else {
         return false;
     };
+    file.ast
+        .arguments_containing(outer.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+        })
+        .any(|(call, index)| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .returned_cleanup_runs_outside_disposal(primitive, index)
+                        && (!prove_rerun
+                            || effect_provably_reruns(file, call, index, outer, function, lookup))
+                })
+        })
+}
+
+/// The function whose body returns `function` itself (an expression body or a
+/// `return` of that function, not of a nested one), if any.
+fn function_returning<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    let outer = crate::owners::owning_function(&file.ast, function.span)?;
     if !outer.body.contains(function.span) {
-        return false;
+        return None;
     }
-    let returned = outer
+    outer
         .expression_return
         .as_ref()
         .into_iter()
@@ -844,27 +869,154 @@ fn returned_effect_cleanup(
                     && crate::owners::owning_function(&file.ast, ret.span)
                         .is_some_and(|owner| owner.span == outer.span)
             })
-        });
-    returned
+        })
+        .then_some(outer)
+}
+
+/// ADR 0539: a read in `function`, when `function` is the cleanup an effect's
+/// apply returns and a rerun calls it in the apply's strict-read window
+/// ([`solid_dialect::Dialect::returned_cleanup_reruns_in_read_window`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum WindowedCleanup {
+    /// The effect's compute provably reads nothing ([`effect_never_reruns`]):
+    /// only a disposal calls the cleanup, outside the window.
+    NeverReruns,
+    /// A rerun may call it in the window; nothing orders the owner's disposal
+    /// (which would call it outside the window) against that rerun.
+    MayRerun,
+}
+
+/// ADR 0539: whether `span` runs in place in the cleanup an effect's apply
+/// returns, a rerun of which may call it in the apply's strict-read window
+/// ([`WindowedCleanup::MayRerun`]). An exhausted climb answers `true`.
+pub(crate) fn inside_rerun_effect_cleanup(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let at = match in_place_run_site(file, span, lookup) {
+        Some((climb, _)) if climb.exhausted => return true,
+        Some((climb, _)) => climb.at,
+        None => span,
+    };
+    crate::owners::containing_ast_function(&file.ast, at).is_some_and(|function| {
+        windowed_returned_cleanup(file, function, lookup) == Some(WindowedCleanup::MayRerun)
+    })
+}
+
+pub(super) fn windowed_returned_cleanup(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WindowedCleanup> {
+    let outer = function_returning(file, function)?;
+    let mut answer = None;
+    for (call, index) in file
+        .ast
+        .arguments_containing(outer.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+        })
+    {
+        let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+            continue;
+        };
+        if !lookup
+            .dialect
+            .returned_cleanup_reruns_in_read_window(primitive, index)
+        {
+            continue;
+        }
+        if effect_never_reruns(file, call, index) {
+            answer.get_or_insert(WindowedCleanup::NeverReruns);
+        } else {
+            return Some(WindowedCleanup::MayRerun);
+        }
+    }
+    // An apply named at the position (`createEffect(compute, apply)`): its
+    // compute is not read here, so a rerun is never excluded.
+    let named = lookup.named_callback_roles(file).get(outer.span);
+    if answer.is_none()
+        && named.effect_apply
+        && named
+            .effect_apply_primitive
+            .single()
+            .is_none_or(|primitive| {
+                lookup
+                    .dialect
+                    .returned_cleanup_reruns_in_read_window(primitive, 1)
+            })
+    {
+        return Some(WindowedCleanup::MayRerun);
+    }
+    answer
+}
+
+/// Whether the effect's compute (its first argument, an inline function the
+/// apply at `index` 1 follows) provably tracks nothing, so that the effect
+/// never reruns: a synchronous function with no call, no identifier
+/// reference, no `this`, `super` or `arguments` in its text, whose every
+/// `return` gives a primitive or nullish literal. Any other compute may track.
+fn effect_never_reruns(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> bool {
+    use solid_facts::ast::{IdentifierRole, RuntimeValueKind};
+    if index != 1 {
+        return false;
+    }
+    let Some(compute) = call
+        .arguments
+        .first()
+        .filter(|compute| !compute.spread)
+        .and_then(|compute| crate::cleanup::callback_argument_literal(file, compute.span))
+    else {
+        return false;
+    };
+    if compute.r#async || compute.generator {
+        return false;
+    }
+    let text = usize::try_from(compute.span.start)
+        .ok()
+        .zip(usize::try_from(compute.span.end).ok())
+        .and_then(|(start, end)| file.source.get(start..end));
+    let Some(text) = text else {
+        return false;
+    };
+    if ["this", "super", "arguments"]
+        .iter()
+        .any(|word| text.contains(word))
+    {
+        return false;
+    }
+    let returns_literal = |ret: &solid_facts::ast::ReturnFact| {
+        ret.argument.is_none()
+            || matches!(
+                ret.runtime_value_kind,
+                RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+            )
+    };
+    !file
+        .ast
+        .calls
+        .iter()
+        .any(|inner| compute.span.contains(inner.span))
+        && !file
+            .ast
+            .identifiers
+            .iter()
+            .any(|id| id.role == IdentifierRole::Reference && compute.body.contains(id.span))
+        && compute
+            .expression_return
+            .as_ref()
+            .is_none_or(returns_literal)
         && file
             .ast
-            .arguments_containing(outer.span)
-            .filter(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
-            })
-            .any(|(call, index)| {
-                lookup
-                    .primitive_at_call(file, call.span)
-                    .is_some_and(|primitive| {
-                        lookup
-                            .dialect
-                            .returned_cleanup_runs_outside_disposal(primitive, index)
-                            && (!prove_rerun
-                                || effect_provably_reruns(
-                                    file, call, index, outer, function, lookup,
-                                ))
-                    })
-            })
+            .returns
+            .iter()
+            .filter(|ret| compute.body.contains(ret.span))
+            .all(returns_literal)
 }
 
 /// Whether the effect whose apply (or tracked body) is `outer` provably tracks
