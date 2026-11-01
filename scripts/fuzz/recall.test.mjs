@@ -3,7 +3,7 @@ import { legalCells, recallLegalShapes, generateLegal } from "./legal.mjs";
 import { cellList, generateShape, gridShapes, recallShapes, shapeSeed } from "./matrix.mjs";
 import {
   CALLBACK_CONTEXTS, CALLBACK_FORMS, CALLEE_FORMS, RECALL_API_BINDINGS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, RECALL_VALUE_BINDINGS, SOURCE_AXES,
-  CBP_CONTEXTS, REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallLegalOf, recallVariantsOf,
+  CBP_CONTEXTS, EFFECT_WINDOW_CONTEXTS, REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallLegalOf, recallVariantsOf,
 } from "./misuse.mjs";
 import { CBP_CALLS, CBP_FORMS } from "./model.mjs";
 import { RECALL_MOUNTS, mountParts } from "./mounts.mjs";
@@ -268,5 +268,30 @@ describe("the callback props (recall only)", () => {
     expect(files("cbp-settled").files["App.tsx"]).toMatch(/import \{[^}]*onSettled[^}]*\} from "solid-js";[^]*onSettled\(\(\) => \{ props\.run\(\); \}\);/);
     const never = generateLegal({ seed: 1 }, { code: "STORE_WRITE_OUTSIDE_SETTER", context: "cbp-never" }, { shape: { variant: "assign", binding: "direct", layer: "none" } }).built.files["App.tsx"];
     expect(never).toMatch(/function Kid\d+\(props: \{ run: \(\) => void \}\) \{\n  return <p data-view="k\d+">x<\/p>;\n\}/);
+  });
+});
+
+describe("the effect windows (recall only)", () => {
+  const isWindow = (cell) => EFFECT_WINDOW_CONTEXTS.includes(cell.context);
+  it("are recall cells of the misuse and legal grids, never base cells", () => {
+    expect(cellList().filter(isWindow)).toEqual([]);
+    expect(legalCells().filter((cell) => isWindow(cell) && cell.context !== "render-apply-guarded-rerun")).toEqual([]);
+    expect(cellList({ recall: true })).toContainEqual({ code: "STRICT_READ_UNTRACKED", context: "effect-cleanup-rerun" });
+    expect(cellList({ recall: true })).toContainEqual({ code: "ACTION_CALLED_IN_OWNED_SCOPE", context: "effect-cleanup-for" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "effect-cleanup-rerun" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "NO_OWNER_CLEANUP", context: "effect-cleanup-for" });
+  });
+  it("an unowned effect out of the window is not a legal PRIMITIVE_IN_EFFECT_CALLBACK program", () => {
+    const variants = new Set(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-error-arm").map((shape) => shape.variant));
+    expect([...variants].sort()).toEqual(["memo", "root"]);
+    expect(recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-cleanup-rerun").some((shape) => shape.variant === "effect")).toBe(true);
+  });
+  it("prints each window", () => {
+    expect(text("STRICT_READ_UNTRACKED", "render-cleanup-rerun", { variant: "signal" })["App.tsx"]).toMatch(/createRenderEffect\(\(\) => \{\s+return t\d+\(\);[^]*\(v\) => \{\s+return \(\) => \{\s+r\d+\(\);/);
+    expect(text("NO_OWNER_CLEANUP", "effect-cleanup-dispose")["App.tsx"]).toMatch(/const disp\d+ = createRoot\(\(dispose\) => \{[^]*return \(\) => \{\s+onCleanup[^]*return dispose;[^]*onClick=\{\(\) => \{\s+disp\d+\(\);/);
+    expect(text("NO_OWNER_CLEANUP", "effect-cleanup-show")["App.tsx"]).toMatch(/<Show when=\{t\d+\(\)\}>\s+\{\(_u\) => \{\s+createEffect\([^]*setT\d+\(0\)/);
+    expect(text("ACTION_CALLED_IN_OWNED_SCOPE", "effect-cleanup-for")["App.tsx"]).toMatch(/<For each=\{t\d+\(\) \? \[1\] : \[\]\}>/);
+    expect(text("NO_OWNER_CLEANUP", "effect-error-arm")["App.tsx"]).toMatch(/createEffect\(\(\) => \{ if \(t\d+\(\) === 2\) throw new Error\("x"\); return 1; \}, \{ effect: \(\) => \{\}, error: \(\) => \{\s+onCleanup/);
+    expect(text("FLUSH_IN_EFFECT_CALLBACK", "reaction")["App.tsx"]).toMatch(/const track\d+ = createReaction\(\(\) => \{\s+flush\(\);\s+\}\);\s+track\d+\(\(\) => \{\s+t\d+\(\);/);
   });
 });

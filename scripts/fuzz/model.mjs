@@ -27,7 +27,7 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -143,7 +143,9 @@ export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
 /** The flow components whose function child the `flow` item writes a body for (`FLOW_FORMS`, misuse.mjs `FLOW_CONTEXTS`). */
 export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
 /** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
-export const flowEl = (id, flow, body) => ({ k: "flow", id, flow, body });
+// `on` (misuse.mjs EFFECT_WINDOW_CONTEXTS): a signal the flow's condition reads (`<Show when={t()}>`, `<For each={t() ? [1] : []}>`), so a
+// button writing 0 disposes the body's owner; absent, the condition is the constant it always was.
+export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, body, ...extra });
 /**
  * A callback prop (misuse.mjs CBP_CONTEXTS): `<KidN run={e} />`, where `KidN` is a component of the same file that calls
  * `props.run()` at `call` (CBP_CALLS: in its body, its JSX, a click handler, an effect apply, `onSettled`, or never); `form`
@@ -343,6 +345,10 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "handler-expr": typeOf(item.e, scope); break;
         case "flow": {
           if (!FLOW_FORMS.includes(item.flow)) fail(`${where}: unknown flow ${item.flow}`);
+          if (item.on !== undefined) {
+            sigCheck(item.on, "read");
+            if (!["for", "show"].includes(item.flow)) fail(`${where}: only For and Show take a condition signal`);
+          }
           checkBlock(item.body, scopeOf(scope), "free");
           break;
         }
@@ -525,6 +531,14 @@ export function validate(program, { maxNodes = 400 } = {}) {
       switch (e.name) {
         case "memo": return T.acc(fnTypeChecked(e.fn, scope, RETURNS.memo).ret);
         case "effect": {
+          // `errorArm` (misuse.mjs `effect-error-arm`): `fn` is the bundle's `error` handler; the printed compute throws once the
+          // signal `errorArm` names reads 2, and the bundle's `effect` is empty.
+          if (e.errorArm !== undefined) {
+            sigCheck(e.errorArm, "read");
+            if (e.apply) fail(`${where}: an error-arm effect takes no apply`);
+            fnTypeChecked(e.fn, scope, "free");
+            return T.void;
+          }
           const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
           if (!e.apply) fail(`${where}: effect without an apply`);
           else fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
@@ -550,6 +564,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
           return T.void;
         }
         case "tracked": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // createReaction(effectFn): the tracker it returns takes the tracking function.
+        case "reaction": fnTypeChecked(e.fn, scope, RETURNS.applyFn); return T.fn(T.void);
         // action(function* () { ... }): the generator body is a block; its result is the action function.
         case "action": fnTypeChecked(e.fn, scope, "free"); return T.fn(T.unknown);
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;

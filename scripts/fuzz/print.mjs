@@ -442,7 +442,12 @@ function render(program, instrument) {
     const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       case "memo": used.add("createMemo"); return `createMemo(${f})`;
-      case "effect": used.add("createEffect"); return `createEffect(${f}, ${applyText(e.apply, depth)})`;
+      case "effect":
+        used.add("createEffect");
+        // `errorArm` (model.mjs): the compute throws once the signal reads 2; `fn` is the bundle's error handler.
+        if (e.errorArm !== undefined) return `createEffect(() => { if (${e.errorArm}() === 2) throw new Error("x"); return 1; }, { effect: () => {}, error: ${f} })`;
+        return `createEffect(${f}, ${applyText(e.apply, depth)})`;
+      case "reaction": used.add("createReaction"); return `createReaction(${f})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
       case "owner": {
@@ -490,7 +495,9 @@ function render(program, instrument) {
         // The function child's body: the statements, then one element (a selector must match exactly one).
         const element = item.flow.startsWith("for") ? "li" : "p";
         const body = block(item.body, depth + 1, entryFor(item, "flow"), [], [`return <${element} data-view="${item.id}">x</${element}>;`]);
-        const open = { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
+        // `on` (model.mjs flowEl): the condition reads a signal a button sets to 0, which disposes the row or the branch.
+        const open = item.on !== undefined ? { for: `<For each={${item.on}() ? [1] : []}>`, show: `<Show when={${item.on}()}>` }[item.flow]
+          : { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
         const close = { for: "</For>", "for-unkeyed": "</For>", show: "</Show>", "show-keyed": "</Show>", match: "</Switch>", repeat: "</Repeat>" }[item.flow];
         for (const name of { for: ["For"], "for-unkeyed": ["For"], show: ["Show"], "show-keyed": ["Show"], match: ["Switch", "Match"], repeat: ["Repeat"] }[item.flow]) used.add(name);
         // A `Show`/`Match` child takes its parameter: rc.17 runs a function child only when `child.length > 0` (`solid.dev.js:1587`,

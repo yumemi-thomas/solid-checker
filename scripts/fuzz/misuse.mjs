@@ -147,8 +147,9 @@ export const MODULE = { "solid-js": "S", "@solidjs/web": "W" };
  */
 const OWNER_LIFETIME = ["root-named", "root-method", "root-hook", "root-stored", "owner-bound", "owner-create"];
 // Measured in Chrome (2026-10-30): a signal write or an action call in an effect's returned cleanup on a rerun reports nothing on
-// rc.17 (a store write there does, so the cleanup runs), and a component rendered in a timer reports nothing from its `onSettled`:
-// neither is a misuse context. A write in a cleanup's `createRoot` is exempt (the disposal); an action call there throws.
+// rc.17 (a store write there does, so the cleanup runs; both are legal cells of EFFECT_WINDOW_CONTEXTS), and a component rendered in a
+// timer reports nothing from its `onSettled`: not a misuse context. A write in a cleanup's `createRoot` is exempt (the disposal); an
+// action call there throws.
 const FALSE_CLEAN_CONTEXTS = ["comp-slot", "comp-rendered"];
 const ASYNC_CONTROL = ["async-loop", "async-for-await", "async-finally"];
 /** The contexts whose site sits in a callback handed to a primitive: the callback-form axis can pass it by name. */
@@ -465,7 +466,50 @@ const CBP_PLACEMENT = {
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { misuse: cbp("settled"), legal: cbp("body", "jsx", "handler", "never") },
   CONTEXT_NOT_FOUND: { misuse: cbp("body", "jsx", "settled"), legal: cbp("never") },
 };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+/**
+ * The effect windows (`--recall` only; catalogue rank 4): the site in an effect's returned cleanup when the effect reruns
+ * (`effect-cleanup-rerun`, `render-cleanup-rerun`: the compute reads a signal a button sets to 2) and when its owner is disposed (a
+ * root's `dispose()` from a button, a `Show` turned off, a `For` row removed: a button sets the condition to 0), in a user effect's
+ * `error` arm (the compute throws once the button sets 2), in a render effect's apply on its rerun only (`render-apply-guarded-rerun`)
+ * and in a `createReaction` callback. Measured on rc.17's fast runtime first (2026-11-01, 247 probes; `@solidjs/signals`
+ * dist/dev.js, dev-shared.js):
+ *   cleanup on a rerun, render apply rerun, reaction   `runEffect` (dev.js:1991-2026) runs the previous cleanup and the apply in the
+ *                       effect-callback window (`setStrictRead("an effect callback")`, `setEffectCallback(true)`) with no owner (the
+ *                       flush): a read warns, a primitive or flush reports, an owner operation is NO_OWNER_*, a write or an action is legal
+ *   cleanup on a root's dispose or a Show turned off   `disposeChildren` (dev-shared.js:1287-1293) under `enterDisposal`, no owner and
+ *                       no window: a read, a write, an action, a primitive and flush are silent; an owner operation is NO_OWNER_*
+ *   cleanup on a For row removed   the row is disposed inside `runWithOwner(this._owner)` (dev.js:3347): owned and under disposal, so a
+ *                       write is exempt (dev-shared.js:5621-5626) but an action throws (its guard has no disposal exemption, dev.js:1535)
+ *                       and an owner operation is silent
+ *   error arm           `_errorFn` runs from `runEffect` (dev.js:1966-1989) outside the window and with no owner: like a root's dispose
+ * A store proxy write warns in each. A `createReaction` callback runs as its effect's apply (dev.js:2653-2664); its `error` handler is
+ * the effect's error arm, the same as `effect-error-arm`.
+ */
+export const EFFECT_WINDOW_CONTEXTS = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-dispose", "effect-cleanup-show", "effect-cleanup-for",
+  "effect-error-arm", "render-apply-guarded-rerun", "reaction"];
+const WINDOWED = ["effect-cleanup-rerun", "render-cleanup-rerun", "render-apply-guarded-rerun", "reaction"];
+const UNWINDOWED = ["effect-cleanup-dispose", "effect-cleanup-show", "effect-error-arm"];
+const ROW_DISPOSAL = ["effect-cleanup-for"];
+const EFFECT_WINDOW_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: EFFECT_WINDOW_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: ROW_DISPOSAL, legal: [...WINDOWED, ...UNWINDOWED] },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: EFFECT_WINDOW_CONTEXTS },
+  NO_OWNER_CLEANUP: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  // In the window an effect is PRIMITIVE_IN_EFFECT_CALLBACK, not this code: neither cell.
+  NO_OWNER_EFFECT: { misuse: UNWINDOWED, legal: ROW_DISPOSAL },
+  NO_OWNER_BOUNDARY: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  NO_OWNER_CONTEXT: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  SETTLED_CLEANUP_UNOWNED: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  // Out of the window an unowned effect is NO_OWNER_EFFECT: the `effect` variant is not a legal program there (`recallVariantsNotIn`).
+  PRIMITIVE_IN_EFFECT_CALLBACK: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
+  FLUSH_IN_EFFECT_CALLBACK: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
+};
+SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn = Object.fromEntries(UNWINDOWED.map((context) => [context, ["effect"]]));
+// Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
+// instead (fast runtime, 2026-11-01): Solid never names this code there.
+SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"] };
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -725,6 +769,30 @@ function recallContext(context, stmts, kit) {
     case "effect-cleanup-rerun": {
       const t = trigger();
       return { body: [expr(prim("effect", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    case "render-cleanup-rerun": {
+      const t = trigger();
+      return { body: [expr(prim("render", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    case "effect-cleanup-dispose": {
+      const d = kit.name("disp");
+      const effect = expr(prim("effect", fn([ret(num(1))]), { apply: fn([ret(fn(stmts))]) }));
+      return { body: [decl(d, prim("rootd", fn([effect, ret(ref("dispose"))])))], view: [button(kit.name("b"), [expr(call(ref(d)))])] };
+    }
+    case "effect-cleanup-show": case "effect-cleanup-for": {
+      const t = trigger();
+      const effect = expr(prim("effect", fn([ret(num(1))]), { apply: fn([ret(fn(stmts))]) }));
+      const flow = context === "effect-cleanup-show" ? "show" : "for";
+      return { body: [], view: [flowEl(kit.name("v"), flow, [effect], { on: t.name }), button(kit.name("b"), [expr(write(t.name, 0))])], sigs: [t] };
+    }
+    case "effect-error-arm": {
+      const t = trigger();
+      return { body: [expr(prim("effect", fn(stmts), { errorArm: t.name }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    case "reaction": {
+      const t = trigger();
+      const track = kit.name("track");
+      return { body: [decl(track, prim("reaction", fn(stmts))), expr(call(ref(track), [fn([expr(read(t.name))])]))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
     case "comp-slot": return { body: [contain("comp-slot", 9, [...stmts, ret(num(1))])], view: [] };
     case "comp-rendered": return { body: [contain("comp-rendered", 9, [...stmts, ret(jsx())])], view: [] };

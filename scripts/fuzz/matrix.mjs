@@ -169,11 +169,13 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  */
 export function recallAxes(code, context, base, variants, { legal = false } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
-  const shapes = recallCell ? [...base] : [];
+  // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
+  const takes = (variant) => !SPEC[code].recallVariantsNotIn?.[context]?.includes(variant);
+  const shapes = recallCell ? base.filter((shape) => takes(shape.variant)) : [];
   // A callback-prop context (misuse.mjs CBP_CONTEXTS) takes its base grid only: its own axis is the pass form (30 contexts a code),
   // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold.
   if (CBP_CONTEXTS.includes(context)) return shapes;
-  for (const variant of variants) {
+  for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
     // axes are written on the local source, which it cannot take.
     if (SPEC[code].variantSources?.[variant]) continue;
@@ -184,13 +186,15 @@ export function recallAxes(code, context, base, variants, { legal = false } = {}
     for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
   }
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
-  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context))) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
-  const local = base.filter((shape) => !shape.mount && !shape.source);
+  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context)).filter(takes)) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
+  const local = base.filter((shape) => !shape.mount && !shape.source && takes(shape.variant));
   if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's
   // strict-read window never opens there: rc.17 is silent on a stale body read, and a pending one re-runs the body without end.
   const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
-  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled)) for (const shape of local) shapes.push({ ...shape, mount });
+  // A mount a recall-only context's code cannot take (`recallMountsNotIn`: there Solid reports nothing).
+  const mountTakes = (mount) => !SPEC[code].recallMountsNotIn?.[context]?.includes(mount);
+  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount)) for (const shape of local) shapes.push({ ...shape, mount });
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
