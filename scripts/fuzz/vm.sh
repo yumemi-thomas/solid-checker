@@ -69,6 +69,18 @@ place_storage() {
     fi"
 }
 
+# The per-program work directories (the checker's, the fast runtime's, Chrome's) on tmpfs. A grid creates and deletes a directory
+# per program, about a million a full run: on the VM's disk each one is a write to a disk image in the host's home directory, which
+# kept the host's fseventsd at a full core (2026-11-02). In RAM they cost the host nothing and never reach the image. Grid outputs and
+# the runtime cache stay on the data disk. Idempotent: a mounted directory is left as it is; a reboot empties them, which loses nothing.
+scratch_in_ram() {
+  vm "set -euo pipefail
+    for d in $clone/scripts/runtime-oracle-install/.solid-checker-fuzz $clone/scripts/runtime-oracle-install/.solid-checker-fuzz-chrome $clone/scripts/fuzz/install/.solid-checker-fuzz-fast; do
+      mkdir -p \$d
+      mountpoint -q \$d || { sudo mount -t tmpfs -o size=${FUZZ_VM_SCRATCH_GIB:-8}g,mode=0755,uid=\$(id -u),gid=\$(id -g) tmpfs \$d && echo \"vm.sh: \$d on tmpfs\"; }
+    done"
+}
+
 # Refuse a run the VM's disk cannot hold: below 10 GiB or 10% of the inodes free where runs/ and tmp/ live.
 preflight() {
   vm "set -euo pipefail; mkdir -p $root/runs $root/tmp
@@ -128,6 +140,7 @@ sync() {
     node -e 'import(\"./scripts/playwright-browser.mjs\").then((m) => m.pinnedBrowser())' 2>/dev/null || {
       (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install chromium-headless-shell >/dev/null && sudo env PATH=\$PATH ./node_modules/.bin/playwright install-deps chromium-headless-shell >/dev/null)
     }"
+  scratch_in_ram
 }
 
 case "${1:-}" in
