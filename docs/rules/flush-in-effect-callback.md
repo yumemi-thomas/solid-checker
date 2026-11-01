@@ -135,7 +135,13 @@ effect.
   the effect. Unresolved callees, generators (calling one runs none of its
   body), methods, parameter initializers, a `let` helper, a callback handed to
   a timer, listener or promise, and an async function's code after its first
-  `await` are not claimed.
+  `await` are not claimed. A named function handed to an inline carrier
+  (`[1].forEach(f)`, ``f`x` ``, `f.call(…)`, `Reflect.apply(f, …)`) runs at
+  the carrier, which is a layer; a callback prop of a project component that
+  only calls it (`props.run()`, a destructured `run()`) runs at those calls
+  (ADR 0538). One handed to a project helper, written as a member's value or
+  an object slot, or a method of a class written in the apply is reported as
+  uncertifiable, anchored at the code around it.
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or

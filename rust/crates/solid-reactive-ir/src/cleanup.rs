@@ -1454,9 +1454,18 @@ fn argument_body_operations(
         );
     }
     let lookup = resolution.lookup;
-    let Some((function_file, function)) = lookup
+    let peeled = file.ast.peel_ts_sugar_span(argument);
+    // ADR 0538: a position the demand table does not carry (a template's tag)
+    // is read through its declaration, the same exact symbol.
+    let symbol = lookup
         .entities()
-        .at(file.path.as_str(), file.ast.peel_ts_sugar_span(argument))
+        .at(file.path.as_str(), peeled)
+        .or_else(|| {
+            file.ast
+                .reference_declaration(peeled)
+                .and_then(|declaration| lookup.entities().at(file.path.as_str(), declaration))
+        });
+    let Some((function_file, function)) = symbol
         .and_then(|symbol| lookup.function_for_symbol(symbol))
         .filter(|(function_file, function)| {
             lookup.function_value_is_current(function_file, function)

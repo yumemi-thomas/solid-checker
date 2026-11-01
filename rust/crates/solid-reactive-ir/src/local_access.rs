@@ -4517,7 +4517,7 @@ pub(crate) fn inline_carriers(
 /// project code or an unresolved call (`run(hf)`, `box.forEach(hf)`), which
 /// may run it anywhere, or written as a member's value. A host that keeps it
 /// (`addEventListener`) runs it later, as the lexical role already says.
-fn handed_to_unknown_code(
+pub(crate) fn handed_to_unknown_code(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
@@ -4553,6 +4553,31 @@ pub(crate) fn member_assigned(
             && file.ast.peel_ts_sugar_span(assignment.value_span) == function.span
             && file.ast.member_at(assignment.target).is_some()
     })
+}
+
+/// ADR 0538: whether `function` is the value of an object literal's data
+/// property (`{ m: () => … }`): it runs wherever the object's member is
+/// called, which the receiver-less walks do not follow.
+pub(crate) fn object_slot_value(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.ast.object_properties.iter().any(|property| {
+        property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
+    })
+}
+
+/// ADR 0538: whether `function`'s run is one the step and effect-phase walks
+/// cannot place: written as a member's value or an object slot, or its binding
+/// handed whole to project code or an unresolved call
+/// ([`handed_to_unknown_code`]). A hand-off to a fresh-stack scheduler or a
+/// host that keeps the listener is placed (it runs elsewhere) and is not this.
+pub(crate) fn run_unplaced(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    object_slot_value(file, function) || handed_to_unknown_code(file, function.body, lookup)
 }
 
 pub(crate) fn function_escapes_unfollowed(
@@ -4693,7 +4718,7 @@ fn function_handed_unfollowed(
 /// ADR 0531: how one reference of a function's binding hands the function
 /// over, read from the reference's own position.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum HandOff {
+pub(crate) enum HandOff {
     /// A direct call of the binding (`f()`, `new F()`): the summaries
     /// attribute the body's reads at the call.
     Call,
@@ -4769,7 +4794,7 @@ fn binding_hand_offs(
 /// [`HandOff`] of the reference at `at`. Every carrier is the compiler-selected
 /// standard-library declaration's, never a spelling: a local `forEach` or a
 /// project helper's parameter is `Unfollowed`.
-fn hand_off_at(
+pub(crate) fn hand_off_at(
     file: &solid_facts::FileFacts,
     at: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,

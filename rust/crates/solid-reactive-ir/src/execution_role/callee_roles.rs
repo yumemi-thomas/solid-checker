@@ -1210,6 +1210,176 @@ pub(super) fn callee_parameter_use_role(
     (calls > 0).then_some(role).flatten()
 }
 
+/// ADR 0538: the calls a project component makes of the callback prop
+/// `literal` is the arrow value of, when the prop reaches nothing else. The
+/// component's props parameter is one identifier read only as static members
+/// (`props.run()`), or an object pattern binding the prop to one identifier
+/// (`{ run }`), and this prop's every use is a direct call or a test (which
+/// runs nothing). `None` when the element spreads, another prop's value binds
+/// `this` and is reached through the props object, the parameter or the
+/// binding is written, a slot is computed or a rest, or a use is anything
+/// else (a value passed on, a forwarded prop, a member of the function).
+pub(crate) fn component_prop_invocations<'a>(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(&'a solid_facts::FileFacts, Vec<Span>)> {
+    // A function value receives the props object as `this` and could run
+    // another prop out of sight.
+    if literal.kind != solid_facts::ast::FunctionKind::Arrow {
+        return None;
+    }
+    let (element, prop) = component_prop_literal(file, literal.span)?;
+    if !element.spreads.is_empty()
+        || element.attributes.iter().any(|attribute| {
+            attribute
+                .expression
+                .is_some_and(|value| receiver_function_at(file, value))
+        })
+    {
+        return None;
+    }
+    let (callee_file, callee) = lookup.function_called_at(file.path.as_str(), element.name.span)?;
+    if callee.r#async || callee.generator {
+        return None;
+    }
+    let parameter = callee.parameters.first()?;
+    if parameter.initializer.is_some() || (callee.rest_parameter && callee.parameters.len() == 1) {
+        return None;
+    }
+    let ast = &callee_file.ast;
+    let path = callee_file.path.as_str();
+    let references_of = |name: Span| -> Option<Vec<Span>> {
+        let symbol = lookup.entities().at(path, name)?;
+        let mut out = Vec::new();
+        for reference in lookup.symbol_references(symbol.as_str()) {
+            if reference.path.as_ref() != path {
+                return None;
+            }
+            let span = Span::new(
+                u32::try_from(reference.start_byte).ok()?,
+                u32::try_from(reference.end_byte).ok()?,
+            );
+            if span != name {
+                out.push(span);
+            }
+        }
+        Some(out)
+    };
+    let direct_call = |callee_span: Span| {
+        ast.calls
+            .iter()
+            .find(|call| {
+                !call.construct
+                    && ast.peel_ts_sugar_span(call.callee) == callee_span
+                    && !call.arguments.iter().any(|argument| argument.spread)
+            })
+            .map(|call| call.span)
+    };
+    let tested = |span: Span| {
+        ast.conditional_expressions
+            .iter()
+            .any(|conditional| ast.peel_ts_sugar_span(conditional.test) == span)
+            || ast.logical_expressions.iter().any(|logical| {
+                logical.operator == solid_facts::ast::LogicalOperatorKind::And
+                    && ast.peel_ts_sugar_span(logical.left) == span
+            })
+    };
+    let mut calls = Vec::new();
+    match parameter.shape {
+        solid_facts::ast::BindingShape::Identifier => {
+            let [name] = parameter.names.as_slice() else {
+                return None;
+            };
+            if crate::indexes::binding_written(callee_file, name.span) {
+                return None;
+            }
+            for reference in references_of(name.span)? {
+                let member = ast
+                    .members
+                    .iter()
+                    .find(|member| ast.peel_ts_sugar_span(member.object) == reference)?;
+                if ast.computed_members.binary_search(&member.span).is_ok()
+                    || ast
+                        .assignments
+                        .iter()
+                        .any(|assignment| assignment.target.contains(member.span))
+                {
+                    return None;
+                }
+                let key = member_static_key(callee_file, member)?;
+                if key != prop {
+                    // Reading another prop runs nothing of this literal;
+                    // calling or chaining through it hands the props object
+                    // over as `this`.
+                    let hands_receiver = direct_call(member.span).is_some()
+                        || ast
+                            .members
+                            .iter()
+                            .any(|outer| ast.peel_ts_sugar_span(outer.object) == member.span)
+                        || ast
+                            .tagged_templates
+                            .iter()
+                            .any(|template| template.tag == member.span);
+                    if hands_receiver
+                        && !sibling_ignores_receiver(
+                            file,
+                            Siblings::Element(element.span),
+                            &key,
+                            lookup,
+                        )
+                    {
+                        return None;
+                    }
+                    continue;
+                }
+                if tested(member.span) {
+                    continue;
+                }
+                calls.push(direct_call(member.span)?);
+            }
+        }
+        solid_facts::ast::BindingShape::Object => {
+            let mut target = None;
+            for element in ast
+                .pattern_elements
+                .iter()
+                .filter(|element| element.pattern == parameter.pattern)
+            {
+                match &element.slot {
+                    solid_facts::ast::PatternSlot::Key(key) if key.as_str() == prop => {
+                        if element.default.is_some() || target.is_some() {
+                            return None;
+                        }
+                        target = Some(element.target);
+                    }
+                    solid_facts::ast::PatternSlot::Key(_) => {}
+                    // A computed key or a rest may carry this prop.
+                    _ => return None,
+                }
+            }
+            let target = target?;
+            // The slot binds one identifier, not a nested pattern.
+            if ast
+                .pattern_elements
+                .iter()
+                .any(|element| element.pattern == target)
+                || crate::indexes::binding_written(callee_file, target)
+            {
+                return None;
+            }
+            for reference in references_of(target)? {
+                if tested(reference) {
+                    continue;
+                }
+                calls.push(direct_call(reference)?);
+            }
+        }
+        solid_facts::ast::BindingShape::Array => return None,
+    }
+    (!calls.is_empty()).then_some((callee_file, calls))
+}
+
 /// The project component element and prop name `value` is exactly the
 /// value of, when it is one ([`component_prop_literal`] for any value).
 pub(super) fn forwarded_component_prop(

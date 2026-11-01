@@ -976,19 +976,79 @@ fn action_step_body(
     site: Span,
     context: &StaticApiContext<'_>,
 ) -> Option<(&'static str, bool)> {
+    action_step_body_bounded(file, site, context, 4)
+}
+
+/// [`action_step_body`] with `depth` unplaced layers left to cross
+/// ([`action_step_body_unplaced`]).
+fn action_step_body_bounded(
+    file: &FileFacts,
+    site: Span,
+    context: &StaticApiContext<'_>,
+    depth: usize,
+) -> Option<(&'static str, bool)> {
     if let Some(body) = action_step_body_at(file, site, context) {
         return Some((body, false));
     }
-    action_step_body_through(file, site, context, 4).or_else(|| {
-        // ADR 0537: a site inside an enclosing named function some call of
-        // which runs in a step, where the layers between them are not
-        // placed (a member's value, a climb past its bound): an
-        // obligation.
-        crate::execution_role::functions_around(file, site)
-            .into_iter()
-            .filter(|function| function.body.contains(site) && function.body != site)
-            .find_map(|function| action_step_body_through(file, function.body, context, 4))
-    })
+    action_step_body_through(file, site, context, 4)
+        .or_else(|| {
+            // ADR 0537: a site inside an enclosing named function some call
+            // of which runs in a step, where the layers between them are not
+            // placed (a member's value, a climb past its bound): an
+            // obligation.
+            crate::execution_role::functions_around(file, site)
+                .into_iter()
+                .filter(|function| function.body.contains(site) && function.body != site)
+                .find_map(|function| action_step_body_through(file, function.body, context, 4))
+        })
+        .or_else(|| action_step_body_unplaced(file, site, context, depth).map(|body| (body, true)))
+}
+
+/// ADR 0538: the site runs where no layer places it, and the code around
+/// that layer is in a step: an obligation, never a violation. The layer is
+/// one of: the in-place climb from the site reaching ADR 0532's bound (the
+/// layers past it are unread, so the position is asked again from where the
+/// climb stopped); the function around the climb written as a member's value
+/// or an object slot, or handed whole by name to project code or an
+/// unresolved call ([`crate::local_access::run_unplaced`]); a method of a
+/// class or object literal written inside a function. A layer proven to run
+/// elsewhere (after an await, a scheduled callback, a kept listener, a
+/// generator) is not crossed: the enclosing proof refuses it as before.
+fn action_step_body_unplaced(
+    file: &FileFacts,
+    site: Span,
+    context: &StaticApiContext<'_>,
+    depth: usize,
+) -> Option<&'static str> {
+    if depth == 0 {
+        return None;
+    }
+    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
+        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
+        Some(climb) if climb.exhausted => {
+            return action_step_body_bounded(file, climb.at, context, depth - 1)
+                .map(|(body, _)| body);
+        }
+        Some(climb) => climb.at,
+        None => site,
+    };
+    let function = crate::owners::owning_function(&file.ast, at)
+        .filter(|function| function.body.contains(at) && !function.generator)?;
+    let anchor = if function.method_name.is_some() {
+        file.ast
+            .classes
+            .iter()
+            .filter(|class| class.span.contains(function.span))
+            .min_by_key(|class| class.span.end - class.span.start)
+            .map_or(function.span, |class| class.span)
+    } else if crate::local_access::run_unplaced(file, function, context.lookup) {
+        function.span
+    } else {
+        return None;
+    };
+    // Module-level code runs in no step.
+    crate::owners::containing_ast_function(&file.ast, anchor)?;
+    action_step_body_bounded(file, anchor, context, depth - 1).map(|(body, _)| body)
 }
 
 /// ADR 0516: the layers [`action_step_body_at`] does not cross, as an

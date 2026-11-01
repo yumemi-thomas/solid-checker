@@ -182,8 +182,14 @@ impl<'l, 'a> Walk<'l, 'a> {
         let literal = containing_ast_function(&file.ast, span)?;
         // A parameter initializer lies outside every body, so the body-based
         // query above placed it in the outer function; it runs when its own
-        // function is called, which no layer here proves.
-        if !written_directly_in(&file.ast, literal, span) {
+        // function is called, which no layer here proves. ADR 0538: the span
+        // may itself be a nested function or a class ([`Self::unplaced_layer`]),
+        // which is written directly here when no other function holds it.
+        if !written_directly_in(&file.ast, literal, span)
+            && file.ast.functions_within(literal.body).any(|nested| {
+                nested.span != literal.span && nested.span != span && nested.span.contains(span)
+            })
+        {
             return None;
         }
         // A method or accessor is reached through a receiver this walk does
@@ -191,7 +197,19 @@ impl<'l, 'a> Walk<'l, 'a> {
         // its iterator runs it (ADR 0516), so one called in place keeps the
         // path, never as a proof.
         if literal.method_name.is_some() {
-            return None;
+            // ADR 0538: a method of a class or object literal written inside
+            // a function runs when its instance's member is called, which
+            // nothing here places: the code around the class is asked, and
+            // any origin is an obligation. A module-level class stays
+            // unproven.
+            let anchor = file
+                .ast
+                .classes
+                .iter()
+                .filter(|class| class.span.contains(literal.span))
+                .min_by_key(|class| class.span.end - class.span.start)
+                .map_or(literal.span, |class| class.span);
+            return self.unplaced_layer(file, anchor, helper_calls);
         }
         if literal.generator {
             if literal.r#async || argument_position(file, literal).is_some() {
@@ -257,7 +275,55 @@ impl<'l, 'a> Walk<'l, 'a> {
         if let Some(call) = iife_call(file, literal) {
             return self.layer(file, call.span, helper_calls);
         }
+        if let Some(origin) = self.prop_layer(file, literal, helper_calls) {
+            return Some(origin);
+        }
         self.named_layer(file, literal, helper_calls)
+    }
+
+    /// ADR 0538: `literal` is the arrow value of a project component's prop
+    /// that the component only ever calls
+    /// ([`crate::execution_role::component_prop_invocations`]): each call is a
+    /// layer, walked in the component's file. One proven run with others
+    /// unproven is an obligation (ADR 0516); none proven answers nothing.
+    fn prop_layer(
+        &mut self,
+        file: &FileFacts,
+        literal: &FunctionFact,
+        helper_calls: usize,
+    ) -> Option<EffectPhaseOrigin> {
+        let (callee_file, calls) =
+            crate::execution_role::component_prop_invocations(file, literal, self.lookup)?;
+        let key = (file.path.to_string(), literal.span);
+        if !self.visiting.insert(key.clone()) {
+            return None;
+        }
+        let mut found: Option<EffectPhaseOrigin> = None;
+        let mut every = true;
+        for call in calls {
+            if self.budget == 0 {
+                every = false;
+                break;
+            }
+            self.budget -= 1;
+            self.from = None;
+            match self.layer(callee_file, call, helper_calls + 1) {
+                Some(origin) => {
+                    if found
+                        .as_ref()
+                        .is_none_or(|known| origin.helper_calls < known.helper_calls)
+                    {
+                        found = Some(origin);
+                    }
+                }
+                None => every = false,
+            }
+        }
+        self.visiting.remove(&key);
+        found.map(|origin| EffectPhaseOrigin {
+            mixed: origin.mixed || !every,
+            ..origin
+        })
     }
 
     /// `literal` is written as an argument of `call`.
@@ -547,9 +613,44 @@ impl<'l, 'a> Walk<'l, 'a> {
         found.map_or(Chain::Missing, |(path, module)| Chain::Found(path, module))
     }
 
+    /// ADR 0538: the function at `anchor` (or the class around it) runs where
+    /// no layer places it: written as a member's value or an object slot,
+    /// handed whole to project code, a method of a nested class. The code
+    /// around `anchor` is walked instead, and any origin it proves is an
+    /// obligation, never a violation. A layer around it that runs elsewhere
+    /// (after an await, a scheduled callback, a handler) still answers `None`.
+    fn unplaced_layer(
+        &mut self,
+        file: &FileFacts,
+        anchor: Span,
+        helper_calls: usize,
+    ) -> Option<EffectPhaseOrigin> {
+        let around = containing_ast_function(&file.ast, anchor)?;
+        // Written in JSX of the function around it (an attribute value, a
+        // child expression): the element's consumer runs it, which the
+        // compiler roles and [`Self::prop_layer`] decide, not the code the
+        // element is written in.
+        if file.ast.jsx_containing(anchor).any(|element| {
+            containing_ast_function(&file.ast, element.span)
+                .is_some_and(|function| function.span == around.span)
+        }) {
+            return None;
+        }
+        self.from = Some(anchor);
+        let origin = self.layer(file, anchor, helper_calls)?;
+        Some(EffectPhaseOrigin {
+            mixed: true,
+            ..origin
+        })
+    }
+
     /// `literal` is a function bound to a name: its flush runs only in the
     /// effect phase when it has calls, is neither exported nor referenced
     /// other than by those calls, and every one of them is a proven layer.
+    /// ADR 0538: a reference handing it to an inline carrier (`[1].forEach(f)`,
+    /// `f.call(…)`, a template tag) is a run at that carrier, proven by the
+    /// walk from there; one handing it to code the walk does not follow
+    /// leaves it unplaced ([`Self::unplaced_layer`]).
     fn named_layer(
         &mut self,
         file: &FileFacts,
@@ -558,6 +659,11 @@ impl<'l, 'a> Walk<'l, 'a> {
     ) -> Option<EffectPhaseOrigin> {
         if exported(self.lookup, file, literal) {
             return None;
+        }
+        // ADR 0538: a member's value (`o.m = () => …`, `this.m = …`) runs
+        // wherever that member is called.
+        if crate::local_access::member_assigned(file, literal) {
+            return self.unplaced_layer(file, literal.span, helper_calls);
         }
         let path = file.path.as_str();
         let dialect = self.lookup.dialect;
@@ -597,6 +703,9 @@ impl<'l, 'a> Walk<'l, 'a> {
         };
         let mut positions = Vec::new();
         let mut escapes = false;
+        // ADR 0538: a reference the walk follows to no run and no proof of a
+        // run elsewhere: the function is unplaced.
+        let mut unplaced = false;
         // ADR 0516: an object literal's member that names the function
         // exactly (ADR 0358's receiver closure) is read only as a callee, a
         // handler or a whole argument: each read is a position or a run the
@@ -628,6 +737,43 @@ impl<'l, 'a> Walk<'l, 'a> {
                     Some(origin) => positions.push(origin),
                     None => escapes = true,
                 }
+            }
+            if positions.is_empty() {
+                // A literal that is neither named nor a slot (one the layer
+                // returns: an apply's cleanup runs at the next run and at
+                // disposal) keeps no single answer.
+                if !slot {
+                    return None;
+                }
+                // ADR 0538: a slot read only through its object, or an object
+                // handed on whole: unplaced, unless the object itself is handed
+                // to a host that keeps or schedules it (a run elsewhere).
+                let object = file
+                    .ast
+                    .object_properties
+                    .iter()
+                    .find(|property| {
+                        property.data && file.ast.peel_ts_sugar_span(property.value) == literal.span
+                    })
+                    .and_then(|property| {
+                        file.ast
+                            .object_get_shapes
+                            .iter()
+                            .filter(|shape| shape.span.contains(property.span))
+                            .min_by_key(|shape| shape.span.end - shape.span.start)
+                    })
+                    .map(|shape| shape.span);
+                if object.is_some_and(|object| {
+                    matches!(
+                        crate::local_access::hand_off_at(file, object, self.lookup),
+                        crate::local_access::HandOff::FreshStack
+                            | crate::local_access::HandOff::Retained
+                            | crate::local_access::HandOff::Value
+                    )
+                }) {
+                    return None;
+                }
+                return self.unplaced_layer(file, literal.span, helper_calls);
             }
             return positions
                 .into_iter()
@@ -693,13 +839,38 @@ impl<'l, 'a> Walk<'l, 'a> {
                     continue;
                 }
                 // A call site the call graph enumerates is followed below.
-                if !(primary && accounted.contains(&(reference_path, at.start, at.end))) {
+                if primary && accounted.contains(&(reference_path, at.start, at.end)) {
+                    continue;
+                }
+                if !same_file {
                     escapes = true;
+                    continue;
+                }
+                // ADR 0538: how the reference hands the function on.
+                match crate::local_access::hand_off_at(file, at, self.lookup) {
+                    // Run before the carrier returns: the walk from the
+                    // carrier places that run.
+                    crate::local_access::HandOff::Inline(carrier) => {
+                        self.from = Some(literal.span);
+                        match self.layer(file, carrier, helper_calls) {
+                            Some(origin) => positions.push(origin),
+                            None => escapes = true,
+                        }
+                    }
+                    // The host only names it.
+                    crate::local_access::HandOff::Value => {}
+                    // A fresh stack or a kept listener: a run elsewhere.
+                    crate::local_access::HandOff::FreshStack
+                    | crate::local_access::HandOff::Retained
+                    | crate::local_access::HandOff::Call => escapes = true,
+                    crate::local_access::HandOff::Unfollowed => unplaced = true,
                 }
             }
         }
         if sites.is_empty() && positions.is_empty() {
-            return None;
+            return unplaced
+                .then(|| self.unplaced_layer(file, literal.span, helper_calls))
+                .flatten();
         }
         let key = (file.path.to_string(), literal.span);
         if !self.visiting.insert(key.clone()) {
@@ -732,10 +903,14 @@ impl<'l, 'a> Walk<'l, 'a> {
                         && function.span == literal.span
                 },
             );
-            let origin = exact
-                .then(|| self.layer(caller, call.span, helper_calls + 1))
-                .flatten();
-            match origin {
+            // ADR 0538: a call that may run this function without proving it
+            // does (a parameter, an unproven receiver) leaves it unplaced.
+            if !exact {
+                unplaced = true;
+                every = false;
+                continue;
+            }
+            match self.layer(caller, call.span, helper_calls + 1) {
                 Some(origin) => {
                     if found
                         .as_ref()
@@ -752,8 +927,13 @@ impl<'l, 'a> Walk<'l, 'a> {
         self.visiting.remove(&key);
         // ADR 0516: one proven effect-phase run with other runs the walk did
         // not prove is an obligation; no proven run at all stays silent.
+        // ADR 0538: unless the function is also handed where nothing places
+        // it, which the code around it answers for, as an obligation.
+        if unplaced && let Some(origin) = self.unplaced_layer(file, literal.span, helper_calls) {
+            return Some(origin);
+        }
         found.map(|origin| EffectPhaseOrigin {
-            mixed: origin.mixed || !every,
+            mixed: origin.mixed || !every || unplaced,
             ..origin
         })
     }
