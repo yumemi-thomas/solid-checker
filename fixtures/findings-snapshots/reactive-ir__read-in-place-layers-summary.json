@@ -67,6 +67,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 3467,
+      "end": 3471,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
       "start": 4150,
       "end": 4159,
       "fixes": 0

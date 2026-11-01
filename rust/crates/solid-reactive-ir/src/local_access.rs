@@ -2022,9 +2022,12 @@ impl LocalAccessContext<'_, '_> {
         // name to a carrier that runs it before returning (`[1].forEach(f)`,
         // `` tag`x` ``, `f.call(null)`, `Reflect.apply(f, …)`) runs at the
         // carrier's position; where that position reports untracked reads the
-        // read is proven there, whatever else names the function.
+        // read is proven there, whatever else names the function. Asked inside
+        // a primitive's callback too (ADR 0535): `inside_non_component_function`
+        // answers for the callback, not for a named function nested in it.
         let handed = (self.accessors.contains_key(symbol)
-            && inside_non_component_function(file, call.callee, self.lookup))
+            && (inside_non_component_function(file, call.callee, self.lookup)
+                || nested_named_function(file, call.callee, self.lookup)))
         .then(|| {
             handed_read_role(
                 file,
@@ -2053,6 +2056,13 @@ impl LocalAccessContext<'_, '_> {
         } else if let Some(accessor) = self.accessors.get(symbol)
             && (!inside_non_component_function(file, call.callee, self.lookup)
                 || named_callback_execution_role(file, call.callee, self.lookup).is_some())
+            // ADR 0535: in a function no named-callback role places, an
+            // unplaced hand-off or an escape is an obligation below, never
+            // this role.
+            && !(nested_named_function(file, call.callee, self.lookup)
+                && (handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
+                    || function_escapes_unfollowed(file, call.callee, self.lookup)))
+            && !escapes_nested(file, call.callee, self.lookup)
             && seen.insert(key.clone())
         {
             self.push_accessor_read(file, call, symbol, accessor, execution, result);
@@ -4374,6 +4384,48 @@ fn read_in_named_local_function(
 
 /// A direct hand-off that no proof follows, including one around a nested
 /// literal whose run has not been attributed through the handed function.
+/// ADR 0535: whether `span` is in a named non-component function that no
+/// named-callback role places, nested where `inside_non_component_function`
+/// answers for the primitive's callback around it.
+fn nested_named_function(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    named_callback_execution_role(file, span, lookup).is_none()
+        && containing_ast_function(&file.ast, span).is_some_and(|function| {
+            !lookup.function_may_be_component(file, function)
+                && function_binding_name(file, function).is_some()
+        })
+}
+
+/// ADR 0535: whether `span` is in a non-component function written as a
+/// member's value (`this.m = () => …`), wherever
+/// `inside_non_component_function` answers for a primitive's callback around
+/// it.
+fn escapes_nested(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        !lookup.function_may_be_component(file, function) && member_assigned(file, function)
+    })
+}
+
+/// ADR 0535: whether `function` is written as a member's value (`o.m = () =>
+/// …`, `this.m = …`): it runs wherever that member is called.
+fn member_assigned(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.ast.assignments.iter().any(|assignment| {
+        assignment.value == solid_facts::ast::AssignmentValueKind::Function
+            && file.ast.peel_ts_sugar_span(assignment.value_span) == function.span
+            && file.ast.member_at(assignment.target).is_some()
+    })
+}
+
 fn function_escapes_unfollowed(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
@@ -4472,6 +4524,12 @@ fn function_handed_unfollowed(
                 })
             })
     };
+    // ADR 0535: a function written as a member's value (`o.m = () => …`,
+    // `this.m = …`) runs wherever that member is called, which no summary
+    // follows: handed where nothing places it.
+    if member_assigned(file, function) {
+        return true;
+    }
     if slot_handed(function.span) {
         return true;
     }

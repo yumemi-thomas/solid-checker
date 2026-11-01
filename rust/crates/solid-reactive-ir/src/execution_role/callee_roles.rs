@@ -238,8 +238,14 @@ pub(super) fn semantic_role_before_awaits(
     if let Some(role) = context_provider_value_role(file, span, lookup) {
         return role_arm!("callee_roles.context-provider-value", role);
     }
+    // ADR 0535: a function assigned to a member runs wherever the member is
+    // called, which nothing here follows (`make().m?.()`, `this.m()`): the
+    // role is unplaced, never a proven deferral.
     if assigned_member_function_contains(file, span, entities) {
-        return role_arm!(default "callee_roles.assigned-member-function", ExecutionRole::DeferredCallback);
+        return role_arm!(
+            "callee_roles.assigned-member-function",
+            ExecutionRole::Unknown
+        );
     }
     // A read in a function nested in a named callback runs where the in-place
     // layers between them (a helper's callback, an IIFE, an inline library
