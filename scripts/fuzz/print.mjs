@@ -378,10 +378,20 @@ function render(program, instrument) {
       case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
-      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); throw new Error(`cannot print control form ${c.form}`);
+      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }
   }
 
+  /** A depth form (model.mjs DEPTH_FORMS): N closures, each called in place, around the body. */
+  function depthText(c, depth) {
+    const n = Number(c.form.slice("depth-".length));
+    const lines = [];
+    for (let i = 0; i < n; i += 1) lines.push(`${ind(depth + i)}(() => {`);
+    const inner = block(c.body, depth + n - 1);
+    lines.push(`${ind(depth + n)}${inner.slice(1, -1).trim()}`);
+    for (let i = n - 1; i >= 0; i -= 1) lines.push(`${ind(depth + i)}})();`);
+    return lines.join("\n").trimStart();
+  }
   /** A hand-off form (model.mjs HANDOFF_FORMS): `hf` holds the site and is handed on by name, in a block of its own. */
   function handoffText(c, depth) {
     const inner = depth + 1;
@@ -399,6 +409,9 @@ function render(program, instrument) {
       "handoff-member": [`const hf = () => ${fnBody()};`, "const ho = { m: hf };", "ho.m();"],
       "handoff-assign": ["const ho: { m?: () => void } = {};", `ho.m = () => ${fnBody()};`, "ho.m?.();"],
       "handoff-function": [`function hf() ${fnBody()}`, "hf();"],
+      "handoff-assign-param": ["const fill = (o: { m?: () => void }) => {", `  o.m = () => ${fnBody()};`, "};", "const ho: { m?: () => void } = {};", "fill(ho);", "ho.m?.();"],
+      "handoff-assign-returned": ["const make = () => {", "  const o: { m?: () => void } = {};", `  o.m = () => ${fnBody()};`, "  return o;", "};", "make().m?.();"],
+      "handoff-assign-this": ["class HK {", "  m?: () => void;", `  constructor() { this.m = () => ${fnBody()}; }`, "}", "new HK().m?.();"],
     }[c.form];
     if (!lines) throw new Error(`cannot print control form ${c.form}`);
     return `{\n${lines.map((line) => `${ind(inner)}${line}`).join("\n")}\n${ind(depth)}}`;

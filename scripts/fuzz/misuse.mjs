@@ -14,7 +14,7 @@
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
   walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
-  HANDOFF_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -584,7 +584,7 @@ function valueBinding(bind, name) {
 
 /** Wraps `stmts` in a layer (a closure called in place, a helper taking the callback, an IIFE). */
 function applyLayer(layer, stmts, kit) {
-  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer)) return [ctl(layer, stmts)];
+  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer) || DEPTH_FORMS.includes(layer)) return [ctl(layer, stmts)];
   if (FILE_LAYERS.includes(layer)) return [expr(call(ref(kit.ensureHelper("call", { module: true, via: layer.slice("module-".length) })), [fn(stmts)]))];
   switch (layer) {
     case "closure": { const f = kit.name("f"); return [decl(f, fn(stmts)), expr(call(ref(f)))]; }
