@@ -814,7 +814,8 @@ pub(super) fn named_callback_write_role(
     // A library callback may run zero times (ADR 0493 review): no rejection.
     let at = match super::write_roles::climb_in_place_layers(file, span, lookup) {
         Some(climb)
-            if !climb.in_list
+            if !climb.exhausted
+                && !climb.in_list
                 && climb.suspended.is_none()
                 && !super::write_roles::climb_crosses_library_callback(
                     file, span, climb.at, lookup,

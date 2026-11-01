@@ -230,7 +230,9 @@ impl<'a> NamedCallbackIndex<'a> {
                                     == declared_in)
                     })
             };
-        for _ in 0..8 {
+        // Each round forwards every alias one step; a chain is no longer
+        // than the alias list, so the fixpoint is reached within it.
+        for _ in 0..=file.ast.local_alias_bindings.len() {
             let mut added = false;
             for alias in &file.ast.local_alias_bindings {
                 let (Some(local), Some(source)) = (
@@ -877,6 +879,9 @@ fn inherits_callback_role(
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
+        if climb.exhausted {
+            return Some(ExecutionRole::Unknown);
+        }
         if crate::owners::containing_body_function(&file.ast, climb.at)
             .map(|function| function.span)
             != Some(callback.span)

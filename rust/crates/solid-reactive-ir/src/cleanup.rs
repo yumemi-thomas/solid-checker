@@ -306,7 +306,8 @@ pub(super) fn leaf_owner_operations_for_file(
                     }
                     at = helper.span;
                 }
-                false
+                // The climb's own bound: the last step may land exactly on it.
+                at == climb.at
             };
             // Only a call whose function is itself an argument can be in a
             // helper's callback, a syntactic test that spares the climb for

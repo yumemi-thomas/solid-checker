@@ -294,6 +294,10 @@ when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,
 `fixtures/reactive-ir/write-in-refused-creation`).
 
+The climbs through in-place layers are bounded (16 layers): a write past the
+bound is uncertifiable wherever it is written, never placed by the lexical role
+around it (ADR 0532, `fixtures/reactive-ir/write-climb-depth`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

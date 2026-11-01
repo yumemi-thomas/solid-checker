@@ -118,7 +118,13 @@ pub(crate) fn unwindowed_role_at_call(
     // the awaits that precede that call count too (ADR 0340's reach).
     let mut at = call;
     let mut suspended = false;
-    for _ in 0..8 {
+    // ADR 0532: past the bound an await is unread, so no window is proven.
+    let mut steps = 0;
+    loop {
+        if steps == 8 {
+            return ExecutionRole::Unknown;
+        }
+        steps += 1;
         if follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
             || follows_try_head_await(file, at, lookup)
@@ -227,6 +233,9 @@ pub(super) fn semantic_role_before_awaits(
         && super::named_callbacks::nested_in_named_callback(file, span, lookup)
         && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
     {
+        if climb.exhausted {
+            return ExecutionRole::Unknown;
+        }
         let role = semantic_execution_role_within(
             file,
             climb.at,
@@ -396,6 +405,9 @@ pub(super) fn semantic_role_before_awaits(
         if !classifying.contains(&write_classification_marker())
             && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
         {
+            if climb.exhausted {
+                return ExecutionRole::Unknown;
+            }
             let role = semantic_execution_role_within(
                 file,
                 climb.at,
@@ -479,6 +491,9 @@ pub(super) fn semantic_role_before_awaits(
             && let Some((climb, through_generator)) =
                 super::write_roles::in_place_run_site(file, span, lookup)
         {
+            if climb.exhausted {
+                return ExecutionRole::Unknown;
+            }
             let placed = semantic_execution_role_within(
                 file,
                 climb.at,

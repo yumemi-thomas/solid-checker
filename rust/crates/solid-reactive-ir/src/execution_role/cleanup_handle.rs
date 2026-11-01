@@ -207,8 +207,14 @@ pub(super) fn disposal_handle_climb(
     let mut unrun = false;
     let mut suspended = false;
     // Bounded: each step moves to the call or function that holds the
-    // previous one.
-    for _ in 0..16 {
+    // previous one. At the bound a disposal callback past it is unread, so
+    // the lexical role is no proof (ADR 0532).
+    let mut steps = 0;
+    loop {
+        if steps == 16 {
+            return Some(HandleClimb::Unrun);
+        }
+        steps += 1;
         let function = crate::owners::owning_function(&file.ast, at)?;
         if !unrun {
             // Past an await the run is on a later task, with no owner, whoever
@@ -295,7 +301,6 @@ pub(super) fn disposal_handle_climb(
             }
         }
     }
-    None
 }
 
 /// Whether a handle call at `site` is unplaced: it sits where the backend

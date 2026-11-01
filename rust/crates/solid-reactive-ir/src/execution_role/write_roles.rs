@@ -124,6 +124,11 @@ pub(super) enum WriteRegionAdjustment {
     /// ([`solid_dialect::CallbackOwner::Conditional`]): null detaches it, an
     /// owner does not. Neither is proven, so the write is unplaced (ADR 0455).
     OwnerUnknown,
+    /// ADR 0532: the climb from the write reached its bound without ending at
+    /// a callback or at a layer it could place. A layer past the bound may be
+    /// an owner-keeping callback or a created root, so neither a placement
+    /// nor the lexical role is proven: the write is unplaced.
+    ClimbExhausted,
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -241,7 +246,14 @@ fn detached_in_place(
     // Whether a layer on the way holds the site past an await.
     let mut suspended = false;
     // Bounded: each step moves to the call that holds the previous function.
-    for _ in 0..16 {
+    // At the bound nothing is proven (ADR 0532): the layers past it are not
+    // read, and the lexical role would answer for them.
+    let mut steps = 0;
+    loop {
+        if steps == 16 {
+            return Some(WriteRegionAdjustment::ClimbExhausted);
+        }
+        steps += 1;
         let Some(function) = crate::owners::owning_function(&file.ast, at) else {
             break;
         };
@@ -1018,7 +1030,8 @@ fn named_closure_in_root_callback<'a>(
 
 /// Whether the first function around `function` that a primitive call takes as
 /// its callback, by the literal or by its binding, is taken in a position whose
-/// callback runs in a root the call creates.
+/// callback runs in a root the call creates, or lies past the climb's bound
+/// (ADR 0532: unread, so not proven otherwise).
 fn innermost_primitive_callback_is_root(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -1041,7 +1054,9 @@ fn innermost_primitive_callback_is_root(
                 .callback_runs_in_created_root(primitive, index)
         });
     }
-    false
+    // ADR 0532: past the bound the callback is unread, so the permissive role
+    // around it is no proof: answer as a root would (the entries decide).
+    true
 }
 
 /// ADR 0471: whether `span` runs, through layers that run in place (an IIFE,
@@ -1082,7 +1097,9 @@ fn in_place_in_root_named_callback(
             LayerRun::FreshStack | LayerRun::Elsewhere => return false,
         }
     }
-    false
+    // ADR 0532: the layers past the bound are unread; the permissive role
+    // around them is no proof for the site.
+    true
 }
 
 /// The primitive call positions that take `function`: as the literal argument,
@@ -1258,7 +1275,9 @@ fn unrun_layer_in_owner_keeping_callback(
             }
         }
     }
-    false
+    // ADR 0532: an owner-keeping callback past the bound is unread, so the
+    // deferred role is no proof.
+    true
 }
 
 /// A closure nested in a leaf callback (`createTrackedEffect`, `onSettled`):
@@ -1471,6 +1490,8 @@ fn write_role_walk(
             // No owner reaches the write: the guard has nothing to reject.
             Some(WriteRegionAdjustment::Detached) => return ExecutionRole::UntrackedCallback,
             Some(WriteRegionAdjustment::OwnerUnknown) => return ExecutionRole::Unknown,
+            // ADR 0532: the bound of the climb proves nothing either way.
+            Some(WriteRegionAdjustment::ClimbExhausted) => return ExecutionRole::Unknown,
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -2269,6 +2290,8 @@ fn sole_call_of_named_function(
 /// Where a site runs once the function layers around it that run in place
 /// ([`layer_run`]) are crossed (ADR 0469).
 pub(crate) struct InPlaceClimb {
+    /// The bound left outer layers unread: no placement role is proven.
+    pub(crate) exhausted: bool,
     /// The call of the outermost layer crossed: the site runs on its stack.
     pub(crate) at: Span,
     /// A layer holds the climbed site in its parameter list (ADR 0454): it
@@ -2398,12 +2421,20 @@ fn apply_runs_nothing_before(
         return own_calls().count() <= 1;
     }
     let mut position = span;
+    let mut reached = false;
     for _ in 0..32 {
         match crate::owners::containing_ast_function(ast, position) {
-            Some(function) if function.span == apply.span => break,
+            Some(function) if function.span == apply.span => {
+                reached = true;
+                break;
+            }
             Some(function) => position = function.span,
             None => return false,
         }
+    }
+    // Past the bound the apply is not reached: no proof (ADR 0532).
+    if !reached {
+        return false;
     }
     !own_calls().any(|other| other.span.end <= position.start)
         && runs_nothing_before_in_layers(file, span, apply.span, lookup)
@@ -2566,7 +2597,8 @@ pub(crate) fn pending_apply_first_read_from(
     let ast = &file.ast;
     let at = match climb_in_place_layers(file, site, lookup) {
         Some(climb)
-            if !climb.in_list
+            if !climb.exhausted
+                && !climb.in_list
                 && !climb.among_others
                 && climb.suspended.is_none()
                 && !climb_crosses_library_callback(file, site, climb.at, lookup) =>
@@ -3461,13 +3493,14 @@ fn climb_in_place_layers_recording(
     passed: &mut Vec<Span>,
 ) -> Option<InPlaceClimb> {
     let mut climb = InPlaceClimb {
+        exhausted: false,
         at: span,
         in_list: false,
         among_others: false,
         suspended: None,
     };
     // Bounded: each step moves to the call that holds the previous function.
-    for _ in 0..16 {
+    for step in 0..16 {
         let Some(function) = crate::owners::owning_function(&file.ast, climb.at) else {
             break;
         };
@@ -3510,6 +3543,7 @@ fn climb_in_place_layers_recording(
         }
         climb.at = call;
         passed.push(call);
+        climb.exhausted = step == 15;
     }
     (climb.at != span).then_some(climb)
 }
@@ -3560,13 +3594,14 @@ fn in_place_run_site_recording(
     passed: &mut Vec<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
     let mut climb = InPlaceClimb {
+        exhausted: false,
         at: span,
         in_list: false,
         among_others: false,
         suspended: None,
     };
     let mut through_generator = false;
-    for _ in 0..8 {
+    for step in 0..8 {
         if let Some(next) = climb_in_place_layers_recording(file, climb.at, lookup, within, passed)
         {
             climb.in_list |= next.in_list;
@@ -3577,6 +3612,10 @@ fn in_place_run_site_recording(
                 (None, None) => None,
             };
             climb.at = next.at;
+            if next.exhausted {
+                climb.exhausted = true;
+                break;
+            }
         }
         let Some(created) = crate::owners::owning_function(&file.ast, climb.at)
             .filter(|function| {
@@ -3590,6 +3629,7 @@ fn in_place_run_site_recording(
         through_generator = true;
         climb.at = created.span;
         passed.push(created.span);
+        climb.exhausted = step == 7;
     }
     (climb.at != span).then_some((climb, through_generator))
 }

@@ -760,3 +760,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/props-passed-sources/node_modules/**
 !fixtures/reactive-ir/read-in-place-layers-summary/node_modules/
 !fixtures/reactive-ir/read-in-place-layers-summary/node_modules/**
+!fixtures/reactive-ir/write-climb-depth/node_modules/
+!fixtures/reactive-ir/write-climb-depth/node_modules/**

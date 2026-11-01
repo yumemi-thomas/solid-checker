@@ -677,7 +677,8 @@ fn resolve_tracked_scope(
         // A library callback may run zero times (ADR 0493 review), so it is
         // not crossed.
         Some(climb)
-            if !climb.in_list
+            if !climb.exhausted
+                && !climb.in_list
                 && climb.suspended.is_none()
                 && !crate::execution_role::climb_crosses_library_callback(
                     file,
@@ -778,6 +779,7 @@ fn resolve_scope_unplaced(
     // call runs under that observer whenever it runs: an obligation.
     if let Some(climb) =
         crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
+        && !climb.exhausted
         && !climb.in_list
         && climb.suspended.is_none()
         && crate::owners::containing_body_function(&file.ast, climb.at).is_some_and(|function| {
@@ -976,7 +978,7 @@ fn action_step_body_through(
         return None;
     }
     let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
         Some(_) => return None,
         None => site,
     };
@@ -1047,7 +1049,7 @@ fn action_step_body_at(
     // neither is claimed. One in-place run proves the throw, so a helper that
     // also hands its callback on still counts.
     let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
         Some(_) => return None,
         None => site,
     };

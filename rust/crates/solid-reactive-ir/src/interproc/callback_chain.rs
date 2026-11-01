@@ -184,6 +184,8 @@ pub(super) fn wrapped_owned_computation_call<'f>(
 /// as "runs inline" is the promise `callback-execution-boundary` exists to
 /// prevent.
 pub(super) struct CallbackChain {
+    /// ADR 0532: outer wrappers remain unread; never fall back to a slot role.
+    pub(super) exhausted: bool,
     pub(super) wrappers: Vec<CallbackWrapper>,
     pub(super) outermost: Span,
 }
@@ -202,10 +204,11 @@ pub(super) fn enclosing_callback_chain(
     lookup: &SemanticLookup<'_>,
 ) -> Option<CallbackChain> {
     let mut wrappers = Vec::new();
+    let mut exhausted = false;
     let mut span = nested;
     // Bounded like every other span walk in this module: a malformed or
     // pathologically nested AST must not turn a summary into a hang.
-    for _ in 0..32 {
+    for step in 0..32 {
         let mut enclosing = file
             .ast
             .arguments_containing(span)
@@ -236,6 +239,7 @@ pub(super) fn enclosing_callback_chain(
             if let Some(call) = direct_branch_call {
                 wrappers.push(CallbackWrapper::Transparent);
                 span = call.span;
+                exhausted = step == 31;
                 continue;
             }
             break;
@@ -249,8 +253,10 @@ pub(super) fn enclosing_callback_chain(
         let (call, argument) = enclosing[0];
         wrappers.push(callback_wrapper_at(file, call, argument, lookup)?);
         span = call.span;
+        exhausted = step == 31;
     }
     Some(CallbackChain {
+        exhausted,
         wrappers,
         outermost: span,
     })
@@ -263,12 +269,13 @@ pub(super) fn callback_chain_reaches_owner_body(
     chain: &CallbackChain,
     owner: &SummaryNode,
 ) -> bool {
-    crate::execution_role::functions_around(file, chain.outermost)
-        .into_iter()
-        .min_by_key(|function| function.span.end - function.span.start)
-        .is_some_and(|innermost| {
-            innermost.body == owner.body && owner.body.contains(chain.outermost)
-        })
+    !chain.exhausted
+        && crate::execution_role::functions_around(file, chain.outermost)
+            .into_iter()
+            .min_by_key(|function| function.span.end - function.span.start)
+            .is_some_and(|innermost| {
+                innermost.body == owner.body && owner.body.contains(chain.outermost)
+            })
 }
 
 /// The execution word a callback carries when it runs synchronously at the

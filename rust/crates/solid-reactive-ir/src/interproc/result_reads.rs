@@ -1740,7 +1740,8 @@ fn body_site_runs_during_call_through_layers(
     else {
         return false;
     };
-    !through_generator
+    !climb.exhausted
+        && !through_generator
         && climb.suspended.is_none()
         && !climb.in_list
         && body_site_runs_during_call(file, function, climb.at)

@@ -1434,7 +1434,7 @@ fn named_leaf_owner(
 ) -> Option<String> {
     let direct = crate::owners::containing_body_function(&file.ast, span)?;
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
-        .filter(|climb| !climb.in_list && climb.suspended.is_none())
+        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
         .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
     [Some(direct), climbed]
         .into_iter()

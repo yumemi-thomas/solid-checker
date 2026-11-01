@@ -392,7 +392,11 @@ pub(crate) fn inside_class_member(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let at = super::in_place_run_site(file, span, lookup).map_or(span, |(climb, _)| climb.at);
+    let at = match super::in_place_run_site(file, span, lookup) {
+        Some((climb, _)) if climb.exhausted => return true,
+        Some((climb, _)) => climb.at,
+        None => span,
+    };
     crate::owners::containing_ast_function(&file.ast, at).is_some_and(|function| {
         class_of_member(file, function).is_some()
             && SiteReach::new(lookup).function_runs(file, function)

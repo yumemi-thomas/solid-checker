@@ -44,7 +44,8 @@ fn callback_result_binding_chain(
     depth: usize,
 ) -> bool {
     if depth == 0 {
-        return true;
+        // ADR 0532: no result identity was proven; retain typed obligations.
+        return false;
     }
     let span = file.ast.peel_ts_sugar_span(span);
     if let Some(call) = file.ast.call_at(span) {

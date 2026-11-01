@@ -389,6 +389,9 @@ fn ref_applied_read_role(
             // of that call, so the read is unplaced there, never the deferred
             // role the callback's position gives it.
             let (climb, through_generator) = in_place_run_site(file, span, lookup)?;
+            if climb.exhausted {
+                return Some(ExecutionRole::Unknown);
+            }
             let function = containing_ast_function(&file.ast, climb.at)?;
             (
                 crate::owners::ref_applied_element(file, function, lookup)?,

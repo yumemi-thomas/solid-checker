@@ -157,7 +157,8 @@ pub(super) fn emit_file(
         // owner, and the push-time guard test follows only IIFEs.
         let climbed_after_await = |site: Span| {
             crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(|climb| {
-                !climb.in_list
+                !climb.exhausted
+                    && !climb.in_list
                     && climb.suspended == Some(true)
                     && !crate::execution_role::climb_crosses_library_callback(
                         file, site, climb.at, lookup,
@@ -401,5 +402,7 @@ fn returned_unreached_function(
         }
         at = outer.span;
     }
-    false
+    // ADR 0532: the functions past the bound are unread; context zero there
+    // is no proof, so the operation stays unplaced.
+    true
 }

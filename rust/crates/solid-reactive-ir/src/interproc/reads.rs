@@ -350,7 +350,8 @@ fn in_place_layer_owners(
         else {
             continue;
         };
-        if climb.suspended == Some(true)
+        if climb.exhausted
+            || climb.suspended == Some(true)
             || climb.at != call
             || file.ast.function_at(node.span).is_none_or(|function| {
                 !crate::owners::written_directly_in(&file.ast, function, call)
