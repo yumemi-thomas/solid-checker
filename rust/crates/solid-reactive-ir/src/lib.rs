@@ -571,8 +571,11 @@ pub struct ReactiveWrite {
     /// How many reachable paths to the call this row stands for
     /// ([`reachability`]). The row is the same on every path, so it is held
     /// once with its count rather than once per path; expanding each row
-    /// `multiplicity` times gives the per-path table. At least 1; saturates
-    /// at `u64::MAX`.
+    /// `multiplicity` times gives the per-path table. Where a root reaches a
+    /// call graph cycle, the count is taken on the condensation (a cycle's
+    /// functions count as one), which is no path count but is nonzero
+    /// exactly where a path reaches the call: only that is read. At least 1;
+    /// saturates at `u64::MAX`.
     #[serde(default = "one_path", skip_serializing_if = "is_one_path")]
     pub multiplicity: u64,
 }
@@ -658,10 +661,11 @@ pub struct ActionInvocation {
     pub execution: ExecutionRole,
     pub context: Arc<str>,
     /// How many reachable paths to the call this row stands for
-    /// ([`reachability`], as [`ReactiveWrite::multiplicity`]). The row is the same on every path, so it is held
-    /// once with its count rather than once per path; expanding each row
-    /// `multiplicity` times gives the per-path table. At least 1; saturates
-    /// at `u64::MAX`.
+    /// ([`reachability`], as [`ReactiveWrite::multiplicity`], on the
+    /// condensation where a root reaches a cycle). The row is the same on
+    /// every path, so it is held once with its count rather than once per
+    /// path; expanding each row `multiplicity` times gives the per-path
+    /// table. At least 1; saturates at `u64::MAX`.
     #[serde(default = "one_path", skip_serializing_if = "is_one_path")]
     pub multiplicity: u64,
 }
