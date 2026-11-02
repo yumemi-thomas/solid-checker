@@ -1947,3 +1947,45 @@ fn use_site_write_role_edits_match_cold() {
         ],
     );
 }
+
+/// Two named functions that are each other's one call (ADR 0479's sole call):
+/// placing a write in either through `write_flow_role` climbed from one to the
+/// other round the cycle forever (`layers_run_inline` never reached the
+/// component), so the build never ended. It ends, and the writes stay
+/// unplaced: nothing runs either function.
+#[test]
+fn sole_calls_of_each_other_end_the_in_place_climb() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let source = r#"import { createSignal } from "solid-js";
+
+export function App() {
+  function f1(n: number): void { if (n > 2) f2(n - 1); }
+  const f2 = (n: number): void => { set(2); if (n > 1) f1(n - 1); };
+  const [r, set] = createSignal(0);
+  return <button>{r()}</button>;
+}
+"#;
+    let (directory, _) = project("sole-call-cycle", &[("App.tsx", source)]);
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let facts = session.analyze().unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let program = cold(&facts, selected.vocabulary, true);
+        let _ = sender.send(program.writes.len());
+    });
+    let writes = receiver
+        .recv_timeout(std::time::Duration::from_secs(120))
+        .expect("the build ends");
+    assert_eq!(writes, 1);
+}

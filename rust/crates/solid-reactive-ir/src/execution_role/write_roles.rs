@@ -2397,8 +2397,12 @@ fn layers_run_inline(
     fresh_stack_ok: bool,
 ) -> bool {
     let mut layer = inner;
+    // Named functions that are each other's one call (ADR 0479: `const f1 =
+    // () => f2(); const f2 = () => f1();`) lead the climb round a cycle that
+    // never reaches `outer`: nothing proves they run there.
+    let mut crossed = HashSet::default();
     while layer.span != outer.span {
-        if layer.generator || !outer.span.contains(layer.span) {
+        if layer.generator || !outer.span.contains(layer.span) || !crossed.insert(layer.span) {
             return false;
         }
         let call = match layer_run(file, layer, lookup) {
