@@ -35,6 +35,7 @@ import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
@@ -127,6 +128,8 @@ export async function runLegal(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
+  // `--scratch <dir>`: cases/ and chrome-cases/ there, behind links at their usual paths (scratch.mjs).
+  if (options.scratch) linkScratch(out, resolve(options.scratch));
   const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
     const cells = legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) }).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
@@ -235,11 +238,12 @@ export async function runLegal(options) {
 const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine] [--recall]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
   [--chrome-concurrency N]   Chrome pages at a time (default the oracle's: at most 8)
   [--runtime-diff <N|all> [--runtime-diff-axes a,b]]   compare Happy DOM's runtime record with Chrome's on up to N programs per stratum, or all
-  [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
+  [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]
+  [--scratch <dir>]   cases/ and chrome-cases/ in <dir> behind links (scratch.mjs)`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

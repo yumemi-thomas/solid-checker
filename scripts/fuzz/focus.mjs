@@ -9,11 +9,14 @@
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
 //     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]]
+//     [--scratch <dir>]
 // `--split-codes`: one grid process per code (`<grid>/<code>/`), so a large grid (mx-recall, 277k programs) stays within a heap and a
 // failure or hang costs one code; `--prune-cases`: delete each grid's `cases/` and `chrome-cases/` once its rows are read (a program is
 // a directory of files: three full runs filled a VM disk's inodes); `--grid-timeout`: a grid process that runs longer is killed and
 // reported (default 120 minutes; a stalled Chrome or a paused VM once hung a run for hours); `--heap-mb`: the grid process's heap
 // (default 12000 for the recall grids, Node's default otherwise). Each grid's output streams to `<grid>.log` while it runs.
+// `--scratch` (default $SOLID_CHECKER_FUZZ_SCRATCH, which vm.sh points at the VM's tmpfs): each grid's `cases/`, `chrome-cases/` and
+// role log live there behind links at their usual paths (scratch.mjs), so the per-program writes never reach a disk.
 // `--role-log` (ADR 0533): each grid's checkers append the role log to `<grid>.roles.jsonl` (one file: a directory would take an inode
 // per program); it is folded into `<grid>/roles.json` and the run's
 // `<out>/roles.json` (roles.mjs: arms hit and never hit, yield, new arms against `--roles-against`, silent-by-default decisions).
@@ -32,6 +35,7 @@ import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
+import { linkRoleLog } from "./scratch.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -109,10 +113,11 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
       if (key === "splitCodes" || key === "pruneCases" || key === "roleLog") { options[key] = true; index -= 1; continue; }
-      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
+    options.scratch ??= process.env.SOLID_CHECKER_FUZZ_SCRATCH || undefined;
     if (options.rolesAgainst && !options.roleLog) throw new Error("focus.mjs: --roles-against needs --role-log");
     // A smoke manifest names one grid's programs across its codes: a per-code process would not generate them all.
     if (options.splitCodes && options.smoke) throw new Error("focus.mjs: --split-codes does not apply to --smoke (a smoke grid is small)");
@@ -128,6 +133,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
     const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...oracle];
     const attention = [];
+    const scratchRoot = options.scratch ? join(resolve(options.scratch), `focus-${process.pid}-${Date.now()}`) : null;
     const folded = [];
     const pending = [];
     const against = options.rolesAgainst ? { ...JSON.parse(readFileSync(resolve(options.rolesAgainst), "utf8")), path: resolve(options.rolesAgainst) } : null;
@@ -147,9 +153,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // The role log: one file per grid that every checker process appends whole lines to (role_log.rs), folded once the grid's rows
       // are written; a line two processes interleaved is counted as malformed, never folded.
       const roles = options.roleLog ? `${unit.dir}.roles.jsonl` : null;
-      if (roles) rmSync(roles, { force: true });
-      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
-      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, "--out", unit.dir, ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
+      // With a scratch directory the checkers write the log there and the fold reads it through `roles`, a link (scratch.mjs).
+      const unitScratch = scratchRoot ? join(scratchRoot, unit.label) : null;
+      const written = roles && unitScratch ? linkRoleLog(unit.dir, unitScratch) : roles;
+      if (roles && !unitScratch) rmSync(roles, { force: true });
+      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: written } : process.env;
+      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const seconds = Math.round((Date.now() - started) / 1000);
       const { outcomes, flagged, oracle, behaviour } = readGrid(unit.dir);
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
@@ -208,6 +217,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     process.exitCode = 2;
   }
   await Promise.all(pending);
+  // Pruned grids left only their empty scratch directories; kept ones (no --prune-cases) still need theirs.
+  if (scratchRoot && options.pruneCases) rmSync(scratchRoot, { recursive: true, force: true });
   if (folded.length) {
     // From the grids' roles.json: --prune-cases has deleted their raw logs by now.
     const report = mergeGridReports(folded, { against });

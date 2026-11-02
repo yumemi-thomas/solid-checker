@@ -42,7 +42,9 @@ case "$repo" in "$HOME"/*) ;; *) die "the checkout ($repo) is not under $HOME, w
 
 vm() { colima ssh --profile "$profile" -- bash -lc "$1"; }
 # The VM's PATH and the fuzzer's environment: the pinned tools, scratch on the VM's own disk.
-vm_env="export PATH=$root/node/bin:\$HOME/.bun/bin:\$HOME/.cargo/bin:\$PATH SOLID_CHECKER_TSRS_BIN=$root/tsrs/target/release/tsrs TMPDIR=$root/tmp; mkdir -p $root/tmp"
+# TMPDIR and the focus runs' scratch (focus.mjs --scratch) are on the tmpfs at $root/ram (scratch_in_ram); the runtime cache and a focus
+# run's default output stay on the data disk through links there.
+vm_env="export PATH=$root/node/bin:\$HOME/.bun/bin:\$HOME/.cargo/bin:\$PATH SOLID_CHECKER_TSRS_BIN=$root/tsrs/target/release/tsrs TMPDIR=$root/ram/tmp SOLID_CHECKER_FUZZ_SCRATCH=$root/ram/scratch; mkdir -p $root/tmp $root/ram/tmp $root/ram/scratch"
 
 start() {
   if ! colima status --profile "$profile" >/dev/null 2>&1; then
@@ -71,13 +73,23 @@ place_storage() {
 
 # The per-program work directories (the checker's, the fast runtime's, Chrome's) on tmpfs. A grid creates and deletes a directory
 # per program, about a million a full run: on the VM's disk each one is a write to a disk image in the host's home directory, which
-# kept the host's fseventsd at a full core (2026-11-02). In RAM they cost the host nothing and never reach the image. Grid outputs and
-# the runtime cache stay on the data disk. Idempotent: a mounted directory is left as it is; a reboot empties them, which loses nothing.
+# kept the host's fseventsd at a full core (2026-11-02). In RAM they cost the host nothing and never reach the image. So do TMPDIR (a
+# producer's transition arena per process, Chrome's profiles) and a focus run's scratch (each grid's cases/, chrome-cases/ and role
+# log until --prune-cases deletes them), at $root/ram. Grid outputs and the runtime cache stay on the data disk: TMPDIR's cache and
+# focus-output directories are links to $root/tmp. Sizes are ceilings, not reservations (FUZZ_VM_SCRATCH_GIB, FUZZ_VM_RAM_GIB; a
+# recall code's cases take ~3 GiB of pages and its role log ~1 GiB, and a grid's heap up to 12 GiB of the VM's 32). Idempotent: a
+# mounted directory is left as it is; a reboot empties them, which loses nothing.
 scratch_in_ram() {
   vm "set -euo pipefail
     for d in $clone/scripts/runtime-oracle-install/.solid-checker-fuzz $clone/scripts/runtime-oracle-install/.solid-checker-fuzz-chrome $clone/scripts/fuzz/install/.solid-checker-fuzz-fast; do
       mkdir -p \$d
       mountpoint -q \$d || { sudo mount -t tmpfs -o size=${FUZZ_VM_SCRATCH_GIB:-8}g,mode=0755,uid=\$(id -u),gid=\$(id -g) tmpfs \$d && echo \"vm.sh: \$d on tmpfs\"; }
+    done
+    mkdir -p $root/ram $root/tmp
+    mountpoint -q $root/ram || { sudo mount -t tmpfs -o size=${FUZZ_VM_RAM_GIB:-16}g,mode=0755,uid=\$(id -u),gid=\$(id -g) tmpfs $root/ram && echo \"vm.sh: $root/ram (TMPDIR, focus scratch) on tmpfs\"; }
+    mkdir -p $root/ram/tmp $root/ram/scratch
+    for d in solid-checker-fuzz-cache.noindex solid-checker-fuzz-focus.noindex; do
+      mkdir -p $root/tmp/\$d; [ -L $root/ram/tmp/\$d ] || ln -s $root/tmp/\$d $root/ram/tmp/\$d
     done"
 }
 
@@ -89,6 +101,7 @@ preflight() {
       [ \"\$avail\" -ge 10 ] && [ \"\$ipct\" -le 90 ] || { echo \"vm.sh: \$d has \$avail GiB and \$((100 - ipct))% of its inodes free; delete old runs (their cases/ directories hold most of the files)\" >&2; exit 2; }
     done"
 }
+
 
 setup() {
   start
@@ -119,6 +132,8 @@ setup() {
 sync() {
   start
   preflight
+  # Before the build, which writes its temporary files to TMPDIR.
+  scratch_in_ram
   local index tree ref
   index=$(mktemp)
   cp "$(git -C "$repo" rev-parse --absolute-git-dir)/index" "$index"
@@ -140,16 +155,15 @@ sync() {
     node -e 'import(\"./scripts/playwright-browser.mjs\").then((m) => m.pinnedBrowser())' 2>/dev/null || {
       (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install chromium-headless-shell >/dev/null && sudo env PATH=\$PATH ./node_modules/.bin/playwright install-deps chromium-headless-shell >/dev/null)
     }"
-  scratch_in_ram
 }
 
 case "${1:-}" in
   setup) setup ;;
   sync) sync ;;
   run) shift; [ $# -gt 0 ] || die "run <command…>"; sync; vm "$vm_env; cd $clone && $(printf '%q ' "$@")" ;;
-  shell) start; colima ssh --profile "$profile" -- bash -lc "$vm_env; cd $clone && exec bash -l" ;;
+  shell) start; scratch_in_ram; colima ssh --profile "$profile" -- bash -lc "$vm_env; cd $clone && exec bash -l" ;;
   detach) shift; [ $# -gt 1 ] || die "detach <log> <command…>"; log=$1; shift; sync
     vm "$vm_env; cd $clone && mkdir -p \$(dirname $(printf '%q' "$log")) && (setsid nohup $(printf '%q ' "$@") > $(printf '%q' "$log") 2>&1 < /dev/null &) ; echo vm.sh: detached, output in $(printf '%q' "$log")" ;;
   pull) [ $# -eq 3 ] || die "pull <vm path> <host dir>"; mkdir -p "$3"; vm "tar cf - -C $(printf '%q' "$2") ." | tar xf - -C "$3" ;;
-  *) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

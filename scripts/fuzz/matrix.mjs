@@ -41,6 +41,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
@@ -586,6 +587,7 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
                                         layers, callback forms, mounts and file sources, each across the base grid, and the recall contexts
   [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
                                         other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
+  [--scratch <dir>]                     cases/ and chrome-cases/ in <dir> behind links (scratch.mjs; focus.mjs passes the VM's tmpfs)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache.noindex)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
@@ -598,6 +600,8 @@ export async function runMatrix(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
+  // `--scratch <dir>`: cases/ and chrome-cases/ there, behind links at their usual paths (scratch.mjs).
+  if (options.scratch) linkScratch(out, resolve(options.scratch));
   const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
     return await sweep(options, config, out);
@@ -758,7 +762,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
