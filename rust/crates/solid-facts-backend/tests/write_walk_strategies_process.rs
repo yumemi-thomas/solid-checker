@@ -7,15 +7,24 @@
 //! recursive local functions (random call forms, entries and declaration
 //! orders), the IR built without it must equal it.
 //!
-//! Both switches are process-wide, so this test is its own binary.
+//! ADR 0560: the walks whose answer is path-dependent end at a deterministic
+//! bound ([`solid_reactive_ir::WALK_STEP_BOUND`]) and answer nothing they
+//! found there; `path_dependent_walks_end_at_their_bound_and_fail_closed`
+//! builds shapes that reach it.
+//!
+//! The switches are process-wide, so these tests are their own binary and
+//! take [`SWITCHES`] in turn.
 
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf, time::Instant};
 
 use solid_facts::compiler::CompilerOptions;
 use solid_facts_backend::{
     NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, dialect,
 };
-use solid_reactive_ir::{AnalysisInputs, RoleLogTarget, RuleOptions};
+use solid_reactive_ir::{AnalysisInputs, ExecutionRole, RoleLogTarget, RuleOptions};
+
+/// Held by each test while it sets the process-wide switches.
+static SWITCHES: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Declarations transcribed from solid-js@2.0.0-rc.17, reduced to what the
 /// programs call.
@@ -163,6 +172,9 @@ fn every_path_and_the_folds_build_the_same_program() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
+    let _switches = SWITCHES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = env::temp_dir()
         .join("sc-scratch.noindex")
         .join(format!("write-walk-strategies-{}", std::process::id()));
@@ -249,6 +261,216 @@ fn every_path_and_the_folds_build_the_same_program() {
     }
     // The premise: the programs hold writes for the walks to place.
     assert!(writes > PROGRAMS as usize, "{writes} writes");
+}
+
+/// ADR 0560's bounded shapes, built with the bound lowered for this process
+/// ([`solid_reactive_ir::bound_walks`]) so they reach it with small
+/// programs. On each, a series' work must stay linear in the program at a
+/// fixed bound, every walk within it, and no write may come out clean.
+///
+/// - `untrack`, `alias`: `k` local functions that all call each other
+///   through `untrack(() => fj(n - 1))` or `const gj = () => fj(n - 1);
+///   gj();`, entered from the component body. The write walk's region fold
+///   (ADR 0546) does not apply to those edges; following the paths is
+///   factorial (at ed30c5738, release: untrack k = 8 38.7 s, alias k = 7
+///   5.6 s).
+/// - `reach-dead`: the same functions calling each other through
+///   `[1].forEach(() => fj(n - 1))`, entered only from dead code: `k * k`
+///   functions whose answers read each other, which the least fixed point
+///   finds never run, and which derive depth first.
+/// - `climb`: the complexity ladder's `climb` shape with
+///   [`solid_reactive_ir::follow_every_path`] on (the reference climb that
+///   the role log, a probe and a proof's deferred check take).
+fn bounded_shapes() -> [&'static str; 4] {
+    ["untrack", "alias", "reach-dead", "climb"]
+}
+
+/// The bound this process takes: the shapes pass it by k = 6..8.
+const BOUND: u64 = 1 << 10;
+
+/// The largest component each series builds.
+const MAX_K: usize = 9;
+
+fn bounded_shape_program(shape: &str, k: usize) -> String {
+    let head = "import { createSignal, untrack } from \"solid-js\";\n\n";
+    if shape == "climb" {
+        let helpers = (1..=k)
+            .map(|i| {
+                let calls = (1..=k)
+                    .filter(|&j| j != i)
+                    .map(|j| format!("if (n > {j}) h{j}(n - 1);"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let write = if i == 1 { "set(1); " } else { "" };
+                format!("  const h{i} = (n: number): void => {{ {write}{calls} }};\n")
+            })
+            .collect::<String>();
+        return format!(
+            "{head}export function App() {{\n  const [r, set] = createSignal(0);\n{helpers}  const hf = () => {{ h1(3); }}; [1].forEach(hf);\n  return <button>{{r()}}</button>;\n}}\n"
+        );
+    }
+    let call = |j: usize| match shape {
+        "untrack" => format!("untrack(() => f{j}(n - 1));"),
+        "alias" => format!("const g{j} = () => f{j}(n - 1); g{j}();"),
+        _ => format!("[1].forEach(() => f{j}(n - 1));"),
+    };
+    let functions = (1..=k)
+        .map(|i| {
+            let calls = (1..=k)
+                .filter(|&j| j != i)
+                .map(call)
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("  function f{i}(n: number): void {{ set({i}); {calls} }}\n")
+        })
+        .collect::<String>();
+    let entry = if shape == "reach-dead" {
+        "  if (false as boolean) f1(3);\n"
+    } else {
+        "  f1(3);\n"
+    };
+    format!(
+        "{head}export function App() {{\n  const [r, set] = createSignal(0);\n{functions}{entry}  return <button>{{r()}}</button>;\n}}\n"
+    )
+}
+
+#[test]
+fn path_dependent_walks_end_at_their_bound_and_fail_closed() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let _switches = SWITCHES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    solid_reactive_ir::bound_walks(Some(BOUND));
+    let root = env::temp_dir()
+        .join("sc-scratch.noindex")
+        .join(format!("walk-bounds-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _scratch = Scratch(root.clone());
+    fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+    fs::write(root.join("tsconfig.json"), TSCONFIG).unwrap();
+    let first = bounded_shape_program("untrack", 2);
+    fs::write(root.join("App.tsx"), &first).unwrap();
+    let root = root.canonicalize().unwrap();
+    let app = root.join("App.tsx");
+    let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let typefacts = PathBuf::from(typefacts)
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let solid_v2 = dialect::by_id("solid-v2").unwrap();
+    let mut session = NativeIncrementalSession::open(
+        solid_v2,
+        project_id,
+        vec![SourceFile {
+            path: app.to_string_lossy().into_owned(),
+            source: first.clone().into(),
+            compiler_options: CompilerOptions::default(),
+        }],
+        typescript,
+    )
+    .unwrap();
+    let mut version = 0;
+    let mut failures = Vec::new();
+    for shape in bounded_shapes() {
+        solid_reactive_ir::follow_every_path(shape == "climb");
+        let mut curve = Vec::new();
+        let mut exhausted_at = None;
+        for k in 2..=MAX_K {
+            let source = bounded_shape_program(shape, k);
+            fs::write(&app, &source).unwrap();
+            version += 1;
+            let facts = session
+                .edit(
+                    vec![SourceChange {
+                        path: app.to_string_lossy().into_owned(),
+                        version,
+                        source: Some(source.clone()),
+                        compiler_options: CompilerOptions::default(),
+                    }],
+                    None,
+                )
+                .unwrap();
+            let started = Instant::now();
+            let (built, timings) = solid_reactive_ir::build_with_analysis_inputs_measured(
+                &facts,
+                solid_v2.vocabulary,
+                AnalysisInputs::empty(),
+                &RuleOptions::default(),
+            )
+            .unwrap();
+            let elapsed = started.elapsed();
+            let writes = if shape == "climb" { 1 } else { k };
+            assert_eq!(
+                built.writes.len(),
+                writes,
+                "{shape} at k = {k} holds {} writes:\n{source}",
+                built.writes.len()
+            );
+            curve.push(format!(
+                "k{k}: walk {}, reach {}, peak {}, exhausted {}, {:.0} ms",
+                timings.write_walk_steps,
+                timings.reach_evaluations,
+                timings.bounded_walk_peak,
+                timings.bounded_walks_exhausted,
+                elapsed.as_secs_f64() * 1000.0
+            ));
+            // Every walk stops within a few steps of its bound (the steps
+            // its enclosing folds take while it unwinds), and a series'
+            // work is linear in the program at a fixed bound: each of the
+            // k writes, its nested walks and the site queries do at most a
+            // bound's work each.
+            if timings.bounded_walk_peak > 2 * BOUND {
+                failures.push(format!(
+                    "{shape} at k = {k}: a walk did {} steps past a bound of {BOUND}",
+                    timings.bounded_walk_peak
+                ));
+            }
+            let work = timings.write_walk_steps + timings.reach_evaluations;
+            let ceiling = 8 * (k * k) as u64 * BOUND;
+            if work > ceiling {
+                failures.push(format!(
+                    "{shape} at k = {k}: work {work} is over 8 * k^2 * bound ({ceiling})"
+                ));
+            }
+            if timings.bounded_walks_exhausted > 0 {
+                exhausted_at.get_or_insert(k);
+                // Fail closed: a walk that ended at its bound proves no
+                // write legal. In the component body each write is a
+                // violation where it is proven, and unproven elsewhere.
+                for write in &built.writes {
+                    if !write.execution.reports_disallowed_write()
+                        && write.execution != ExecutionRole::Unknown
+                    {
+                        failures.push(format!(
+                            "{shape} at k = {k}: a write at {} is {:?} past the bound",
+                            write.location.start_byte, write.execution
+                        ));
+                    }
+                }
+                // An undecided site-reach query proves no violation.
+                if shape == "reach-dead" && !built.unreached_sites.iter().any(|site| site.undecided)
+                {
+                    failures.push(format!(
+                        "{shape} at k = {k}: the site-reach query ended at its bound and no site is undecided"
+                    ));
+                }
+            }
+        }
+        eprintln!("bounded {shape}: {}", curve.join("; "));
+        // The premise: the shape reaches the bound (else an exact fold now
+        // answers it, and the complexity ladder should build it instead).
+        if exhausted_at.is_none() {
+            failures.push(format!("{shape}: no walk reached the bound by k = {MAX_K}"));
+        }
+    }
+    solid_reactive_ir::follow_every_path(false);
+    solid_reactive_ir::bound_walks(None);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 struct Scratch(PathBuf);

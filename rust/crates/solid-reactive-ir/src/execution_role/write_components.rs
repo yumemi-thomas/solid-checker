@@ -71,6 +71,79 @@ type Key = (String, Span);
 /// The work a region fold may do before the walk follows the paths instead.
 const STEP_BUDGET: usize = 1 << 20;
 
+/// ADR 0560: the caller steps one write walk may take (its region folds'
+/// and the paths it follows where none applies, every nested walk that
+/// shares its `visiting` set included) before it answers `Unknown`. The
+/// helper climb ([`crate::local_access`]) and the site-reach query's
+/// depth-first derivations ([`super::SiteReach`]) take the same bound.
+pub const WALK_STEP_BOUND: u64 = 1 << 16;
+
+/// Set by [`bound_walks`]; zero is [`WALK_STEP_BOUND`].
+static BOUND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// ADR 0560, for tests: every bounded walk (the write walk, the helper
+/// climb, the site-reach derivations) ends past `bound` steps instead of
+/// [`WALK_STEP_BOUND`], in this process, until it is called again (`None`
+/// restores it). A ladder reaches the bound with small programs.
+pub fn bound_walks(bound: Option<u64>) {
+    BOUND.store(bound.unwrap_or(0), std::sync::atomic::Ordering::Release);
+}
+
+/// The bound every bounded walk takes ([`bound_walks`]).
+pub(crate) fn walk_bound() -> u64 {
+    match BOUND.load(std::sync::atomic::Ordering::Acquire) {
+        0 => WALK_STEP_BOUND,
+        bound => bound,
+    }
+}
+
+thread_local! {
+    /// The caller steps of each write walk in progress on this thread that
+    /// began with a `visiting` set of its own, innermost last.
+    static WALK_STEPS: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// ADR 0560: runs `walk`, a write walk with a `visiting` set of its own,
+/// under [`walk_bound`]: past it the walk answers `Unknown`, whatever
+/// its folds found and whatever a fallback would place. The steps are the
+/// walk's own (a walk it starts with a fresh set counts its own), so the
+/// answer is a function of the walk's start alone.
+pub(super) fn bounded_walk(
+    lookup: &SemanticLookup<'_>,
+    walk: impl FnOnce() -> ExecutionRole,
+) -> ExecutionRole {
+    struct Frame;
+    impl Drop for Frame {
+        fn drop(&mut self) {
+            WALK_STEPS.with(|steps| steps.borrow_mut().pop());
+        }
+    }
+    WALK_STEPS.with(|steps| steps.borrow_mut().push(0));
+    let frame = Frame;
+    let role = walk();
+    let steps = WALK_STEPS.with(|steps| steps.borrow().last().copied().unwrap_or(0));
+    drop(frame);
+    let exhausted = steps > walk_bound();
+    lookup.note_bounded_walk(steps, exhausted);
+    if exhausted {
+        ExecutionRole::Unknown
+    } else {
+        role
+    }
+}
+
+/// ADR 0560: one caller step of the innermost [`bounded_walk`]; `false` once
+/// it is past its bound (the walk then unwinds; its answer is `Unknown`).
+pub(super) fn walk_step() -> bool {
+    WALK_STEPS.with(|steps| match steps.borrow_mut().last_mut() {
+        Some(steps) => {
+            *steps += 1;
+            *steps <= walk_bound()
+        }
+        None => true,
+    })
+}
+
 thread_local! {
     /// The `visiting` queries made while a placement is recorded.
     static VISITS: std::cell::RefCell<VisitLog> = std::cell::RefCell::default();
@@ -247,7 +320,7 @@ impl<'a, 'y: 'a> Region<'a, 'y, '_, '_> {
 
     fn step(&mut self) -> Option<()> {
         self.steps += 1;
-        (self.steps <= STEP_BUDGET).then_some(())
+        (self.steps <= STEP_BUDGET && walk_step()).then_some(())
     }
 
     fn fold(&mut self, mut imperative: Option<ExecutionRole>) -> Option<CallerFold> {

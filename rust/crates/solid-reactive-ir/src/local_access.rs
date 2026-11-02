@@ -4959,7 +4959,13 @@ pub(crate) fn handed_write_execution(
     root_body: RootBodyGuard,
     execution: ExecutionRole,
 ) -> ExecutionRole {
-    handed_write_execution_within(
+    let mut walk = HelperWriteWalk {
+        visiting: HashSet::default(),
+        depth: HELPER_WRITE_DEPTH,
+        memo: (!crate::execution_role::every_path()).then(HelperWalkMemo::default),
+        steps: 0,
+    };
+    let role = handed_write_execution_within(
         file,
         span,
         allowed,
@@ -4968,12 +4974,16 @@ pub(crate) fn handed_write_execution(
         lookup,
         root_body,
         execution,
-        &mut HelperWriteWalk {
-            visiting: HashSet::default(),
-            depth: HELPER_WRITE_DEPTH,
-            memo: (!crate::execution_role::every_path()).then(HelperWalkMemo::default),
-        },
-    )
+        &mut walk,
+    );
+    lookup.note_bounded_walk(walk.steps, walk.exhausted());
+    // ADR 0560: a climb that followed its paths past the bound answers
+    // nothing it found, and no placed hand-off replaces that.
+    if walk.exhausted() {
+        ExecutionRole::Unknown
+    } else {
+        role
+    }
 }
 
 /// ADR 0537: how many helper calls [`helper_call_write_execution`] follows
@@ -4989,6 +4999,21 @@ struct HelperWriteWalk {
     /// probe or a proof's deferred check: the climb then follows every path
     /// as it is written).
     memo: Option<HelperWalkMemo>,
+    /// ADR 0560: the calls the climb followed along its paths
+    /// ([`Self::exhausted`]).
+    steps: u64,
+}
+
+impl HelperWriteWalk {
+    /// ADR 0560: whether the climb followed more calls along its paths than
+    /// the bound ([`crate::execution_role::walk_bound`]): it then ends, and
+    /// its root answers `Unknown`. A climb that rejects descends by
+    /// [`first_rejection`], whose work is polynomial; one that follows its
+    /// paths as written (the role log on, a probe, a proof's deferred
+    /// check) or finds no rejection follows calls one by one.
+    fn exhausted(&self) -> bool {
+        self.steps > crate::execution_role::walk_bound()
+    }
 }
 
 /// ADR 0546: a call's own answer ([`handed_tail`]) is the same on every path
@@ -5036,6 +5061,7 @@ fn handed_write_execution_within(
         walk,
     ) {
         Some(role) if role.reports_disallowed_write() => return role,
+        _ if walk.exhausted() => return ExecutionRole::Unknown,
         Some(_) => ExecutionRole::Unknown,
         None => execution,
     };
@@ -5237,6 +5263,128 @@ fn climb_rejects_nowhere(
     ClimbBall::Quiet { unplaced, called }
 }
 
+/// ADR 0560: the rejection the climb's paths meet first from `function`
+/// (in progress, with `walk.depth` calls left), found without following
+/// them. The climb tries each call of a helper in order: the calls of the
+/// helper it is written in first (a rejection there ends the fold), then
+/// its own answer ([`handed_tail`]). A helper's climb rejects exactly when
+/// a path of at most its calls left, through helpers not in progress,
+/// reaches a call whose own answer rejects ([`rejection_within`]: the
+/// shortest such path is such a path), so the first call whose helper
+/// rejects is where the climb goes, and the first rejection there is the
+/// fold's. `None` where no call is found to lead to one (the climb then
+/// follows its paths).
+#[allow(clippy::too_many_arguments)]
+fn first_rejection(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    walk: &mut HelperWriteWalk,
+) -> Option<ExecutionRole> {
+    let (depth, mut entered) = (walk.depth, Vec::new());
+    let mut at = (file.path.to_string(), function.span);
+    let found = 'descent: loop {
+        let mut next = None;
+        for (caller_file, callee) in lookup.function_call_sites(&at.0, at.1) {
+            lookup.count_write_walk_steps(1);
+            if walk.depth == 0 {
+                break 'descent None;
+            }
+            if let Some(helper) = climbed_helper(caller_file, callee, lookup) {
+                let key = (caller_file.path.to_string(), helper.span);
+                if !walk.visiting.contains(&key)
+                    && rejection_within(
+                        key.clone(),
+                        walk.depth - 1,
+                        entities,
+                        symbol_names,
+                        lookup,
+                        root_body,
+                        walk,
+                    )
+                {
+                    next = Some(key);
+                    break;
+                }
+            }
+            let tail = climb_tail(
+                caller_file,
+                callee,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+                walk,
+            );
+            if let Some(role) = tail.filter(|role| role.reports_disallowed_write()) {
+                break 'descent Some(role);
+            }
+        }
+        let Some(key) = next else {
+            break None;
+        };
+        walk.visiting.insert(key.clone());
+        entered.push(key.clone());
+        walk.depth -= 1;
+        at = key;
+    };
+    for key in entered {
+        walk.visiting.remove(&key);
+    }
+    walk.depth = depth;
+    found
+}
+
+/// ADR 0560: whether the climb of `helper` with `calls` calls left rejects:
+/// some call of a helper at most `calls - 1` calls away, over helpers not
+/// in progress, has a rejecting [`handed_tail`] (breadth-first, so each
+/// helper is reached by a shortest path, which repeats none).
+#[allow(clippy::too_many_arguments)]
+fn rejection_within(
+    helper: (String, solid_facts::core::Span),
+    calls: usize,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    walk: &mut HelperWriteWalk,
+) -> bool {
+    let mut seen = walk.visiting.clone();
+    seen.insert(helper.clone());
+    let mut frontier = vec![helper];
+    for _ in 0..calls {
+        let mut next = Vec::new();
+        for (path, span) in frontier {
+            for (caller_file, callee) in lookup.function_call_sites(&path, span) {
+                lookup.count_write_walk_steps(1);
+                let tail = climb_tail(
+                    caller_file,
+                    callee,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    walk,
+                );
+                if tail.is_some_and(ExecutionRole::reports_disallowed_write) {
+                    return true;
+                }
+                if let Some(helper) = climbed_helper(caller_file, callee, lookup) {
+                    let key = (caller_file.path.to_string(), helper.span);
+                    if seen.insert(key.clone()) {
+                        next.push(key);
+                    }
+                }
+            }
+        }
+        frontier = next;
+    }
+    false
+}
+
 /// ADR 0537: ADR 0536's summary placement for a write. A write that runs
 /// during its helper's call (`const wrapUse = () => { setX(1); }`) runs
 /// wherever that call runs, so a call written in a named function handed to
@@ -5288,11 +5436,34 @@ fn helper_call_write_execution(
         }
     }
     let quick = walk.memo.as_ref().and_then(|memo| memo.quick) == Some(true);
+    // ADR 0560: a call rejects somewhere the climb reaches; the kept climb
+    // descends straight to the first rejection its paths meet.
+    if walk.memo.is_some()
+        && !quick
+        && let Some(role) = first_rejection(
+            file,
+            function,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            walk,
+        )
+    {
+        walk.visiting.remove(&key);
+        return Some(role);
+    }
     let mut unplaced = false;
     let mut proven = None;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
         if walk.depth == 0 {
             unplaced = true;
+            break;
+        }
+        // ADR 0560: past the bound the climb ends; its root answers
+        // `Unknown` ([`handed_write_execution`]).
+        walk.steps += 1;
+        if walk.exhausted() {
             break;
         }
         lookup.count_write_walk_steps(1);
@@ -5307,6 +5478,9 @@ fn helper_call_write_execution(
             walk,
         );
         walk.depth += 1;
+        if walk.exhausted() {
+            break;
+        }
         if role.reports_disallowed_write() {
             proven = Some(role);
             break;

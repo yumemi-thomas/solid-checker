@@ -844,6 +844,10 @@ pub(super) struct SemanticLookup<'a> {
     /// The site-reach derivations this build evaluated (instrumentation,
     /// [`crate::BuildTimings::reach_evaluations`]).
     reach_evaluations: std::sync::atomic::AtomicU64,
+    /// The most work one bounded walk did, and how many ended at their
+    /// bound (ADR 0560, [`crate::BuildTimings::bounded_walk_peak`]).
+    bounded_walk_peak: std::sync::atomic::AtomicU64,
+    bounded_walks_exhausted: std::sync::atomic::AtomicU64,
     /// The functions of every file, counted once (ADR 0546).
     function_count: OnceLock<usize>,
     /// The literals whose every invocation is a host event dispatch.
@@ -1215,6 +1219,8 @@ impl<'a> SemanticLookup<'a> {
             write_walk_steps: std::sync::atomic::AtomicU64::new(0),
             function_count: OnceLock::new(),
             reach_evaluations: std::sync::atomic::AtomicU64::new(0),
+            bounded_walk_peak: std::sync::atomic::AtomicU64::new(0),
+            bounded_walks_exhausted: std::sync::atomic::AtomicU64::new(0),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -1289,6 +1295,29 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn count_reach_evaluation(&self) {
         self.reach_evaluations
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// ADR 0560: one bounded walk's work (a climb's followed calls, a write
+    /// walk's caller steps, a site-reach query's derivations) and whether
+    /// it ended at its bound.
+    pub(crate) fn note_bounded_walk(&self, steps: u64, exhausted: bool) {
+        self.bounded_walk_peak
+            .fetch_max(steps, std::sync::atomic::Ordering::Relaxed);
+        if exhausted {
+            self.bounded_walks_exhausted
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// The largest [`Self::note_bounded_walk`] work, and how many walks
+    /// ended at their bound, so far.
+    pub(crate) fn bounded_walks(&self) -> (u64, u64) {
+        (
+            self.bounded_walk_peak
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.bounded_walks_exhausted
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     /// The site-reach derivations this build has evaluated so far.

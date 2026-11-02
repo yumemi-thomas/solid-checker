@@ -415,16 +415,18 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
             let allowed = write_allowed_spans(file, &allowed_callback_spans(file, lookup), lookup);
             // Only what the position proves: another entry of the function
             // the call is written in is not an entry of this activation.
-            let here = semantic_write_role_walk(
-                file,
-                callee,
-                &allowed,
-                lookup.entities(),
-                lookup.symbol_names(),
-                lookup,
-                root_body,
-                &mut HashSet::from_iter([lexical_only_marker()]),
-            );
+            let here = super::write_components::bounded_walk(lookup, || {
+                semantic_write_role_walk(
+                    file,
+                    callee,
+                    &allowed,
+                    lookup.entities(),
+                    lookup.symbol_names(),
+                    lookup,
+                    root_body,
+                    &mut HashSet::from_iter([lexical_only_marker()]),
+                )
+            });
             WRITE_SITE_ROLES.with(|cache| cache.borrow_mut().insert(key, here));
             here
         });

@@ -9,7 +9,11 @@
 //!
 //! A second series builds `k` local functions that all call each other (k =
 //! 2..=12) in the same hosts: the write walk and the site-reach query must
-//! stay polynomial in `k` (ADR 0546), gated on their own counters.
+//! stay polynomial in `k` (ADR 0546), gated on their own counters. A third
+//! builds the shapes whose answers ADR 0560 computes exactly (site reach
+//! past 64 functions, a helper climb whose rejecting call is its last), on
+//! the same counters; `walk_bounds_process` builds the shapes whose walks
+//! end at their bound.
 //!
 //! Work is counted, never timed: the rows the IR holds for each host
 //! (writes, actions, reads), the reachability count's visits
@@ -485,6 +489,168 @@ fn dense_mutual_recursion_stays_polynomial() {
             }
             eprintln!("dense {name}: {}", curve.join("; "));
         }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// ADR 0560: the shapes ADR 0546 left exponential that now answer exactly,
+/// `k` = 2..=[`MAX_DENSE`]:
+///
+/// - `reach`: 64 exported functions beside a dense component that only dead
+///   code enters (`if (false as boolean) f1(3)`): each site-reach answer
+///   reads `k + 1` functions, which the least fixed point decides (at
+///   ed30c5738, release: k = 7 6.9 s, k = 8 over 40 s);
+/// - `reach-arrows`: the dense component entered from the body through
+///   `[1].forEach(() => fj(n - 1))` calls, `k * k` functions whose answers
+///   read each other, proven to run by the fixed point;
+/// - `climb`: `k` helper closures that all call each other, the first
+///   writing, whose one rejecting call (`[1].forEach(hf)` with `hf` calling
+///   `h1`) is the first helper's last call site: the climb descends to it
+///   (at ed30c5738: k = 10 679 ms, about four times per helper).
+fn exact_shape_program(shape: &str, k: usize) -> String {
+    let dense = |call: &dyn Fn(usize) -> String| {
+        (1..=k)
+            .map(|i| {
+                let calls = (1..=k)
+                    .filter(|&j| j != i)
+                    .map(call)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!("  function f{i}(n: number): void {{ set({i}); {calls} }}\n")
+            })
+            .collect::<String>()
+    };
+    let head = "import { createMemo, createSignal } from \"solid-js\";\n\n";
+    match shape {
+        "reach" => {
+            let pads = (0..64)
+                .map(|p| format!("export function pad{p}() {{ return {p}; }}\n"))
+                .collect::<String>();
+            let functions = dense(&|j| format!("if (n > {j}) f{j}(n - 1);"));
+            format!(
+                "{head}{pads}export function App() {{\n  const [r, set] = createSignal(0);\n{functions}  if (false as boolean) f1(3);\n  return <button>{{r()}}</button>;\n}}\n"
+            )
+        }
+        "reach-arrows" => {
+            let functions = dense(&|j| format!("[1].forEach(() => f{j}(n - 1));"));
+            format!(
+                "{head}export function App() {{\n  const [r, set] = createSignal(0);\n{functions}  f1(3);\n  return <button>{{r()}}</button>;\n}}\n"
+            )
+        }
+        _ => {
+            let helpers = (1..=k)
+                .map(|i| {
+                    let calls = (1..=k)
+                        .filter(|&j| j != i)
+                        .map(|j| format!("if (n > {j}) h{j}(n - 1);"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let write = if i == 1 { "set(1); " } else { "" };
+                    format!("  const h{i} = (n: number): void => {{ {write}{calls} }};\n")
+                })
+                .collect::<String>();
+            format!(
+                "{head}export function App() {{\n  const [r, set] = createSignal(0);\n{helpers}  const hf = () => {{ h1(3); }}; [1].forEach(hf);\n  return <button>{{r()}}</button>;\n}}\n"
+            )
+        }
+    }
+}
+
+#[test]
+fn path_dependent_fallbacks_answer_exactly_in_polynomial_work() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = env::temp_dir()
+        .join("sc-scratch.noindex")
+        .join(format!("complexity-exact-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _scratch = Scratch(root.clone());
+    fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+    fs::write(root.join("tsconfig.json"), TSCONFIG).unwrap();
+    let first = exact_shape_program("reach", 2);
+    fs::write(root.join("App.tsx"), &first).unwrap();
+    let root = root.canonicalize().unwrap();
+    let app = root.join("App.tsx");
+    let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let typefacts = PathBuf::from(typefacts)
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let solid_v2 = dialect::by_id("solid-v2").unwrap();
+    let mut session = NativeIncrementalSession::open(
+        solid_v2,
+        project_id,
+        vec![SourceFile {
+            path: app.to_string_lossy().into_owned(),
+            source: first.clone().into(),
+            compiler_options: CompilerOptions::default(),
+        }],
+        typescript,
+    )
+    .unwrap();
+    let mut version = 0;
+    let mut failures = Vec::new();
+    for shape in ["reach", "reach-arrows", "climb"] {
+        let mut work = Vec::new();
+        let mut curve = Vec::new();
+        for k in 2..=MAX_DENSE {
+            let source = exact_shape_program(shape, k);
+            fs::write(&app, &source).unwrap();
+            version += 1;
+            let facts = session
+                .edit(
+                    vec![SourceChange {
+                        path: app.to_string_lossy().into_owned(),
+                        version,
+                        source: Some(source.clone()),
+                        compiler_options: CompilerOptions::default(),
+                    }],
+                    None,
+                )
+                .unwrap();
+            let started = Instant::now();
+            let (built, timings) = solid_reactive_ir::build_with_analysis_inputs_measured(
+                &facts,
+                solid_v2.vocabulary,
+                AnalysisInputs::empty(),
+                &RuleOptions::default(),
+            )
+            .unwrap();
+            let elapsed = started.elapsed();
+            // The premises: every write is analyzed, and no walk answered
+            // at its bound (each answer is the exact one).
+            let writes = if shape == "climb" { 1 } else { k };
+            assert_eq!(
+                built.writes.len(),
+                writes,
+                "{shape} at k = {k} holds {} writes:\n{source}",
+                built.writes.len()
+            );
+            assert_eq!(
+                timings.bounded_walks_exhausted, 0,
+                "{shape} at k = {k}: a walk ended at its bound:\n{source}"
+            );
+            let steps = timings.write_walk_steps + timings.reach_evaluations;
+            work.push(steps);
+            curve.push(format!(
+                "k{k}: walk {}, reach {}, peak {}, {:.0} ms",
+                timings.write_walk_steps,
+                timings.reach_evaluations,
+                timings.bounded_walk_peak,
+                elapsed.as_secs_f64() * 1000.0
+            ));
+            if !within_cubic_envelope(&work, k) {
+                failures.push(format!(
+                    "{shape}: write-walk and reach work {work:?} leaves 2*(k/2)^3*work(2) at k = {k}"
+                ));
+                break;
+            }
+        }
+        eprintln!("exact {shape}: {}", curve.join("; "));
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

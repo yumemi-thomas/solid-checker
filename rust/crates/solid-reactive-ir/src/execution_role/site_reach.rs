@@ -47,6 +47,10 @@ pub(crate) enum Reach {
     Unreached(UnreachedReason),
     /// No proof either way.
     MayRun,
+    /// ADR 0560: the query stopped at its depth limit or its work bound
+    /// before it decided: no proof either way, and a violation here is not
+    /// proven either ([`crate::UnreachedSite::undecided`]).
+    Undecided,
 }
 
 /// Why a site is [`Reach::Unreached`].
@@ -78,6 +82,24 @@ pub(crate) struct SiteReach<'l, 'a> {
     /// While [`Self::least_fixed_point`] runs: its current approximation,
     /// and the functions it has met, in order.
     approximation: RefCell<Option<Approximation<'a>>>,
+    /// ADR 0560: the least fixed point may answer a query (not with
+    /// [`super::follow_every_path`] on).
+    fixes: bool,
+    /// ADR 0560: the depth-first derivations this query ran, and whether
+    /// one stopped at the depth limit or the walks' bound
+    /// ([`super::walk_bound`]): from then on no answer of this query is a
+    /// proof ([`Reach::Undecided`]). Only a function whose answer reads
+    /// [`DEPTH_LIMIT`] functions or more ([`Self::reads_few`]) and is not
+    /// proven to run by the least fixed point derives depth first.
+    derivations: Cell<u64>,
+    limited: Cell<bool>,
+}
+
+impl Drop for SiteReach<'_, '_> {
+    fn drop(&mut self) {
+        self.lookup
+            .note_bounded_walk(self.derivations.get(), self.limited.get());
+    }
 }
 
 /// A least fixed point being iterated: each function met so far, with
@@ -94,7 +116,7 @@ struct Approximation<'a> {
 }
 
 /// How deep a chain of functions the query follows before it answers
-/// `MayRun`.
+/// `MayRun` (ADR 0560: and every later answer of the query is undecided).
 const DEPTH_LIMIT: usize = 64;
 
 impl<'l, 'a> SiteReach<'l, 'a> {
@@ -107,16 +129,18 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             refusals: true,
             iterates: lookup.function_count() < DEPTH_LIMIT && !super::every_path_asked(),
             approximation: RefCell::new(None),
+            fixes: !super::every_path_asked(),
+            derivations: Cell::new(0),
+            limited: Cell::new(false),
         }
     }
 
     /// The query without ADR 0475's refusals: what tells a report why a site
     /// is unreached.
     fn without_refusals(lookup: &'l SemanticLookup<'a>) -> Self {
-        Self {
-            refusals: false,
-            ..Self::new(lookup)
-        }
+        let mut query = Self::new(lookup);
+        query.refusals = false;
+        query
     }
 
     fn refused(&self, file: &solid_facts::FileFacts, entry: Span) -> bool {
@@ -125,11 +149,19 @@ impl<'l, 'a> SiteReach<'l, 'a> {
 
     /// Whether any execution reaches `site` of `file`.
     pub(crate) fn site(&self, file: &solid_facts::FileFacts, site: Span) -> Reach {
+        let reach = self.site_within(file, site);
+        if self.limited.get() {
+            return Reach::Undecided;
+        }
+        reach
+    }
+
+    fn site_within(&self, file: &solid_facts::FileFacts, site: Span) -> Reach {
         if file.ast.unreachable_contains(site) {
             return Reach::Unreached(UnreachedReason::DeadCode);
         }
         match crate::owners::owning_function(&file.ast, site) {
-            Some(function) if !self.function_runs(file, function) => {
+            Some(function) if !self.runs(file, function) => {
                 Reach::Unreached(UnreachedReason::NeverEntered)
             }
             _ => Reach::MayRun,
@@ -137,20 +169,52 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     }
 
     fn reached(&self, file: &solid_facts::FileFacts, site: Span) -> bool {
-        self.site(file, site) == Reach::MayRun
+        self.site_within(file, site) == Reach::MayRun
     }
 
-    /// Whether `function` of `file` may run.
+    /// Whether `function` of `file` may run: `true` where the query did not
+    /// decide ([`Reach::Undecided`]).
     pub(crate) fn function_runs(
         &self,
         file: &solid_facts::FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
+        self.runs(file, function) || self.limited.get()
+    }
+
+    fn runs(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        if self.limited.get() {
+            return true;
+        }
         let key = (file.path.to_string(), function.span);
         if let Some(runs) = self.functions.borrow().get(&key) {
             return *runs;
         }
-        if self.iterates {
+        // ADR 0560: outside a derivation, the least fixed point answers a
+        // function whose answer reads fewer than DEPTH_LIMIT functions (a
+        // derivation from it never reaches the limit), and any function it
+        // proves runs (a derivation answers at least the fixed point).
+        let outside = !self.iterates
+            && self.fixes
+            && self.approximation.borrow().is_none()
+            && self.visiting.borrow().is_empty();
+        let fixes = self.iterates || (outside && self.reads_few(file, function));
+        if outside && !fixes {
+            let own = self
+                .lookup
+                .own_file(file)
+                .and_then(|own| Some((own, own.ast.function_at(function.span)?)));
+            if let Some((own, function)) = own
+                && self.least_fixed_point(key.clone(), own, function, false) == Some(true)
+            {
+                return true;
+            }
+        }
+        if fixes || self.approximation.borrow().is_some() {
             let own = self
                 .lookup
                 .own_file(file)
@@ -168,12 +232,18 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                 return false;
             }
             if let Some((own, function)) = own
-                && let Some(runs) = self.least_fixed_point(key.clone(), own, function)
+                && let Some(runs) = self.least_fixed_point(key.clone(), own, function, true)
             {
                 return runs;
             }
         }
-        if self.visiting.borrow().len() >= DEPTH_LIMIT {
+        // ADR 0560: a derivation that stops at the limit or the bound
+        // decides nothing from here on.
+        self.derivations.set(self.derivations.get() + 1);
+        if self.visiting.borrow().len() >= DEPTH_LIMIT
+            || self.derivations.get() > super::walk_bound()
+        {
+            self.limited.set(true);
             return true;
         }
         if !self.visiting.borrow_mut().insert(key.clone()) {
@@ -183,7 +253,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         }
         let outer_assumed = self.assumed.replace(false);
         self.lookup.count_reach_evaluation();
-        let runs = self.function_runs_uncached(file, function);
+        let runs = self.runs_uncached(file, function);
         self.visiting.borrow_mut().remove(&key);
         let assumed = self.assumed.get();
         if runs || !assumed {
@@ -191,6 +261,68 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         }
         self.assumed.set(outer_assumed || assumed);
         runs
+    }
+
+    /// ADR 0560: whether the functions `function`'s answer may read, and
+    /// theirs in turn, are fewer than [`DEPTH_LIMIT`], all of the program's
+    /// own files. An answer reads the function written around it, and the
+    /// function each call, render or reference of its name (or of its
+    /// class's name) is written in ([`Self::site`] asks only those): a
+    /// derivation from it holds only functions of that set in progress, so
+    /// it never stops at the limit, and its answer is the least fixed point
+    /// ([`Self::least_fixed_point`]).
+    fn reads_few(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        let Some(own) = self.lookup.own_file(file) else {
+            return false;
+        };
+        let mut seen = HashSet::from_iter([(own.path.to_string(), function.span)]);
+        let mut stack = vec![(own, function.span)];
+        while let Some((file, span)) = stack.pop() {
+            let Some(function) = file.ast.function_at(span) else {
+                return false;
+            };
+            let mut sites = Vec::new();
+            if let Some(outer) = crate::owners::owning_function(&file.ast, function.span) {
+                sites.push((file, outer.span));
+            }
+            for (caller, callee) in self
+                .lookup
+                .function_call_sites(file.path.as_str(), function.span)
+            {
+                let Some(caller) = self.lookup.own_file(caller) else {
+                    return false;
+                };
+                if let Some(owner) = crate::owners::owning_function(&caller.ast, callee) {
+                    sites.push((caller, owner.span));
+                }
+            }
+            let declarations = function_declaration_span(file, function).into_iter().chain(
+                class_of_member(file, function).and_then(|class| class_declaration(file, class)),
+            );
+            for declaration in declarations {
+                for reference in file.ast.identifiers.iter().filter(|identifier| {
+                    identifier.role == solid_facts::ast::IdentifierRole::Reference
+                        && file.ast.reference_declaration(identifier.span) == Some(declaration)
+                }) {
+                    if let Some(owner) = crate::owners::owning_function(&file.ast, reference.span) {
+                        sites.push((file, owner.span));
+                    }
+                }
+            }
+            for (file, span) in sites {
+                if seen.insert((file.path.to_string(), span)) {
+                    if seen.len() >= DEPTH_LIMIT {
+                        return false;
+                    }
+                    stack.push((file, span));
+                }
+            }
+        }
+        true
     }
 
     /// ADR 0546: whether the function `key` runs, as the least fixed point of
@@ -201,12 +333,16 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     /// answers the same where the depth limit cannot stop it: a function in
     /// progress is assumed not to run, and a derivation that runs needs no
     /// function twice on any branch. `None` (nothing kept) where a function
-    /// met is not one of the program's own.
+    /// met is not one of the program's own. ADR 0560: without `exact` (the
+    /// derivation may reach its limit), only the functions found to run are
+    /// kept: a derivation answers at least the fixed point, so it answers
+    /// `true` there too.
     fn least_fixed_point(
         &self,
         key: (String, Span),
         file: &'a solid_facts::FileFacts,
         function: &'a solid_facts::ast::FunctionFact,
+        exact: bool,
     ) -> Option<bool> {
         struct Reset<'r, 'a>(&'r RefCell<Option<Approximation<'a>>>);
         impl Drop for Reset<'_, '_> {
@@ -237,7 +373,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                     continue;
                 };
                 self.lookup.count_reach_evaluation();
-                if self.function_runs_uncached(file, function) {
+                if self.runs_uncached(file, function) {
                     let mut approximation = self.approximation.borrow_mut();
                     *approximation.as_mut()?.values.get_mut(&next)? = true;
                     moved = true;
@@ -253,11 +389,16 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             return None;
         }
         let runs = approximation.values[&key];
-        self.functions.borrow_mut().extend(approximation.values);
+        self.functions.borrow_mut().extend(
+            approximation
+                .values
+                .into_iter()
+                .filter(|(_, runs)| exact || *runs),
+        );
         Some(runs)
     }
 
-    fn function_runs_uncached(
+    fn runs_uncached(
         &self,
         file: &solid_facts::FileFacts,
         function: &solid_facts::ast::FunctionFact,
@@ -276,7 +417,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             // unless it is entered only through refused creations (ADR 0475).
             return !self.entered_only_through_refusals(file, function);
         };
-        if !self.function_runs(file, outer) || self.refused(file, function.span) {
+        if !self.runs(file, outer) || self.refused(file, function.span) {
             return false;
         }
         match function_declaration_span(file, function) {
@@ -372,24 +513,30 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         if runs_at_definition || decorated || self.lookup.program_has_eval() {
             return false;
         }
-        let declaration = match &class.name {
-            Some(name) => name.span,
-            None => {
-                let Some(binding) = file.ast.bindings.iter().find(|binding| {
-                    binding.shape == solid_facts::ast::BindingShape::Identifier
-                        && binding.initializer.is_some_and(|initializer| {
-                            file.ast.peel_ts_sugar_span(initializer) == class.span
-                        })
-                }) else {
-                    return false;
-                };
-                let Some(name) = binding.names.first() else {
-                    return false;
-                };
-                name.span
-            }
+        let Some(declaration) = class_declaration(file, class) else {
+            return false;
         };
         !flow_binding_exported(file, declaration) && self.references_unreached(file, declaration)
+    }
+}
+
+/// The declaration of the name a class is bound to: its own name, or the
+/// name of an identifier binding whose initializer is the class.
+fn class_declaration(
+    file: &solid_facts::FileFacts,
+    class: &solid_facts::ast::ClassFact,
+) -> Option<Span> {
+    match &class.name {
+        Some(name) => Some(name.span),
+        None => {
+            let binding = file.ast.bindings.iter().find(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast.peel_ts_sugar_span(initializer) == class.span
+                    })
+            })?;
+            Some(binding.names.first()?.span)
+        }
     }
 }
 
@@ -604,12 +751,25 @@ pub(crate) fn unreached_report_sites(
                 return None;
             };
             let site = Span::new(start, end);
+            let undecided = crate::UnreachedSite {
+                location: location.clone(),
+                dead_code: false,
+                refused_creation: false,
+                undecided: true,
+            };
             match query.site(file, site) {
-                Reach::Unreached(reason) => Some(crate::UnreachedSite {
-                    location: location.clone(),
-                    dead_code: reason == UnreachedReason::DeadCode,
-                    refused_creation: plain.site(file, site) == Reach::MayRun,
-                }),
+                Reach::Unreached(reason) => match plain.site(file, site) {
+                    // ADR 0560: an undecided query proves nothing; the
+                    // violation is not proven either.
+                    Reach::Undecided => Some(undecided),
+                    plain => Some(crate::UnreachedSite {
+                        location: location.clone(),
+                        dead_code: reason == UnreachedReason::DeadCode,
+                        refused_creation: plain == Reach::MayRun,
+                        undecided: false,
+                    }),
+                },
+                Reach::Undecided => Some(undecided),
                 Reach::MayRun => None,
             }
         })

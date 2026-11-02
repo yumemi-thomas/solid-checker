@@ -78,7 +78,7 @@ mod projection;
 mod reachability;
 mod reactive_analysis;
 mod role_log;
-pub use execution_role::follow_every_path;
+pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};
 pub use role_log::{RoleLogTarget, configure as configure_role_log};
 pub mod route_components;
 pub mod router_params;
@@ -1446,6 +1446,10 @@ pub struct UnreachedSite {
     /// callback (ADR 0475).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refused_creation: bool,
+    /// ADR 0560: the query stopped at its depth limit or work bound before
+    /// it decided whether any execution reaches the site.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub undecided: bool,
 }
 
 /// The [`UnreachedSite`] at exactly the byte range `start..end` of `path`,
@@ -1654,6 +1658,13 @@ pub struct BuildTimings {
     /// derivation counted, its fixed-point rounds included (ADR 0546).
     /// Deterministic, so the complexity ladder gates on it.
     pub reach_evaluations: u64,
+    /// ADR 0560: the most work one bounded walk did (a helper climb's
+    /// followed calls, a write walk's caller steps, a site-reach query's
+    /// depth-first derivations), and how many walks ended at their bound,
+    /// which answers nothing it found. Deterministic, so the complexity
+    /// ladder gates on them.
+    pub bounded_walk_peak: u64,
+    pub bounded_walks_exhausted: u64,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
     pub owner_reused_files: u64,

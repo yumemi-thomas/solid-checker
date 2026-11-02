@@ -22,16 +22,18 @@ pub(crate) fn semantic_write_execution_role(
 ) -> ExecutionRole {
     crate::role_log::decide("write", file.path.as_str(), span, || {
         let allowed = write_allowed_spans(file, allowed, lookup);
-        semantic_write_execution_role_within(
-            file,
-            span,
-            &allowed,
-            entities,
-            symbol_names,
-            lookup,
-            root_body,
-            &mut HashSet::default(),
-        )
+        super::write_components::bounded_walk(lookup, || {
+            semantic_write_execution_role_within(
+                file,
+                span,
+                &allowed,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+                &mut HashSet::default(),
+            )
+        })
     })
 }
 
@@ -2360,6 +2362,14 @@ fn path_fold(
     let mut unplaced = false;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
         lookup.count_write_walk_steps(1);
+        // ADR 0560: past its bound the walk unwinds; it answers `Unknown`
+        // ([`super::write_components::bounded_walk`]).
+        if !super::write_components::walk_step() {
+            return CallerFold::Entries {
+                imperative: None,
+                unplaced: true,
+            };
+        }
         // A call written directly in a function this walk is already deriving
         // (the function itself, or one of its callers) runs in that
         // function's role, which its other entries decide -- when it is a
