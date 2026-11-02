@@ -257,3 +257,69 @@ fn a_retained_daemon_follows_every_disk_change_that_moves_a_resolution() {
     warm.write("App.tsx", &app("./dep", ""));
     assert_eq!(warm.agree("dep/reactive.ts restored"), reads);
 }
+
+/// ADR 0546: after an import edit the fresh chain rescans the exports of
+/// only the modules that reach a file that changed; every other module keeps
+/// the exported identities its file's parse gave. Re-export chains (`export
+/// *`, a renamed `export { … } from`), a re-export whose target moves in the
+/// same check as an import edit, a module that joins the global scope and a
+/// deep dependency edited under an import edit: every warm answer is the
+/// one-shot answer at the same path, and each move changes the answer.
+#[test]
+fn a_fresh_chain_keeps_only_exports_nothing_changed_reaches() {
+    let Some(warm) = Warm::new("warm-export-rescan") else {
+        return;
+    };
+    warm.write("tsconfig.json", &tsconfig("./paths-a.ts"));
+    warm.write("dep/package.json", "{ \"types\": \"./reactive.ts\" }\n");
+    warm.write("dep/reactive.ts", &reactive(1));
+    warm.write("dep/plain.ts", PLAIN);
+    warm.write("paths-a.ts", &reactive(0));
+    warm.write("paths-b.ts", PLAIN);
+    warm.write("reexport.ts", "export * from \"./dep\";\n");
+    warm.write(
+        "alias.ts",
+        "export { readCount as readAgain, readCount } from \"./reexport\";\n",
+    );
+    warm.write("App.tsx", &app("./alias", ""));
+    let reads = warm.agree("readCount through two re-exports");
+
+    // An import edit: the chain is rebuilt, the re-exports keep their scans.
+    let added = "import { readAgain } from \"./alias\";\nexport const again = readAgain;";
+    warm.write("App.tsx", &app("./alias", added));
+    let again = warm.agree("an import of the renamed re-export added");
+    warm.write("App.tsx", &app("./alias", ""));
+    assert_eq!(warm.agree("the import removed"), reads);
+
+    // A re-export's target moves in the same check as an import edit.
+    warm.write("reexport.ts", "export * from \"./paths-b\";\n");
+    warm.write("App.tsx", &app("./alias", added));
+    let moved = warm.agree("the star re-export now names paths-b.ts");
+    assert_ne!(moved, again, "the re-export's move reached the importer");
+    warm.write("reexport.ts", "export * from \"./dep\";\n");
+    warm.write("App.tsx", &app("./alias", ""));
+    assert_eq!(warm.agree("the star re-export names ./dep again"), reads);
+
+    // A module that joins the global scope under an import edit.
+    warm.write(
+        "global.ts",
+        "export {};\ndeclare global {\n  interface Window { counted: number }\n}\n",
+    );
+    warm.write("App.tsx", &app("./alias", added));
+    warm.agree("a global augmentation joins under an import edit");
+    warm.remove("global.ts");
+    warm.write("App.tsx", &app("./alias", ""));
+    assert_eq!(warm.agree("the augmentation removed"), reads);
+
+    // A deep dependency's text changes under an import edit.
+    warm.write("dep/reactive.ts", PLAIN);
+    warm.write("App.tsx", &app("./alias", added));
+    let plain = warm.agree("dep/reactive.ts is plain, under an import edit");
+    assert_ne!(
+        plain, again,
+        "the edited dependency reached its re-exporters"
+    );
+    warm.write("dep/reactive.ts", &reactive(1));
+    warm.write("App.tsx", &app("./alias", ""));
+    assert_eq!(warm.agree("dep/reactive.ts restored"), reads);
+}

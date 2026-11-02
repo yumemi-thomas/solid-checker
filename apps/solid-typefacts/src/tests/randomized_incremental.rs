@@ -1167,6 +1167,9 @@ struct Reuse {
     /// Files a rebuilt chain of the retained side took from its parse cache;
     /// the oracle has none (`file_regions::without_parse_cache`).
     parsed_files_taken: u64,
+    /// Modules whose export scan a rebuilt chain of the retained side kept
+    /// (ADR 0546); every update checks the kept scan against a fresh one.
+    kept_export_scans: u64,
 }
 
 fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
@@ -1287,9 +1290,14 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
         }
     }
     reuse.parsed_files_taken = incremental.backend_mut().parse_cache_hits();
+    reuse.kept_export_scans = incremental.backend_mut().kept_export_scans();
     eprintln!(
-        "seed {seed}: {steps} steps, {} retained contributions, {} reused reference files, {} reused entity symbols, {} parsed files taken",
-        reuse.contributions, reuse.reference_files, reuse.symbols, reuse.parsed_files_taken
+        "seed {seed}: {steps} steps, {} retained contributions, {} reused reference files, {} reused entity symbols, {} parsed files taken, {} export scans kept",
+        reuse.contributions,
+        reuse.reference_files,
+        reuse.symbols,
+        reuse.parsed_files_taken,
+        reuse.kept_export_scans
     );
     reuse
 }
@@ -1298,13 +1306,14 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
 /// updates, and every generation equals a fresh whole-batch one.
 #[test]
 fn seeded_random_edit_sequences_match_fresh() {
-    let (mut files, mut symbols, mut taken) = (0, 0, 0);
+    let (mut files, mut symbols, mut taken, mut kept) = (0, 0, 0, 0);
     for seed in seed_range() {
         let reuse = run_seed(seed, step_count(), 5, false);
         assert_eq!(reuse.contributions, 0, "an update reused a contribution");
         files += reuse.reference_files;
         symbols += reuse.symbols;
         taken += reuse.parsed_files_taken;
+        kept += reuse.kept_export_scans;
     }
     assert!(
         files > 0 && symbols > 0,
@@ -1313,6 +1322,10 @@ fn seeded_random_edit_sequences_match_fresh() {
     assert!(
         taken > 0,
         "no rebuilt chain took a parsed file: the parse cache went untested"
+    );
+    assert!(
+        kept > 0,
+        "no rebuilt chain kept an export scan: the comparison is vacuous"
     );
 }
 

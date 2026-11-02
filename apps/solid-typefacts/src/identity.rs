@@ -575,14 +575,26 @@ impl Identities {
             None => self.seed_exported_with(program, checker, scanned),
         }
         self.export_scan.valid = true;
-        if crate::passes::verify_reuse() {
+        // ADR 0546: the crate's tests check every kept scan against a fresh
+        // one, and fail on a difference.
+        if cfg!(test) || crate::passes::verify_reuse() {
             let fresh = collect_exported_identities(program, checker);
             if fresh != *self.exported_by_ref {
+                if cfg!(test) {
+                    kept_scan_differs();
+                }
                 crate::per_file::reuse_mismatch("the exported identities");
                 self.seed_exported(program, checker);
             }
         }
     }
+}
+
+/// A kept export scan differs from a fresh one: fails the running test
+/// (ADR 0546).
+#[cold]
+fn kept_scan_differs() {
+    panic!("the exported identities kept by an update differ from a fresh scan");
 }
 
 /// What the modules of a program export, per module (`collect_exported_identities`

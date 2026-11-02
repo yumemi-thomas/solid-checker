@@ -262,6 +262,12 @@ pub trait ClosureBackend {
         0
     }
 
+    /// The modules whose export scan a rebuilt chain kept so far (ADR 0546:
+    /// nothing that changed reaches them).
+    fn kept_export_scans(&self) -> u64 {
+        0
+    }
+
     /// Per-file passes with reuse (instant-edits P3): whether the last
     /// [`ClosureBackend::per_file_demand_runs`] tracked, per path, whether its
     /// rows changed ([`ClosureBackend::content_version`]).

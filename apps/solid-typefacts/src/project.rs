@@ -210,6 +210,8 @@ pub struct Project {
     pub(crate) source_memo: HashMap<String, crate::source_facts::FileFactsMemo>,
     /// The per-file passes' state (`per_file`, ADR 0398).
     pub(crate) per_file: crate::per_file::PerFile,
+    /// The modules whose export scan rebuilt chains kept (ADR 0546).
+    kept_export_scans: u64,
 }
 
 impl Project {
@@ -275,6 +277,7 @@ impl Project {
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
             per_file: crate::per_file::PerFile::new(),
+            kept_export_scans: 0,
         };
         // Go: `collectExportedIdentities` seeds the symbol store at open.
         let generation = project.generation.as_ref().expect("just built");
@@ -827,6 +830,10 @@ impl ClosureBackend for Project {
         self.parse_cache.as_ref().map_or(0, |cache| cache.hits())
     }
 
+    fn kept_export_scans(&self) -> u64 {
+        self.kept_export_scans
+    }
+
     fn tracks_content_versions(&self) -> bool {
         self.per_file_content_version("").is_some()
     }
@@ -1053,6 +1060,15 @@ impl Project {
             Vec::new()
         };
         let candidate_kind = candidate.kind();
+        // ADR 0546: a rebuilt chain whose files came from the parse cache
+        // rescans only the modules that reach a file that changed.
+        let chain_rescan = (candidate_kind != UpdateKind::Reused
+            && self.parse_cache.is_some()
+            && !changed_paths.contains(&self.config_path))
+        .then(|| {
+            crate::passes::Graph::rebuilt_export_rescan(generation.program(), candidate.program())
+        })
+        .flatten();
         // Whether the edited file adds to the global scope or augments a
         // module, before or after: then any module's exports can move.
         let global_exports = changed_paths.iter().any(|path| {
@@ -1110,9 +1126,18 @@ impl Project {
         // A parse-reusing update kept every other file's parse and
         // resolutions: only the modules that reach the edited file can export
         // something else.
-        let rescan = (reused && !global_exports)
-            .then(|| self.per_file.reuse.reaching(&clean(&incremental_path)))
-            .flatten();
+        let rescan = if reused {
+            (!global_exports)
+                .then(|| self.per_file.reuse.reaching(&clean(&incremental_path)))
+                .flatten()
+        } else {
+            let rescan = chain_rescan.filter(|_| !global_exports);
+            if let Some(rescan) = &rescan {
+                let modules = program.source_files().len();
+                self.kept_export_scans += modules.saturating_sub(rescan.len()) as u64;
+            }
+            rescan
+        };
         // Every module rescanned: on the pass workers first.
         let scanned = rescan.is_none().then(|| {
             crate::identity::scan_exports_on_workers(

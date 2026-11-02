@@ -621,6 +621,75 @@ impl Graph {
             .collect();
     }
 
+    /// ADR 0546: after a rebuilt chain that took its files from the parse
+    /// cache, the modules whose exports can differ from `old`'s: every file
+    /// that reaches, over `new`'s resolution edges, a file that is not the
+    /// same parsed file in both programs or whose resolutions differ. Every
+    /// other module keeps its file (so its binder symbols), its resolutions
+    /// and those of every file it reaches, so its exports resolve to the same
+    /// roots. `None` (rescan every module) where membership or the compiler
+    /// options differ, or a file that differs joins the global scope or
+    /// augments a module in either program, which can move any module's
+    /// exports.
+    pub(crate) fn rebuilt_export_rescan(old: &Program, new: &Program) -> Option<Vec<String>> {
+        if *old.options() != *new.options() {
+            return None;
+        }
+        let mut before = Self::build(old);
+        let mut after = Self::build(new);
+        if before.paths != after.paths {
+            return None;
+        }
+        before.compute_resolutions(old);
+        after.compute_resolutions(new);
+        let files = |program: &Program| -> HashMap<String, tsrs_core::P<tsrs_ast::SourceFile>> {
+            program
+                .source_files()
+                .iter()
+                .map(|file| (clean(file.file_name()), *file))
+                .collect()
+        };
+        let (was_files, is_files) = (files(old), files(new));
+        let mut seeds = Vec::new();
+        for (index, path) in after.paths.iter().enumerate() {
+            let (Some(&was), Some(&is)) = (was_files.get(path), is_files.get(path)) else {
+                return None;
+            };
+            let same = was.addr() == is.addr();
+            if !same
+                && (crate::inputs::contributes_to_global_scope(was)
+                    || crate::inputs::contributes_to_global_scope(is))
+            {
+                return None;
+            }
+            if !same || before.resolutions[index] != after.resolutions[index] {
+                seeds.push(u32::try_from(index).ok()?);
+            }
+        }
+        let mut reverse: Vec<Vec<u32>> = vec![Vec::new(); after.paths.len()];
+        for (from, edges) in after.edges.iter().enumerate() {
+            for to in edges {
+                reverse[*to as usize].push(u32::try_from(from).ok()?);
+            }
+        }
+        let mut seen = bits_new(after.paths.len());
+        for seed in &seeds {
+            bit_set(&mut seen, *seed);
+        }
+        let mut pending = seeds;
+        let mut found = Vec::new();
+        while let Some(at) = pending.pop() {
+            found.push(after.paths[at as usize].clone());
+            for from in &reverse[at as usize] {
+                if !bit_get(&seen, *from) {
+                    bit_set(&mut seen, *from);
+                    pending.push(*from);
+                }
+            }
+        }
+        Some(found)
+    }
+
     /// `seeds` and every file they reach, added to `bits`.
     fn close(&self, seeds: impl IntoIterator<Item = u32>, bits: &mut Bits) {
         let mut pending: Vec<u32> = Vec::new();
