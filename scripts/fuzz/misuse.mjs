@@ -13,7 +13,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
   CBP_CALLS, CBP_FORMS, cbProp,
 } from "./model.mjs";
@@ -265,9 +265,18 @@ export const SPEC = {
     call: (node, [sig]) => local(sig.name),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
+  // effect under the owner current at `createReaction` (`@solidjs/signals` dist/dev.js:2630-2651, `runWithOwner(owner, …)`): none
+  // there, so every `track1()` warns, wherever it is called. `reaction-track-owned` (legal only): the tracker the component (or its
+  // parent, or a hook the body calls) creates, owned there, so a call anywhere is legal.
   NO_OWNER_EFFECT: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL,
-    variants: ["effect", "render"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
-    call: (node) => api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}"),
+    variants: ["effect", "render"], gridVariants: ["reaction-track"], legalVariants: ["effect", "render", "reaction-track-owned"],
+    variantSources: { "reaction-track": ["module", "module-barrel"],
+      "reaction-track-owned": ["local", ...SOURCE_AXES.props.filter((source) => source !== "prop-value"), ...SOURCE_AXES.context, "module-hook", "module-hook-member"] },
+    contexts: UNOWNED, bindings: BINDINGS, bindingsFor: (variant) => (variant?.startsWith("reaction-track") ? ["direct", "alias", "destructured", "wrapper"] : BINDINGS),
+    setup: (variant, name) => (variant?.startsWith("reaction-track") ? [reactionSignal(name("track"))] : []),
+    call: (node, sigs) => (node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
+      : api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}")),
   },
   NO_OWNER_BOUNDARY: { recallContexts: ASYNC_CONTROL,
     variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
@@ -487,9 +496,9 @@ const CBP_PLACEMENT = {
  * the effect's error arm, the same as `effect-error-arm`.
  */
 export const EFFECT_WINDOW_CONTEXTS = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-rerun-named", "effect-cleanup-dispose", "effect-cleanup-show", "effect-cleanup-for",
-  "effect-error-arm", "render-apply-guarded-rerun", "reaction"];
+  "effect-error-arm", "render-apply-guarded-rerun", "reaction", "reaction-error-arm"];
 const WINDOWED = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-rerun-named", "render-apply-guarded-rerun", "reaction"];
-const UNWINDOWED = ["effect-cleanup-dispose", "effect-cleanup-show", "effect-error-arm"];
+const UNWINDOWED = ["effect-cleanup-dispose", "effect-cleanup-show", "effect-error-arm", "reaction-error-arm"];
 const ROW_DISPOSAL = ["effect-cleanup-for"];
 const EFFECT_WINDOW_PLACEMENT = {
   STRICT_READ_UNTRACKED: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
@@ -507,10 +516,41 @@ const EFFECT_WINDOW_PLACEMENT = {
   FLUSH_IN_EFFECT_CALLBACK: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
 };
 SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn = Object.fromEntries(UNWINDOWED.map((context) => [context, ["effect"]]));
+/**
+ * The action step (`--recall` only; Fable's precision report 2026-11-02, section 3): the site in an action's first synchronous slice,
+ * the action called from an effect apply, a `createReaction` callback, an owned `onSettled`, a `createTrackedEffect` or an effect's
+ * `error` arm, and after a plain-value `yield 1` from an apply. rc.17's `step` (`@solidjs/signals` dist/dev.js:1573-1600) sets the
+ * action depth and clears the effect-callback marker; the owner, the tracking state and the strict-read window are the caller's,
+ * and a plain-value `yield` resumes synchronously on the same stack (dev.js:1637). Measured on the fast runtime (2026-11-02):
+ *   from an apply, a reaction callback, after `yield 1` from an apply   no owner, window "an effect callback": a read warns, an owner
+ *                       operation is NO_OWNER_*, a memo or root is legal (the marker is cleared), a write or an action is legal
+ *   from an owned onSettled or a tracked effect   the leaf owner: a memo, root or effect is PRIMITIVE_IN_FORBIDDEN_SCOPE, onCleanup
+ *                       CLEANUP_IN_FORBIDDEN_SCOPE; a read, a write and an action are legal
+ *   from an error arm   no owner, no window: a read, a write and an action are legal; an owner operation is NO_OWNER_*
+ * `flush` throws FLUSH_IN_ACTION in each (SC2006's, already a cell through `action`).
+ */
+export const ACTION_STEP_CONTEXTS = ["action-from-apply", "action-from-reaction", "action-plain-yield-from-apply", "action-from-settled", "action-from-tracked", "action-from-error-arm"];
+const ACTION_WINDOWED = ["action-from-apply", "action-from-reaction", "action-plain-yield-from-apply"];
+const ACTION_LEAF = ["action-from-settled", "action-from-tracked"];
+const ACTION_STEP_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { misuse: ACTION_WINDOWED, legal: [...ACTION_LEAF, "action-from-error-arm"] },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { misuse: ACTION_LEAF },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { misuse: ACTION_LEAF },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ACTION_STEP_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { legal: ACTION_STEP_CONTEXTS },
+  NO_OWNER_CLEANUP: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  NO_OWNER_EFFECT: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  NO_OWNER_BOUNDARY: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  NO_OWNER_CONTEXT: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  // The marker is cleared for the step: a memo or root in the body is legal where the apply itself reports.
+  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ACTION_WINDOWED },
+};
+// With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
+for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
-SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -820,6 +860,39 @@ function recallContext(context, stmts, kit) {
       return { body: [decl(g, fn(stmts)), decl(a, prim("action", fn(calls)))], view: [button(kit.name("b"), [expr(call(ref(a)))]), caller] };
     }
     case "action-after-yield": { const a = kit.name("a"); return { body: [decl(a, prim("action", fn(stmts), { afterYield: true }))], view: [button(kit.name("b"), [expr(call(ref(a)))])] }; }
+    // ACTION_STEP_CONTEXTS: the site in an action's first synchronous slice, the action called by the named caller.
+    case "action-from-apply": case "action-plain-yield-from-apply": {
+      const a = kit.name("a");
+      const act = prim("action", fn(stmts), context === "action-plain-yield-from-apply" ? { plainYield: true } : {});
+      return { body: [decl(a, act), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(a)))]) }))], view: [] };
+    }
+    case "action-from-reaction": {
+      const t = trigger();
+      const a = kit.name("a");
+      const track = kit.name("track");
+      return {
+        body: [decl(a, prim("action", fn(stmts))), decl(track, prim("reaction", fn([expr(call(ref(a)))]))), expr(call(ref(track), [fn([expr(read(t.name))])]))],
+        view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t],
+      };
+    }
+    case "action-from-settled": case "action-from-tracked": {
+      const a = kit.name("a");
+      return { body: [decl(a, prim("action", fn(stmts))), expr(prim(context === "action-from-settled" ? "settled" : "tracked", fn([expr(call(ref(a)))])))], view: [] };
+    }
+    case "action-from-error-arm": {
+      const t = trigger();
+      const a = kit.name("a");
+      return { body: [decl(a, prim("action", fn(stmts))), expr(prim("effect", fn([expr(call(ref(a)))]), { errorArm: t.name }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // The site in a reaction bundle's `error` member: the tracker throws once the button sets 2.
+    case "reaction-error-arm": {
+      const t = trigger();
+      const track = kit.name("track");
+      return {
+        body: [decl(track, prim("reaction", fn(stmts), { errorArm: true })), expr(call(ref(track), [{ ...fn([expr(read(t.name))]), throwOn: t.name }]))],
+        view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t],
+      };
+    }
     case "tracked-rerun": {
       const t = trigger();
       return { body: [expr(prim("tracked", fn([expr(read(t.name)), ...stmts])))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };

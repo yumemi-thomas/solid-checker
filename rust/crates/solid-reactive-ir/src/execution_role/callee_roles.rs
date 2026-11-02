@@ -547,6 +547,30 @@ pub(super) fn semantic_role_before_awaits(
             }
             return role_arm!("callee_roles.allowed-generator", ExecutionRole::Unknown);
         }
+        // ADR 0547: an action's generator runs its first synchronous slice on
+        // the stack of whoever calls the action, in that caller's strict-read
+        // window: a read there is placed at the action's callers.
+        if !classifying.contains(&write_classification_marker())
+            && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+            && let Some((call, index)) =
+                crate::owners::stepped_action_generator(file, function, lookup)
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    dialect.action_step_inherits_calling_window(primitive, index)
+                })
+        {
+            return action_step_role(
+                file,
+                function,
+                span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+        }
         // ADR 0539: the cleanup an effect's apply returns runs on the effect's
         // rerun in the apply's strict-read window, where rc.17 warns on a
         // read; the owner's disposal calls it outside the window, and nothing
@@ -1823,8 +1847,10 @@ pub(super) fn callee_callback_timing_within(
         }
         // Calling a generator function runs none of its body: it runs on
         // the returned iterator's `next()`, wherever that is.
+        // ADR 0547: an action's stepped generator runs its first slice at the
+        // action's calls.
         if literal.generator {
-            return true;
+            return action_step_timing_unproven(file, literal, execution, lookup, following);
         }
         // The call the literal is written in: an argument in which the literal
         // is the outermost function (directly, or inside an array or object
@@ -2022,4 +2048,241 @@ pub(super) fn inheriting_call_role(
         }
         other => other,
     }
+}
+
+/// ADR 0547: the read role of `span`, written in the body of `function`, an
+/// action's stepped generator on a dialect whose step keeps the caller's
+/// window ([`solid_dialect::Dialect::action_step_inherits_calling_window`]).
+/// The first synchronous slice (no suspending `yield` before the site:
+/// [`crate::owners::action_step_resumption`]; a plain-value `yield` resumes on
+/// the same stack) runs where the action is called, so a read there reports
+/// when a read written at some call would: in an effect apply, a reaction
+/// callback, a created root's or a bound owner's window. A call whose guard
+/// throws first (a children-capable owner, `reports_disallowed_write`) runs no
+/// step. Every reference of the action's `const` must be a call that names
+/// this generator or an event handler's value; an exported, escaping or
+/// otherwise unfollowed binding, a call no fact places, or a site that may
+/// follow a suspending `yield` is unplaced when any caller would report. A
+/// site after a proven suspension runs on a continuation with no window, and
+/// callers none of which reports keep the deferred answer.
+#[allow(clippy::too_many_arguments)]
+fn action_step_role(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    // Parameter initializers run when the iterator is created, on the
+    // caller's stack too, but no layer here places them.
+    if !function.body.contains(span) {
+        return role_arm!("callee_roles.action-step-in-list", ExecutionRole::Unknown);
+    }
+    let marker = ("action-step-callers".to_string(), function.span);
+    if !classifying.insert(marker.clone()) {
+        return role_arm!("callee_roles.action-step-recursive", ExecutionRole::Unknown);
+    }
+    let callers = action_step_callers(
+        file,
+        function,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        classifying,
+    );
+    classifying.remove(&marker);
+    let resumption = crate::owners::action_step_resumption(file, span, lookup);
+    match (callers, resumption) {
+        (_, Some(crate::owners::StepResumption::Proven)) => role_arm!(
+            "callee_roles.action-step-continuation",
+            ExecutionRole::DeferredCallback
+        ),
+        (ActionStepCallers::Silent, _) => role_arm!(
+            "callee_roles.action-step-callers-silent",
+            ExecutionRole::DeferredCallback
+        ),
+        (ActionStepCallers::Unplaced | ActionStepCallers::Reports(_), Some(_)) => role_arm!(
+            "callee_roles.action-step-may-resume",
+            ExecutionRole::Unknown
+        ),
+        (ActionStepCallers::Unplaced, None) => role_arm!(
+            "callee_roles.action-step-callers-unplaced",
+            ExecutionRole::Unknown
+        ),
+        (ActionStepCallers::Reports(role), None) => {
+            role_arm!("callee_roles.action-step-callers", role)
+        }
+    }
+}
+
+/// What the callers of an action place its first slice in: a reporting role
+/// one of them gives (the first found), else unplaced when one of them, or a
+/// use that may call the action, has no proven role, else silent.
+enum ActionStepCallers {
+    Reports(ExecutionRole),
+    Unplaced,
+    Silent,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn action_step_callers(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ActionStepCallers {
+    let Some(calls) = action_step_call_sites(file, function, lookup) else {
+        return ActionStepCallers::Unplaced;
+    };
+    let mut unplaced = false;
+    for call in calls {
+        let write = super::write_roles::semantic_write_execution_role(
+            file,
+            call.callee,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            RootBodyGuard::Rejects,
+        );
+        // The action's guard throws before the step runs.
+        if write.reports_disallowed_write() {
+            continue;
+        }
+        if write.reports_unplaced() {
+            unplaced = true;
+            continue;
+        }
+        let role = semantic_execution_role_within(
+            file,
+            call.span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        );
+        if role.reports_untracked_read() {
+            return ActionStepCallers::Reports(role);
+        }
+        unplaced |= role.reports_unplaced();
+    }
+    if unplaced {
+        ActionStepCallers::Unplaced
+    } else {
+        ActionStepCallers::Silent
+    }
+}
+
+/// ADR 0547: the calls of the action whose stepped generator is `function`,
+/// when they are all the action's invocations: every reference of the
+/// action's `const` (and of its `const` copies) is a call that names this
+/// generator ([`crate::owners::named_action_generator`]) or an event
+/// handler's value, which the host dispatches in no window. `None` when the
+/// generator has no such binding, the binding is exported or escapes
+/// ([`crate::owners::action_binding_escapes`]), the program may `eval`, or a
+/// reference is anything else.
+pub(crate) fn action_step_call_sites<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<&'a solid_facts::ast::CallFact>> {
+    let ast = &file.ast;
+    let name = crate::owners::action_binding_name(file, function, lookup)?;
+    if lookup.program_has_eval()
+        || super::flow_helpers::flow_binding_exported(file, name.span)
+        || crate::owners::action_binding_escapes(file, name.span)
+    {
+        return None;
+    }
+    let peel = |span: Span| ast.peel_ts_sugar_span(span);
+    let mut calls = Vec::new();
+    let mut holders = vec![name.span];
+    let mut index = 0;
+    while index < holders.len() {
+        let holder = holders[index];
+        index += 1;
+        for &(reference, declaration) in &ast.reference_declarations {
+            if declaration != holder {
+                continue;
+            }
+            if let Some(call) = ast.calls.iter().find(|call| peel(call.callee) == reference) {
+                if crate::owners::named_action_generator(file, call.callee, lookup)
+                    != Some(function.span)
+                {
+                    return None;
+                }
+                calls.push(call);
+                continue;
+            }
+            if file.compiler.callback_roles.iter().any(|callback| {
+                callback.span == reference
+                    && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            }) {
+                continue;
+            }
+            let copied = ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.len() == 1
+                        && binding
+                            .initializer
+                            .is_some_and(|initializer| peel(initializer) == reference)
+                })
+                .and_then(|binding| binding.names.first())?;
+            if holders.len() >= 9 {
+                return None;
+            }
+            holders.push(copied.span);
+        }
+    }
+    Some(calls)
+}
+
+/// ADR 0547: whether the run of a read in the first slice of the stepped
+/// generator `literal` is unproven ([`callee_callback_timing`]): the slice runs
+/// at the action's calls, so it is proven only when every call is, both in
+/// its own callback's timing and in the apply-region census (an apply whose
+/// defer options and compute may skip it). A generator no dialect steps on
+/// the caller's stack runs on its iterator's `next()`, which nothing follows.
+fn action_step_timing_unproven(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<(String, Span)>,
+) -> bool {
+    let Some((call, index)) = crate::owners::stepped_action_generator(file, literal, lookup) else {
+        return true;
+    };
+    if !lookup
+        .primitive_at_call(file, call.span)
+        .is_some_and(|primitive| {
+            lookup
+                .dialect
+                .action_step_inherits_calling_window(primitive, index)
+        })
+        || !following.insert((file.path.to_string(), literal.span))
+    {
+        return true;
+    }
+    let Some(calls) = action_step_call_sites(file, literal, lookup) else {
+        return true;
+    };
+    calls.is_empty()
+        || calls.into_iter().any(|call| {
+            crate::effect_execution::at_span(file, call.span, lookup)
+                != crate::effect_execution::ApplyExecution::Proven
+                || callee_callback_timing_within(file, call.span, execution, lookup, following)
+        })
 }

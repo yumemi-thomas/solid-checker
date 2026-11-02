@@ -177,6 +177,8 @@ export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe
 export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-list" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
+/** A `createReaction` tracker (`const track1 = createReaction(() => {})`); misuse.mjs NO_OWNER_EFFECT's `reaction-track` variants call it. */
+export const reactionSignal = (name) => ({ ...signal(name, 0, "src"), kind: "reaction" });
 /** `const a = createMemo(async () => { t(); await Promise.resolve(); return 1; })`: an async memo that reads `dep`, so a write to it refetches. */
 export const asyncDepSignal = (name, dep) => ({ ...signal(name, 0, "src"), kind: "async-dep", dep });
 
@@ -565,7 +567,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
         }
         case "tracked": fnTypeChecked(e.fn, scope, "free"); return T.void;
         // createReaction(effectFn): the tracker it returns takes the tracking function.
-        case "reaction": fnTypeChecked(e.fn, scope, RETURNS.applyFn); return T.fn(T.void);
+        // `errorArm`: `fn` is the bundle's `error` handler (misuse.mjs `reaction-error-arm`).
+        case "reaction": fnTypeChecked(e.fn, scope, e.errorArm ? "free" : RETURNS.applyFn); return T.fn(T.void);
         // action(function* () { ... }): the generator body is a block; its result is the action function.
         case "action": fnTypeChecked(e.fn, scope, "free"); return T.fn(T.unknown);
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;

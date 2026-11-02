@@ -907,6 +907,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the synchronous slices of the stepped callback at `argument`
+    /// ([`Dialect::callback_runs_as_action_steps`]) run in the strict-read
+    /// window and the tracking state of whoever invoked the action: the step
+    /// changes neither, so a read before the first suspending `yield` warns
+    /// exactly where a read written at the invocation would (ADR 0547). The
+    /// default claims nothing: the body keeps the deferred answer.
+    fn action_step_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// The argument that a call of the export declared as `name` **renders**:
     /// the call invokes that argument as a component, synchronously, before
     /// it returns, on the caller's stack.

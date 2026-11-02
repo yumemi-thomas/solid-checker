@@ -2335,6 +2335,20 @@ impl Dialect for Solid2 {
         primitive == Primitive::Action && argument == 0
     }
 
+    /// ADR 0547: rc.17's `step` (`@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev.js:1573-1600`) sets the action depth, the callback depth and
+    /// clears the effect-callback marker around `it.next(v)`; it leaves
+    /// `strictRead` and `tracking` as the invoking stack had them, and a
+    /// plain-value `yield` resumes in `inTransaction(…, () => step(v))` on the
+    /// same stack (`:1637`). From an effect apply a body read warns "an effect
+    /// callback" (probed). Read on rc.17 only (the release key ADRs 0456,
+    /// 0483 and 0541 use); every other release claims nothing.
+    fn action_step_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::Action
+            && argument == 0
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+    }
+
     /// `createComponent(Comp, props)`, argument 0, on every release the
     /// reviews read. The export is `solid-js`'s; `@solidjs/web` re-exports it
     /// unchanged in every build (`export { …, createComponent, … } from

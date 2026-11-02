@@ -327,5 +327,21 @@
   "found": "review of full-7's 12 dynamic-mount STORE_WRITE_OUTSIDE_SETTER wrong-rule rows (those stay: ADR 0530 proves dynamic-only entries)",
   "fixed": "t3/verify-fuzz-recall",
   "outside": "no mount hands a component to plain code as a function value; fixture undecided-flush-callback holds the case (old build: violation)"
+ },
+ {
+  "finding": "An action body's read in its first synchronous slice took the deferred role: called from an effect apply or a createReaction callback (and after a plain-value yield) rc.17 warns STRICT_READ_UNTRACKED \"an effect callback\" (ADR 0547)",
+  "found": "Fable's precision report 2026-11-02 (probes R11, R13, R19), confirmed on the fast runtime",
+  "fixed": "ADR 0547",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-action-from-apply-memo-assign-callee-none",
+   "mx-strict-read-untracked-action-from-apply-memo-default-slot-iife",
+   "mx-strict-read-untracked-action-from-reaction-memo-alias-none",
+   "mx-strict-read-untracked-action-from-reaction-memo-assign-callee-none",
+   "mx-strict-read-untracked-action-plain-yield-from-apply-memo-assign-callee-iife",
+   "mx-strict-read-untracked-action-plain-yield-from-apply-memo-cond-alias-iife"
+  ],
+  "rediscovered": "f31337fa8 (release), the three cells at --grid-sample 0.2: 1,404 runtime-confirmed programs, 1,296 false-clean, 108 recall-gap; ADR 0547: 1,182 agree, 222 recall-gap, 0 false-clean"
  }
 ]

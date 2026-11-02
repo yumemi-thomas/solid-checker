@@ -228,7 +228,8 @@ function render(program, instrument) {
   function fnParts(f, depth, header) {
     const entry = entryFor(f, "fn");
     const head = header ?? `(${within({ entry, inDefault: true }, () => params(f, depth))})`;
-    return { head, body: block(f.body, depth, entry) };
+    // `throwOn` (misuse.mjs `reaction-error-arm`): the function throws once that signal reads 2, so a reaction's error arm runs.
+    return { head, body: block(f.body, depth, entry, f.throwOn ? [`if (${f.throwOn}() === 2) throw new Error("x");`] : []) };
   }
   function fnText(f, depth, { header } = {}) {
     const { head, body } = fnParts(f, depth, header);
@@ -447,7 +448,11 @@ function render(program, instrument) {
         // `errorArm` (model.mjs): the compute throws once the signal reads 2; `fn` is the bundle's error handler.
         if (e.errorArm !== undefined) return `createEffect(() => { if (${e.errorArm}() === 2) throw new Error("x"); return 1; }, { effect: () => {}, error: ${f} })`;
         return `createEffect(${f}, ${applyText(e.apply, depth)})`;
-      case "reaction": used.add("createReaction"); return `createReaction(${f})`;
+      case "reaction":
+        used.add("createReaction");
+        // `errorArm` (misuse.mjs `reaction-error-arm`): `fn` is the bundle's error handler; the bundle's `effect` is empty.
+        if (e.errorArm) return `createReaction({ effect: () => {}, error: ${f} })`;
+        return `createReaction(${f})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
       case "owner": {
@@ -467,6 +472,9 @@ function render(program, instrument) {
         used.add("action");
         // `afterYield` (the recall contexts): the body runs after the action's first `yield`, in a later step of its transition.
         if (e.afterYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
+        // `plainYield` (`action-plain-yield-from-apply`): a plain-value `yield` first; the next step runs synchronously on the same
+        // stack (`@solidjs/signals` dist/dev.js:1637), so the body is still in the caller's window.
+        if (e.plainYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
         const { head, body } = fnParts(e.fn, depth, "()");
         return `action(function* ${head} ${body})`;
       }
@@ -709,6 +717,7 @@ function signalText(sig, signals, used) {
     case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
     case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
     case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
+    case "reaction": used.add("createReaction"); return `const ${sig.name} = createReaction(() => {});`;
     case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
     case "async-dep": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => { ${sig.dep}(); await Promise.resolve(); return 1; });`;
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
@@ -729,6 +738,7 @@ function signalKeys(sig) {
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
     case "async": case "async-dep": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];
+    case "reaction": return [[sig.name, "(tracking: () => void) => void"]];
     default: return [[sig.name, "Accessor<number>"], [sig.setter, "Setter<number>"]];
   }
 }
