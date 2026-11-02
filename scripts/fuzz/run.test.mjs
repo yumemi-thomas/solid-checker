@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { configFrom, defaultParallelism, defaultWorkers, parseArgs, witnessesPresent } from "./run.mjs";
+import { attachDaemon, configFrom, defaultParallelism, defaultWorkers, parseArgs, warmCheckerMode, witnessesPresent } from "./run.mjs";
+
+describe("--warm-checker (ADR 0543)", () => {
+  it("is off unless asked, and --warm-verify implies it", () => {
+    expect(warmCheckerMode(parseArgs([]))).toBe("off");
+    expect(warmCheckerMode(parseArgs(["--warm-checker"]))).toBe("on");
+    expect(warmCheckerMode(parseArgs(["--warm-verify"]))).toBe("verify");
+    expect(warmCheckerMode(parseArgs(["--warm-checker", "--warm-verify"]))).toBe("verify");
+  });
+  it("needs the Rust executor", () => {
+    expect(() => attachDaemon({}, { fastHost: "happy-dom", warmChecker: true, noDaemon: true })).toThrow(/Rust executor/);
+  });
+});
 
 describe("parseArgs", () => {
   it("has defaults", () => {

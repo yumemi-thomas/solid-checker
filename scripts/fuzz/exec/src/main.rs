@@ -8,7 +8,7 @@
 //! pages with Vite and the Solid plugin, as the oracle compiles them, and maps a record's stack positions through Vite's source maps.
 //!
 //! Protocol: one JSON object per line on stdin, one per line on stdout, matched by `seq`.
-//!   init     the tools, the concurrency, and (optional) the Chrome settings; answers `ready`
+//!   init     the tools, the concurrency, (optional) the Chrome settings and `warmChecker` (off, on, verify); answers `ready`
 //!   prepare  the case's files, its clean and twin projects (in a fixed slot pair, or given directories), the type checks and the
 //!            checker run; answers the type checks and the checker's raw output
 //!   run      cases to run in Chrome; answers their records by id
@@ -81,6 +81,17 @@ impl Semaphore {
     }
 }
 
+/// Held around every process start. On macOS `std` creates a child's pipes and marks them close-on-exec in two steps, so a child
+/// another thread starts in between inherits them: a retained checker daemon (`--warm-checker`) that a client started then holds
+/// another command's stdout open for minutes, and that command's reader never sees its end (a grid stalled on one `prepare`).
+static SPAWN: Mutex<()> = Mutex::new(());
+
+/// `command.spawn()` with no other start in progress (`SPAWN`).
+fn spawn(command: &mut Command) -> std::io::Result<std::process::Child> {
+    let _held = SPAWN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    command.spawn()
+}
+
 struct Ran {
     status: Option<i32>,
     stdout: String,
@@ -94,7 +105,7 @@ struct Ran {
 fn run_command(mut command: Command, timeout: Duration) -> Ran {
     let started = Instant::now();
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = match command.spawn() {
+    let mut child = match spawn(&mut command) {
         Ok(child) => child,
         Err(error) => {
             return Ran { status: None, stdout: String::new(), stderr: String::new(), killed: false, wall_ms: 0, spawn_error: Some(error.to_string()) };
@@ -201,27 +212,89 @@ impl Batcher {
 const CHECKER_ARGS: [&str; 9] = ["--format", "json", "--feedback-facts", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
 const ORDINARY_ARGS: [&str; 8] = ["--format", "json", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
 
+/// `init.warmChecker` (ADR 0543): a slot's feedback-facts check is answered by a retained checker daemon, one per slot directory
+/// (the daemon's socket is keyed by the project path), instead of a fresh checker and producer per program. `Verify` also runs the
+/// one-shot check at the same path after each warm one and reports whether stdout and the exit status are byte-identical.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Warm {
+    Off,
+    On,
+    Verify,
+}
+
 struct Checker {
     bin: String,
     env: Vec<(String, String)>,
+    warm: Warm,
+    /// The slot directories a warm check ran in: their daemons are stopped when the executor ends.
+    warmed: Mutex<std::collections::BTreeSet<String>>,
 }
 
 impl Checker {
-    fn run(&self, dir: &str, ordinary: bool) -> Value {
-        if !Path::new(&self.bin).exists() {
-            return json!({ "spawnError": format!("checker binary not found: {}", self.bin), "dir": dir });
-        }
+    fn command(&self, dir: &str, args: &[&str], daemon: bool) -> Command {
         let mut command = Command::new(&self.bin);
-        command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(if ordinary { &ORDINARY_ARGS[..] } else { &CHECKER_ARGS[..] }).current_dir(dir);
+        command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(args).current_dir(dir);
         for (key, value) in &self.env {
             command.env(key, value);
         }
-        command.env("SOLID_CHECKER_DAEMON", "0");
-        let ran = run_command(command, Duration::from_secs(180));
+        command.env("SOLID_CHECKER_DAEMON", if daemon { "1" } else { "0" });
+        // A slot's daemon lives while the executor does (it stops them at its end, `stop_warm`); the checker's two-minute default
+        // would end one during a long Chrome wave and start it cold again.
+        if daemon && !self.env.iter().any(|(key, _)| key == "SOLID_CHECKER_DAEMON_IDLE_SECS") {
+            command.env("SOLID_CHECKER_DAEMON_IDLE_SECS", "900");
+        }
+        command
+    }
+
+    /// The checker on `dir`. `slotted`: `dir` is a slot the executor rewrites per program, which a warm daemon may serve.
+    fn run(&self, dir: &str, ordinary: bool, slotted: bool) -> Value {
+        if !Path::new(&self.bin).exists() {
+            return json!({ "spawnError": format!("checker binary not found: {}", self.bin), "dir": dir });
+        }
+        let warm = self.warm != Warm::Off && slotted && !ordinary;
+        if warm {
+            self.warmed.lock().unwrap().insert(dir.to_string());
+        }
+        let args = if ordinary { &ORDINARY_ARGS[..] } else { &CHECKER_ARGS[..] };
+        let ran = run_command(self.command(dir, args, warm), Duration::from_secs(180));
+        // A warm check that did not answer may leave its daemon working on this program: it is stopped (after it finishes what it
+        // accepted) before the slot goes to the next program.
+        if warm && (ran.killed || ran.spawn_error.is_some() || !matches!(ran.status, Some(0 | 1))) {
+            self.stop(dir);
+        }
         if let Some(error) = ran.spawn_error {
             return json!({ "spawnError": error, "dir": dir, "wallMs": ran.wall_ms as u64 });
         }
-        json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir })
+        let mut answer = json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir });
+        if warm && self.warm == Warm::Verify {
+            let once = run_command(self.command(dir, args, false), Duration::from_secs(180));
+            let identical = once.spawn_error.is_none() && !once.killed && once.status == ran.status && once.stdout == ran.stdout;
+            answer["warm"] = json!({ "identical": identical, "oneShotStatus": once.status, "oneShotWallMs": once.wall_ms as u64 });
+        } else if warm {
+            answer["warm"] = json!({});
+        }
+        answer
+    }
+
+    /// Ends `dir`'s daemon once it has answered every check it accepted (`--stop-daemon`).
+    fn stop(&self, dir: &str) {
+        let mut args = vec!["--stop-daemon"];
+        args.extend(CHECKER_ARGS);
+        // The stop waits for what the daemon accepted, at most `SOLID_CHECKER_DAEMON_STOP_SECS` (60 s), then ends it by its pid.
+        let ran = run_command(self.command(dir, &args, true), Duration::from_secs(120));
+        if ran.killed || ran.status != Some(0) {
+            eprintln!("fuzz-exec: could not stop the checker daemon of {dir}: {}", ran.stderr.trim());
+        }
+    }
+
+    /// Stops every slot daemon this executor used.
+    fn stop_warm(&self) {
+        let dirs = std::mem::take(&mut *self.warmed.lock().unwrap());
+        thread::scope(|scope| {
+            for dir in &dirs {
+                scope.spawn(move || self.stop(dir));
+            }
+        });
     }
 }
 
@@ -488,13 +561,7 @@ impl Chrome {
     fn start(settings: &Value) -> Res<Chrome> {
         let text = |key: &str| settings.get(key).and_then(Value::as_str).map(str::to_string).ok_or(format!("chrome.{key} missing"));
         // The Vite helper: one line `{ base, work }` once it serves.
-        let mut vite = Command::new(text("node")?)
-            .arg(text("viteHost")?)
-            .arg(settings.to_string())
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
+        let mut vite = spawn(Command::new(text("node")?).arg(text("viteHost")?).arg(settings.to_string()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::inherit()))
             .map_err(|e| format!("vite helper: {e}"))?;
         let helper_out = vite.stdout.take().unwrap();
         let line = read_line_within(helper_out, Duration::from_secs(120)).map_err(|e| {
@@ -509,16 +576,17 @@ impl Chrome {
 
         static STARTS: AtomicU64 = AtomicU64::new(0);
         let profile = std::env::temp_dir().join(format!("fuzz-exec-profile-{}-{}", std::process::id(), STARTS.fetch_add(1, Ordering::Relaxed)));
-        let mut browser = Command::new(text("browser")?)
-            .args(BROWSER_ARGS)
-            .arg(format!("--user-data-dir={}", profile.display()))
-            .arg("--remote-debugging-port=0")
-            .arg("--no-startup-window")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("browser: {e}"))?;
+        let mut browser = spawn(
+            Command::new(text("browser")?)
+                .args(BROWSER_ARGS)
+                .arg(format!("--user-data-dir={}", profile.display()))
+                .arg("--remote-debugging-port=0")
+                .arg("--no-startup-window")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped()),
+        )
+        .map_err(|e| format!("browser: {e}"))?;
         // The browser's stderr: its DevTools endpoint, then a bounded tail kept for the log of an exit (`supervise`).
         let tail = Arc::new(Mutex::new(std::collections::VecDeque::<String>::new()));
         let (endpoint, found) = channel::<Option<String>>();
@@ -943,7 +1011,13 @@ impl Executor {
         let batch = request.get("typecheckBatch").and_then(Value::as_u64).unwrap_or(24) as usize;
         batcher.start(tsc.clone(), batch, Duration::from_millis(15), Arc::new(Semaphore::new(concurrency)));
         let env = request.get("env").and_then(Value::as_object).map(|env| env.iter().filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string()))).collect()).unwrap_or_default();
-        let checker = Arc::new(Checker { bin: text("checkerBin")?, env });
+        let warm = match request.get("warmChecker").and_then(Value::as_str) {
+            None | Some("off") => Warm::Off,
+            Some("on") => Warm::On,
+            Some("verify") => Warm::Verify,
+            Some(other) => return Err(format!("init.warmChecker is off, on or verify, not {other}")),
+        };
+        let checker = Arc::new(Checker { bin: text("checkerBin")?, env, warm, warmed: Mutex::new(Default::default()) });
         let slot_root = PathBuf::from(text("slotRoot")?);
         let slots = Slots {
             free: Mutex::new((0..concurrency * 2).map(|slot| (SlotDir::new(slot_root.join(format!("{slot}"))), SlotDir::new(slot_root.join(format!("{slot}-run"))))).collect()),
@@ -1077,7 +1151,8 @@ impl Executor {
                 (Some(check), Some(dir)) => {
                     let ordinary = check.get("ordinary").and_then(Value::as_bool).unwrap_or(false);
                     self.checks.acquire();
-                    let answer = self.checker.run(&string(dir), ordinary);
+                    let slotted = project.is_some_and(|p| p.get("dir").is_none());
+                    let answer = self.checker.run(&string(dir), ordinary, slotted);
                     self.checks.release();
                     Some(answer)
                 }
@@ -1162,10 +1237,12 @@ fn main() {
             _ => {}
         }
     }
-    // stdin closed: the run is over. The browser and the Vite helper are killed and waited on.
+    // stdin closed: the run is over. The browser and the Vite helper are killed and waited on, and every slot's checker daemon is
+    // stopped.
     if let Some(chrome) = executor.current_chrome() {
         chrome.stop();
     }
+    executor.checker.stop_warm();
 }
 
 #[cfg(test)]
@@ -1336,5 +1413,69 @@ mod tests {
         assert!(has_ts_error("App.tsx(1,1): error TS2322: x"));
         assert!(!has_ts_error("error TSX"));
         assert_eq!(resolve_lexical(Path::new("/w/a"), "../b/./App.tsx"), PathBuf::from("/w/b/App.tsx"));
+    }
+
+    /// A stand-in checker: logs `<SOLID_CHECKER_DAEMON> <args>` and prints what its environment says, or exits 9 when told to.
+    fn fake_checker(dir: &Path) -> (String, PathBuf) {
+        let log = dir.join("calls.log");
+        let bin = dir.join("fake-checker");
+        std::fs::write(
+            &bin,
+            format!(
+                "#!/bin/sh\necho \"$SOLID_CHECKER_DAEMON $*\" >> {}\ncase \"$*\" in *--stop-daemon*) exit 0;; esac\n[ \"$FAKE_FAIL$SOLID_CHECKER_DAEMON\" = 11 ] && exit 9\nprintf '{{\"daemon\":%s,\"diverge\":%s}}' \"$SOLID_CHECKER_DAEMON\" \"${{FAKE_DIVERGE:-0}}\"\n",
+                log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&bin).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+        std::fs::set_permissions(&bin, permissions).unwrap();
+        (bin.to_string_lossy().into_owned(), log)
+    }
+
+    fn checker(bin: &str, warm: Warm, env: &[(&str, &str)]) -> Checker {
+        Checker { bin: bin.into(), env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), warm, warmed: Mutex::new(Default::default()) }
+    }
+
+    #[test]
+    fn a_warm_checker_serves_slots_only_and_stops_their_daemons() {
+        let dir = std::env::temp_dir().join(format!("fuzz-exec-warm-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (bin, log) = fake_checker(&dir);
+        let calls = || std::fs::read_to_string(&log).unwrap_or_default();
+        let slot = dir.to_string_lossy().into_owned();
+
+        // Off: one-shot everywhere.
+        let answer = checker(&bin, Warm::Off, &[]).run(&slot, false, true);
+        assert_eq!(answer["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert!(answer.get("warm").is_none());
+
+        // On: a slot's feedback check goes to the daemon; an ordinary check and a project with its own directory do not.
+        std::fs::remove_file(&log).unwrap();
+        let warm = checker(&bin, Warm::On, &[]);
+        assert_eq!(warm.run(&slot, false, true)["stdout"], "{\"daemon\":1,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, true, true)["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, false, false)["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert!(calls().lines().next().unwrap().starts_with("1 --project"));
+        // The executor's end stops the daemon of each slot a warm check used, once, with the check's own mode flags.
+        warm.stop_warm();
+        let stops: Vec<String> = calls().lines().filter(|line| line.contains("--stop-daemon")).map(str::to_string).collect();
+        assert_eq!(stops.len(), 1);
+        assert!(stops[0].contains("--feedback-facts"), "{}", stops[0]);
+        warm.stop_warm();
+        assert_eq!(calls().lines().filter(|line| line.contains("--stop-daemon")).count(), 1);
+
+        // A warm check that fails stops its daemon before the slot is reused.
+        std::fs::remove_file(&log).unwrap();
+        let failing = checker(&bin, Warm::On, &[("FAKE_FAIL", "1")]);
+        assert_eq!(failing.run(&slot, false, true)["status"], 9);
+        assert!(calls().lines().last().unwrap().contains("--stop-daemon"));
+
+        // Verify: the one-shot run at the same path follows, and the two are compared.
+        let verify = checker(&bin, Warm::Verify, &[]);
+        let answer = verify.run(&slot, false, true);
+        assert_eq!(answer["warm"]["identical"], false, "the stand-in prints its mode, so the outputs differ");
+        assert_eq!(answer["warm"]["oneShotStatus"], 0);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
