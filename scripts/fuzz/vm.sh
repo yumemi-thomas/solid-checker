@@ -9,6 +9,8 @@
 #   scripts/fuzz/vm.sh run <command…>   sync, then run <command> in the VM clone (e.g. node scripts/fuzz/focus.mjs --codes A …)
 #   scripts/fuzz/vm.sh shell            a login shell in the VM clone, with the toolchains on PATH
 #   scripts/fuzz/vm.sh pull <vm path> <host dir>   copy a run's output out of the VM
+#   scripts/fuzz/vm.sh relocate-disks <volume>   the VM's disk images on an APFS volume without FSEvents logging, Spotlight or
+#                                       Time Machine (created when missing); `relocate-disks --remove-old` then deletes the originals
 #   scripts/fuzz/vm.sh detach <log> <command…>     sync, then run <command> in the VM clone detached from this shell (it survives
 #                                       the SSH session, a host time limit and a sleeping host); output in <log> in the VM
 #
@@ -102,9 +104,112 @@ preflight() {
     done"
 }
 
+# The VM's disk images on a dedicated APFS volume (`relocate-disks <volume>`). They live in the host's home directory, and every write
+# in the VM is a write to them that the host's FSEvents logs and Spotlight and Time Machine see. The volume (created in the Data
+# volume's container when missing: `diskutil apfs addVolume`, which erases nothing) gets `.fseventsd/no_log` (its root-owned
+# `.fseventsd` is moved aside, which the volume's owner may do, and the volume remounted so fseventsd reads it), `.metadata_never_index`,
+# and a Time Machine exclusion on the directories that hold the images (a volume root needs root to exclude). The VM is stopped, the
+# images are copied (APFS `cp` keeps them sparse), the originals renamed `*.pre-relocate` and replaced by links, and the VM started
+# again; `relocate-disks --remove-old` deletes the originals once the VM has run from the volume. `setup` warns while the images are
+# still in the home directory.
+lima=${COLIMA_HOME:-$HOME/.colima}/_lima
+instance=$([ "$profile" = default ] && echo colima || echo "colima-$profile")
+images() { printf '%s\n' "$lima/$instance/disk" "$lima/_disks/$instance"; }
+# Whether a running VM holds this instance's disk image open under <dir> (Virtualization.framework's VM process opens it, not limactl).
+vz_open_on() {
+  local pid
+  for pid in $(pgrep -f com.apple.Virtualization.VirtualMachine); do
+    # Read whole first: `grep -q` closing the pipe early fails `lsof` with SIGPIPE under pipefail.
+    case "$(lsof -p "$pid" 2>/dev/null)" in *" $1/$instance/disk"$'\n'* | *" $1/$instance/disk") return 0 ;; esac
+  done
+  return 1
+}
+
+prepare_volume() {
+  local vol=$1 name container dev remount=
+  name=$(basename "$vol")
+  if [ ! -d "$vol" ]; then
+    container=$(diskutil info -plist /System/Volumes/Data | plutil -extract APFSContainerReference raw -)
+    echo "vm.sh: creating the APFS volume $name in $container"
+    diskutil apfs addVolume "$container" APFS "$name" >/dev/null
+  fi
+  [ -d "$vol" ] && [ -w "$vol" ] || die "$vol is not a writable mounted volume"
+  if [ ! -f "$vol/.fseventsd/no_log" ]; then
+    [ -e "$vol/.fseventsd" ] && mv "$vol/.fseventsd" "$vol/.fseventsd-discarded-$(date +%s)"
+    mkdir -p "$vol/.fseventsd" && touch "$vol/.fseventsd/no_log"
+    remount=1
+  fi
+  touch "$vol/.metadata_never_index"
+  if [ -n "$remount" ]; then
+    dev=$(diskutil info -plist "$vol" | plutil -extract DeviceIdentifier raw -)
+    diskutil unmount "$vol" >/dev/null && diskutil mount "$dev" >/dev/null
+  fi
+  mkdir -p "$vol/$instance" "$vol/_disks"
+  tmutil addexclusion "$vol/$instance" "$vol/_disks" 2>/dev/null || echo "vm.sh: warning: Time Machine exclusion not set" >&2
+}
+
+# A copy of an image file or directory: `cp -p` for small files and links, `dd conv=sparse` for the images (macOS `cp` copied the
+# 150 GB data image at 20-50 MB/s on a loaded host, `dd` with 64 MiB blocks at ~1.8 GB/s, and it leaves zero blocks unwritten).
+cmp_tree() {
+  local name
+  if [ -d "$1" ] && [ ! -L "$1" ]; then
+    for name in $(ls -A "$1"); do cmp_tree "$1/$name" "$2/$name" || return 1; done
+  elif [ -L "$1" ]; then [ "$(readlink "$1")" = "$(readlink "$2")" ]
+  else cmp -s "$1" "$2"
+  fi
+}
+
+copy_image() {
+  local from=$1 to=$2 name
+  if [ -d "$from" ] && [ ! -L "$from" ]; then
+    mkdir -p "$to"
+    for name in $(ls -A "$from"); do copy_image "$from/$name" "$to/$name"; done
+  elif [ -f "$from" ] && [ ! -L "$from" ] && [ "$(stat -f %z "$from")" -ge $((1 << 30)) ]; then
+    dd if="$from" of="$to" bs=64m conv=sparse 2>/dev/null && truncate -s "$(stat -f %z "$from")" "$to"
+  else
+    cp -Pp "$from" "$to"
+  fi
+}
+
+relocate_disks() {
+  local vol=$1 path target
+  case "$vol" in /*) ;; *) vol=/Volumes/$vol ;; esac
+  if [ "$vol" = /Volumes/--remove-old ] || [ "${2:-}" = --remove-old ]; then
+    [ "$vol" = /Volumes/--remove-old ] && vol=$(dirname "$(dirname "$(readlink "$lima/$instance/disk")")")
+    colima status --profile "$profile" >/dev/null 2>&1 && vz_open_on "$vol" || die "the VM is not running from $vol: start it there before removing the old images"
+    for path in $(images); do if [ -e "$path.pre-relocate" ]; then rm -rf "$path.pre-relocate" && echo "vm.sh: removed $path.pre-relocate"; fi; done
+    return
+  fi
+  prepare_volume "$vol"
+  colima status --profile "$profile" >/dev/null 2>&1 && { echo "vm.sh: stopping the VM"; colima stop --profile "$profile"; }
+  for path in $(images); do
+    target=$vol/${path#"$lima"/}
+    if [ -L "$path" ]; then echo "vm.sh: $path already links to $(readlink "$path")"; continue; fi
+    [ -e "$path" ] || die "no $path (create the VM with setup first)"
+    rm -rf "$target" && mkdir -p "$(dirname "$target")"
+    echo "vm.sh: copying $path to $target"
+    copy_image "$path" "$target"
+    # Same bytes: the images are compared whole (cmp reads holes as zeros), a few minutes at the disk's speed.
+    cmp_tree "$path" "$target" || die "the copy of $path differs from it"
+    mv "$path" "$path.pre-relocate" && ln -s "$target" "$path"
+  done
+  start
+  vz_open_on "$vol" || die "the VM did not open its disks on $vol (the originals are *.pre-relocate: remove the links and rename them back)"
+  vm true && echo "vm.sh: the VM runs from $vol; after a run, \`vm.sh relocate-disks --remove-old\` deletes the originals ($(du -shc $(images | sed 's/$/.pre-relocate/') 2>/dev/null | tail -1 | cut -f1))"
+}
+
+# A warning while an image is a plain file in the home directory (relocate-disks).
+disks_check() {
+  local path
+  for path in $(images); do
+    [ -L "$path" ] && [ -f "$(dirname "$(dirname "$(readlink "$path")")")/.fseventsd/no_log" ] && continue
+    echo "vm.sh: warning: $path is not on a volume without FSEvents logging; every VM write reaches the host's fseventsd (vm.sh relocate-disks <volume>)" >&2
+  done
+}
 
 setup() {
   start
+  disks_check
   vm "set -euo pipefail
     sudo mkdir -p $root && sudo chown \$(id -u):\$(id -g) $root
     sudo apt-get update -qq >/dev/null
@@ -161,9 +266,10 @@ case "${1:-}" in
   setup) setup ;;
   sync) sync ;;
   run) shift; [ $# -gt 0 ] || die "run <command…>"; sync; vm "$vm_env; cd $clone && $(printf '%q ' "$@")" ;;
+  relocate-disks) shift; [ $# -ge 1 ] || die "relocate-disks <volume> | --remove-old"; relocate_disks "$@" ;;
   shell) start; scratch_in_ram; colima ssh --profile "$profile" -- bash -lc "$vm_env; cd $clone && exec bash -l" ;;
   detach) shift; [ $# -gt 1 ] || die "detach <log> <command…>"; log=$1; shift; sync
     vm "$vm_env; cd $clone && mkdir -p \$(dirname $(printf '%q' "$log")) && (setsid nohup $(printf '%q ' "$@") > $(printf '%q' "$log") 2>&1 < /dev/null &) ; echo vm.sh: detached, output in $(printf '%q' "$log")" ;;
   pull) [ $# -eq 3 ] || die "pull <vm path> <host dir>"; mkdir -p "$3"; vm "tar cf - -C $(printf '%q' "$2") ." | tar xf - -C "$3" ;;
-  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
