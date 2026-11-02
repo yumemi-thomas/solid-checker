@@ -99,6 +99,58 @@ struct Ran {
     killed: bool,
     wall_ms: u128,
     spawn_error: Option<String>,
+    /// The process's resource use as `wait4` gave it (Linux only; the harness's cost record, never a verdict input).
+    usage: Option<Usage>,
+}
+
+/// A finished process's CPU time, peak resident set and block writes, including the children it waited for (Linux `wait4`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Usage {
+    cpu_ms: u64,
+    max_rss_kb: u64,
+    write_kb: u64,
+}
+
+/// Waits for `child` as `Child::wait` does, with its resource use from `wait4`; the exit code is `ExitStatus::code`'s.
+#[cfg(target_os = "linux")]
+fn wait_with_usage(child: &mut std::process::Child) -> (Option<i32>, Option<Usage>) {
+    #[repr(C)]
+    struct Timeval {
+        sec: i64,
+        usec: i64,
+    }
+    #[repr(C)]
+    struct Rusage {
+        utime: Timeval,
+        stime: Timeval,
+        // maxrss, ixrss, idrss, isrss, minflt, majflt, nswap, inblock, oublock, msgsnd, msgrcv, nsignals, nvcsw, nivcsw
+        longs: [i64; 14],
+    }
+    unsafe extern "C" {
+        fn wait4(pid: i32, status: *mut i32, options: i32, rusage: *mut Rusage) -> i32;
+    }
+    let pid = child.id() as i32;
+    let mut status = 0i32;
+    let mut usage = Rusage { utime: Timeval { sec: 0, usec: 0 }, stime: Timeval { sec: 0, usec: 0 }, longs: [0; 14] };
+    loop {
+        // SAFETY: `pid` is this process's unreaped child; `status` and `usage` are valid for the call's writes.
+        let reaped = unsafe { wait4(pid, &mut status, 0, &mut usage) };
+        if reaped == pid {
+            break;
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return (child.wait().ok().and_then(|status| status.code()), None);
+        }
+    }
+    let code = if status & 0x7f == 0 { Some((status >> 8) & 0xff) } else { None };
+    let ms = |t: &Timeval| (t.sec.max(0) as u64) * 1000 + (t.usec.max(0) as u64) / 1000;
+    let usage = Usage { cpu_ms: ms(&usage.utime) + ms(&usage.stime), max_rss_kb: usage.longs[0].max(0) as u64, write_kb: (usage.longs[8].max(0) as u64) / 2 };
+    (code, Some(usage))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wait_with_usage(child: &mut std::process::Child) -> (Option<i32>, Option<Usage>) {
+    (child.wait().ok().and_then(|status| status.code()), None)
 }
 
 /// Runs a command to completion with its outputs read on threads, killed after `timeout`.
@@ -108,7 +160,7 @@ fn run_command(mut command: Command, timeout: Duration) -> Ran {
     let mut child = match spawn(&mut command) {
         Ok(child) => child,
         Err(error) => {
-            return Ran { status: None, stdout: String::new(), stderr: String::new(), killed: false, wall_ms: 0, spawn_error: Some(error.to_string()) };
+            return Ran { status: None, stdout: String::new(), stderr: String::new(), killed: false, wall_ms: 0, spawn_error: Some(error.to_string()), usage: None };
         }
     };
     let mut stdout = child.stdout.take().unwrap();
@@ -133,12 +185,22 @@ fn run_command(mut command: Command, timeout: Duration) -> Ran {
         }
         false
     });
-    let status = child.wait().ok().and_then(|status| status.code());
+    let (status, usage) = wait_with_usage(&mut child);
     let _ = finished.send(());
     let killed = watchdog.join().unwrap_or(false);
     let stdout = String::from_utf8_lossy(&out.join().unwrap_or_default()).into_owned();
     let stderr = String::from_utf8_lossy(&err.join().unwrap_or_default()).into_owned();
-    Ran { status, stdout, stderr, killed, wall_ms: started.elapsed().as_millis(), spawn_error: None }
+    Ran { status, stdout, stderr, killed, wall_ms: started.elapsed().as_millis(), spawn_error: None, usage }
+}
+
+/// The checker answer's cost fields (`cost.mjs`): the process's CPU time, peak RSS and block writes, or null with the reason. A warm
+/// check's process is the client that hands the program to its slot's daemon, whose use it does not include.
+fn usage_fields(ran: &Ran, warm: bool) -> Value {
+    match (warm, ran.usage) {
+        (true, _) => json!({ "cpuMs": null, "maxRssKb": null, "writeKb": null, "usageWhy": "warm daemon" }),
+        (false, Some(usage)) => json!({ "cpuMs": usage.cpu_ms, "maxRssKb": usage.max_rss_kb, "writeKb": usage.write_kb }),
+        (false, None) => json!({ "cpuMs": null, "maxRssKb": null, "writeKb": null, "usageWhy": "no wait4 rusage on this platform" }),
+    }
 }
 
 fn write_file(path: &str, text: &str) -> Res<()> {
@@ -265,7 +327,8 @@ impl Checker {
         if let Some(error) = ran.spawn_error {
             return json!({ "spawnError": error, "dir": dir, "wallMs": ran.wall_ms as u64 });
         }
-        let mut answer = json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir });
+        let usage = usage_fields(&ran, warm);
+        let mut answer = json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir, "usage": usage });
         if warm && self.warm == Warm::Verify {
             let once = run_command(self.command(dir, args, false), Duration::from_secs(180));
             let identical = once.spawn_error.is_none() && !once.killed && once.status == ran.status && once.stdout == ran.stdout;
@@ -1249,6 +1312,25 @@ fn main() {
 mod tests {
     use super::typecheck::{batch_answers, has_ts_error, resolve_lexical};
     use super::*;
+
+    #[test]
+    fn a_command_answers_its_exit_code_and_on_linux_its_resource_use() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 3"]);
+        let ran = run_command(command, Duration::from_secs(10));
+        assert_eq!(ran.status, Some(3));
+        assert_eq!(ran.usage.is_some(), cfg!(target_os = "linux"));
+        if let Some(usage) = ran.usage {
+            assert!(usage.max_rss_kb > 0);
+        }
+        // A signal leaves no code, as `ExitStatus::code` says.
+        let mut command = Command::new("sh");
+        command.args(["-c", "kill -9 $$"]);
+        assert_eq!(run_command(command, Duration::from_secs(10)).status, None);
+        let fields = usage_fields(&run_command(Command::new("true"), Duration::from_secs(10)), true);
+        assert_eq!(fields["usageWhy"], "warm daemon");
+        assert!(fields["maxRssKb"].is_null());
+    }
 
     #[test]
     fn a_semaphore_grows_and_shrinks_under_its_holders() {
