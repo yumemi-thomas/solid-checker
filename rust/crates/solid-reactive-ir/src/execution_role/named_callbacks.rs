@@ -1001,6 +1001,17 @@ fn inherits_callback_role(
     Some(role)
 }
 
+/// The callbacks [`inherits_callback_role`] is placing on this thread, sorted:
+/// part of the context a kept closure placement is reused in
+/// (`body_roles::unrun_closure_within`).
+pub(super) fn inherits_placing_snapshot() -> Vec<(String, Span)> {
+    INHERITS_PLACING.with(|placing| {
+        let mut held = placing.borrow().iter().cloned().collect::<Vec<_>>();
+        held.sort_unstable();
+        held
+    })
+}
+
 thread_local! {
     /// The callbacks [`inherits_callback_role`] is placing on this thread.
     static INHERITS_PLACING: std::cell::RefCell<std::collections::HashSet<(String, Span)>> =

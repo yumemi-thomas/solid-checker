@@ -163,6 +163,7 @@ thread_local! {
 
 pub(super) fn clear_write_site_roles() {
     WRITE_SITE_ROLES.with(|cache| cache.borrow_mut().clear());
+    super::flow_caches_cleared();
 }
 
 /// Whether every invocation of the function literal runs through event

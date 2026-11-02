@@ -2,13 +2,16 @@
 //! write, an action, a refresh and a read nested under that many layers in
 //! three hosts (the component body and a memo, which own the scope, and an
 //! event handler, which does not). The checker's work must grow with the
-//! program, near-linearly in the depth, however many reachable paths the
-//! layers multiply: each in-place layer is reached by two edges, so a call at
-//! depth N lies on about 2^(N+1) paths.
+//! program, polynomially in the depth (near-linearly for rows and visits, at
+//! most quadratically for closure placements), however many reachable paths
+//! the layers multiply: each in-place layer is reached by two edges, so a
+//! call at depth N lies on about 2^(N+1) paths.
 //!
 //! Work is counted, never timed: the rows the IR holds for each host
-//! (writes, actions, reads) and the reachability count's visits
-//! ([`solid_reactive_ir::BuildTimings::reachability_visits`]). Wall time is
+//! (writes, actions, reads), the reachability count's visits
+//! ([`solid_reactive_ir::BuildTimings::reachability_visits`]) and the
+//! named-closure placements the role queries computed
+//! ([`solid_reactive_ir::BuildTimings::closure_placements`]). Wall time is
 //! printed with `--nocapture` and gates nothing.
 
 use std::{env, fs, path::PathBuf, time::Instant};
@@ -47,18 +50,6 @@ declare module "solid-js" {
 const TSCONFIG: &str = r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"include":["*.ts","*.tsx"]}"#;
 
 const MAX_DEPTH: usize = 20;
-
-/// The deepest program built for `layer`. Named closures stop at 12: their
-/// write-role queries still cost time exponential in the depth (debug,
-/// whole build: 286 ms at depth 10, 8.1 s at 15, 32 s at 17, 69 s at 20),
-/// though rows and visits stay flat. That is role work this ladder does not
-/// count.
-fn max_depth(layer: Layer) -> usize {
-    match layer {
-        Layer::Closure => 12,
-        _ => MAX_DEPTH,
-    }
-}
 
 /// How a layer wraps what it holds; every one runs its body once, in place.
 #[derive(Clone, Copy, Debug)]
@@ -148,6 +139,19 @@ fn within_envelope(series: &[usize], depth: usize) -> bool {
     series[depth - 1] <= 2 * depth * first
 }
 
+/// The quadratic envelope the named-closure placements must stay under:
+/// `2 * depth^2 * work(1)`, and at least `2 * depth^2`. A role query at a
+/// call places each named closure around it once, and a layer adds one call
+/// and one closure, so the count grows as `depth * (depth + 3)` for
+/// closures called once (4, 10, 18, … 442 at depth 20). At 2f58b3158 every
+/// query placed the closures around it again under each outer one, and the
+/// count doubled per layer (4, 14, 36, 82, 176, 366 at depths 1-6; 98,270
+/// at 14), which leaves this envelope at depth 6.
+fn within_quadratic_envelope(series: &[usize], depth: usize) -> bool {
+    let first = series[0].max(1);
+    series[depth - 1] <= 2 * depth * depth * first
+}
+
 /// The `(layer, host)` series whose rows still grow exponentially. Each must
 /// leave the envelope, so a fix that makes one near-linear fails here until
 /// it is removed. Empty since rows carry their path count: at b38255c8b
@@ -161,7 +165,7 @@ const KNOWN_EXPONENTIAL_ROWS: &[(&str, char)] = &[];
 const KNOWN_EXPONENTIAL_VISITS: &[&str] = &[];
 
 #[test]
-fn checker_work_grows_near_linearly_with_nested_layers() {
+fn checker_work_grows_polynomially_with_nested_layers() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -203,9 +207,10 @@ fn checker_work_grows_near_linearly_with_nested_layers() {
         let name = format!("{layer:?}");
         let mut rows = HOSTS.map(|_| Vec::<usize>::new());
         let mut visits = Vec::<u64>::new();
+        let mut placements = Vec::<usize>::new();
         let mut alive = HOSTS.to_vec();
         let mut curve = Vec::new();
-        let deepest = max_depth(layer);
+        let deepest = MAX_DEPTH;
         for depth in 1..=deepest {
             let source = program(layer, depth, &alive);
             fs::write(&app, &source).unwrap();
@@ -265,9 +270,11 @@ fn checker_work_grows_near_linearly_with_nested_layers() {
                 rows[index].push(held);
             }
             visits.push(timings.reachability_visits);
+            placements.push(timings.closure_placements as usize);
             curve.push(format!(
-                "d{depth}: rows {total}, visits {}, {:.0} ms",
+                "d{depth}: rows {total}, visits {}, placements {}, {:.0} ms",
                 timings.reachability_visits,
+                timings.closure_placements,
                 elapsed.as_secs_f64() * 1000.0
             ));
             // A series that left the envelope is done; drop its host so the
@@ -296,7 +303,13 @@ fn checker_work_grows_near_linearly_with_nested_layers() {
                     "{name}: reachability visits {visits:?} leave 2*depth*visits(1) at depth {depth}"
                 ));
             }
-            if visits_out || alive.is_empty() {
+            let placements_out = !within_quadratic_envelope(&placements, depth);
+            if placements_out {
+                failures.push(format!(
+                    "{name}: closure placements {placements:?} leave 2*depth^2*placements(1) at depth {depth}"
+                ));
+            }
+            if visits_out || placements_out || alive.is_empty() {
                 break;
             }
         }

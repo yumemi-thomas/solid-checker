@@ -452,6 +452,14 @@ pub(crate) fn recording_frame() -> Option<u64> {
     })
 }
 
+/// The innermost open frame's serial, suppressed or not; 0 outside every
+/// recording. Serials are never reused on a thread, so an answer kept under
+/// this serial is only ever reused where its reads already reached the same
+/// frame (`execution_role::body_roles`' closure placements).
+pub(crate) fn current_frame() -> u64 {
+    CURRENT.with(std::cell::Cell::get)
+}
+
 /// Records that the current computation read `section`.
 pub(crate) fn note(section: Section) {
     if !recording() {

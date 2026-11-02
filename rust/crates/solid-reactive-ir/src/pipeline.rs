@@ -685,6 +685,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     program.runtime_configuration = runtime_configuration;
     crate::role_log::flush();
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
+    build_timings.closure_placements = semantic_lookup.closure_placements();
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))
 }

@@ -528,6 +528,7 @@ pub(super) fn computing_flow<R>(f: impl FnOnce() -> R) -> R {
     COMPUTING_FLOW_ANSWERS.with(|computing| computing.set(outer));
     if !outer {
         SITE_ROLES.with(|cache| cache.borrow_mut().clear());
+        flow_caches_cleared();
     }
     result
 }
@@ -600,6 +601,34 @@ thread_local! {
     /// every answer is computed from an empty context and no order of
     /// computation matters.
     static COMPUTING_WRITE_FLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether this thread is computing a write-flow answer ([`write_flow_answer`]).
+pub(super) fn computing_write_flow() -> bool {
+    COMPUTING_WRITE_FLOW.with(std::cell::Cell::get)
+}
+
+thread_local! {
+    /// How many times this thread cleared a per-answer flow cache
+    /// ([`site_role_in`]'s, the write flow's site roles).
+    static FLOW_CACHE_EPOCH: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Marks that a per-answer flow cache was cleared on this thread.
+pub(super) fn flow_caches_cleared() {
+    FLOW_CACHE_EPOCH.with(|epoch| epoch.set(epoch.get() + 1));
+}
+
+/// The flow-cache state a kept role computation was made in: whether a flow
+/// answer and a write-flow answer are computing, and how many times the
+/// per-answer caches were cleared. Between two equal states those caches only
+/// grew, so what a computation read from them it reads again.
+pub(super) fn flow_cache_state() -> (bool, bool, u64) {
+    (
+        computing_flow_answers(),
+        computing_write_flow(),
+        FLOW_CACHE_EPOCH.with(std::cell::Cell::get),
+    )
 }
 
 /// ADR 0442, per function and guard (ADR 0450): the write-flow answer of a

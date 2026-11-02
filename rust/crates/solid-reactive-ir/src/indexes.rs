@@ -835,6 +835,9 @@ pub(super) struct SemanticLookup<'a> {
     memos: crate::base::memo::build::LookupMemos<'a>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    /// The named-closure placements this build computed (instrumentation,
+    /// [`crate::BuildTimings::closure_placements`]).
+    closure_placements: std::sync::atomic::AtomicU64,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
@@ -1200,6 +1203,7 @@ impl<'a> SemanticLookup<'a> {
             hand_out_reads: hand_outs::HandOutReads::default(),
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
+            closure_placements: std::sync::atomic::AtomicU64::new(0),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -1247,6 +1251,19 @@ impl<'a> SemanticLookup<'a> {
             effect_apply_regions: crate::base::reads::Recorded::new(),
             effect_apply_calls: crate::base::reads::Recorded::new(),
         }
+    }
+
+    /// Counts one computed named-closure placement
+    /// ([`crate::BuildTimings::closure_placements`]).
+    pub(crate) fn count_closure_placement(&self) {
+        self.closure_placements
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The named-closure placements this build has computed so far.
+    pub(crate) fn closure_placements(&self) -> u64 {
+        self.closure_placements
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// The exact compiler symbol demanded at one span of one file, if any.

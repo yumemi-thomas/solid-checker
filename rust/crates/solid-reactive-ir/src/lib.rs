@@ -1634,6 +1634,11 @@ pub struct BuildTimings {
     /// visits plus edges followed ([`reachability`]). Zero when the stage
     /// was reused. Deterministic, so the complexity ladder gates on it.
     pub reachability_visits: u64,
+    /// The named-closure placements the build computed: closures bound to a
+    /// name whose calls a read's role had to place (`execution_role`'s
+    /// `closure_unplaced`), each computation counted, a kept answer's reuse
+    /// not. Deterministic, so the complexity ladder gates on it.
+    pub closure_placements: u64,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
     pub owner_reused_files: u64,
