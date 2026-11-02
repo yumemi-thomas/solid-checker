@@ -302,7 +302,7 @@ const NATIVE_VALUE_OPTIONS = new Set([
   "--framework-transform", "--only-file"
 ]);
 const NATIVE_FLAGS = new Set([
-  "--certify", "--internal", "--feedback-facts", "--serve", "--help", "-h", "--no-package-contracts"
+  "--certify", "--internal", "--feedback-facts", "--serve", "--stop-daemon", "--help", "-h", "--no-package-contracts"
 ]);
 /**
  * One analysis per lint pass over a file.
