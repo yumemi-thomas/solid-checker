@@ -31,3 +31,36 @@ export function Uses() {
     </button>
   );
 }
+
+// ADR 0549's value flows: a slot of a closed literal, a hook's returned
+// literal (destructured or read as a member), a tuple named by a `const`.
+// Each still names the module-scope tracker: violations. Through a `let`:
+// an obligation. The same shapes over a body-created tracker: silent.
+const useShared = () => ({ track: trackShared });
+export function ValueFlows() {
+  const owned = createReaction(() => {});
+  const { viaSlot } = { viaSlot: trackShared };
+  const { track: viaHook } = useShared();
+  const shared = useShared();
+  const pair = [0, trackShared] as const;
+  const [, viaTuple] = pair;
+  let viaLet = trackShared;
+  const { ownedSlot } = { ownedSlot: owned };
+  const [, ownedTuple] = [0, owned] as const;
+  return (
+    <button
+      onClick={() => {
+        viaSlot(() => count());
+        viaHook(() => count());
+        shared.track(() => count());
+        viaTuple(() => count());
+        viaLet(() => count());
+        ownedSlot(() => count());
+        ownedTuple(() => count());
+        viaLet = trackShared;
+      }}
+    >
+      go
+    </button>
+  );
+}

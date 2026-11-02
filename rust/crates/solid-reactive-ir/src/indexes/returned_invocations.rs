@@ -237,8 +237,22 @@ struct InvocationChain {
     factory_at_module_scope: bool,
 }
 
+/// The slot a walk carries to the binding whose initializer holds it
+/// (ADR 0549's folds): an object pattern's or a member callee's property, or
+/// a tuple pattern's position.
+#[derive(Clone)]
+enum Slot {
+    Key(String),
+    Index(usize),
+}
+
 /// `returned_primitive_invocation`'s binding-chain walk from the callee at
-/// `callee` of file `id`.
+/// `callee` of file `id`. ADR 0549 folds exact local value flows into it: a
+/// member callee on an identifier (`thing.useIt()`), and a slot of a pattern
+/// or member whose binding's initializer is a closed object literal, a tuple
+/// literal, or the call of a `const` function whose only return is a complete
+/// object or tuple literal (`const { useIt } = useThing()`), followed through
+/// the slot's value when it is an identifier.
 fn invocation_chain(
     ctx: &Ctx<'_, '_, BuildSchema>,
     id: FileId,
@@ -246,6 +260,19 @@ fn invocation_chain(
     resolvable: &mut Resolvable,
 ) -> Result<Option<InvocationChain>, Cycle> {
     let mut reference = (id, callee);
+    let mut pending: Option<Slot> = None;
+    if let Some(read) = ctx.file(id, 0) {
+        let ast = &read.facts().ast;
+        let peeled = ast.peel_ts_sugar_span(callee);
+        if let Some(member) = ast.member_at(peeled)
+            && ast.computed_members.binary_search(&peeled).is_err()
+            && ast.optional_members.binary_search(&peeled).is_err()
+            && let Some(property) = read.facts().source_text(member.property)
+        {
+            reference = (id, ast.peel_ts_sugar_span(member.object));
+            pending = Some(Slot::Key(property.to_owned()));
+        }
+    }
     let mut seen = BTreeSet::<Arc<str>>::new();
     let mut exact = true;
     loop {
@@ -264,44 +291,199 @@ fn invocation_chain(
         let Some(read) = ctx.file(file, rank as usize) else {
             return Ok(None);
         };
-        let Some(binding) = read.facts().ast.bindings.get(ordinal as usize) else {
+        let facts = read.facts();
+        let Some(binding) = facts.ast.bindings.get(ordinal as usize) else {
             return Ok(None);
         };
         exact &= binding.immutable;
-        if let Some(initializer) = binding.call_initializer {
-            let slot = match binding.shape {
-                solid_facts::ast::BindingShape::Array => {
-                    let Some(position) = binding.array_slots.iter().position(|slot| {
-                        slot.as_ref()
-                            .and_then(|name| read.symbol_at(name.span))
-                            .is_some_and(|named| named.as_str() == &*symbol)
-                    }) else {
-                        return Ok(None);
-                    };
-                    Some(u32_of(position))
+        let named = |name: &solid_facts::ast::NamedSpan| {
+            read.symbol_at(name.span)
+                .is_some_and(|named| named.as_str() == &*symbol)
+        };
+        // The slot this binding's pattern selects, or the one a member callee
+        // carried to an identifier binding.
+        let slot = match binding.shape {
+            solid_facts::ast::BindingShape::Array => {
+                let Some(position) = binding
+                    .array_slots
+                    .iter()
+                    .position(|slot| slot.as_ref().is_some_and(named))
+                else {
+                    return Ok(None);
+                };
+                if pending.is_some() {
+                    return Ok(None);
                 }
-                _ => None,
-            };
+                Some(Slot::Index(position))
+            }
+            solid_facts::ast::BindingShape::Object => {
+                let pattern = facts.source_text(binding.pattern).unwrap_or("=");
+                if pending.is_some() || pattern.contains('=') || pattern.contains("...") {
+                    return Ok(None);
+                }
+                let Some(slot) = binding
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.plain_identifier_key && named(&slot.local))
+                else {
+                    return Ok(None);
+                };
+                Some(Slot::Key(slot.property.to_string()))
+            }
+            solid_facts::ast::BindingShape::Identifier => pending.take(),
+        };
+        if let Some(initializer) = binding.call_initializer {
             // A call with no primitive and no call at the span both prove
             // nothing.
             let primitives = ctx.memo::<super::census::CallPrimitives>(&file)?;
-            let factory_at_module_scope =
-                crate::owners::containing_ast_function(&read.facts().ast, initializer).is_none();
-            return Ok(primitives
-                .get(&initializer)
-                .map(|primitive| InvocationChain {
+            if let Some(primitive) = primitives.get(&initializer) {
+                let slot = match slot {
+                    None => None,
+                    Some(Slot::Index(position)) => Some(u32_of(position)),
+                    Some(Slot::Key(_)) => return Ok(None),
+                };
+                let factory_at_module_scope =
+                    crate::owners::containing_ast_function(&facts.ast, initializer).is_none();
+                return Ok(Some(InvocationChain {
                     primitive: *primitive,
                     slot,
                     factory: (file, initializer),
                     exact,
                     factory_at_module_scope,
                 }));
+            }
+            // ADR 0549: a hook's slot, by its only, complete-literal return.
+            let Some(slot) = slot else {
+                return Ok(None);
+            };
+            let Some(call) = facts.ast.call_at(initializer) else {
+                return Ok(None);
+            };
+            let Some(value) =
+                hook_slot_value(ctx, file, call.callee, &slot, resolvable, &mut exact)?
+            else {
+                return Ok(None);
+            };
+            reference = value;
+            continue;
+        }
+        if let Some(slot) = slot {
+            // ADR 0549: a slot of a binding that names the literal
+            // (`const [, c] = pair`) is that slot of the named binding's.
+            if let Some(named) = binding.initializer_identifier.as_ref() {
+                reference = (file, named.span);
+                pending = Some(slot);
+                continue;
+            }
+            // ADR 0549: a slot of a closed local literal.
+            let Some(initializer) = binding
+                .initializer
+                .map(|span| facts.ast.peel_ts_sugar_span(span))
+            else {
+                return Ok(None);
+            };
+            let Some(value) = literal_slot_value(facts, initializer, &slot) else {
+                return Ok(None);
+            };
+            reference = (file, value);
+            continue;
         }
         let Some(initializer) = binding.initializer_identifier.as_ref() else {
             return Ok(None);
         };
         reference = (file, initializer.span);
     }
+}
+
+/// ADR 0549: the identifier a closed object literal's property or a tuple
+/// literal's element holds, written at `literal` (behind TypeScript sugar).
+fn literal_slot_value(facts: &FileFacts, literal: Span, slot: &Slot) -> Option<Span> {
+    let ast = &facts.ast;
+    let literal = ast.peel_ts_sugar_span(literal);
+    let value = match slot {
+        Slot::Key(key) => crate::execution_role::closed_literal_slot_value(facts, literal, key)?,
+        Slot::Index(position) => {
+            let array = ast.array_literal_at(literal)?;
+            if array
+                .elements
+                .iter()
+                .take(position + 1)
+                .any(|element| element.kind == solid_facts::ast::ArrayElementKind::Spread)
+            {
+                return None;
+            }
+            let element = array.elements.get(*position)?;
+            (element.kind == solid_facts::ast::ArrayElementKind::Value).then_some(element.span)?
+        }
+    };
+    let value = ast.peel_ts_sugar_span(value);
+    ast.identifiers
+        .iter()
+        .any(|identifier| {
+            identifier.span == value
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+        .then_some(value)
+}
+
+/// ADR 0549: the identifier the slot holds in what the function `callee` names
+/// returns: a `const` bound to a function literal whose only return (an
+/// expression body, or one straight-line `return`) is a complete object or
+/// tuple literal. The identifier is resolved in the function's file; a name
+/// the function declares itself (a parameter) resolves to a binding with no
+/// initializer, which proves nothing.
+fn hook_slot_value(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    id: FileId,
+    callee: Span,
+    slot: &Slot,
+    resolvable: &mut Resolvable,
+    exact: &mut bool,
+) -> Result<Option<(FileId, Span)>, Cycle> {
+    let Some((file, rank, ordinal, _)) = resolve_binding(ctx, id, callee, resolvable) else {
+        return Ok(None);
+    };
+    let Some(read) = ctx.file(file, rank as usize) else {
+        return Ok(None);
+    };
+    let facts = read.facts();
+    let Some(binding) = facts.ast.bindings.get(ordinal as usize) else {
+        return Ok(None);
+    };
+    *exact &= binding.immutable;
+    let Some(initializer) = binding
+        .initializer
+        .filter(|_| binding.initializer_function)
+        .map(|span| facts.ast.peel_ts_sugar_span(span))
+    else {
+        return Ok(None);
+    };
+    let Some(function) = facts.ast.function_at(initializer) else {
+        return Ok(None);
+    };
+    if function.r#async || function.generator {
+        return Ok(None);
+    }
+    let returned = match &function.expression_return {
+        Some(returned) => returned,
+        None => {
+            let mut returns = facts.ast.returns.iter().filter(|returned| {
+                crate::owners::containing_ast_function(&facts.ast, returned.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            });
+            let Some(returned) = returns.next() else {
+                return Ok(None);
+            };
+            if returns.next().is_some() || !returned.straight_line {
+                return Ok(None);
+            }
+            returned
+        }
+    };
+    let Some(argument) = returned.argument else {
+        return Ok(None);
+    };
+    Ok(literal_slot_value(facts, argument, slot).map(|value| (file, value)))
 }
 
 /// The returned-source answers of a file's binding initializers

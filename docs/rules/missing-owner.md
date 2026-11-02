@@ -67,9 +67,13 @@ operation stays a proven violation.
 `createReaction` captures the owner current at its call, and each call of the
 tracker it returns creates its effect under that owner (rc.17 `dist/dev.js:2630-2651`):
 a tracker created with no owner is a violation at every `track()` call, wherever
-that call runs; one created in a body is owned there. Only a tracker reached
-through `const` bindings is followed; one created in another module is placed
-only when it is created at that module's top level (ADR 0549).
+that call runs; one created in a body is owned there. The tracker is followed
+through `const` bindings, closed object and tuple literals, and a `const`
+hook's single literal return; through a `let` the call is an obligation. One
+created in another module is placed only when it is created at that module's
+top level. A tracker that escapes where no call is named (exported, passed to a
+call or a JSX attribute) is an obligation at its creation unless that is owned
+(ADR 0549).
 
 A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller

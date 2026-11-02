@@ -380,9 +380,13 @@
    "mx-no-owner-effect-handler-reaction-track-alias-none-s-module",
    "mx-no-owner-effect-handler-reaction-track-direct-none-s-module",
    "mx-no-owner-effect-handler-reaction-track-wrapper-none-s-module",
-   "mx-no-owner-effect-timer-reaction-track-alias-none-s-module"
+   "mx-no-owner-effect-timer-reaction-track-alias-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-destructured-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-hook-member-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-tuple-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-hook-none-s-module"
   ],
-  "rediscovered": "f31337fa8 (release), mx-src NO_OWNER_EFFECT: 230 false-clean and 22 recall-gap of the 252 reaction-track programs; ADR 0549: 108 agree (direct, alias, wrapper bindings), 122 false-clean remain (object-literal, hook, hook-member and tuple bindings: open-work)"
+  "rediscovered": "f31337fa8 (release), mx-src NO_OWNER_EFFECT: 230 false-clean and 22 recall-gap of the 252 reaction-track programs; ADR 0549 with its value-flow folds: all 252 agree (direct, alias, wrapper, object-literal, hook, hook-member and tuple bindings)"
  },
  {
   "finding": "createMemo / onCleanup in an action's first step called from an owned onSettled or a createTrackedEffect was certified clean: the leaf walk counted the action as a safe call; rc.17 throws PRIMITIVE_IN_FORBIDDEN_SCOPE / CLEANUP_IN_FORBIDDEN_SCOPE (ADR 0550)",
