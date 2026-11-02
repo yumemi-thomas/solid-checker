@@ -17,6 +17,16 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/identity-wrapper-callback/App.tsx",
+      "start": 378,
+      "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/identity-wrapper-callback/App.tsx",
       "start": 586,
       "end": 595,
       "fixes": 0
@@ -27,8 +37,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/identity-wrapper-callback/App.tsx",
+      "start": 609,
+      "end": 619,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/identity-wrapper-callback/App.tsx",
       "start": 746,
       "end": 755,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/identity-wrapper-callback/App.tsx",
+      "start": 769,
+      "end": 782,
       "fixes": 0
     },
     {

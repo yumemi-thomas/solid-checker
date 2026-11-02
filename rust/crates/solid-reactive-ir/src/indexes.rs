@@ -1460,6 +1460,14 @@ impl<'a> SemanticLookup<'a> {
     ) -> bool {
         let count = answer.arguments as usize;
         let slot = answer.slot.map(|slot| slot as usize);
+        // ADR 0549: the owner pass reads the creating call's placement.
+        if self
+            .dialect
+            .returned_invocation_owner_requirement_role(answer.primitive)
+            .is_some()
+        {
+            return true;
+        }
         (0..count).any(|argument| {
             let semantics = self.dialect.returned_callback_semantics_at(
                 answer.primitive,
@@ -1532,6 +1540,14 @@ impl<'a> SemanticLookup<'a> {
                     text(&mut hasher, &format!("{:?}", answer.primitive));
                     hasher.update(answer.slot.map_or(u64::MAX, u64::from).to_le_bytes());
                     hasher.update(answer.arguments.to_le_bytes());
+                    // ADR 0549: where the function was created, as the owner
+                    // pass reads it.
+                    text(&mut hasher, self.memos.table().path_of(answer.factory.0));
+                    span(&mut hasher, answer.factory.1);
+                    hasher.update([
+                        u8::from(answer.exact),
+                        u8::from(answer.factory_at_module_scope),
+                    ]);
                 }
                 hasher.update([0xff]);
             }

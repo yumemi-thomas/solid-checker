@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reaction-creation-owner/App.tsx",
+      "start": 336,
+      "end": 347,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reaction-creation-owner/App.tsx",
+      "start": 747,
+      "end": 758,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reaction-creation-owner/App.tsx",
+      "start": 783,
+      "end": 794,
+      "fixes": 0
+    }
+  ]
+}

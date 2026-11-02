@@ -139,11 +139,35 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 3989,
+      "end": 4002,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
       "start": 4419,
       "end": 4428,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 4444,
+      "end": 4463,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
       "rule": "missing-owner",

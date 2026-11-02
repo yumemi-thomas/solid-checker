@@ -87,6 +87,12 @@ pub(crate) struct ReturnedInvocation {
     pub(crate) primitive: Primitive,
     pub(crate) slot: Option<u32>,
     pub(crate) arguments: u32,
+    /// ADR 0549: the file and call that created the function, whether every
+    /// binding the walk followed is a `const` (`exact`), and whether that call
+    /// is written at its module's top level.
+    pub(crate) factory: (FileId, Span),
+    pub(crate) exact: bool,
+    pub(crate) factory_at_module_scope: bool,
 }
 
 impl Canonical for ReturnedInvocation {}
@@ -145,15 +151,16 @@ impl Memo<BuildSchema> for ReturnedPrimitiveCalls {
             if answers.contains_key(&key) {
                 continue;
             }
-            if let Some((primitive, slot)) =
-                invocation_chain(ctx, *id, call.callee, &mut resolvable)?
-            {
+            if let Some(chain) = invocation_chain(ctx, *id, call.callee, &mut resolvable)? {
                 answers.insert(
                     key,
                     ReturnedInvocation {
-                        primitive,
-                        slot,
+                        primitive: chain.primitive,
+                        slot: chain.slot,
                         arguments: u32_of(call.arguments.len()),
+                        factory: chain.factory,
+                        exact: chain.exact,
+                        factory_at_module_scope: chain.factory_at_module_scope,
                     },
                 );
             }
@@ -220,6 +227,16 @@ fn resolve_binding(
     ctx.binding_name_at(id, span)
 }
 
+/// What [`invocation_chain`] found: the primitive, the slot, the creating
+/// call, and the facts ADR 0549's owner placement needs of the walk.
+struct InvocationChain {
+    primitive: Primitive,
+    slot: Option<u32>,
+    factory: (FileId, Span),
+    exact: bool,
+    factory_at_module_scope: bool,
+}
+
 /// `returned_primitive_invocation`'s binding-chain walk from the callee at
 /// `callee` of file `id`.
 fn invocation_chain(
@@ -227,9 +244,10 @@ fn invocation_chain(
     id: FileId,
     callee: Span,
     resolvable: &mut Resolvable,
-) -> Result<Option<(Primitive, Option<u32>)>, Cycle> {
+) -> Result<Option<InvocationChain>, Cycle> {
     let mut reference = (id, callee);
     let mut seen = BTreeSet::<Arc<str>>::new();
+    let mut exact = true;
     loop {
         // Callee result values do not always receive an entity fact of their
         // own (tuple slots are the motivating case). Resolve them from the
@@ -249,6 +267,7 @@ fn invocation_chain(
         let Some(binding) = read.facts().ast.bindings.get(ordinal as usize) else {
             return Ok(None);
         };
+        exact &= binding.immutable;
         if let Some(initializer) = binding.call_initializer {
             let slot = match binding.shape {
                 solid_facts::ast::BindingShape::Array => {
@@ -266,9 +285,17 @@ fn invocation_chain(
             // A call with no primitive and no call at the span both prove
             // nothing.
             let primitives = ctx.memo::<super::census::CallPrimitives>(&file)?;
+            let factory_at_module_scope =
+                crate::owners::containing_ast_function(&read.facts().ast, initializer).is_none();
             return Ok(primitives
                 .get(&initializer)
-                .map(|primitive| (*primitive, slot)));
+                .map(|primitive| InvocationChain {
+                    primitive: *primitive,
+                    slot,
+                    factory: (file, initializer),
+                    exact,
+                    factory_at_module_scope,
+                }));
         }
         let Some(initializer) = binding.initializer_identifier.as_ref() else {
             return Ok(None);
@@ -398,6 +425,24 @@ impl<'a> SemanticLookup<'a> {
             .ok()?;
         let answer = answers[found].1;
         Some((answer.primitive, answer.slot.map(|slot| slot as usize)))
+    }
+
+    /// ADR 0549: the answer for `call` with whether its creating call is
+    /// in `file` itself. Nothing of the other file is read here: the answer
+    /// carries what the owner pass needs, and the cross-file proof digest
+    /// hashes it.
+    pub(crate) fn returned_factory_at(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<(bool, ReturnedInvocation)> {
+        let answers = self.returned_invocations(file);
+        let found = answers
+            .binary_search_by_key(&(call.span, call.callee), |(key, _)| *key)
+            .ok()?;
+        let answer = answers[found].1;
+        let same_file = self.memos.table().path_of(answer.factory.0) == file.path.as_str();
+        Some((same_file, answer))
     }
 
     /// The returned-source answers of `file`, by call span.

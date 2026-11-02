@@ -14,11 +14,31 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 346,
+      "end": 355,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
       "start": 583,
       "end": 592,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 606,
+      "end": 618,
       "fixes": 0
     }
   ]

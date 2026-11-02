@@ -64,6 +64,13 @@ other owner-creating callback, as much as under a component body: the root owns
 the first run only. Under an unowned call site every run is unowned, and the
 operation stays a proven violation.
 
+`createReaction` captures the owner current at its call, and each call of the
+tracker it returns creates its effect under that owner (rc.17 `dist/dev.js:2630-2651`):
+a tracker created with no owner is a violation at every `track()` call, wherever
+that call runs; one created in a body is owned there. Only a tracker reached
+through `const` bindings is followed; one created in another module is placed
+only when it is created at that module's top level (ADR 0549).
+
 A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
 later calls it. The owner walk does not follow the returned value to those

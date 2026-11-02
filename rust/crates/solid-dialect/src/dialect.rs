@@ -1581,6 +1581,19 @@ pub trait Dialect: Sync {
         shared_owner_requirement_role(primitive)
     }
 
+    /// What an invocation of the function `primitive` returns does that needs
+    /// an owner, judged at the owner current where `primitive` was called
+    /// (ADR 0549): the returned function runs its owner-creating work under
+    /// that captured owner, not under its own caller's. The default claims
+    /// nothing.
+    fn returned_invocation_owner_requirement_role(
+        &self,
+        primitive: Primitive,
+    ) -> Option<OwnerRequirementRole> {
+        let _ = primitive;
+        None
+    }
+
     /// Whether an untracked read in this callback is a likely dependency bug.
     ///
     /// Most deliberately untracked callbacks are explicit imperative scopes:

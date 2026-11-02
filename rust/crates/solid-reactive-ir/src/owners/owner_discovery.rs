@@ -480,6 +480,44 @@ pub(crate) fn discover_owner_file(
             )),
             _ => None,
         };
+        // ADR 0549: an invocation of a function a primitive returned that
+        // creates its work under the owner captured where the primitive was
+        // called (`createReaction`'s `track()`): the requirement is placed at
+        // the invocation and judged at the creating call. Only an exact
+        // `const` chain to an unwrapped tracker is followed; a creating call
+        // in another file is placed only at its module's top level, where no
+        // owner is current.
+        if known.is_none()
+            && !in_list
+            && let Some((same_file, answer)) = lookup.returned_factory_at(file, call)
+            && answer.exact
+            && answer.slot.is_none()
+            && dialect.returned_invocation_owner_requirement_role(answer.primitive)
+                == Some(OwnerRequirementRole::Effect)
+        {
+            let factory = answer.factory.1;
+            let placement = if same_file {
+                Some((owner_at(factory), region_chain(factory), region_of(factory)))
+            } else {
+                answer.factory_at_module_scope.then_some((None, None, None))
+            };
+            if let Some((owner, providing_region_chain, providing_region)) = placement {
+                requirements.push(OwnerRequirementCandidate {
+                    operation: "effect",
+                    operation_span: call.callee,
+                    owner,
+                    report_mask: OWNER_CONTEXT_UNOWNED,
+                    allow_uncertain: true,
+                    runtime_uncertain: false,
+                    settled_target: None,
+                    settled_gate: None,
+                    providing_region_chain,
+                    providing_region,
+                    context_argument: None,
+                    in_parameter_list: false,
+                });
+            }
+        }
         if let Some((operation, report_mask, settled_target, operation_span, runtime_uncertain)) =
             operation
         {

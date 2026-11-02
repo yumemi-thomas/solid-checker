@@ -2494,6 +2494,20 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// ADR 0549: `createReaction` captures `getOwner()` at its call and every
+    /// `track()` runs `runWithOwner(owner, () => effect(…))`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2630-2651`): the arm
+    /// effect's parent is the creation owner, and with none `effect()` warns
+    /// NO_OWNER_EFFECT at each `track()` (`:1869`; probed). Read on rc.17 only.
+    fn returned_invocation_owner_requirement_role(
+        &self,
+        primitive: Primitive,
+    ) -> Option<OwnerRequirementRole> {
+        (primitive == Primitive::CreateReaction
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown)
+            .then_some(OwnerRequirementRole::Effect)
+    }
+
     /// `Dynamic`'s `component`, on every release the reviews read. `Dynamic`
     /// is `@solidjs/web`'s, the same function in every build of rc.3 and rc.9
     /// (rc.3 `web.js:1865`, `dev.js:1935`, `server.js:3208`; rc.9 `web.js:2099`,

@@ -369,5 +369,19 @@
    "lg-action-called-in-owned-scope-reaction-error-arm-x-alias-iife-m-loading"
   ],
   "rediscovered": "see the REACTIVE_WRITE entry above (the same programs' climb)"
+ },
+ {
+  "finding": "track() of a createReaction tracker created with no owner (module scope) was silent: rc.17 creates the arm effect under the creation owner, so each track() warns NO_OWNER_EFFECT (ADR 0549)",
+  "found": "Fable's precision report 2026-11-02 (probe R09), confirmed on the fast runtime by the new reaction-track variant",
+  "fixed": "ADR 0549",
+  "grid": "mx-src",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-handler-reaction-track-alias-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-direct-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-wrapper-none-s-module",
+   "mx-no-owner-effect-timer-reaction-track-alias-none-s-module"
+  ],
+  "rediscovered": "f31337fa8 (release), mx-src NO_OWNER_EFFECT: 230 false-clean and 22 recall-gap of the 252 reaction-track programs; ADR 0549: 108 agree (direct, alias, wrapper bindings), 122 false-clean remain (object-literal, hook, hook-member and tuple bindings: open-work)"
  }
 ]
