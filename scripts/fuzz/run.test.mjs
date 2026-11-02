@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { attachDaemon, configFrom, defaultParallelism, defaultWorkers, parseArgs, warmCheckerMode, witnessesPresent } from "./run.mjs";
 
 describe("--warm-checker (ADR 0543)", () => {
-  it("is off unless asked, and --warm-verify implies it", () => {
+  it("is on by default on the Rust executor, off elsewhere unless asked, and --warm-verify implies it", () => {
     expect(warmCheckerMode(parseArgs([]))).toBe("off");
+    expect(warmCheckerMode(parseArgs([]), { rust: true })).toBe("on");
+    expect(warmCheckerMode(parseArgs(["--no-warm-checker"]), { rust: true })).toBe("off");
     expect(warmCheckerMode(parseArgs(["--warm-checker"]))).toBe("on");
     expect(warmCheckerMode(parseArgs(["--warm-verify"]))).toBe("verify");
     expect(warmCheckerMode(parseArgs(["--warm-checker", "--warm-verify"]))).toBe("verify");

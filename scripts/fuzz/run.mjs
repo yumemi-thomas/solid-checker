@@ -38,7 +38,7 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "no-typecheck-batch", "warm-checker", "warm-verify", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "no-typecheck-batch", "warm-checker", "no-warm-checker", "warm-verify", "help"]);
 const VALUES = new Set(["executor", "fast-host", "chrome-concurrency", "chrome-clock", "chrome-pages", "cache-dir", "seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
@@ -71,8 +71,13 @@ export const defaultParallelism = (cores = availableParallelism(), { allCores = 
  */
 export const defaultWorkers = (cores = availableParallelism(), { virtualClock = false } = {}) => Math.max(1, virtualClock ? cores : cores * 2);
 
-/** The executor's `warmChecker` (ADR 0543): `--warm-verify` compares every warm answer with a one-shot run, `--warm-checker` alone does not. */
-export const warmCheckerMode = (options) => (options.warmVerify ? "verify" : options.warmChecker ? "on" : "off");
+/**
+ * The executor's `warmChecker` (ADR 0543): `--warm-verify` compares every warm answer with a one-shot run, `--warm-checker` alone does
+ * not. On the Rust executor it is on by default (`rust`): the sampled grids under `--warm-verify` (warm-verify-1, 48,973 programs, every
+ * warm answer byte-identical to the one-shot one) were its proof; `--no-warm-checker` turns it off.
+ */
+export const warmCheckerMode = (options, { rust = false } = {}) =>
+  options.warmVerify ? "verify" : options.noWarmChecker ? "off" : options.warmChecker || rust ? "on" : "off";
 
 /** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
 export function attachDaemon(config, options) {
@@ -90,7 +95,7 @@ export function attachDaemon(config, options) {
       if (settings.pages !== "reuse" || settings.clock !== "virtual-time") throw new Error("--executor rust runs --chrome-pages reuse on --chrome-clock virtual-time only");
       const executor = lazyExecutor({
         tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork, slotRoot: checkerWorkDir(config.install, "slots"),
-        warmChecker: warmCheckerMode(options),
+        warmChecker: warmCheckerMode(options, { rust: true }),
         env: checkerEnv({ typefacts: config.typefacts, env: Object.fromEntries(["SOLID_CHECKER_RUNTIME_RESOLVER", "SOLID_TYPEFACTS_BIN"].filter((key) => process.env[key]).map((key) => [key, process.env[key]])) }),
         chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, oracleInstall: config.install, pages: Number(options.chromeConcurrency ?? 16) },
       });
@@ -182,7 +187,8 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--fast-host chrome|happy-dom]  the fast path's runtime (default chrome: real Chrome, the oracle's browser; happy-dom: the Vitest daemon)
   [--chrome-pages reuse|fresh-page|fresh-context] [--chrome-clock virtual-time|js|real]  (defaults reuse, virtual-time)
   [--executor node|rust]  rust (the default with Chrome's defaults): projects, type checks, checker runs and pages in the Rust executor (exec.mjs)
-  [--warm-checker]    with the Rust executor: one retained checker daemon per slot answers its feedback-facts checks (ADR 0543; off by default)
+  [--warm-checker]    with the Rust executor: one retained checker daemon per slot answers its feedback-facts checks (ADR 0543; the Rust executor's default)
+  [--no-warm-checker] a fresh checker and producer per program
   [--warm-verify]     --warm-checker, and every warm answer is compared with a one-shot run at the same path (a difference is a harness failure)
   [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache.noindex)
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
