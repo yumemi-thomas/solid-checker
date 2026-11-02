@@ -72,7 +72,9 @@ calls, so an owner operation in it is uncertifiable, never certified (ADR 0472).
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
 `createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a
-`runWithOwner(null, fn)` callback -- is not owned by it, so an operation there
+`runWithOwner(null, fn)` callback, the `error` member of an exact
+`createEffect` or `createReaction` bundle (rc.17 calls it from the flush before
+the window opens; ADR 0548) -- is not owned by it, so an operation there
 inside a `createRoot` callback is the same proven violation it is inside a
 component, and an `onSettled` there is out-of-band. A root created inside such
 a callback, or a compiled JSX child, which the render effect the compiler

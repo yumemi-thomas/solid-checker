@@ -907,6 +907,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the `error` member of an exact effect bundle at `argument` of
+    /// `primitive` (`{ effect, error }`) runs from the flush's error branch
+    /// before the strict-read window opens, with no owner and no
+    /// effect-callback marker (ADR 0548): owner-creating work there is
+    /// unowned, a read there is outside any window, a write or an action call
+    /// is legal. The default claims nothing: the member stays unplaced.
+    fn bundle_error_member_runs_unowned(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the synchronous slices of the stepped callback at `argument`
     /// ([`Dialect::callback_runs_as_action_steps`]) run in the strict-read
     /// window and the tracking state of whoever invoked the action: the step

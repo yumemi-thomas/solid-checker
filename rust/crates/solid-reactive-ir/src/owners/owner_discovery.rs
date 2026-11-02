@@ -283,11 +283,40 @@ pub(crate) fn discover_owner_file(
             callback_edges.is_empty() && known_primitive(&call_primitives[call_index]).is_none();
         for edge in callback_edges {
             let kind = callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
-            if let Some(target) = call
+            // ADR 0548: an exact effect bundle names its members: the `effect`
+            // member runs as the slot's callback, the `error` member from the
+            // flush's error branch with no owner.
+            let bundle_targets = || {
+                let primitive = known_primitive(&call_primitives[call_index])?;
+                let error = crate::execution_role::bundle_error_member(
+                    lookup.dialect,
+                    primitive,
+                    call,
+                    edge.argument,
+                )?;
+                let effect = crate::execution_role::effect_apply_span(call, edge.argument)
+                    .filter(|effect| *effect != call.arguments[edge.argument].span);
+                Some(
+                    effect
+                        .and_then(|effect| callback_target(effect, false))
+                        .map(|target| (target, kind))
+                        .into_iter()
+                        .chain(
+                            callback_target(error, false)
+                                .map(|target| (target, OwnerEdgeKind::Unowned)),
+                        )
+                        .collect::<Vec<_>>(),
+                )
+            };
+            let targets = match call
                 .arguments
                 .get(edge.argument)
                 .and_then(|argument| callback_target(argument.span, false))
             {
+                Some(target) => vec![(target, kind)],
+                None => bundle_targets().unwrap_or_default(),
+            };
+            for (target, kind) in targets {
                 let source = lookup
                     .files()
                     .iter()

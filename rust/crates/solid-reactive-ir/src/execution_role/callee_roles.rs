@@ -423,6 +423,10 @@ pub(super) fn semantic_role_before_awaits(
                 callback_execution_at_call(file, call, primitive, index, lookup).is_some()
                     && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
                     && direct_callback_contains(file, call.arguments[index].span, span)
+                    // ADR 0548: an exact bundle's `error` member runs before
+                    // the window opens.
+                    && !super::bundle_error_member(dialect, primitive, call, index)
+                        .is_some_and(|error| error.contains(span))
                     // JSX the map function returns tracks its own expressions.
                     && !(dialect.callback_runs_untracked_without_window(primitive, index)
                         && tracked_region_within(file, call.arguments[index].span, span))

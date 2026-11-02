@@ -782,6 +782,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/effect-window-arms/node_modules/**
 !fixtures/reactive-ir/action-step-window/node_modules/
 !fixtures/reactive-ir/action-step-window/node_modules/**
+!fixtures/reactive-ir/effect-error-arm-owner/node_modules/
+!fixtures/reactive-ir/effect-error-arm-owner/node_modules/**
 !fixtures/reactive-ir/effect-phase-windows/node_modules/
 !fixtures/reactive-ir/effect-phase-windows/node_modules/**
 !fixtures/reactive-ir/undecided-flush-callback/node_modules/

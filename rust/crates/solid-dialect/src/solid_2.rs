@@ -2335,6 +2335,23 @@ impl Dialect for Solid2 {
         primitive == Primitive::Action && argument == 0
     }
 
+    /// ADR 0548: `runEffect` calls a user effect's `_errorFn` when the
+    /// compute errored, before `setStrictRead`, `setEffectCallback` and
+    /// `enterCallback`, from the draining flush whose owner is `null`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1969-1985`, `:1993-1995`).
+    /// `createEffect` unwraps the bundle (`:2519`); `createReaction` passes
+    /// `effectFn.error` to its arm, a user effect (`:2653-2672`). Probed:
+    /// `createEffect` there warns NO_OWNER_EFFECT, `onCleanup`
+    /// NO_OWNER_CLEANUP, `useContext` throws; a read, a write, `createRoot` and
+    /// an action call are silent. `createRenderEffect` takes no bundle.
+    /// Read on rc.17 only.
+    fn bundle_error_member_runs_unowned(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect, 1) | (Primitive::CreateReaction, 0)
+        ) && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+    }
+
     /// ADR 0547: rc.17's `step` (`@solidjs/signals@2.0.0-rc.17`
     /// `dist/dev.js:1573-1600`) sets the action depth, the callback depth and
     /// clears the effect-callback marker around `it.next(v)`; it leaves

@@ -343,5 +343,31 @@
    "mx-strict-read-untracked-action-plain-yield-from-apply-memo-cond-alias-iife"
   ],
   "rediscovered": "f31337fa8 (release), the three cells at --grid-sample 0.2: 1,404 runtime-confirmed programs, 1,296 false-clean, 108 recall-gap; ADR 0547: 1,182 agree, 222 recall-gap, 0 false-clean"
+ },
+ {
+  "finding": "A write in an IIFE in a createReaction bundle's error member climbed to the component body: SC2001 proven where rc.17 runs the member from the flush with no owner (ADR 0548)",
+  "found": "the fuzzer's new reaction-error-arm cells (2026-11-02), from Fable's precision report section 3",
+  "fixed": "ADR 0548",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-refresh-destructured-iife",
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-refresh-wrapper-iife",
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-signal-alias-iife",
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-signal-hook-iife"
+  ],
+  "rediscovered": "f31337fa8 (release), new error-arm cells at --grid-sample 0.2: 73 REACTIVE_WRITE and 25 ACTION_CALLED false positives in reaction-error-arm; ADR 0548: 92 clean, 6 uncertifiable (hand-off layers)"
+ },
+ {
+  "finding": "An action call in an IIFE in a createReaction bundle's error member: SC2002 proven where rc.17 runs the member with no owner (ADR 0548)",
+  "found": "the fuzzer's new reaction-error-arm cells (2026-11-02)",
+  "fixed": "ADR 0548",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-reaction-error-arm-x-alias-iife-m-for-signal",
+   "lg-action-called-in-owned-scope-reaction-error-arm-x-alias-iife-m-loading"
+  ],
+  "rediscovered": "see the REACTIVE_WRITE entry above (the same programs' climb)"
  }
 ]

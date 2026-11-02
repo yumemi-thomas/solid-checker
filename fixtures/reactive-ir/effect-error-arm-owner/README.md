@@ -1,0 +1,5 @@
+# effect-error-arm-owner
+
+ADR 0548: rc.17's `runEffect` calls a user effect's `error` member from the draining flush before it opens the strict-read window, with no owner (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1969-1985`); `createReaction` hands its bundle's `error` to such an effect (`:2653-2672`). Fable's precision report (2026-11-02, probes R04, R08) and the fuzzer's `effect-error-arm` and `reaction-error-arm` cells: an effect or `onCleanup` there warns NO_OWNER_EFFECT and NO_OWNER_CLEANUP (EffectErrorArm, ReactionErrorArm: violations; the root's own cleanup is owned, silent), and a read, a write or an action call there is legal, directly or through an IIFE (ReactionErrorArm: silent; before, the IIFE's write and action were SC2001/SC2002 violations and the read an obligation). SpreadBundle names no member exactly: an obligation.
+
+The stub reduces the published rc.17 declarations; `@solidjs/signals` is pinned to rc.17 for the release key. The complete source also type-checks against published solid-js rc.17 with strict ES2022 settings. Package bytes are not copied here.

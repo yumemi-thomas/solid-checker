@@ -121,6 +121,32 @@ pub(crate) fn effect_apply_span(
         .filter(|_| !argument.literal_members.is_empty())
 }
 
+/// ADR 0548: the `error` member of an exact effect bundle at `argument` of
+/// `call`, where the dialect runs it from the flush's error branch with no
+/// owner and before the strict-read window opens
+/// ([`Dialect::bundle_error_member_runs_unowned`]). A bundle with a spread, a
+/// computed key or an accessor names no member exactly.
+pub(crate) fn bundle_error_member(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+) -> Option<Span> {
+    let value = call.arguments.get(argument)?;
+    if !dialect.bundle_error_member_runs_unowned(primitive, argument)
+        || value.spread
+        || !value.exact_object_literal
+    {
+        return None;
+    }
+    value
+        .literal_members
+        .iter()
+        .rev()
+        .find(|member| member.key == "error")
+        .map(|member| member.value)
+}
+
 fn callback_runs_outside_tracking(
     dialect: &dyn Dialect,
     primitive: Primitive,

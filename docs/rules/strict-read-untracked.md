@@ -254,7 +254,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   apply returns is uncertifiable: a rerun runs it in the window, a disposal
   outside it (ADR 0539). A compute with no call, no reference and a literal
   return never reruns, and its cleanup is silent. A read in an exact bundle's
-  `error` member is silent: rc.17 runs it before the window opens (ADR 0540).
+  `error` member is silent: rc.17 runs it before the window opens (ADR 0540),
+  a `createReaction` bundle's too (ADR 0548).
   An action body's read before its first suspending `yield` runs on the
   stack of the action's call, in that caller's window: called from an effect
   apply or a `createReaction` callback it is reported; from a handler, an
