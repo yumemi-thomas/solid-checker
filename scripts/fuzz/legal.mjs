@@ -35,6 +35,7 @@ import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
@@ -150,6 +151,8 @@ export async function runLegal(options) {
     const plain = (list) => list.map(({ program, built }) => ({ program, built }));
     const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
     if (run !== config) console.error(`legal: every program's runtime is cached; checker concurrency ${run.concurrency}`);
+    // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
+    if (run !== config) await setExecutorChecks(run);
     const chunks = [];
     for (let at = 0; at < entries.length; at += 150) chunks.push(entries.slice(at, at + 150));
     const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
@@ -169,6 +172,7 @@ export async function runLegal(options) {
       }
       console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
     }
+    if (run !== config) await setExecutorChecks(config);
     console.error(`legal: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
     assertFindingsMapped();
     const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length);

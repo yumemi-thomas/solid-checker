@@ -98,6 +98,8 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   return {
     prepare: (job) => request({ op: "prepare", ...job }, deadlines.prepareMs),
     run: (cases) => request({ op: "run", cases }, deadlines.runBaseMs + waves(cases.length) * deadlines.runPerWaveMs),
+    /** How many checker runs may run at once from now on (at most twice the starting concurrency); resolves to the number set. */
+    checks: (count) => request({ op: "checks", count }, deadlines.prepareMs).then((answer) => answer.checks),
     async close() {
       if (child.exitCode !== null || child.signalCode !== null) return;
       const exited = new Promise((resolve) => child.once("exit", resolve));
@@ -107,6 +109,17 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
       clearTimeout(timer);
     },
   };
+}
+
+/**
+ * Sets the Rust executor's checker concurrency to `config.concurrency` (a grid's `run` config: its own plus the idle workers' when
+ * every runtime is cached). The executor is sized at its start; without this the grid's larger pool waited on its smaller semaphore
+ * (full-8: 10 checkers on 10 vCPUs at ~70% busy where the pool had 20). A config without an executor is left as it is.
+ */
+export async function setExecutorChecks(config) {
+  if (!config.exec) return;
+  const executor = await config.exec;
+  if (executor.checks) await executor.checks(config.concurrency);
 }
 
 /**

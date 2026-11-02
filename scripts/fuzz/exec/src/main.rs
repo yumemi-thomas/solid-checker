@@ -12,6 +12,7 @@
 //!   prepare  the case's files, its clean and twin projects (in a fixed slot pair, or given directories), the type checks and the
 //!            checker run; answers the type checks and the checker's raw output
 //!   run      cases to run in Chrome; answers their records by id
+//!   checks   how many checker runs may run at once from now on (at most the step-1 pool); answers the new number
 //! Parsing the checker's output and every verdict stay in JS: this process returns what the tools printed.
 
 use serde_json::{Value, json};
@@ -41,17 +42,20 @@ impl Out {
     }
 }
 
+/// A counting semaphore whose capacity can change while it is held (`resize`): `free` goes below zero when it shrinks under its
+/// holders, and acquiring waits until releases bring it back above.
 struct Semaphore {
-    free: Mutex<usize>,
+    free: Mutex<isize>,
+    capacity: Mutex<usize>,
     ready: Condvar,
 }
 impl Semaphore {
     fn new(count: usize) -> Self {
-        Self { free: Mutex::new(count.max(1)), ready: Condvar::new() }
+        Self { free: Mutex::new(count.max(1) as isize), capacity: Mutex::new(count.max(1)), ready: Condvar::new() }
     }
     fn acquire(&self) {
         let mut free = self.free.lock().unwrap();
-        while *free == 0 {
+        while *free <= 0 {
             free = self.ready.wait(free).unwrap();
         }
         *free -= 1;
@@ -59,6 +63,17 @@ impl Semaphore {
     fn release(&self) {
         *self.free.lock().unwrap() += 1;
         self.ready.notify_one();
+    }
+    /// The semaphore's capacity, now `count` (at least 1).
+    fn resize(&self, count: usize) {
+        let count = count.max(1);
+        let mut capacity = self.capacity.lock().unwrap();
+        *self.free.lock().unwrap() += count as isize - *capacity as isize;
+        *capacity = count;
+        self.ready.notify_all();
+    }
+    fn capacity(&self) -> usize {
+        *self.capacity.lock().unwrap()
     }
 }
 
@@ -1142,7 +1157,7 @@ fn main() {
     // Step-1 work runs on a pool twice the concurrency (a program waiting for its batch holds no checker), Chrome runs on their own.
     let (jobs, queue) = channel::<Value>();
     let queue = Arc::new(Mutex::new(queue));
-    let workers = executor.checks.free.lock().map(|free| *free).unwrap_or(8) * 2;
+    let workers = executor.checks.capacity() * 2;
     for _ in 0..workers {
         let executor = Arc::clone(&executor);
         let queue = Arc::clone(&queue);
@@ -1159,6 +1174,13 @@ fn main() {
         match request["op"].as_str() {
             Some("prepare") => {
                 let _ = jobs.send(request);
+            }
+            // A new number of concurrent checker runs (matrix.mjs: with every runtime cached, the idle Chrome share goes to the
+            // checker). Capped at the step-1 pool, which is twice the starting concurrency.
+            Some("checks") => {
+                let count = request["count"].as_u64().unwrap_or(1) as usize;
+                executor.checks.resize(count.min(workers));
+                executor.out.emit(&json!({ "seq": request["seq"].clone(), "checks": executor.checks.capacity() }));
             }
             Some("run") => {
                 let executor = Arc::clone(&executor);
@@ -1183,6 +1205,31 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_semaphore_grows_and_shrinks_under_its_holders() {
+        let semaphore = Arc::new(Semaphore::new(1));
+        semaphore.acquire();
+        semaphore.resize(3);
+        semaphore.acquire();
+        semaphore.acquire();
+        assert_eq!(*semaphore.free.lock().unwrap(), 0);
+        // Shrunk below its three holders: a fourth waits until two of them release.
+        semaphore.resize(1);
+        assert_eq!(*semaphore.free.lock().unwrap(), -2);
+        let waiting = {
+            let semaphore = Arc::clone(&semaphore);
+            thread::spawn(move || semaphore.acquire())
+        };
+        semaphore.release();
+        semaphore.release();
+        thread::sleep(Duration::from_millis(50));
+        assert!(!waiting.is_finished());
+        semaphore.release();
+        waiting.join().unwrap();
+        assert_eq!(semaphore.capacity(), 1);
+        assert_eq!(*semaphore.free.lock().unwrap(), 0);
+    }
 
     /// A DevTools endpoint that accepts one WebSocket, answers its first command, then closes: what a browser that dies looks like.
     fn dying_endpoint() -> String {

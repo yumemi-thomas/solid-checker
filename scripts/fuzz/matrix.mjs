@@ -41,6 +41,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
@@ -630,6 +631,8 @@ async function sweep(options, config, out) {
   const plain = (list) => list.map(({ program, built }) => ({ program, built }));
   const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
   if (run !== config) console.error(`matrix: every program's runtime is cached; checker concurrency ${run.concurrency} (${config.concurrency} + the ${config.workers} idle workers)`);
+  // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
+  if (run !== config) await setExecutorChecks(run);
   // Chunk k's fast path runs while chunk k+1 is type-checked and checked: one checker pool and one Vitest batch at a time, as before, but
   // never one waiting on the other. Each chunk's records and verdicts are what `evaluate` gives it.
   const chunks = [];
@@ -653,6 +656,7 @@ async function sweep(options, config, out) {
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
   }
 
+  if (run !== config) await setExecutorChecks(config);
   console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
   const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
