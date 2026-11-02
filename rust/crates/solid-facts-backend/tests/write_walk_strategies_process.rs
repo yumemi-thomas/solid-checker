@@ -1,0 +1,260 @@
+//! ADR 0546: the write walk's region fold, the site-reach fixed point, the
+//! helper climb's kept answers and the ordering proof's visited set answer
+//! what the walks that follow every path answer. With
+//! `solid_reactive_ir::follow_every_path` on (and, for the write walk and the
+//! helper climb, with the role log on), each follows every path as written,
+//! so that build is the reference: on randomized programs of mutually
+//! recursive local functions (random call forms, entries and declaration
+//! orders), the IR built without it must equal it.
+//!
+//! Both switches are process-wide, so this test is its own binary.
+
+use std::{env, fs, path::PathBuf};
+
+use solid_facts::compiler::CompilerOptions;
+use solid_facts_backend::{
+    NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, dialect,
+};
+use solid_reactive_ir::{AnalysisInputs, RoleLogTarget, RuleOptions};
+
+/// Declarations transcribed from solid-js@2.0.0-rc.17, reduced to what the
+/// programs call.
+const STUB: &str = r#"declare namespace JSX {
+  interface IntrinsicElements {
+    button: { onClick?: (event: MouseEvent) => void; children?: any };
+    div: { children?: any };
+  }
+  interface Element {}
+  interface ElementChildrenAttribute {
+    children: {};
+  }
+}
+
+declare module "solid-js" {
+  export type Accessor<T> = () => T;
+  export type Setter<T> = (value: T) => T;
+  export function createSignal<T>(value: T): [get: Accessor<T>, set: Setter<T>];
+  export function createMemo<T>(compute: (prev: T | undefined) => T): Accessor<T>;
+  export function createEffect<T>(compute: () => T, effect: (value: T) => void | (() => void)): void;
+  export function untrack<T>(fn: () => T): T;
+}
+
+declare module "hands" {
+  /** Code the program does not see: what it does with `cb` is unknown. */
+  export function hand(cb: (n: number) => void): void;
+}
+"#;
+
+const TSCONFIG: &str = r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"include":["*.ts","*.tsx"]}"#;
+
+const PROGRAMS: u64 = 500;
+
+/// A small deterministic generator (xorshift64*).
+struct Random(u64);
+
+impl Random {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+
+    fn below(&mut self, bound: u64) -> u64 {
+        self.next() % bound
+    }
+
+    fn chance(&mut self, percent: u64) -> bool {
+        self.below(100) < percent
+    }
+}
+
+/// A call of `f{j}` written in another function's body, in one of the forms
+/// the walks treat differently.
+fn call(random: &mut Random, j: usize) -> String {
+    match random.below(11) {
+        0 => format!("[1].forEach(() => f{j}(n - 1));"),
+        1 => format!("untrack(() => f{j}(n - 1));"),
+        2 => format!("const g{j} = () => f{j}(n - 1); g{j}();"),
+        3 => format!("return void (<div>{{f{j}(n - 1)}}</div>);"),
+        4 => format!("[1].forEach(f{j});"),
+        5 => format!("hand(f{j});"),
+        _ => format!("if (n > {j}) f{j}(n - 1);"),
+    }
+}
+
+/// An entry of `f{i}` in the component.
+fn entry(random: &mut Random, i: usize) -> (String, String) {
+    match random.below(11) {
+        0 => (format!("  f{i}(3);\n"), String::new()),
+        1 => (
+            format!("  createMemo(() => {{ f{i}(3); return 1; }});\n"),
+            String::new(),
+        ),
+        2 => (
+            format!("  createEffect(() => r(), () => {{ f{i}(3); }});\n"),
+            String::new(),
+        ),
+        3 => (String::new(), format!(" onClick={{() => f{i}(3)}}")),
+        4 => (format!("  untrack(() => f{i}(3));\n"), String::new()),
+        // Inline carriers, which run a function handed by name in place.
+        5 => (format!("  [1].forEach(f{i});\n"), String::new()),
+        6 => (
+            format!("  createMemo(() => {{ [1].forEach(f{i}); return 1; }});\n"),
+            String::new(),
+        ),
+        7 => (
+            String::new(),
+            format!(" onClick={{() => [1].forEach(f{i})}}"),
+        ),
+        8 => (format!("  hand(f{i});\n"), String::new()),
+        _ => (String::new(), String::new()),
+    }
+}
+
+fn program(random: &mut Random) -> String {
+    let k = 2 + random.below(4) as usize;
+    let density = 30 + random.below(71);
+    let signal_at = random.below(k as u64 + 1) as usize;
+    let mut body = String::new();
+    let mut module = String::new();
+    for i in 1..=k {
+        if i - 1 == signal_at {
+            body.push_str("  const [r, set] = createSignal(0);\n");
+        }
+        let mut statements = Vec::new();
+        if random.chance(80) {
+            statements.push(format!("set({i});"));
+        }
+        for j in 1..=k {
+            if j != i && random.chance(density) {
+                statements.push(call(random, j));
+            }
+        }
+        let statements = statements.join(" ");
+        let declaration = if random.chance(50) {
+            format!("function f{i}(n: number): void {{ {statements} }}")
+        } else {
+            format!("const f{i} = (n: number): void => {{ {statements} }};")
+        };
+        body.push_str(&format!("  {declaration}\n"));
+    }
+    if signal_at == k {
+        body.push_str("  const [r, set] = createSignal(0);\n");
+    }
+    let mut handler = String::new();
+    for i in 1..=k {
+        let (statement, attribute) = entry(random, i);
+        body.push_str(&statement);
+        if handler.is_empty() {
+            handler = attribute;
+        }
+    }
+    if random.chance(20) {
+        module.push_str("export function outside() { App(); }\n");
+    }
+    format!(
+        "import {{ createEffect, createMemo, createSignal, untrack }} from \"solid-js\";\nimport {{ hand }} from \"hands\";\n\n{module}export function App() {{\n{body}  return <button{handler}>{{r()}}</button>;\n}}\n"
+    )
+}
+
+#[test]
+fn every_path_and_the_folds_build_the_same_program() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = env::temp_dir()
+        .join("sc-scratch.noindex")
+        .join(format!("write-walk-strategies-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _scratch = Scratch(root.clone());
+    fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+    fs::write(root.join("tsconfig.json"), TSCONFIG).unwrap();
+    let mut random = Random(0x0546_d1ce_5eed_0001);
+    let first = program(&mut random);
+    fs::write(root.join("App.tsx"), &first).unwrap();
+    let root = root.canonicalize().unwrap();
+    let app = root.join("App.tsx");
+    let log = RoleLogTarget {
+        path: root.join("roles.jsonl"),
+        program: None,
+    };
+    let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let typefacts = PathBuf::from(typefacts)
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let solid_v2 = dialect::by_id("solid-v2").unwrap();
+    let mut session = NativeIncrementalSession::open(
+        solid_v2,
+        project_id,
+        vec![SourceFile {
+            path: app.to_string_lossy().into_owned(),
+            source: first.clone().into(),
+            compiler_options: CompilerOptions::default(),
+        }],
+        typescript,
+    )
+    .unwrap();
+    let mut source = first;
+    let mut writes = 0;
+    for version in 1..=PROGRAMS {
+        if version > 1 {
+            source = program(&mut random);
+        }
+        fs::write(&app, &source).unwrap();
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: app.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.clone()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let build = || {
+            solid_reactive_ir::build_with_analysis_inputs_measured(
+                &facts,
+                solid_v2.vocabulary,
+                AnalysisInputs::empty(),
+                &RuleOptions::default(),
+            )
+            .unwrap()
+            .0
+        };
+        solid_reactive_ir::follow_every_path(true);
+        let reference = build();
+        solid_reactive_ir::follow_every_path(false);
+        let folded = build();
+        // Every few programs, the role log's own reference too.
+        if version % 8 == 0 {
+            solid_reactive_ir::configure_role_log(Some(&log));
+            let logged = build();
+            solid_reactive_ir::configure_role_log(None);
+            assert_eq!(
+                logged, reference,
+                "program {version} builds differently with the role log:\n{source}"
+            );
+        }
+        writes += reference.writes.len();
+        assert_eq!(
+            folded, reference,
+            "program {version} builds differently without the role log:\n{source}"
+        );
+    }
+    // The premise: the programs hold writes for the walks to place.
+    assert!(writes > PROGRAMS as usize, "{writes} writes");
+}
+
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}

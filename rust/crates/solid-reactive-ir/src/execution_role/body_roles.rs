@@ -1004,7 +1004,7 @@ pub(super) fn named_callback_write_role(
     };
     let symbol = function_symbol(file, function, entities)?;
     let key = (file.path.to_string(), function.span);
-    if !visiting.insert(key.clone()) {
+    if !super::write_components::visit_insert(visiting, key.clone()) {
         return None;
     }
     let mut rejected = None;

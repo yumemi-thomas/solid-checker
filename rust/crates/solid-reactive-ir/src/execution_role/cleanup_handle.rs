@@ -376,7 +376,7 @@ pub(super) fn cleanup_handle_write_role(
         HandleClimb::Suspended => return Some(HandleRole::Decided(ExecutionRole::Unknown)),
     };
     let marker = handle_marker(file, &sites);
-    if !visiting.insert(marker.clone()) {
+    if !super::write_components::visit_insert(visiting, marker.clone()) {
         return Some(HandleRole::Decided(ExecutionRole::Unknown));
     }
     let mut unplaced = false;

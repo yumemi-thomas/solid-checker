@@ -1509,7 +1509,22 @@ pub(super) fn semantic_write_execution_role_within(
         root_body,
         visiting,
         &mut decided,
+        None,
     );
+    write_role_fallback(file, span, role, decided, root_body, lookup)
+}
+
+/// What [`semantic_write_execution_role_within`] answers for the walk's
+/// `role` at `span`: an `Unknown` that is not final takes the invocation
+/// flow's role ([`write_flow_role`]), when there is one.
+pub(super) fn write_role_fallback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    decided: bool,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
     if role != ExecutionRole::Unknown || decided || file.compiler.withheld() {
         return role;
     }
@@ -1551,15 +1566,20 @@ pub(super) fn semantic_write_role_walk(
         root_body,
         visiting,
         &mut false,
+        None,
     )
 }
 
 /// [`semantic_write_role_walk`], and whether its `Unknown` is final: the write
 /// runs under an owner the call gave it, so what its function's other callers
 /// run it under places nothing (`decided`).
+///
+/// With `plan`, a walk whose position proves nothing stops where its
+/// function's entries would decide: the [`LoopPlan`] goes to `plan` and the
+/// answer returned means nothing ([`super::write_components`] folds it).
 #[allow(clippy::too_many_arguments)]
-fn write_role_walk(
-    file: &solid_facts::FileFacts,
+pub(super) fn write_role_walk<'f>(
+    file: &'f solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],
     entities: &EntitySymbols,
@@ -1568,6 +1588,7 @@ fn write_role_walk(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
     decided: &mut bool,
+    plan: Option<&mut Option<LoopPlan<'f>>>,
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused places no write.
     if file.compiler.withheld() {
@@ -1764,7 +1785,7 @@ fn write_role_walk(
                 }
             }
             None => {
-                if !visiting.contains(&lexical_only_marker())
+                if !visit_contains(visiting, &lexical_only_marker())
                     && let Some(role) = named_callback_write_role(
                         file,
                         span,
@@ -2102,7 +2123,7 @@ fn write_role_walk(
             ExecutionRole::EventCallback
         );
     }
-    if visiting.contains(&lexical_only_marker()) {
+    if visit_contains(visiting, &lexical_only_marker()) {
         return role_arm!("write_roles.walk-unknown-7", unknown);
     }
     let function = named.or(entry).unwrap_or(innermost);
@@ -2178,13 +2199,167 @@ fn write_role_walk(
             return role_arm!("write_roles.walk-unknown-8", unknown);
         }
     }
+    let loop_plan = LoopPlan {
+        function,
+        direct,
+        named: named.is_some(),
+        nested,
+        current,
+        possible_render,
+        unknown,
+    };
+    if let Some(plan) = plan {
+        *plan = Some(loop_plan);
+        return unknown;
+    }
+    caller_loop(
+        file,
+        loop_plan,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        visiting,
+    )
+}
+
+/// Where a write's walk goes when its position proves nothing: the function
+/// whose entries decide (its call sites, followed by [`caller_loop`]) and
+/// how the walk folds them.
+#[derive(Clone, Copy)]
+pub(super) struct LoopPlan<'f> {
+    pub(super) function: &'f solid_facts::ast::FunctionFact,
+    /// The role the position itself gave, one entry when `named`.
+    pub(super) direct: ExecutionRole,
+    /// The function is a named callback whose positions gave `direct`.
+    pub(super) named: bool,
+    /// The write is in a closure nested in the function, which a call of it
+    /// does not run: a rejecting entry proves nothing.
+    pub(super) nested: bool,
+    /// The function's binding holds this function only.
+    pub(super) current: bool,
+    /// A rendering role is only a possibility here (ADR 0331).
+    pub(super) possible_render: bool,
+    /// What an unplaced walk answers: `Unknown`, or `Unreported` when the
+    /// position proved a non-reporting mix.
+    pub(super) unknown: ExecutionRole,
+}
+
+impl LoopPlan<'_> {
+    /// Whether the loop answers exactly what its entries fold to: a hit
+    /// as itself, an unplaced fold as `Unknown`, a placed one as its first
+    /// role (or `Unknown` without a complete census).
+    pub(super) fn plain(&self) -> bool {
+        !self.named
+            && !self.nested
+            && self.current
+            && !self.possible_render
+            && self.unknown == ExecutionRole::Unknown
+    }
+}
+
+/// What the entries of a function fold to ([`caller_loop`]): the first
+/// entry that rejects the write, or the first role and whether an entry
+/// left it unplaced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CallerFold {
+    Rejected(ExecutionRole),
+    Entries {
+        imperative: Option<ExecutionRole>,
+        unplaced: bool,
+    },
+}
+
+/// The role a write takes from the entries of the function `plan` names: a
+/// call written in a function this walk is already deriving is that
+/// function's business; every other call is placed by its own walk.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn caller_loop(
+    file: &solid_facts::FileFacts,
+    plan: LoopPlan<'_>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    let LoopPlan {
+        function,
+        direct,
+        named,
+        nested,
+        current,
+        possible_render,
+        unknown,
+    } = plan;
     let key = (file.path.to_string(), function.span);
-    if !visiting.insert(key.clone()) {
+    if !visit_insert(visiting, key.clone()) {
         return role_arm!("write_roles.walk-unknown-9", unknown);
     }
-    let mut imperative = named.map(|_| direct);
+    let imperative = named.then_some(direct);
+    let folded = super::write_components::region_fold(
+        file,
+        function,
+        imperative,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        visiting,
+    )
+    .unwrap_or_else(|| {
+        path_fold(
+            file,
+            function,
+            imperative,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            visiting,
+        )
+    });
+    visiting.remove(&key);
+    let (imperative, unplaced) = match folded {
+        CallerFold::Rejected(role) => return if nested || !current { unknown } else { role },
+        CallerFold::Entries {
+            imperative,
+            unplaced,
+        } => (imperative, unplaced),
+    };
+    if possible_render {
+        return role_arm!("write_roles.walk-unknown-10", unknown);
+    }
+    let Some(role) = imperative.filter(|_| !unplaced) else {
+        return role_arm!("write_roles.walk-unknown-11", unknown);
+    };
+    // A permissive role is inherited only from a complete census of the
+    // function's entries: a use the walk did not follow (handed to a child
+    // component, stored, aliased, exported) may run it in an owned scope.
+    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
+        role
+    } else {
+        unknown
+    }
+}
+
+/// The reference fold of [`caller_loop`]: every entry of `function` in
+/// order, each placed by its own walk, which follows every path through the
+/// callers that revisits no function on it.
+#[allow(clippy::too_many_arguments)]
+fn path_fold(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    mut imperative: Option<ExecutionRole>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+) -> CallerFold {
     let mut unplaced = false;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        lookup.count_write_walk_steps(1);
         // A call written directly in a function this walk is already deriving
         // (the function itself, or one of its callers) runs in that
         // function's role, which its other entries decide -- when it is a
@@ -2193,7 +2368,7 @@ fn write_role_walk(
         // effect: such a re-entry has a role of its own the walk cannot
         // derive here.
         if let Some(caller) = crate::owners::containing_body_function(&caller_file.ast, callee)
-            .filter(|caller| visiting.contains(&(caller_file.path.to_string(), caller.span)))
+            .filter(|caller| visit_contains(visiting, &(caller_file.path.to_string(), caller.span)))
         {
             if !plain_call_outside_jsx(caller_file, caller, callee) {
                 unplaced = true;
@@ -2216,8 +2391,7 @@ fn write_role_walk(
             visiting,
         );
         if role.reports_disallowed_write() {
-            visiting.remove(&key);
-            return if nested || !current { unknown } else { role };
+            return CallerFold::Rejected(role);
         }
         if role == ExecutionRole::Unknown {
             // An entry no fact places leaves the function's role unplaced,
@@ -2227,20 +2401,9 @@ fn write_role_walk(
             imperative.get_or_insert(role);
         }
     }
-    visiting.remove(&key);
-    if possible_render {
-        return role_arm!("write_roles.walk-unknown-10", unknown);
-    }
-    let Some(role) = imperative.filter(|_| !unplaced) else {
-        return role_arm!("write_roles.walk-unknown-11", unknown);
-    };
-    // A permissive role is inherited only from a complete census of the
-    // function's entries: a use the walk did not follow (handed to a child
-    // component, stored, aliased, exported) may run it in an owned scope.
-    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
-        role
-    } else {
-        unknown
+    CallerFold::Entries {
+        imperative,
+        unplaced,
     }
 }
 
@@ -2278,7 +2441,7 @@ fn named_effect_compute_runs(
 /// the census must be bounded at all: a method is entered by member access
 /// through any receiver holding it, and an export by modules this build may
 /// not see (an open program, or a module whose namespace escapes unnamed).
-fn entry_census_complete(
+pub(super) fn entry_census_complete(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
@@ -4053,7 +4216,7 @@ fn helper_runs_layer_inline(
 
 /// Whether the call at `callee` in `caller` is a plain call expression written
 /// outside every JSX element of `caller`'s body.
-fn plain_call_outside_jsx(
+pub(super) fn plain_call_outside_jsx(
     file: &solid_facts::FileFacts,
     caller: &solid_facts::ast::FunctionFact,
     callee: Span,
@@ -4097,7 +4260,7 @@ pub(crate) fn module_exports(
 /// through a closed program, is an event delivery, and no synchronous dispatch
 /// can hand a delivery its caller's owner. Such a function runs with no owner
 /// however it is passed around.
-fn event_only_entries(
+pub(super) fn event_only_entries(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,

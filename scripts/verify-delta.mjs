@@ -116,6 +116,16 @@ export const CHECKS = {
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
+  "write-walk-strategies": {
+    why:
+      "the write walk, site reach, helper climb and ordering proof fold what their path-following forms " +
+      "(the role log on) compute; this test builds randomized programs both ways and compares the IR (ADR 0546)",
+    command: [
+      "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
+      "--test", "write_walk_strategies_process",
+    ],
+    env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
+  },
   "dialects-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
@@ -277,12 +287,12 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
+    checks: ["ir-lib", "write-walk-strategies", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
     owner: "solid-facts-backend process/diagnostics",
-    checks: ["backend-process", "backend-staleness", "coverage", "ir-edit-fuzz"],
+    checks: ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ir-edit-fuzz"],
   },
   // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
   // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
@@ -441,7 +451,7 @@ export function planFor(paths) {
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
-    ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "dialects-process"].filter((id) =>
+    ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
     ...["coverage", "ownership-gate", "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
@@ -650,6 +660,7 @@ export const LANES = {
   "ir-lib": "rust",
   "backend-process": "rust",
   "backend-staleness": "rust",
+  "write-walk-strategies": "rust",
   "dialects-process": "rust",
   "differential-harness": "rust",
   typefacts: "typefacts",

@@ -838,6 +838,14 @@ pub(super) struct SemanticLookup<'a> {
     /// The named-closure placements this build computed (instrumentation,
     /// [`crate::BuildTimings::closure_placements`]).
     closure_placements: std::sync::atomic::AtomicU64,
+    /// The write walk's caller steps this build took (instrumentation,
+    /// [`crate::BuildTimings::write_walk_steps`]).
+    write_walk_steps: std::sync::atomic::AtomicU64,
+    /// The site-reach derivations this build evaluated (instrumentation,
+    /// [`crate::BuildTimings::reach_evaluations`]).
+    reach_evaluations: std::sync::atomic::AtomicU64,
+    /// The functions of every file, counted once (ADR 0546).
+    function_count: OnceLock<usize>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
@@ -1204,6 +1212,9 @@ impl<'a> SemanticLookup<'a> {
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
             closure_placements: std::sync::atomic::AtomicU64::new(0),
+            write_walk_steps: std::sync::atomic::AtomicU64::new(0),
+            function_count: OnceLock::new(),
+            reach_evaluations: std::sync::atomic::AtomicU64::new(0),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -1263,6 +1274,56 @@ impl<'a> SemanticLookup<'a> {
     /// The named-closure placements this build has computed so far.
     pub(crate) fn closure_placements(&self) -> u64 {
         self.closure_placements
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Counts `steps` write-walk caller steps
+    /// ([`crate::BuildTimings::write_walk_steps`]).
+    pub(crate) fn count_write_walk_steps(&self, steps: u64) {
+        self.write_walk_steps
+            .fetch_add(steps, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Counts one evaluated site-reach derivation of a function
+    /// ([`crate::BuildTimings::reach_evaluations`]).
+    pub(crate) fn count_reach_evaluation(&self) {
+        self.reach_evaluations
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The site-reach derivations this build has evaluated so far.
+    pub(crate) fn reach_evaluations(&self) -> u64 {
+        self.reach_evaluations
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// `file` as one of this lookup's own files (the same facts, not a file
+    /// of that path): a position in [`Self::files`], read by address. It
+    /// reads no other file.
+    pub(crate) fn own_file(&self, file: &FileFacts) -> Option<&'a FileFacts> {
+        let files = self.files();
+        let at = std::ptr::from_ref(file) as usize;
+        let start = files.as_ptr() as usize;
+        let index = at.checked_sub(start)? / std::mem::size_of::<FileFacts>().max(1);
+        files.get(index).filter(|own| std::ptr::eq(*own, file))
+    }
+
+    /// How many functions the program's files hold (every file's
+    /// [`solid_facts::ast::AstFacts::functions`]). ADR 0546: it chooses how
+    /// the site-reach query computes its answers, which are the same either
+    /// way (`SiteReach::least_fixed_point`), so it is no read of the answers.
+    pub(crate) fn function_count(&self) -> usize {
+        *self.function_count.get_or_init(|| {
+            self.files()
+                .iter()
+                .map(|file| file.ast.functions.len())
+                .sum()
+        })
+    }
+
+    /// The write-walk caller steps this build has taken so far.
+    pub(crate) fn write_walk_steps(&self) -> u64 {
+        self.write_walk_steps
             .load(std::sync::atomic::Ordering::Relaxed)
     }
 

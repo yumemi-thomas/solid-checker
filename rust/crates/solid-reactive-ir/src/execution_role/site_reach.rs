@@ -71,6 +71,26 @@ pub(crate) struct SiteReach<'l, 'a> {
     assumed: Cell<bool>,
     /// Whether a refused creation enters nothing (ADR 0475).
     refusals: bool,
+    /// ADR 0546: the program has fewer functions than [`DEPTH_LIMIT`], so the
+    /// depth-first derivation never stops at the limit and every answer is
+    /// the least fixed point, which [`Self::least_fixed_point`] iterates.
+    iterates: bool,
+    /// While [`Self::least_fixed_point`] runs: its current approximation,
+    /// and the functions it has met, in order.
+    approximation: RefCell<Option<Approximation<'a>>>,
+}
+
+/// A least fixed point being iterated: each function met so far, with
+/// whether it runs under the current approximation (all start `false`).
+struct Approximation<'a> {
+    values: HashMap<(String, Span), bool>,
+    order: Vec<(
+        (String, Span),
+        &'a solid_facts::FileFacts,
+        &'a solid_facts::ast::FunctionFact,
+    )>,
+    /// A function met is not in one of the program's own files.
+    foreign: bool,
 }
 
 /// How deep a chain of functions the query follows before it answers
@@ -85,6 +105,8 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             visiting: RefCell::default(),
             assumed: Cell::new(false),
             refusals: true,
+            iterates: lookup.function_count() < DEPTH_LIMIT && !super::every_path_asked(),
+            approximation: RefCell::new(None),
         }
     }
 
@@ -128,6 +150,29 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         if let Some(runs) = self.functions.borrow().get(&key) {
             return *runs;
         }
+        if self.iterates {
+            let own = self
+                .lookup
+                .own_file(file)
+                .and_then(|own| Some((own, own.ast.function_at(function.span)?)));
+            if let Some(approximation) = self.approximation.borrow_mut().as_mut() {
+                let Some((own, function)) = own else {
+                    approximation.foreign = true;
+                    return false;
+                };
+                if let Some(runs) = approximation.values.get(&key) {
+                    return *runs;
+                }
+                approximation.values.insert(key.clone(), false);
+                approximation.order.push((key, own, function));
+                return false;
+            }
+            if let Some((own, function)) = own
+                && let Some(runs) = self.least_fixed_point(key.clone(), own, function)
+            {
+                return runs;
+            }
+        }
         if self.visiting.borrow().len() >= DEPTH_LIMIT {
             return true;
         }
@@ -137,6 +182,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             return false;
         }
         let outer_assumed = self.assumed.replace(false);
+        self.lookup.count_reach_evaluation();
         let runs = self.function_runs_uncached(file, function);
         self.visiting.borrow_mut().remove(&key);
         let assumed = self.assumed.get();
@@ -145,6 +191,70 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         }
         self.assumed.set(outer_assumed || assumed);
         runs
+    }
+
+    /// ADR 0546: whether the function `key` runs, as the least fixed point of
+    /// "runs" over the functions its answer reads, from all `false`: each
+    /// round evaluates every function not yet known to run against the
+    /// current approximation, and the iteration stops at a round that moves
+    /// nothing. Every answer it met is kept. The depth-first derivation
+    /// answers the same where the depth limit cannot stop it: a function in
+    /// progress is assumed not to run, and a derivation that runs needs no
+    /// function twice on any branch. `None` (nothing kept) where a function
+    /// met is not one of the program's own.
+    fn least_fixed_point(
+        &self,
+        key: (String, Span),
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<bool> {
+        struct Reset<'r, 'a>(&'r RefCell<Option<Approximation<'a>>>);
+        impl Drop for Reset<'_, '_> {
+            fn drop(&mut self) {
+                self.0.borrow_mut().take();
+            }
+        }
+        *self.approximation.borrow_mut() = Some(Approximation {
+            values: HashMap::from_iter([(key.clone(), false)]),
+            order: vec![(key.clone(), file, function)],
+            foreign: false,
+        });
+        let reset = Reset(&self.approximation);
+        loop {
+            let mut moved = false;
+            let mut index = 0;
+            loop {
+                let next = {
+                    let approximation = self.approximation.borrow();
+                    let approximation = approximation.as_ref()?;
+                    let Some((next, file, function)) = approximation.order.get(index) else {
+                        break;
+                    };
+                    (!approximation.values[next]).then(|| (next.clone(), *file, *function))
+                };
+                index += 1;
+                let Some((next, file, function)) = next else {
+                    continue;
+                };
+                self.lookup.count_reach_evaluation();
+                if self.function_runs_uncached(file, function) {
+                    let mut approximation = self.approximation.borrow_mut();
+                    *approximation.as_mut()?.values.get_mut(&next)? = true;
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+        let approximation = self.approximation.borrow_mut().take()?;
+        drop(reset);
+        if approximation.foreign {
+            return None;
+        }
+        let runs = approximation.values[&key];
+        self.functions.borrow_mut().extend(approximation.values);
+        Some(runs)
     }
 
     fn function_runs_uncached(

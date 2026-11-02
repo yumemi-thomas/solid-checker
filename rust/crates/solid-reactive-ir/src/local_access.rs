@@ -4971,6 +4971,7 @@ pub(crate) fn handed_write_execution(
         &mut HelperWriteWalk {
             visiting: HashSet::default(),
             depth: HELPER_WRITE_DEPTH,
+            memo: (!crate::execution_role::every_path()).then(HelperWalkMemo::default),
         },
     )
 }
@@ -4984,6 +4985,30 @@ const HELPER_WRITE_DEPTH: usize = 8;
 struct HelperWriteWalk {
     visiting: HashSet<(String, solid_facts::core::Span)>,
     depth: usize,
+    /// ADR 0546: what the climb keeps (none with the role log on, under a
+    /// probe or a proof's deferred check: the climb then follows every path
+    /// as it is written).
+    memo: Option<HelperWalkMemo>,
+}
+
+/// ADR 0546: a call's own answer ([`handed_tail`]) is the same on every path
+/// that reaches it, so the climb computes it once; and where no call the
+/// climb can reach has a rejecting one, no fold can reject, so a fold is
+/// unplaced as soon as one entry is and stops there (`quick`).
+#[derive(Default)]
+struct HelperWalkMemo {
+    tails: HashMap<(String, solid_facts::core::Span), Option<ExecutionRole>>,
+    /// Decided when the climb's first helper is entered.
+    quick: Option<bool>,
+}
+
+/// What [`climb_rejects_nowhere`] found of the calls a climb can reach.
+enum ClimbBall {
+    /// A call's own answer rejects the write.
+    Rejects,
+    /// None rejects: whether one is unplaced, and how many helpers with a
+    /// call the climb can enter.
+    Quiet { unplaced: bool, called: usize },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5014,6 +5039,31 @@ fn handed_write_execution_within(
         Some(_) => ExecutionRole::Unknown,
         None => execution,
     };
+    handed_tail(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+    )
+    .unwrap_or(execution)
+}
+
+/// What [`handed_write_execution_within`] answers at `span` whatever its
+/// helpers' climb found: a placed hand-off's role, `Unknown` for an escape,
+/// none where the climb's answer stands.
+#[allow(clippy::too_many_arguments)]
+fn handed_tail(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+) -> Option<ExecutionRole> {
     if (inside_non_component_function(file, span, lookup)
         || nested_named_function(file, span, lookup))
         && let Some((role, carrier)) = handed_write_role(
@@ -5031,7 +5081,7 @@ fn handed_write_execution_within(
             || (role == ExecutionRole::Unknown
                 && !inside_non_component_function(file, span, lookup)))
     {
-        return role;
+        return Some(role);
     }
     if escapes_nested(file, span, lookup)
         // Only where `inside_non_component_function` answers for a primitive's
@@ -5040,9 +5090,151 @@ fn handed_write_execution_within(
             && nested_named_function(file, span, lookup)
             && handed_to_unknown_code(file, span, lookup))
     {
-        return ExecutionRole::Unknown;
+        return Some(ExecutionRole::Unknown);
     }
-    execution
+    None
+}
+
+/// [`handed_write_execution_within`] at a helper's call site `callee`, as
+/// the climb asks it (the caller's own allowed callbacks, no role yet); the
+/// call's [`handed_tail`] is computed once per climb.
+fn handed_call_role(
+    caller_file: &solid_facts::FileFacts,
+    callee: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    walk: &mut HelperWriteWalk,
+) -> ExecutionRole {
+    let execution = match helper_call_write_execution(
+        caller_file,
+        callee,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        walk,
+    ) {
+        Some(role) if role.reports_disallowed_write() => return role,
+        Some(_) => ExecutionRole::Unknown,
+        None => ExecutionRole::Unreported,
+    };
+    climb_tail(
+        caller_file,
+        callee,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        walk,
+    )
+    .unwrap_or(execution)
+}
+
+/// The [`handed_tail`] of a call the climb reaches, kept for the climb.
+fn climb_tail(
+    caller_file: &solid_facts::FileFacts,
+    callee: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    walk: &mut HelperWriteWalk,
+) -> Option<ExecutionRole> {
+    let key = (caller_file.path.to_string(), callee);
+    if let Some(tail) = walk.memo.as_ref().and_then(|memo| memo.tails.get(&key)) {
+        return *tail;
+    }
+    let caller_allowed = allowed_callback_spans(caller_file, lookup);
+    let tail = handed_tail(
+        caller_file,
+        callee,
+        &caller_allowed,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+    );
+    if let Some(memo) = walk.memo.as_mut() {
+        memo.tails.insert(key, tail);
+    }
+    tail
+}
+
+/// The helper whose body runs `span` during its call, if a climb enters it
+/// there: not a possible component, and `span` runs while it is called.
+fn climbed_helper<'f>(
+    file: &'f solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let function = containing_ast_function(&file.ast, span)?;
+    (!lookup.function_may_be_component(file, function)
+        && crate::interproc::body_site_runs_during_call(file, function, span))
+    .then_some(function)
+}
+
+/// ADR 0546: whether no call a climb from `function` with `depth` calls left
+/// can reach has a rejecting [`handed_tail`] (the only rejection a climb
+/// finds). A call's tail is asked wherever a path of at most `depth` calls
+/// reaches it, which a breadth-first search over the helpers finds by its
+/// shortest such path; the search stops at the first rejecting tail. A
+/// quiet ball also says whether a tail is unplaced and how many helpers it
+/// holds that have a call (a climb runs out of calls only on a path through
+/// `depth + 1` of them).
+#[allow(clippy::too_many_arguments)]
+fn climb_rejects_nowhere(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    depth: usize,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    walk: &mut HelperWriteWalk,
+) -> ClimbBall {
+    let mut seen = HashSet::from_iter([(file.path.to_string(), function.span)]);
+    let mut frontier = vec![(file.path.to_string(), function.span)];
+    let mut unplaced = false;
+    let mut called = 0;
+    for level in 0..=depth {
+        let mut next = Vec::new();
+        for (path, span) in frontier {
+            let sites = lookup.function_call_sites(&path, span);
+            if !sites.is_empty() {
+                called += 1;
+            }
+            // The calls of a helper entered with no call left are not asked.
+            if level == depth {
+                continue;
+            }
+            for (caller_file, callee) in sites {
+                lookup.count_write_walk_steps(1);
+                let tail = climb_tail(
+                    caller_file,
+                    callee,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    walk,
+                );
+                if tail.is_some_and(ExecutionRole::reports_disallowed_write) {
+                    return ClimbBall::Rejects;
+                }
+                unplaced |= tail == Some(ExecutionRole::Unknown);
+                if let Some(helper) = climbed_helper(caller_file, callee, lookup) {
+                    let key = (caller_file.path.to_string(), helper.span);
+                    if seen.insert(key.clone()) {
+                        next.push(key);
+                    }
+                }
+            }
+        }
+        frontier = next;
+    }
+    ClimbBall::Quiet { unplaced, called }
 }
 
 /// ADR 0537: ADR 0536's summary placement for a write. A write that runs
@@ -5063,16 +5255,39 @@ fn helper_call_write_execution(
     root_body: RootBodyGuard,
     walk: &mut HelperWriteWalk,
 ) -> Option<ExecutionRole> {
-    let function = containing_ast_function(&file.ast, span)?;
-    if lookup.function_may_be_component(file, function)
-        || !crate::interproc::body_site_runs_during_call(file, function, span)
-    {
-        return None;
-    }
+    let function = climbed_helper(file, span, lookup)?;
     let key = (file.path.to_string(), function.span);
     if !walk.visiting.insert(key.clone()) {
         return None;
     }
+    if walk.memo.as_ref().is_some_and(|memo| memo.quick.is_none()) {
+        let ball = climb_rejects_nowhere(
+            file,
+            function,
+            walk.depth,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            walk,
+        );
+        if let Some(memo) = walk.memo.as_mut() {
+            memo.quick = Some(!matches!(ball, ClimbBall::Rejects));
+        }
+        // No call rejects, none is unplaced and no path runs out of calls:
+        // every call answers its own placed role or none, so no fold is
+        // unplaced, this one included.
+        if let ClimbBall::Quiet {
+            unplaced: false,
+            called,
+        } = ball
+            && called <= walk.depth
+        {
+            walk.visiting.remove(&key);
+            return None;
+        }
+    }
+    let quick = walk.memo.as_ref().and_then(|memo| memo.quick) == Some(true);
     let mut unplaced = false;
     let mut proven = None;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
@@ -5080,17 +5295,15 @@ fn helper_call_write_execution(
             unplaced = true;
             break;
         }
+        lookup.count_write_walk_steps(1);
         walk.depth -= 1;
-        let caller_allowed = allowed_callback_spans(caller_file, lookup);
-        let role = handed_write_execution_within(
+        let role = handed_call_role(
             caller_file,
             callee,
-            &caller_allowed,
             entities,
             symbol_names,
             lookup,
             root_body,
-            ExecutionRole::Unreported,
             walk,
         );
         walk.depth += 1;
@@ -5100,6 +5313,10 @@ fn helper_call_write_execution(
         }
         if role == ExecutionRole::Unknown {
             unplaced = true;
+            // Nothing this climb reaches rejects: the fold is unplaced now.
+            if quick {
+                break;
+            }
         }
     }
     walk.visiting.remove(&key);

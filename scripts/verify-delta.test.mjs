@@ -44,10 +44,13 @@ test("every check a row or the universal set names actually exists", () => {
 test("each table row claims its own owner's paths", () => {
   const expected = [
     ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
     ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "wasm-compile"]],
     ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process"]],
-    ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "backend-staleness", "coverage", "ir-edit-fuzz"]],
+    [
+      "rust/crates/solid-facts-backend/src/diagnostics.rs",
+      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ir-edit-fuzz"],
+    ],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
     [
@@ -71,6 +74,7 @@ test("the longest matching prefix wins, so no row swallows another's directory",
   assert.deepEqual(classify("rust/crates/solid-facts-backend/src/dialect.rs").checks, [
     "backend-process",
     "backend-staleness",
+    "write-walk-strategies",
     "coverage",
     "ir-edit-fuzz",
   ]);
@@ -92,6 +96,7 @@ test("a mapped change set runs preflight checks before building and testing", ()
     ...UNIVERSAL,
     "build-debug",
     "ir-lib",
+    "write-walk-strategies",
     "coverage",
     "ownership-gate",
     "ir-read-lint",

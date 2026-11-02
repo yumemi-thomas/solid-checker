@@ -78,6 +78,7 @@ mod projection;
 mod reachability;
 mod reactive_analysis;
 mod role_log;
+pub use execution_role::follow_every_path;
 pub use role_log::{RoleLogTarget, configure as configure_role_log};
 pub mod route_components;
 pub mod router_params;
@@ -1644,6 +1645,15 @@ pub struct BuildTimings {
     /// `closure_unplaced`), each computation counted, a kept answer's reuse
     /// not. Deterministic, so the complexity ladder gates on it.
     pub closure_placements: u64,
+    /// The write walk's caller steps (`execution_role`'s write walk, ADR
+    /// 0546): each call site of a function whose entries place a write,
+    /// evaluated or folded, and each step of a region fold. Deterministic,
+    /// so the complexity ladder gates on it.
+    pub write_walk_steps: u64,
+    /// The functions whose run the site-reach query (ADR 0458) derived, each
+    /// derivation counted, its fixed-point rounds included (ADR 0546).
+    /// Deterministic, so the complexity ladder gates on it.
+    pub reach_evaluations: u64,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
     pub owner_reused_files: u64,

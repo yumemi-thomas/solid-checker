@@ -7,6 +7,10 @@
 //! the layers multiply: each in-place layer is reached by two edges, so a
 //! call at depth N lies on about 2^(N+1) paths.
 //!
+//! A second series builds `k` local functions that all call each other (k =
+//! 2..=12) in the same hosts: the write walk and the site-reach query must
+//! stay polynomial in `k` (ADR 0546), gated on their own counters.
+//!
 //! Work is counted, never timed: the rows the IR holds for each host
 //! (writes, actions, reads), the reachability count's visits
 //! ([`solid_reactive_ir::BuildTimings::reachability_visits`]) and the
@@ -339,6 +343,147 @@ fn checker_work_grows_polynomially_with_nested_layers() {
             failures.push(format!(
                 "{name}: visits {visits:?} are near-linear now; remove it from KNOWN_EXPONENTIAL_VISITS"
             ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The largest dense-recursion component the ladder builds.
+const MAX_DENSE: usize = 12;
+
+/// Where the dense component is entered: the component body and a memo own
+/// the scope (each write is a violation), an event handler does not (each
+/// write is legal there, and the other functions' entries leave it unplaced).
+const DENSE_HOSTS: [&str; 3] = ["body", "memo", "handler"];
+
+/// `k` local functions that all call each other, each writing a signal,
+/// entered once from `host`, as `function` declarations or `const` arrows.
+fn dense_program(k: usize, host: &str, declarations: bool) -> String {
+    let mut functions = String::new();
+    for i in 1..=k {
+        let calls = (1..=k)
+            .filter(|&j| j != i)
+            .map(|j| format!("if (n > {j}) f{j}(n - 1);"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let body = format!("set(1); {calls}");
+        functions.push_str(&if declarations {
+            format!("  function f{i}(n: number): void {{ {body} }}\n")
+        } else {
+            format!("  const f{i} = (n: number): void => {{ {body} }};\n")
+        });
+    }
+    let (entry, handler) = match host {
+        "body" => ("  f1(3);\n", ""),
+        "memo" => ("  createMemo(() => { f1(3); return 1; });\n", ""),
+        _ => ("", " onClick={() => f1(3)}"),
+    };
+    format!(
+        "import {{ createMemo, createSignal }} from \"solid-js\";\n\nexport function App() {{\n  const [r, set] = createSignal(0);\n{functions}{entry}  return <button{handler}>{{r()}}</button>;\n}}\n"
+    )
+}
+
+/// The cubic envelope the dense series must stay under: `work(k) <= 2 *
+/// (k / 2)^3 * work(2)`. Each of the `k` writes folds a component of `k`
+/// functions with `k - 1` calls each once; following every path through
+/// it is factorial (at f31337fa8, release: k = 8 2.1-3.9 s, k = 10 about
+/// 48 s).
+fn within_cubic_envelope(series: &[u64], k: usize) -> bool {
+    let first = u128::from(series[0].max(1));
+    let cube = (k as u128).pow(3);
+    u128::from(series[k - 2]) * 4 <= first * cube
+}
+
+#[test]
+fn dense_mutual_recursion_stays_polynomial() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = env::temp_dir()
+        .join("sc-scratch.noindex")
+        .join(format!("complexity-dense-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _scratch = Scratch(root.clone());
+    fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+    fs::write(root.join("tsconfig.json"), TSCONFIG).unwrap();
+    let first = dense_program(2, "body", true);
+    fs::write(root.join("App.tsx"), &first).unwrap();
+    let root = root.canonicalize().unwrap();
+    let app = root.join("App.tsx");
+    let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let typefacts = PathBuf::from(typefacts)
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let solid_v2 = dialect::by_id("solid-v2").unwrap();
+    let mut session = NativeIncrementalSession::open(
+        solid_v2,
+        project_id,
+        vec![SourceFile {
+            path: app.to_string_lossy().into_owned(),
+            source: first.clone().into(),
+            compiler_options: CompilerOptions::default(),
+        }],
+        typescript,
+    )
+    .unwrap();
+    let mut version = 0;
+    let mut failures = Vec::new();
+    for host in DENSE_HOSTS {
+        for declarations in [true, false] {
+            let name = format!("{host}/{}", if declarations { "decl" } else { "arrow" });
+            let mut work = Vec::new();
+            let mut curve = Vec::new();
+            for k in 2..=MAX_DENSE {
+                let source = dense_program(k, host, declarations);
+                fs::write(&app, &source).unwrap();
+                version += 1;
+                let facts = session
+                    .edit(
+                        vec![SourceChange {
+                            path: app.to_string_lossy().into_owned(),
+                            version,
+                            source: Some(source.clone()),
+                            compiler_options: CompilerOptions::default(),
+                        }],
+                        None,
+                    )
+                    .unwrap();
+                let started = Instant::now();
+                let (built, timings) = solid_reactive_ir::build_with_analysis_inputs_measured(
+                    &facts,
+                    solid_v2.vocabulary,
+                    AnalysisInputs::empty(),
+                    &RuleOptions::default(),
+                )
+                .unwrap();
+                let elapsed = started.elapsed();
+                // The premise: every function's write is analyzed.
+                assert_eq!(
+                    built.writes.len(),
+                    k,
+                    "{name} at k = {k} holds {} writes:\n{source}",
+                    built.writes.len()
+                );
+                let steps = timings.write_walk_steps + timings.reach_evaluations;
+                work.push(steps);
+                curve.push(format!(
+                    "k{k}: walk {}, reach {}, {:.0} ms",
+                    timings.write_walk_steps,
+                    timings.reach_evaluations,
+                    elapsed.as_secs_f64() * 1000.0
+                ));
+                if !within_cubic_envelope(&work, k) {
+                    failures.push(format!(
+                        "{name}: write-walk and reach work {work:?} leaves 2*(k/2)^3*work(2) at k = {k}"
+                    ));
+                    break;
+                }
+            }
+            eprintln!("dense {name}: {}", curve.join("; "));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));

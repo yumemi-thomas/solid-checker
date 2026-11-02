@@ -176,7 +176,7 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
     "facts.files": 9,
-    "files()": 4,
+    "files()": 6,
     "file_by_path": 3,
     "symbols_by_id": 7,
     "typescript-table": 3,
