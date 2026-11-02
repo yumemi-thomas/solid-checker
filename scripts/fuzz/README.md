@@ -407,7 +407,7 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 | `exec.mjs`, `exec/` | the Rust executor: projects, type checks, checker runs and the Chrome pages off the orchestrator's thread; `exec/vite-host.mjs` its Vite helper |
 | `runtime-diff.mjs` | the runtime differential: the fast path's records against the oracle's, behaviour apart from attribution |
 | `focus.mjs`, `smoke.mjs`, `smoke/` | `make fuzz-focus` (the grids for some codes) and `make fuzz-smoke` (the smoke manifests, their selection and validation) |
-| `roles.mjs` | the role-log fold: arms hit and never hit, and the saturation numbers (`roles.json`, ADR 0533) |
+| `roles.mjs`, `fold-worker.mjs` | the role-log fold: arms hit and never hit, and the saturation numbers (`roles.json`, ADR 0533); `fold-worker.mjs` folds and prunes a finished grid while focus.mjs runs the next |
 | `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest), `--fast-host happy-dom` |
 | `classify.mjs`, `codes.mjs` | the comparator; the policy table per rc.17 code and the oracle's code/rule tables (tests fail when they drift) |
 | `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |

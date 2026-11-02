@@ -22,6 +22,7 @@
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
 // by code, context, source, mount and outcome (runtime-diff.mjs DEFAULT_DIFF_AXES), many more programs. `--oracle-axes` picks.
 import { spawnSync } from "node:child_process";
+import { Worker } from "node:worker_threads";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -30,7 +31,7 @@ import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
-import { foldGrids, mergeGridReports, summaryLine } from "./roles.mjs";
+import { mergeGridReports, summaryLine } from "./roles.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -119,7 +120,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     return options;
   }
 
-  function main() {
+  async function main() {
     const options = parse(process.argv.slice(2));
     const out = resolve(options.out ?? join(tmpdir(), "solid-checker-fuzz-focus.noindex", `${Date.now()}`));
     mkdirSync(out, { recursive: true });
@@ -128,6 +129,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...oracle];
     const attention = [];
     const folded = [];
+    const pending = [];
     const against = options.rolesAgainst ? { ...JSON.parse(readFileSync(resolve(options.rolesAgainst), "utf8")), path: resolve(options.rolesAgainst) } : null;
     console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}`);
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
@@ -172,17 +174,21 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
         if (moved.worse.length > 10) attention.push(`${unit.label}: ... ${moved.worse.length - 10} more worse`);
         for (const move of moved.other.slice(0, 5)) console.log(`             ${move.id} ${move.from} -> ${move.to}`);
       }
-      if (roles && existsSync(join(unit.dir, "programs.jsonl"))) {
-        const report = foldGrids([unit.dir], { against });
-        writeFileSync(join(unit.dir, "roles.json"), `${JSON.stringify(report, null, 2)}\n`);
-        console.log(`           ${summaryLine(report)}`);
-        if (report.notInInventory.length) attention.push(`${unit.label}: role log arms missing from the source inventory: ${report.notInInventory.slice(0, 5).join(", ")}`);
-        folded.push(unit.dir);
+      // The fold and the pruning run in a worker (fold-worker.mjs) while the next grid runs; the run-wide report waits for them all.
+      if ((roles && existsSync(join(unit.dir, "programs.jsonl"))) || options.pruneCases) {
+        pending.push(new Promise((settle) => {
+          const worker = new Worker(join(here, "fold-worker.mjs"), { workerData: { dir: unit.dir, roles, against, pruneCases: Boolean(options.pruneCases) } });
+          worker.once("message", (message) => {
+            if (message.summary) console.log(`  ${unit.label}: ${message.summary}`);
+            if (message.notInInventory?.length) attention.push(`${unit.label}: role log arms missing from the source inventory: ${message.notInInventory.join(", ")}`);
+            if (message.error) attention.push(`${unit.label}: role fold failed: ${message.error}`);
+            if (message.folded) folded.push(unit.dir);
+          });
+          worker.once("error", (error) => { attention.push(`${unit.label}: fold worker failed: ${String(error).slice(0, 200)}`); settle(); });
+          worker.once("exit", () => settle());
+        }));
       }
       if (oracle?.inconclusive) attention.push(`${unit.label}: ${oracle.inconclusive} oracle runs inconclusive (${join(unit.dir, "runtime-diff.jsonl")})`);
-      if (options.pruneCases) for (const name of ["cases", "chrome-cases"]) rmSync(join(unit.dir, name), { recursive: true, force: true });
-      // The folded log is in roles.json; the raw one runs to about 23 KB a program.
-      if (options.pruneCases && roles && existsSync(join(unit.dir, "roles.json"))) rmSync(roles, { force: true });
     };
     try {
     for (const grid of options.grids.split(",")) {
@@ -201,6 +207,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     attention.push(`stopped: ${error.message}`);
     process.exitCode = 2;
   }
+  await Promise.all(pending);
   if (folded.length) {
     // From the grids' roles.json: --prune-cases has deleted their raw logs by now.
     const report = mergeGridReports(folded, { against });
@@ -214,4 +221,4 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
   } else console.log("\nnothing needs a look");
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

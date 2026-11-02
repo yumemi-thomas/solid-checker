@@ -125,3 +125,27 @@ describe("the run-wide merge", () => {
     expect(report.saturation.yield).toMatchObject({ programs: 3, candidates: 1 });
   });
 });
+
+describe("the fold worker", () => {
+  it("folds a grid's log into roles.json and prunes its cases and raw log, off the orchestrator's thread", async () => {
+    const { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { Worker } = await import("node:worker_threads");
+    const root = mkdtempSync(join(tmpdir(), "fold-worker-"));
+    const dir = join(root, "CODE");
+    mkdirSync(join(dir, "cases", "p1"), { recursive: true });
+    writeFileSync(join(dir, "programs.jsonl"), `${JSON.stringify({ id: "p1", outcome: "agree" })}\n`);
+    const roles = `${dir}.roles.jsonl`;
+    writeFileSync(roles, `${JSON.stringify({ k: "read", f: `/x/.solid-checker-fuzz/run-1/p1/App.tsx`, s: 1, e: 2, role: "Unknown", arm: "f.a", arms: ["f.a"] })}\n`);
+    const message = await new Promise((resolve, reject) => {
+      const worker = new Worker(new URL("./fold-worker.mjs", import.meta.url), { workerData: { dir, roles, against: null, pruneCases: true } });
+      worker.once("message", resolve);
+      worker.once("error", reject);
+    });
+    expect(message).toMatchObject({ folded: true });
+    expect(JSON.parse(readFileSync(join(dir, "roles.json"), "utf8")).decisions).toBe(1);
+    expect(existsSync(join(dir, "cases"))).toBe(false);
+    expect(existsSync(roles)).toBe(false);
+  });
+});
