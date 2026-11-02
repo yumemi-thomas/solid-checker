@@ -13,6 +13,7 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { StaleCacheError, cacheableRecord, cacheableTypecheck, caseKey, recordDigest, typecheckDigest, typecheckKey } from "./cache.mjs";
 import { checkerProjectFiles, checkerResult, checkerWorkDir, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { classify, runtimeEvents } from "./classify.mjs";
+import { costOf } from "./cost.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { runFast } from "./fast.mjs";
 import { findingsDiff, outcomeDiff } from "./hits.mjs";
@@ -248,7 +249,8 @@ async function prepareViaExecutor({ program, built }, { config, exec, instrument
   timings.checker.ms += checker.wallMs ?? 0;
   timings.checker.n += 1;
   // A slot's directory is the executor's, not this program's (it is named for the program, main.rs `SlotDir`): nothing removes it.
-  const value = { program, built, caseDir, dir: own ? dir : null, typecheck: typed, checker };
+  // The program's cost (cost.mjs): measurement beside the verdict inputs, never inside `checker`.
+  const value = { program, built, caseDir, dir: own ? dir : null, typecheck: typed, checker, cost: costOf(answer.checker) };
   if (instrument) value.twinTypecheck = twin.fresh ? settle(twin, answer.twinTypecheck) : twin.stored;
   return value;
 }

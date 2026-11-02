@@ -36,7 +36,9 @@ import {
 } from "./misuse.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
 import { isSite, walk } from "./model.mjs";
-import { evaluate, finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
+import { gridProfile } from "./perf.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
@@ -599,6 +601,18 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
 
 const CHUNK = 150;
 
+/**
+ * A grid's measurement files beside its rows (matrix.mjs and legal.mjs): `costs.jsonl` and `cost.json` (cost.mjs), `profile.json`
+ * (perf.mjs `gridProfile`, with the pipeline's busy totals). Nothing reads them back into a row or a verdict.
+ * SOLID_CHECKER_FUZZ_PERF=0 writes neither (the control of the rows-unchanged check).
+ */
+export function writeGridPerf(out, label, rows, values, budget, profile) {
+  if (process.env.SOLID_CHECKER_FUZZ_PERF === "0") return;
+  const summary = writeCosts(out, rows.map((row) => costLine(row, values.get(row.id))), budget);
+  writeFileSync(join(out, "profile.json"), `${JSON.stringify(profile.json({ programs: rows.length, busy: phaseTimings() }), null, 2)}\n`);
+  for (const line of costLines(summary, { prefix: label })) console.error(line);
+}
+
 export async function runMatrix(options) {
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
@@ -615,6 +629,10 @@ export async function runMatrix(options) {
 }
 
 async function sweep(options, config, out) {
+  // The grid's phase clock (perf.mjs) and its budget (cost.mjs): measurement only, beside the rows.
+  const profile = gridProfile();
+  const budget = budgetOf(options);
+  const phaseStart = performance.now();
   const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(","), recall: options.recall });
   let entries = [];
   // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
@@ -634,6 +652,7 @@ async function sweep(options, config, out) {
     ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
     console.error(`matrix: ${sampleLine(gridSample)}`);
   }
+  profile.add("generate", performance.now() - phaseStart);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();
@@ -657,7 +676,7 @@ async function sweep(options, config, out) {
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
       const site = siteOf(built);
-      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built) });
+      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built) }));
       const misuse = program.components[0].misuse;
       const others = otherRegions(built);
       rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
@@ -667,6 +686,7 @@ async function sweep(options, config, out) {
   }
 
   if (run !== config) await setExecutorChecks(config);
+  profile.add("evaluate", Date.now() - started);
   console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
   const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
@@ -675,6 +695,7 @@ async function sweep(options, config, out) {
   if (broken) throw new Error(broken);
 
   // Chrome: a sample of agree programs per cell, every wrong-rule and false-clean one.
+  const chromePhase = performance.now();
   if (options.confirmWithChrome) {
     const pick = [];
     const bySample = new Map();
@@ -713,8 +734,10 @@ async function sweep(options, config, out) {
 
   // The runtime differential (`--runtime-diff <N|all>`): Happy DOM's record against Chrome's, without the checker, on up to N programs
   // per stratum. Beside the matrix, never in it.
+  if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
   const perStratum = parsePerStratum(options.runtimeDiff);
-  if (perStratum) await runtimeDifferential(rows, values, perStratum, config, options, out, "matrix");
+  if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "matrix"));
+  const shrinkPhase = performance.now();
 
   // Shrink one representative per false-clean cell (the smallest program that Chrome did not refute).
   if (options.shrink) {
@@ -744,6 +767,8 @@ async function sweep(options, config, out) {
     }
   }
 
+  if (options.shrink) profile.add("shrink", performance.now() - shrinkPhase);
+  const writePhase = performance.now();
   // Typed-away codes: the evidence is the type checker's own error on the one-line misuse.
   const typedAway = {};
   for (const code of MISUSE_CODES.filter((c) => SPEC[c].typedAway)) {
@@ -764,6 +789,8 @@ async function sweep(options, config, out) {
     writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
     console.error(`matrix: runtime cache ${JSON.stringify(cacheStats(config))}`);
   }
+  profile.add("write", performance.now() - writePhase);
+  writeGridPerf(out, "matrix", rows, values, budget, profile);
   console.error(`matrix: wrote ${join(out, "matrix.md")}`);
   if (options.baseline) return reportGate(gate(JSON.parse(readFileSync(resolve(options.baseline), "utf8")), JSON.parse(JSON.stringify(matrix))));
   return 0;
@@ -776,7 +803,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

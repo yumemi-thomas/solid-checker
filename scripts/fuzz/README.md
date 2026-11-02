@@ -312,6 +312,12 @@ A shrink with `--control` asks for the neutrality control of each reduction it a
 
 `node scripts/fuzz/compare-runs.mjs <run A> <run B>` is the equality check for any of the above (every row but the wall times, the findings, the summary counts and the shrunk minima byte for byte). `--unexecuted-moves` compares two runs of the same seeds from before and after `candidate-unexecuted` existed: a row may differ only by an `inconclusive: never-ran` item that became a `candidate-unexecuted` one (listed as a move), and any other difference fails.
 
+### Cost and throughput
+
+Measurement only: no row, verdict, cache key or finding reads it, and with `SOLID_CHECKER_FUZZ_PERF=0` none of it is written (the rows of mx-base and lg-base for NO_OWNER_CONTEXT were byte-identical with it off and on, and mx-recall's 18,655 rows across three runs, 2026-11-02). Each grid writes `costs.jsonl` beside `programs.jsonl` (per program: checker wall time; from the Rust executor's `wait4` on Linux its CPU time, peak RSS and block writes, a warm check's null as the daemon's use is not the client's; role decisions with `--role-log`), `cost.json` (the checker's p50/p90/p99, the slowest (code, context, layer, variant) cells, every program over `--budget-ms` 1000 or `--budget-mb` 500) and `profile.json` (generate, evaluate, judge, Chrome, runtime differential, shrink and write times, and the pipeline's busy totals). `focus.mjs` samples /proc/stat and /proc/diskstats every 250 ms in a worker and prints a `perf <unit>:` line per unit: programs/s, the phases with fold and prune, checker p50/p99, CPU busy and iowait, idle stretches (at least 75% of the cores idle for `--idle-stretch-s` 10 s, named by the unit they fell in or the gap between units) and disk MiB per program (the VM's disks, aggregate: other processes count, tmpfs does not). It writes `<unit>/perf.json` and `<out>/perf.json`.
+
+`node scripts/fuzz/perf-compare.mjs <old run> <new run> [--threshold 0.2] [--floor-ms 20] [--floor-count 2]` (and `focus.mjs --perf-against <run>`) compares per unit programs/s, checker p50 and p99, and the over-budget count, and flags a metric more than the threshold worse (exit 1). Runs that differ in codes, seed, selection, checker mode, budget, cores, a unit's programs or sample, or a unit's cache state (each stated: none, cold, warm, mixed) are not comparable (exit 2), never a pass: a cold runtime cache ran mx-recall NO_OWNER_CONTEXT at 75 programs/s, a warm one at 121-132.
+
 ### Unexecuted violations
 
 ADR 0458: a violation at a site no execution reaches is uncertifiable, so the checker reporting one is a false positive. Five of them were found by a person reading `inconclusive: never-ran` rows. Now the run counts them (`summary.json` and `findings.json` `unexecuted`: candidates, programs, confirmed, by status, by basis, groups).
@@ -436,6 +442,7 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 | `mounts.mjs` | the recall mounts: a parent's lines for each, the later mount's button |
 | `mutation.mjs` | mutation mode: each misuse shape against its legal twin, the checker alone |
 | `twins.mjs` | the twin consistency check: a grid program's in-place layer twins, the checker alone |
+| `cost.mjs`, `perf.mjs`, `perf-sampler.mjs`, `perf-compare.mjs` | the per-program cost record, the grid and machine self-profile, and the throughput comparison (Cost and throughput) |
 | `sample.mjs` | the stratified sample of the big codes (`--grid-sample`, `focus.mjs --sample-big`) |
 | `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |

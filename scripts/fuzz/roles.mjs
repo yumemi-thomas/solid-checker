@@ -154,7 +154,7 @@ export const FINDING_OUTCOMES = ["false-clean", "wrong-rule", "false-positive"];
  * `silentByDefault`: decisions answered by a default arm (role_log.rs: a non-reporting role for want of a proof) whose answer no rule
  * reports.
  */
-export function foldDecisions(lines, inventory) {
+export function foldDecisions(lines, inventory, { perProgram = null } = {}) {
   const arms = new Map();
   const slot = (id) => {
     if (!arms.has(id)) arms.set(id, { passed: 0, answered: 0, unframed: 0, programs: new Set(), roles: {}, kinds: {}, silent: 0 });
@@ -180,6 +180,8 @@ export function foldDecisions(lines, inventory) {
     seen.add(hashed);
     decisions += 1;
     if (!program) unattributed += 1;
+    // The cost record's decision count per program (cost.mjs `addDecisions`), when asked for.
+    else if (perProgram) perProgram.set(program, (perProgram.get(program) ?? 0) + 1);
     for (const id of line.arms ?? []) {
       const arm = slot(id);
       arm.passed += 1;
@@ -223,8 +225,8 @@ export function slicesYield(rows) {
  * programs), `growth` (arms this run hit that `against`, an earlier roles.json, did not; null without one) and `silentByDefault`.
  * A slice whose new programs raise neither findings nor arms is saturated for its axis.
  */
-export function foldRoles({ lines, rows, inventory, against = null, malformed = 0, sources = [] }) {
-  const folded = foldDecisions(lines, inventory);
+export function foldRoles({ lines, rows, inventory, against = null, malformed = 0, sources = [], perProgram = null }) {
+  const folded = foldDecisions(lines, inventory, { perProgram });
   const earlier = against ? new Set(against.hit ?? []) : null;
   const newArms = earlier ? folded.hit.filter((id) => !earlier.has(id)) : null;
   return {
@@ -253,8 +255,11 @@ const readRows = (dir) => existsSync(join(dir, "programs.jsonl")) ? readFileSync
 /** The log of a grid directory: `<dir>.roles.jsonl` (one file every checker appends to), else `<dir>.roles/` (a file per process). */
 export const gridLog = (dir) => (existsSync(`${dir}.roles.jsonl`) || !existsSync(`${dir}.roles`) ? `${dir}.roles.jsonl` : `${dir}.roles`);
 
-/** Folds grid directories (their `programs.jsonl` and logs, `gridLog` or `logs[i]`) into one report. */
-export function foldGrids(dirs, { logs = [], inventory = armInventory(), against = null } = {}) {
+/**
+ * Folds grid directories (their `programs.jsonl` and logs, `gridLog` or `logs[i]`) into one report. `perProgram` (a Map), when given,
+ * receives each program's decision count, outside the report (a recall grid's programs would bloat it).
+ */
+export function foldGrids(dirs, { logs = [], inventory = armInventory(), against = null, perProgram = null } = {}) {
   const rows = [];
   const counter = { malformed: 0 };
   const sources = dirs.map((dir, index) => {
@@ -272,7 +277,7 @@ export function foldGrids(dirs, { logs = [], inventory = armInventory(), against
       }
     }
   }
-  const report = foldRoles({ lines: lines(), rows, inventory, against, malformed: 0, sources });
+  const report = foldRoles({ lines: lines(), rows, inventory, against, malformed: 0, sources, perProgram });
   report.malformed = counter.malformed;
   return report;
 }
