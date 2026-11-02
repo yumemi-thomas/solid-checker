@@ -42,8 +42,14 @@ export function parseArgs(argv) {
   return options;
 }
 
-/** `text` with every `<root>/slot-<n>` spelled `<slots>/slot-*`: the one difference two runs of one program in two slots may have. */
-export const normalizeSlots = (text, root) => text.split(`${root}/slot-`).map((part, index) => (index ? part.replace(/^\d+/, "*") : part)).join("<slots>/slot-");
+/**
+ * `text` with every slot number spelled `*`: the one difference two runs of one program in two slots may have. A slot directory is
+ * `<root>/<n>/<program>/` (the executor names it for its program, so the role log keys decisions by program) or, before that,
+ * `<root>/slot-<n>/`; `-run` marks the twin.
+ */
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, (char) => `\\${char}`);
+export const normalizeSlots = (text, root) =>
+  text.replace(new RegExp(`${escapeRegExp(root)}/(slot-)?\\d+(-run)?/`, "g"), (_, prefix = "", run = "") => `<slots>/${prefix}*${run}/`);
 
 const quantile = (values, q) => {
   if (!values.length) return null;
