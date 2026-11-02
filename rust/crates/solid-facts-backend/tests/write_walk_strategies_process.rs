@@ -5,7 +5,8 @@
 //! helper climb, with the role log on), each follows every path as written,
 //! so that build is the reference: on randomized programs of mutually
 //! recursive local functions (random call forms, entries and declaration
-//! orders), the IR built without it must equal it.
+//! orders; ADR 0560: one in six a chain longer than the helper climb's
+//! depth), the IR built without it must equal it.
 //!
 //! ADR 0560: the walks whose answer is path-dependent end at a deterministic
 //! bound ([`solid_reactive_ir::WALK_STEP_BOUND`]) and answer nothing they
@@ -81,20 +82,25 @@ impl Random {
 /// A call of `f{j}` written in another function's body, in one of the forms
 /// the walks treat differently.
 fn call(random: &mut Random, j: usize) -> String {
-    match random.below(11) {
+    match random.below(13) {
         0 => format!("[1].forEach(() => f{j}(n - 1));"),
         1 => format!("untrack(() => f{j}(n - 1));"),
         2 => format!("const g{j} = () => f{j}(n - 1); g{j}();"),
         3 => format!("return void (<div>{{f{j}(n - 1)}}</div>);"),
         4 => format!("[1].forEach(f{j});"),
         5 => format!("hand(f{j});"),
+        // ADR 0560: a call in a function written as a member's value (the
+        // helper climb's unplaced call), and in a named function handed to
+        // an inline carrier (a call with a role of its own).
+        6 => format!("box.m = (k: number) => f{j}(k - 1);"),
+        7 => format!("const c{j} = () => f{j}(n - 1); [1].forEach(c{j});"),
         _ => format!("if (n > {j}) f{j}(n - 1);"),
     }
 }
 
 /// An entry of `f{i}` in the component.
 fn entry(random: &mut Random, i: usize) -> (String, String) {
-    match random.below(11) {
+    match random.below(14) {
         0 => (format!("  f{i}(3);\n"), String::new()),
         1 => (
             format!("  createMemo(() => {{ f{i}(3); return 1; }});\n"),
@@ -117,23 +123,47 @@ fn entry(random: &mut Random, i: usize) -> (String, String) {
             format!(" onClick={{() => [1].forEach(f{i})}}"),
         ),
         8 => (format!("  hand(f{i});\n"), String::new()),
+        // A named function handed to an inline carrier calls it: in an owned
+        // scope that call rejects a helper's write (the climb's rejection).
+        9 => (
+            format!("  const e{i} = () => f{i}(3); [1].forEach(e{i});\n"),
+            String::new(),
+        ),
+        10 => (
+            String::new(),
+            format!(" onClick={{() => {{ const e = () => f{i}(3); [1].forEach(e); }}}}"),
+        ),
+        // The function handed by name as an effect's apply: a position of
+        // its own, which with another entry is a mix of roles.
+        11 => (format!("  createEffect(() => r(), f{i});\n"), String::new()),
         _ => (String::new(), String::new()),
     }
 }
 
 fn program(random: &mut Random) -> String {
-    let k = 2 + random.below(4) as usize;
-    let density = 30 + random.below(71);
+    // ADR 0560: one program in six is a chain of 9 to 12 functions, each
+    // calling the one before it, with a few other calls: longer than the
+    // helper climb's depth (8 calls), so a climb can run out of calls.
+    let chain = random.chance(16);
+    let k = if chain {
+        9 + random.below(4) as usize
+    } else {
+        2 + random.below(4) as usize
+    };
+    let density = if chain { 5 } else { 30 + random.below(71) };
     let signal_at = random.below(k as u64 + 1) as usize;
-    let mut body = String::new();
+    let mut body = String::from("  const box = { m: (k: number): void => {} };\n");
     let mut module = String::new();
     for i in 1..=k {
         if i - 1 == signal_at {
             body.push_str("  const [r, set] = createSignal(0);\n");
         }
         let mut statements = Vec::new();
-        if random.chance(80) {
+        if random.chance(80) || (chain && i == 1) {
             statements.push(format!("set({i});"));
+        }
+        if chain && i > 1 {
+            statements.push(format!("if (n > 0) f{}(n - 1);", i - 1));
         }
         for j in 1..=k {
             if j != i && random.chance(density) {
@@ -153,10 +183,17 @@ fn program(random: &mut Random) -> String {
     }
     let mut handler = String::new();
     for i in 1..=k {
-        let (statement, attribute) = entry(random, i);
-        body.push_str(&statement);
-        if handler.is_empty() {
-            handler = attribute;
+        // A chain is entered at its last function, and rarely elsewhere.
+        if chain && i < k && !random.chance(10) {
+            continue;
+        }
+        // Some functions are entered twice.
+        for _ in 0..(1 + usize::from(random.chance(30))) {
+            let (statement, attribute) = entry(random, i);
+            body.push_str(&statement);
+            if handler.is_empty() {
+                handler = attribute;
+            }
         }
     }
     if random.chance(20) {
@@ -261,6 +298,98 @@ fn every_path_and_the_folds_build_the_same_program() {
     }
     // The premise: the programs hold writes for the walks to place.
     assert!(writes > PROGRAMS as usize, "{writes} writes");
+}
+
+/// ADR 0560: the helper climb answers none at once where no call it reaches
+/// rejects, none runs out of calls and none is unplaced (ADR 0546). Dropping
+/// the last condition answers the same: a call the climb reaches whose own
+/// answer is unplaced is written in a function stored as a member's value
+/// (`handed_tail`'s escape), which no call site or position places, and the
+/// write walk reaches it through the same call sites, so the write's own
+/// role is already `Unknown` and the climb's `Unknown` changes nothing. These
+/// programs pin that premise: each write must stay `Unknown`.
+const UNPLACED_CLIMB_CALLS: [&str; 3] = [
+    "  function f1(n: number): void { set(n); }\n  box.m = (k: number) => f1(k - 1);\n  createEffect(() => r(), f1);\n",
+    "  function f1(n: number): void { set(n); }\n  function f2(n: number): void { f1(n); }\n  box.m = (k: number) => f2(k - 1);\n  createEffect(() => r(), f2);\n",
+    "  const f1 = (n: number): void => { set(n); };\n  const f2 = (n: number): void => { f1(n); };\n  box.m = function (k: number) { f2(k - 1); };\n",
+];
+
+#[test]
+fn an_unplaced_call_the_climb_reaches_leaves_the_write_unplaced() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let _switches = SWITCHES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = env::temp_dir()
+        .join("sc-scratch.noindex")
+        .join(format!("unplaced-climb-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _scratch = Scratch(root.clone());
+    fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+    fs::write(root.join("tsconfig.json"), TSCONFIG).unwrap();
+    let program = |functions: &str| {
+        format!(
+            "import {{ createEffect, createSignal }} from \"solid-js\";\n\nexport function App() {{\n  const [r, set] = createSignal(0);\n  const box = {{ m: (k: number): void => {{}} }};\n{functions}  return <button onClick={{() => f1(3)}}>{{r()}}</button>;\n}}\n"
+        )
+    };
+    let first = program(UNPLACED_CLIMB_CALLS[0]);
+    fs::write(root.join("App.tsx"), &first).unwrap();
+    let root = root.canonicalize().unwrap();
+    let app = root.join("App.tsx");
+    let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let typefacts = PathBuf::from(typefacts)
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let solid_v2 = dialect::by_id("solid-v2").unwrap();
+    let mut session = NativeIncrementalSession::open(
+        solid_v2,
+        project_id,
+        vec![SourceFile {
+            path: app.to_string_lossy().into_owned(),
+            source: first.into(),
+            compiler_options: CompilerOptions::default(),
+        }],
+        typescript,
+    )
+    .unwrap();
+    for (index, functions) in UNPLACED_CLIMB_CALLS.iter().enumerate() {
+        let source = program(functions);
+        fs::write(&app, &source).unwrap();
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: app.to_string_lossy().into_owned(),
+                    version: index as u64 + 1,
+                    source: Some(source.clone()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let (built, _) = solid_reactive_ir::build_with_analysis_inputs_measured(
+            &facts,
+            solid_v2.vocabulary,
+            AnalysisInputs::empty(),
+            &RuleOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(built.writes.len(), 1, "{source}");
+        assert_eq!(
+            built.writes[0].execution,
+            ExecutionRole::Unknown,
+            "the write is placed though a call its climb reaches is not:\n{source}"
+        );
+    }
+    eprintln!(
+        "unplaced climb calls: {} programs",
+        UNPLACED_CLIMB_CALLS.len()
+    );
 }
 
 /// ADR 0560's bounded shapes, built with the bound lowered for this process
