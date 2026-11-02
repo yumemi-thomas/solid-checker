@@ -1564,6 +1564,10 @@ pub struct BuildTimings {
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
     pub reachability_recomputed_files: u64,
+    /// The reachability count's work when its graph was assembled: function
+    /// visits plus edges followed ([`reachability`]). Zero when the stage
+    /// was reused. Deterministic, so the complexity ladder gates on it.
+    pub reachability_visits: u64,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
     pub owner_reused_files: u64,

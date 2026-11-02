@@ -624,7 +624,7 @@ pub(super) fn reachability_stage(
     let facts = inputs.facts;
     let Some(cache) = cache else {
         let substage_started = std::time::Instant::now();
-        let calls = reachable_call_multiplicity(
+        let (calls, visits) = reachable_call_multiplicity(
             facts,
             inputs.indexes,
             inputs.entities,
@@ -632,6 +632,7 @@ pub(super) fn reachability_stage(
             inputs.lookup,
         );
         build_timings.reachability = substage_started.elapsed();
+        build_timings.reachability_visits = visits;
         return Some(calls);
     };
     let can_reuse = inputs.typescript_unchanged
@@ -670,7 +671,7 @@ pub(super) fn reachability_stage(
             multiplicity_by_path: HashMap::default(),
             function_symbols: HashSet::default(),
         });
-        let (reused_files, recomputed_files) = reachable_call_multiplicity_incremental(
+        let (reused_files, recomputed_files, visits) = reachable_call_multiplicity_incremental(
             inputs,
             ReachabilityState {
                 files: &mut cached.files,
@@ -682,6 +683,7 @@ pub(super) fn reachability_stage(
         build_timings.reachability = substage_started.elapsed();
         build_timings.reachability_reused_files = reused_files;
         build_timings.reachability_recomputed_files = recomputed_files;
+        build_timings.reachability_visits = visits;
         cached.inputs = facts
             .files
             .iter()
@@ -696,10 +698,12 @@ pub(super) fn reachability_stage(
     None
 }
 
+/// Returns the reused and recomputed file counts and the count's work
+/// ([`crate::BuildTimings::reachability_visits`]).
 pub(super) fn reachable_call_multiplicity_incremental(
     inputs: ReachabilityInputs<'_>,
     state: ReachabilityState<'_>,
-) -> (u64, u64) {
+) -> (u64, u64, u64) {
     let ReachabilityInputs {
         facts,
         indexes,
@@ -817,7 +821,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
             }
         }
         if topology_unchanged {
-            return (reused_files, recomputed_files);
+            return (reused_files, recomputed_files, 0);
         }
     }
 
@@ -891,8 +895,15 @@ pub(super) fn reachable_call_multiplicity_incremental(
     roots.sort_unstable();
     roots.dedup();
     let mut multiplicity = vec![0_usize; functions.len()];
+    let mut visits = 0_u64;
     for root in roots {
-        accumulate_function(root, &edges, &mut HashSet::default(), &mut multiplicity);
+        accumulate_function(
+            root,
+            &edges,
+            &mut HashSet::default(),
+            &mut multiplicity,
+            &mut visits,
+        );
     }
     multiplicity_by_path.clear();
     let mut offset = 0;
@@ -929,7 +940,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
             }
         }
     }
-    (reused_files, recomputed_files)
+    (reused_files, recomputed_files, visits)
 }
 
 /// Reachability for a build with no cache to answer from.
@@ -952,12 +963,12 @@ pub(super) fn reachable_call_multiplicity<'a>(
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     lookup: &'a SemanticLookup<'a>,
-) -> HashMap<Location, usize> {
+) -> (HashMap<Location, usize>, u64) {
     let mut files = HashMap::default();
     let mut multiplicity_by_path = HashMap::default();
     let mut calls = HashMap::default();
     let mut function_symbols = HashSet::default();
-    reachable_call_multiplicity_incremental(
+    let (_, _, visits) = reachable_call_multiplicity_incremental(
         ReachabilityInputs {
             facts,
             indexes,
@@ -974,7 +985,7 @@ pub(super) fn reachable_call_multiplicity<'a>(
             function_symbols: &mut function_symbols,
         },
     );
-    calls
+    (calls, visits)
 }
 
 fn accumulate_function(
@@ -982,13 +993,15 @@ fn accumulate_function(
     edges: &[Vec<usize>],
     visiting: &mut HashSet<usize>,
     multiplicity: &mut [usize],
+    visits: &mut u64,
 ) {
+    *visits += 1;
     if !visiting.insert(function) {
         return;
     }
     multiplicity[function] += 1;
     for target in &edges[function] {
-        accumulate_function(*target, edges, visiting, multiplicity);
+        accumulate_function(*target, edges, visiting, multiplicity, visits);
     }
     visiting.remove(&function);
 }

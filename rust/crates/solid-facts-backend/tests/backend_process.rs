@@ -16,6 +16,8 @@ mod bookkeeping_process;
 mod callback_props_reads_process;
 #[path = "cli_process.rs"]
 mod cli_process;
+#[path = "complexity_ladder_process.rs"]
+mod complexity_ladder_process;
 #[path = "cross_file_callbacks_process.rs"]
 mod cross_file_callbacks_process;
 #[path = "cross_file_digest_process.rs"]
