@@ -11,6 +11,13 @@
 //! whole session; changed file contents become incremental overlay updates.
 //! The response body is byte-identical to one-shot output.
 //!
+//! A `--feedback-facts` check is served only when `SOLID_CHECKER_DAEMON`
+//! asks for the daemon explicitly, by a daemon of its own (ADR 0543): the
+//! fuzzer's warm checker, one daemon per executor slot. A directory whose
+//! stamp moved over the entries it held (a file created and removed again)
+//! is not a rebuild. `--stop-daemon` ends a daemon once it has answered the
+//! requests it accepted.
+//!
 //! A check whose effective `--dependency-source` selection is nonempty is not
 //! served from here (ADR 0311): the executable runs the one-shot path, which
 //! opens a new original program for preparation and a new analyzed program, so
@@ -75,6 +82,15 @@ struct CheckRequest {
     /// report, narrowed when it is sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     only_file: Option<String>,
+    /// `--feedback-facts` (ADR 0543): the answer carries the development
+    /// feedback models. A daemon serves one mode, the one it was started
+    /// for; a request for the other is refused.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    feedback_facts: bool,
+    /// `--stop-daemon` (ADR 0543): end the daemon once every request it
+    /// accepted before this one is answered. Nothing is analyzed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    stop: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -178,6 +194,17 @@ pub fn enabled() -> bool {
     )
 }
 
+/// [`enabled`] for this request. A `--feedback-facts` check is retained only
+/// when `SOLID_CHECKER_DAEMON` asks for the daemon explicitly (ADR 0543):
+/// the release default leaves `feedback run` one-shot, as it was, until the
+/// fuzzer's identity proof makes the retained answer the default.
+pub fn enabled_for(request: &Request) -> bool {
+    if request.feedback_facts {
+        return enabled_from(std::env::var_os("SOLID_CHECKER_DAEMON").as_deref(), false);
+    }
+    enabled()
+}
+
 fn enabled_from(setting: Option<&OsStr>, production_default: bool) -> bool {
     let Some(setting) = setting else {
         return production_default;
@@ -213,7 +240,6 @@ fn carried(request: &Request) -> bool {
         && Path::new(&request.project_id).is_absolute()
         // ADR 0295's Window realm is not part of the retained identity.
         && !request.window_realm
-        && !request.feedback_facts
         && super::producer_arguments(&request.typefacts_args).is_empty()
 }
 
@@ -349,17 +375,21 @@ fn socket_path(
         dialect_id,
         implementation,
         None,
+        false,
     )
 }
 
 /// [`socket_path`] for a daemon that also serves one [`dependency_domain`]:
-/// a different selection or host is a different daemon.
+/// a different selection or host is a different daemon. So is the
+/// `--feedback-facts` mode (ADR 0543): its answers carry what the ordinary
+/// mode's do not, and each mode keeps its own retained state.
 fn socket_path_in_domain(
     project_id: &str,
     typefacts_executable: &str,
     dialect_id: &str,
     implementation: &str,
     domain: Option<&str>,
+    feedback_facts: bool,
 ) -> PathBuf {
     let mut identity = Sha256::new();
     identity.update(implementation.as_bytes());
@@ -382,6 +412,10 @@ fn socket_path_in_domain(
         identity.update(b"dependency-sources");
         identity.update([0]);
         identity.update(domain.as_bytes());
+    }
+    if feedback_facts {
+        identity.update([0]);
+        identity.update(b"feedback-facts");
     }
     let digest = identity.finalize();
     let mut name = String::from("solid-checker-");
@@ -739,7 +773,7 @@ impl OriginalProgram {
 /// The filesystem observations a retained program is reused under.
 struct Tracking {
     fingerprints: BTreeMap<String, FileFingerprint>,
-    dirs: BTreeMap<PathBuf, Option<FileStamp>>,
+    dirs: BTreeMap<PathBuf, DirectoryWitness>,
     /// The file holding the program's configuration: the project's tsconfig,
     /// or the scratch file a dependency-source program is opened from.
     config: PathBuf,
@@ -757,9 +791,9 @@ impl Tracking {
         let extended =
             solid_facts_backend::tsconfig_extends_witness(config).map(|(_, witness)| witness);
         let mut fingerprints = BTreeMap::new();
-        let mut dirs = BTreeMap::new();
+        let mut dirs = BTreeMap::<PathBuf, ()>::new();
         if let Some(parent) = project.parent() {
-            dirs.insert(parent.to_path_buf(), directory_stamp(parent));
+            dirs.insert(parent.to_path_buf(), ());
         }
         for source in sources {
             fingerprints.insert(
@@ -780,9 +814,15 @@ impl Tracking {
                 if dirs.contains_key(directory) {
                     break;
                 }
-                dirs.insert(directory.to_path_buf(), directory_stamp(directory));
+                dirs.insert(directory.to_path_buf(), ());
             }
         }
+        // Read once every source is fingerprinted: an entry that is a
+        // tracked file is recognized by the identity its fingerprint holds.
+        let tracked = tracked_files(&fingerprints, &tsconfig);
+        let paths = dirs.keys().cloned().collect::<Vec<_>>();
+        let witnesses = parallel_map(&paths, |dir| DirectoryWitness::of(dir, &tracked));
+        let dirs = paths.into_iter().zip(witnesses).collect();
         Ok(Self {
             fingerprints,
             dirs,
@@ -816,6 +856,95 @@ impl FileStamp {
             changed_nanoseconds: metadata.ctime_nsec(),
         }
     }
+}
+
+/// What a retained program reads of a directory: its stamp, and the entries
+/// it holds (ADR 0543). A moved stamp alone is not a change: a file created
+/// and removed again (the fuzzer's type check leaves and removes a
+/// `tsconfig.tsbuildinfo` in its slot between two checks) moves it and
+/// leaves every entry as it was. The entries are each one's name, type and
+/// inode, and for an entry that is not a tracked file its own stamp too; a
+/// tracked file's bytes are its fingerprint's to check.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DirectoryWitness {
+    stamp: Option<FileStamp>,
+    /// `None` when the directory cannot be listed: a moved stamp then
+    /// rebuilds, as any moved stamp did before.
+    entries: Option<Vec<DirectoryEntry>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DirectoryEntry {
+    name: std::ffi::OsString,
+    kind: EntryKind,
+    inode: u64,
+    /// `None` for a tracked file.
+    stamp: Option<FileStamp>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EntryKind {
+    File,
+    Directory,
+    Link,
+    Other,
+}
+
+/// The `(device, inode)` of every file a retained program fingerprints.
+fn tracked_files(
+    fingerprints: &BTreeMap<String, FileFingerprint>,
+    tsconfig: &FileFingerprint,
+) -> HashSet<(u64, u64)> {
+    fingerprints
+        .values()
+        .chain(std::iter::once(tsconfig))
+        .map(|fingerprint| (fingerprint.stamp.device, fingerprint.stamp.inode))
+        .collect()
+}
+
+impl DirectoryWitness {
+    fn of(path: &Path, tracked: &HashSet<(u64, u64)>) -> Self {
+        let stamp = directory_stamp(path);
+        let entries = stamp.and_then(|stamp| directory_entries(path, stamp.device, tracked));
+        Self { stamp, entries }
+    }
+}
+
+fn directory_entries(
+    path: &Path,
+    device: u64,
+    tracked: &HashSet<(u64, u64)>,
+) -> Option<Vec<DirectoryEntry>> {
+    use std::os::unix::fs::DirEntryExt;
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(path).ok()? {
+        let entry = entry.ok()?;
+        let file_type = entry.file_type().ok()?;
+        let kind = if file_type.is_symlink() {
+            EntryKind::Link
+        } else if file_type.is_dir() {
+            EntryKind::Directory
+        } else if file_type.is_file() {
+            EntryKind::File
+        } else {
+            EntryKind::Other
+        };
+        let inode = entry.ino();
+        let stamp = if kind == EntryKind::File && tracked.contains(&(device, inode)) {
+            None
+        } else {
+            // `DirEntry::metadata` does not follow a symlink.
+            Some(FileStamp::from_metadata(&entry.metadata().ok()?))
+        };
+        entries.push(DirectoryEntry {
+            name: entry.file_name(),
+            kind,
+            inode,
+            stamp,
+        });
+    }
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    Some(entries)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -868,14 +997,25 @@ fn resync_tracked(
     }
     // The stamps are independent filesystem reads, a thousand or more for a
     // large project: read on several workers, then decide in order.
-    let dirs = tracking.dirs.iter().collect::<Vec<_>>();
-    let stamps = parallel_map(&dirs, |(dir, _)| directory_stamp(dir));
-    if dirs
+    let dirs = tracking
+        .dirs
         .iter()
-        .zip(&stamps)
-        .any(|((_, recorded), now)| now != *recorded)
-    {
-        return Ok(Sync::Rebuild);
+        .map(|(dir, witness)| (dir.clone(), witness.clone()))
+        .collect::<Vec<_>>();
+    let stamps = parallel_map(&dirs, |(dir, _)| directory_stamp(dir));
+    let tracked = tracked_files(&tracking.fingerprints, &tracking.tsconfig);
+    for ((dir, recorded), stamp) in dirs.into_iter().zip(stamps) {
+        if stamp == recorded.stamp {
+            continue;
+        }
+        // A moved stamp over the entries recorded is a file created and
+        // removed again: nothing a fresh program would hold differently.
+        // Any other move rebuilds.
+        let now = DirectoryWitness::of(&dir, &tracked);
+        if now.stamp != stamp || recorded.entries.is_none() || now.entries != recorded.entries {
+            return Ok(Sync::Rebuild);
+        }
+        tracking.dirs.insert(dir, now);
     }
     let mut changes = Vec::new();
     let paths = tracking.fingerprints.keys().cloned().collect::<Vec<_>>();
@@ -1353,6 +1493,9 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 .into(),
         );
     }
+    // Nothing of the client's parent stays open in a process that outlives
+    // the client (ADR 0543).
+    crate::unsafe_boundary::close_inherited_descriptors();
     let implementation = implementation_identity()?;
     let mut request = request.clone();
     request.dependency_sources = normalized_selection(&request.dependency_sources);
@@ -1363,16 +1506,20 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
         resolve_dialect(request)?.id,
         implementation,
         dependency_domain(request).as_deref(),
+        request.feedback_facts,
     );
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
     }
     let _ = fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket)?;
+    // Beside the socket, for a `--stop-daemon` that this daemon does not
+    // answer in time (ADR 0543).
+    let _ = fs::write(pid_path(&socket), std::process::id().to_string());
     let mut state = match State::open(request) {
         Ok(state) => Some(state),
         Err(error) => {
-            let _ = fs::remove_file(&socket);
+            remove_endpoint(&socket);
             return Err(error);
         }
     };
@@ -1408,7 +1555,7 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                     }
                 });
                 if idle_for >= idle {
-                    let _ = fs::remove_file(&watchdog_socket);
+                    remove_endpoint(&watchdog_socket);
                     remove_owned_program();
                     std::process::exit(0);
                 }
@@ -1429,7 +1576,7 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 if watchdog_check.relieve_memory() {
                     continue;
                 }
-                let _ = fs::remove_file(&watchdog_socket);
+                remove_endpoint(&watchdog_socket);
                 remove_owned_program();
                 std::process::exit(0);
             }
@@ -1451,8 +1598,20 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                     }
                     own_program(None);
                 }
-                if let Err(error) = handle(&mut state, request, stream, &idle_check, recovered) {
-                    eprintln!("solid-checker daemon: {error}");
+                match handle(&mut state, request, stream, &idle_check, recovered) {
+                    // Every request accepted before the stop is answered
+                    // (one at a time, in order): end now, as the idle limit
+                    // does.
+                    Ok(Handled::Stop(stream)) => {
+                        remove_endpoint(&socket);
+                        remove_owned_program();
+                        // Closed last: the client returns once the socket
+                        // is gone.
+                        drop(stream);
+                        std::process::exit(0);
+                    }
+                    Ok(Handled::Answered) => {}
+                    Err(error) => eprintln!("solid-checker daemon: {error}"),
                 }
                 idle_check.end_request();
                 if let Ok(mut activity) = activity.lock() {
@@ -1461,12 +1620,35 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 }
             }
             Err(error) => {
-                let _ = fs::remove_file(&socket);
+                remove_endpoint(&socket);
                 remove_owned_program();
                 return Err(error.into());
             }
         }
     }
+}
+
+/// The file holding the process id of the daemon listening on `socket`.
+fn pid_path(socket: &Path) -> PathBuf {
+    let mut path = socket.as_os_str().to_owned();
+    path.push(".pid");
+    PathBuf::from(path)
+}
+
+/// Removes the socket and its pid file: no client reaches this daemon again.
+fn remove_endpoint(socket: &Path) {
+    let _ = fs::remove_file(socket);
+    let _ = fs::remove_file(pid_path(socket));
+}
+
+/// How long `--stop-daemon` waits for the daemon to answer what it accepted
+/// before ending it by its pid: `SOLID_CHECKER_DAEMON_STOP_SECS`, default 60.
+fn stop_limit() -> Duration {
+    let seconds = std::env::var("SOLID_CHECKER_DAEMON_STOP_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(60);
+    Duration::from_secs(seconds.max(1))
 }
 
 /// What the idle watchdog reads: when the last request ended, and whether
@@ -1476,13 +1658,20 @@ struct Activity {
     serving: bool,
 }
 
+/// What [`handle`] did with one connection.
+enum Handled {
+    Answered,
+    /// A `stop` request, acknowledged on this connection: the daemon ends.
+    Stop(UnixStream),
+}
+
 fn handle(
     state: &mut Option<State>,
     request: &Request,
     stream: UnixStream,
     idle_check: &idle_shadow::IdleShadow,
     recovered: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Handled, Box<dyn Error>> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -1490,23 +1679,46 @@ fn handle(
     let mut check: CheckRequest = serde_json::from_str(&line)?;
     normalize_enablement(&mut check);
     let mut stream = reader.into_inner();
+    let refuse = |stream: &mut UnixStream, message: &str| {
+        respond_error(stream, message).map(|()| Handled::Answered)
+    };
     if verify_implementation(implementation_identity()?, &check.implementation).is_err() {
-        return respond_error(
+        return refuse(
             &mut stream,
             "daemon checker implementation identity mismatch",
         );
     }
     if check.project_id != request.project_id {
-        return respond_error(&mut stream, "daemon serves a different project");
+        return refuse(&mut stream, "daemon serves a different project");
+    }
+    if check.stop {
+        // Acknowledged before the daemon ends: the client then knows every
+        // earlier request was answered and no later one will be.
+        respond_stopped(&mut stream)?;
+        return Ok(Handled::Stop(stream));
     }
     if check.dependency_sources != request.dependency_sources {
-        return respond_error(
+        return refuse(
             &mut stream,
             "daemon serves a different dependency selection",
         );
     }
     if !request.dependency_sources.is_empty() && check.runtime != request.runtime {
-        return respond_error(&mut stream, "daemon serves a different runtime host");
+        return refuse(&mut stream, "daemon serves a different runtime host");
+    }
+    // The socket already separates the modes; this keeps a request that
+    // reached the other mode's daemon from being answered in the wrong one.
+    if check.feedback_facts != request.feedback_facts {
+        return refuse(&mut stream, "daemon serves a different feedback-facts mode");
+    }
+    #[cfg(debug_assertions)]
+    if let Some(delay) = std::env::var("SOLID_CHECKER_DAEMON_TEST_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        // The test hook: an answer slow enough for a stop to arrive behind
+        // it and find it still working.
+        std::thread::sleep(Duration::from_millis(delay));
     }
     let outcome = answer_retained(state, request, &check, idle_check);
     match outcome {
@@ -1553,7 +1765,8 @@ fn handle(
             if materialized {
                 idle_memory::reclaim_idle_pages();
             }
-            Ok(written?)
+            written?;
+            Ok(Handled::Answered)
         }
         Err(error) => {
             let message = error.to_string();
@@ -1571,6 +1784,25 @@ fn normalize_enablement(check: &mut CheckRequest) {
     check.host_suppressions.sort();
     check.host_suppressions.dedup();
     check.dependency_sources = normalized_selection(&check.dependency_sources);
+}
+
+fn respond_stopped(stream: &mut UnixStream) -> Result<(), Box<dyn Error>> {
+    let header = serde_json::to_vec(&CheckHeader {
+        implementation: implementation_identity()?.to_owned(),
+        ok: true,
+        status: "stopped".into(),
+        error: String::new(),
+        cache_hit: false,
+        generation: 0,
+        analysis_ns: 0,
+        response_bytes: 0,
+        notice: None,
+        recovered: false,
+    })?;
+    stream.write_all(&header)?;
+    stream.write_all(b"\n")?;
+    stream.flush()?;
+    Ok(())
 }
 
 fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn Error>> {
@@ -1794,7 +2026,7 @@ fn answer_with(
                 presets: &check.presets,
                 rules: &check.enable_rules,
                 runtime: check.runtime.clone(),
-                feedback_facts: false,
+                feedback_facts: check.feedback_facts,
                 host_suppressions: &check.host_suppressions,
                 default_program_boundary: None,
             },
@@ -2027,7 +2259,7 @@ fn answer_with(
                 presets: &check.presets,
                 rules: &check.enable_rules,
                 runtime: check.runtime.clone(),
-                feedback_facts: false,
+                feedback_facts: check.feedback_facts,
                 host_suppressions: &check.host_suppressions,
                 default_program_boundary: Some(default_boundary.boundary),
             },
@@ -2060,6 +2292,7 @@ fn answer_with(
             enable_rules: check.enable_rules.clone(),
             host_suppressions: check.host_suppressions.clone(),
             runtime: check.runtime.clone(),
+            feedback_facts: check.feedback_facts,
             modules,
             router_roots,
             status: Arc::clone(&status),
@@ -2104,6 +2337,7 @@ fn cached_answer(
         || cached.enable_rules != check.enable_rules
         || cached.host_suppressions != check.host_suppressions
         || cached.runtime != check.runtime
+        || cached.feedback_facts != check.feedback_facts
         || !inference_inputs_current(&cached.inference_inputs)
     {
         return Ok(None);
@@ -2121,6 +2355,7 @@ fn cached_answer(
         &check.enable_rules,
         &check.host_suppressions,
         &check.runtime,
+        check.feedback_facts,
     ))
 }
 
@@ -2297,6 +2532,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         dialect.id,
         implementation,
         dependency_domain(request).as_deref(),
+        request.feedback_facts,
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
@@ -2314,6 +2550,8 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
             .only_file
             .clone()
             .filter(|_| request.format == "json"),
+        feedback_facts: request.feedback_facts,
+        stop: false,
     })?;
     let mut stream = stream;
     stream.write_all(&payload)?;
@@ -2391,6 +2629,81 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     }
     report_timings(&header, started.elapsed(), received);
     Ok(code)
+}
+
+/// `--stop-daemon` (ADR 0543): ends the daemon `check` would ask for this
+/// request, once it has answered every request it accepted before this one.
+/// No live daemon is not an error: there is nothing to stop. The fuzzer's
+/// executor stops each slot's daemon after a check it abandoned, so the next
+/// program on the slot never meets a daemon still working on the last one,
+/// and at its own exit.
+pub fn stop(request: &Request) -> Result<i32, Box<dyn Error>> {
+    let request = &absolute_paths(request)?;
+    let dialect = resolve_dialect(request)?;
+    let implementation = implementation_identity()?;
+    let socket = socket_path_in_domain(
+        &request.project_id,
+        &request.typefacts_executable,
+        dialect.id,
+        implementation,
+        dependency_domain(request).as_deref(),
+        request.feedback_facts,
+    );
+    let Ok(mut stream) = UnixStream::connect(&socket) else {
+        return Ok(0);
+    };
+    // Read now: the daemon that accepted this connection wrote it after it
+    // bound the socket, and removes it only as it ends.
+    let pid = fs::read_to_string(pid_path(&socket))
+        .ok()
+        .and_then(|text| text.trim().parse::<u32>().ok());
+    let payload = serde_json::to_vec(&CheckRequest {
+        implementation: implementation.to_owned(),
+        project_id: request.project_id.clone(),
+        presets: Vec::new(),
+        enable_rules: Vec::new(),
+        host_suppressions: Vec::new(),
+        runtime: RuntimeEnvironment::default(),
+        dependency_sources: normalized_selection(&request.dependency_sources),
+        only_file: None,
+        feedback_facts: request.feedback_facts,
+        stop: true,
+    })?;
+    stream.write_all(&payload)?;
+    stream.write_all(b"\n")?;
+    stream.flush()?;
+    stream.set_read_timeout(Some(stop_limit()))?;
+    let mut reader = BufReader::new(stream);
+    let mut header_line = String::new();
+    if let Err(error) = reader.read_line(&mut header_line) {
+        // A request it accepted earlier does not end: a daemon that cannot
+        // drain must not hold the caller (a fuzzer slot) either.
+        let Some(pid) = pid.filter(|_| {
+            matches!(
+                error.kind(),
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+            )
+        }) else {
+            return Err(error.into());
+        };
+        let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+        remove_endpoint(&socket);
+        eprintln!(
+            "solid-checker: the daemon (pid {pid}) did not finish its accepted requests within {} s; it was ended",
+            stop_limit().as_secs()
+        );
+        return Ok(0);
+    }
+    let header: CheckHeader = serde_json::from_str(&header_line)?;
+    verify_implementation(implementation, &header.implementation)?;
+    if !header.ok {
+        return Err(header.error.into());
+    }
+    // The daemon removes its socket and exits after the acknowledgement:
+    // read to its end of the connection, so the caller returns after it.
+    let mut rest = Vec::new();
+    let _ = reader.read_to_end(&mut rest);
+    Ok(0)
 }
 
 /// `request` with every path the daemon reads for it made absolute against
@@ -2541,6 +2854,9 @@ fn spawn_and_connect(
     // the client never connects to — so the value `check` resolved once is
     // passed in and forwarded, never re-derived.
     command.arg("--dialect").arg(dialect.id);
+    if request.feedback_facts {
+        command.arg("--feedback-facts");
+    }
     // ADR 0296: a dependency-source daemon prepares its program for exactly
     // this selection and host, which therefore cross verbatim.
     if !request.dependency_sources.is_empty() {

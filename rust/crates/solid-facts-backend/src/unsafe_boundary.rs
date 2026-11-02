@@ -114,3 +114,42 @@ pub(crate) fn loaded_executable_load_commands() -> Result<(&'static [u8], u32), 
     };
     Ok((commands, header.commands))
 }
+
+/// Closes every descriptor above standard error this process inherited.
+///
+/// A retained daemon outlives the client that started it, and a client
+/// started by a multithreaded parent can inherit descriptors the parent was
+/// still marking close-on-exec (on macOS a pipe is created and marked in two
+/// steps). The daemon would then hold another of the parent's children's
+/// pipes open for as long as it lives, and that child's reader would never
+/// see its end (ADR 0543). Called first thing, before the daemon opens
+/// anything of its own.
+#[cfg(unix)]
+pub(crate) fn close_inherited_descriptors() {
+    unsafe extern "C" {
+        fn close(descriptor: i32) -> i32;
+    }
+    let listing = if cfg!(target_os = "linux") {
+        "/proc/self/fd"
+    } else {
+        "/dev/fd"
+    };
+    // Collected first: the listing holds a descriptor of its own while it
+    // is read, closed when it is dropped, before anything is closed here.
+    let descriptors = match std::fs::read_dir(listing) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok()?.file_name().to_str()?.parse::<i32>().ok())
+            .filter(|descriptor| *descriptor > 2)
+            .collect::<Vec<_>>(),
+        Err(_) => return,
+    };
+    for descriptor in descriptors {
+        // SAFETY: closing a descriptor number is sound whatever it names;
+        // one that is no longer open (the listing's own) fails with EBADF.
+        // Nothing in this process holds these: the daemon calls this before
+        // it opens a file, a socket or a thread.
+        unsafe {
+            close(descriptor);
+        }
+    }
+}

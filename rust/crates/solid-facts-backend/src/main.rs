@@ -80,6 +80,10 @@ struct Request {
     help: bool,
     #[serde(default)]
     serve: bool,
+    /// `--stop-daemon` (ADR 0543): end this request's retained daemon once it
+    /// has answered what it accepted before, and analyze nothing.
+    #[serde(default)]
+    stop_daemon: bool,
     #[serde(default)]
     runtime: RuntimeEnvironment,
 }
@@ -184,7 +188,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         if request.serve {
             return daemon::serve(&request);
         }
-        if daemon::enabled() && daemon::eligible(&request) {
+        if request.stop_daemon {
+            return daemon::stop(&request);
+        }
+        if daemon::enabled_for(&request) && daemon::eligible(&request) {
             match daemon::check(&request) {
                 Ok(code) => return Ok(code),
                 Err(error) => {
@@ -194,8 +201,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         }
     }
     #[cfg(not(unix))]
-    if request.serve {
-        return Err("--serve requires a Unix platform".into());
+    if request.serve || request.stop_daemon {
+        return Err("--serve and --stop-daemon require a Unix platform".into());
     }
     run_ordinary_check(&request, dialect, implicit_dependency_sources, started)
 }
@@ -442,6 +449,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut only_file = None;
     let mut help = false;
     let mut serve = false;
+    let mut stop_daemon = false;
     let mut args = arguments.into_iter();
     while let Some(argument) = args.next() {
         if let Some(value) = argument.strip_prefix("--project=") {
@@ -548,6 +556,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 }
             }
             "--serve" => serve = true,
+            "--stop-daemon" => stop_daemon = true,
             // Internal: the whole declared host a dependency-source daemon
             // serves (ADR 0296), as its client stated it.
             "--daemon-runtime" => {
@@ -662,6 +671,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         only_file,
         help,
         serve,
+        stop_daemon,
         // Both spellings, merged. `--conditions` takes a comma-separated list
         // and `--runtime-condition` one name at a time; overwriting here
         // discarded the latter entirely, and `packages/cli/eslint.cjs` emits
@@ -777,6 +787,10 @@ fn print_help() {
            --serve                      Run the retained per-project check daemon (Unix only).\n\
                                         Release checks use it by default; set\n\
                                         SOLID_CHECKER_DAEMON=0 for one-shot analysis.\n\
+                                        A --feedback-facts check uses it only with\n\
+                                        SOLID_CHECKER_DAEMON=1.\n\
+           --stop-daemon                End the daemon these options would use, after it\n\
+                                        answers the checks it has accepted (Unix only).\n\
            -h, --help                   Print help"
     );
 }
