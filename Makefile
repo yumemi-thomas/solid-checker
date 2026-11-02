@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-twins
 
 build: build-rust
 
@@ -209,6 +209,14 @@ fuzz-focus: build-checker-release
 fuzz-smoke: build-checker-release
 	node scripts/fuzz/focus.mjs --smoke \
 	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
+
+# The twin consistency check (scripts/fuzz/twins.mjs): the checker alone on the grids' runtime-identical twins (one program under
+# each in-place layer); exits 1 on a group where one twin is a proven violation the others contradict.
+#   make fuzz-twins CODES=STRICT_READ_UNTRACKED[,...] [FUZZ_TWINS_ARGS="--recall --grids legal --contexts effect-error-arm"]
+fuzz-twins: build-checker-release
+	@test -n "$(CODES)" || { echo "make fuzz-twins CODES=A[,B]: the codes to check"; exit 2; }
+	node scripts/fuzz/twins.mjs --codes "$(CODES)" --out "$${TMPDIR:-/tmp}/solid-checker-fuzz-twins.noindex/$$(date +%s)" \
+	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_TWINS_ARGS)
 
 # The retained IR's safety net (scripts/ir-read-lint.mjs, scripts/ir-edit-fuzz.mjs).
 # The lint ratchets raw cross-file reads against scripts/ir-read-lint.allowlist.json.
