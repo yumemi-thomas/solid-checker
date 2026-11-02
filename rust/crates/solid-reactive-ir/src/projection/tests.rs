@@ -209,6 +209,7 @@ fn catalog_capabilities_gate_whole_program_tables() {
             declaration: location(2),
             execution: ExecutionRole::TrackedJsx,
             context: "App".into(),
+            multiplicity: 1,
         }],
         async_reads: vec![AsyncRead {
             accessor: Arc::from("user()"),
@@ -313,6 +314,7 @@ fn selection_filters_safe_rows_before_the_catalog_seam() {
             declaration: location(2),
             execution: ExecutionRole::EventCallback,
             context: "handler".into(),
+            multiplicity: 1,
         }],
         async_reads: vec![AsyncRead {
             accessor: Arc::from("user()"),
@@ -411,17 +413,20 @@ fn an_unanalyzed_import_is_filed_under_a_coverage_family() {
     assert!(super::coverage_group(FindingSeed::StaticDefect(&unavailable_defect(3))).is_some());
 }
 
-/// A row listed once per reachable path (`for _ in 0..multiplicity`) projects
-/// as it did listed once: the copies are adjacent, so their findings were
-/// adjacent and the final `dedup` dropped them.
+/// A row listed once per reachable path projects as it did listed once: the
+/// copies are adjacent, so their findings were adjacent and the final
+/// `dedup` dropped them. A row held once with its path count
+/// ([`ActionInvocation::multiplicity`]) projects as its copies did, and so
+/// do adjacent rows that differ only in their counts.
 #[test]
 fn a_run_of_equal_rows_projects_as_one_row() {
-    let action = |at: u64| ActionInvocation {
+    let action = |at: u64, multiplicity: u64| ActionInvocation {
         action: "save".into(),
         location: location(at),
         declaration: location(2),
         execution: ExecutionRole::TrackedJsx,
         context: "memo".into(),
+        multiplicity,
     };
     let project = |actions: Vec<ActionInvocation>| {
         project_findings(
@@ -433,7 +438,24 @@ fn a_run_of_equal_rows_projects_as_one_row() {
         )
         .0
     };
-    let repeated = project(vec![action(1), action(1), action(1), action(5), action(1)]);
-    assert_eq!(repeated, project(vec![action(1), action(5), action(1)]));
+    let repeated = project(vec![
+        action(1, 1),
+        action(1, 1),
+        action(1, 1),
+        action(5, 1),
+        action(1, 1),
+    ]);
+    assert_eq!(
+        repeated,
+        project(vec![action(1, 1), action(5, 1), action(1, 1)])
+    );
+    assert_eq!(
+        repeated,
+        project(vec![action(1, 3), action(5, 1), action(1, 1)])
+    );
+    assert_eq!(
+        repeated,
+        project(vec![action(1, 2), action(1, 1), action(5, 1), action(1, 1)])
+    );
     assert_eq!(repeated.len(), 2);
 }

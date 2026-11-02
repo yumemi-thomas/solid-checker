@@ -713,7 +713,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) lookup: &'a SemanticLookup<'facts>,
     pub(crate) entities: &'a EntitySymbols,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
-    pub(crate) reachable_calls: &'a HashMap<Location, usize>,
+    pub(crate) reachable_calls: &'a HashMap<Location, u64>,
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// ADR 0294: typed candidates. A read of one whose implementation is not
     /// visible is an obligation, never a read.
@@ -1077,7 +1077,7 @@ impl LocalAccessContext<'_, '_> {
     pub(crate) fn call_multiplicities(
         &self,
         file: &solid_facts::FileFacts,
-    ) -> Vec<(Location, Option<usize>)> {
+    ) -> Vec<(Location, Option<u64>)> {
         file.ast
             .calls
             .iter()
@@ -2642,7 +2642,7 @@ impl LocalAccessContext<'_, '_> {
         symbol: &str,
         allowed: &[solid_facts::core::Span],
         alias_withheld: bool,
-        multiplicity: usize,
+        multiplicity: u64,
         result: &mut LocalAccessResult,
     ) {
         if let Some((name, declaration, owned_write, source_kind)) = self.setters.get(symbol) {
@@ -2721,7 +2721,7 @@ impl LocalAccessContext<'_, '_> {
                     ExecutionRole::Unknown
                 };
             }
-            // One record per reachable path, shared.
+            // One record standing for every reachable path.
             if multiplicity > 0 {
                 let record = Arc::new(ReactiveWrite {
                     setter: name.to_string().into(),
@@ -2740,10 +2740,9 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                     .into(),
+                    multiplicity,
                 });
-                result
-                    .writes
-                    .extend(std::iter::repeat_n(record, multiplicity));
+                result.writes.push(record);
             }
         }
     }
@@ -2758,7 +2757,7 @@ impl LocalAccessContext<'_, '_> {
         symbol: &str,
         allowed: &[solid_facts::core::Span],
         alias_withheld: bool,
-        multiplicity: usize,
+        multiplicity: u64,
         result: &mut LocalAccessResult,
     ) {
         if let Some((name, declaration)) = self.actions.get(symbol) {
@@ -2792,7 +2791,7 @@ impl LocalAccessContext<'_, '_> {
                     role,
                 )
             };
-            // One record per reachable path, shared.
+            // One record standing for every reachable path.
             if multiplicity > 0 {
                 let record = Arc::new(ActionInvocation {
                     action: name.to_string().into(),
@@ -2808,10 +2807,9 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                     .into(),
+                    multiplicity,
                 });
-                result
-                    .action_invocations
-                    .extend(std::iter::repeat_n(record, multiplicity));
+                result.action_invocations.push(record);
             }
         }
     }

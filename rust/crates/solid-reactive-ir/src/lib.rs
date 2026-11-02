@@ -568,6 +568,22 @@ pub struct ReactiveWrite {
     #[serde(default)]
     pub owned_write: OwnedWriteOption,
     pub context: Arc<str>,
+    /// How many reachable paths to the call this row stands for
+    /// ([`reachability`]). The row is the same on every path, so it is held
+    /// once with its count rather than once per path; expanding each row
+    /// `multiplicity` times gives the per-path table. At least 1; saturates
+    /// at `u64::MAX`.
+    #[serde(default = "one_path", skip_serializing_if = "is_one_path")]
+    pub multiplicity: u64,
+}
+
+fn one_path() -> u64 {
+    1
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_one_path(multiplicity: &u64) -> bool {
+    *multiplicity == 1
 }
 
 /// What a source's options argument proves about `ownedWrite` (ADR 0424),
@@ -598,6 +614,31 @@ impl ReactiveWrite {
     pub fn is_uncertifiable(&self) -> bool {
         self.execution == ExecutionRole::Unknown
     }
+
+    /// Whether `other` is this row on other paths: every field but
+    /// [`Self::multiplicity`] equal.
+    #[must_use]
+    pub fn same_row(&self, other: &Self) -> bool {
+        let Self {
+            setter,
+            operation,
+            source_kind,
+            location,
+            declaration,
+            execution,
+            owned_write,
+            context,
+            multiplicity: _,
+        } = self;
+        *setter == other.setter
+            && *operation == other.operation
+            && *source_kind == other.source_kind
+            && *location == other.location
+            && *declaration == other.declaration
+            && *execution == other.execution
+            && *owned_write == other.owned_write
+            && *context == other.context
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -616,6 +657,13 @@ pub struct ActionInvocation {
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub context: Arc<str>,
+    /// How many reachable paths to the call this row stands for
+    /// ([`reachability`], as [`ReactiveWrite::multiplicity`]). The row is the same on every path, so it is held
+    /// once with its count rather than once per path; expanding each row
+    /// `multiplicity` times gives the per-path table. At least 1; saturates
+    /// at `u64::MAX`.
+    #[serde(default = "one_path", skip_serializing_if = "is_one_path")]
+    pub multiplicity: u64,
 }
 
 impl ActionInvocation {
@@ -624,6 +672,24 @@ impl ActionInvocation {
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
         self.execution == ExecutionRole::Unknown
+    }
+
+    /// [`ReactiveWrite::same_row`].
+    #[must_use]
+    pub fn same_row(&self, other: &Self) -> bool {
+        let Self {
+            action,
+            location,
+            declaration,
+            execution,
+            context,
+            multiplicity: _,
+        } = self;
+        *action == other.action
+            && *location == other.location
+            && *declaration == other.declaration
+            && *execution == other.execution
+            && *context == other.context
     }
 }
 

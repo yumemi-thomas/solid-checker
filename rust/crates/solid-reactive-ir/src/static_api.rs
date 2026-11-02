@@ -58,7 +58,7 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(super) reachable_calls: &'a HashMap<Location, usize>,
+    pub(super) reachable_calls: &'a HashMap<Location, u64>,
     /// No server build of the Solid packages is selected.
     pub(super) client_build: bool,
     /// Which installed `solid-js` each file loads at runtime.
@@ -536,7 +536,7 @@ impl StaticApiContext<'_> {
                         ),
                     );
                     if role.reports_disallowed_write() || role.reports_unplaced() {
-                        // One record per reachable path, the same on each.
+                        // One record standing for every reachable path.
                         if multiplicity > 0 {
                             let write = ReactiveWrite {
                                 setter: format!(
@@ -559,10 +559,9 @@ impl StaticApiContext<'_> {
                                     self.lookup,
                                 )
                                 .into(),
+                                multiplicity,
                             };
-                            result
-                                .writes
-                                .extend(std::iter::repeat_n(write, multiplicity));
+                            result.writes.push(write);
                         }
                     }
                 }
@@ -621,7 +620,7 @@ impl StaticApiContext<'_> {
             if multiplicity == 0 {
                 continue;
             }
-            // One record per reachable path, the same on each: its role is
+            // One record standing for every reachable path: its role is
             // decided once.
             let write = ReactiveWrite {
                 setter: format!("refresh({name})").into(),
@@ -671,10 +670,9 @@ impl StaticApiContext<'_> {
                     self.lookup,
                 )
                 .into(),
+                multiplicity,
             };
-            result
-                .writes
-                .extend(std::iter::repeat_n(write, multiplicity));
+            result.writes.push(write);
         }
         result
     }

@@ -184,7 +184,7 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
-    pub(crate) reachable_calls: &'a HashMap<Location, usize>,
+    pub(crate) reachable_calls: &'a HashMap<Location, u64>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) rule_options: &'a RuleOptions,
     /// The files whose source and TypeFacts rows are the last build's

@@ -654,7 +654,7 @@ pub fn project_findings(
             }),
     );
     findings.extend(
-        distinct_runs(&program.writes)
+        distinct_runs(&program.writes, ReactiveWrite::same_row)
             .filter(|write| write_reported(write, capabilities))
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
@@ -749,7 +749,7 @@ pub fn project_findings(
     }
     if capabilities.actions {
         findings.extend(
-            distinct_runs(&program.actions)
+            distinct_runs(&program.actions, ActionInvocation::same_row)
                 .filter(|action| action_reported(action))
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
@@ -763,17 +763,17 @@ pub fn project_findings(
     finish_findings(findings, total_started, construction_started)
 }
 
-/// `rows` without the rows equal to the one before them. A write or an
-/// action is listed once per reachable path to its call
-/// (`reachability::accumulate_function`), and nested in-place layers reach a
-/// call by millions; the copies are adjacent and equal, so they project to
-/// adjacent equal findings, which [`finish_findings`]'s stable sort keeps
-/// adjacent and its `dedup` drops. Projecting one of them leaves the same
-/// findings.
-fn distinct_runs<T: PartialEq>(rows: &[T]) -> impl Iterator<Item = &T> {
+/// `rows` without the rows that are the one before them on other paths
+/// (`same`, every field but the multiplicity equal). A write or an action
+/// stands for every reachable path to its call
+/// ([`ReactiveWrite::multiplicity`]); held once per path, the copies were
+/// adjacent and equal, projected to adjacent equal findings, and
+/// [`finish_findings`]'s stable sort kept them adjacent and its `dedup`
+/// dropped them. Projecting one row of such a run leaves the same findings.
+fn distinct_runs<T>(rows: &[T], same: fn(&T, &T) -> bool) -> impl Iterator<Item = &T> {
     rows.iter()
         .enumerate()
-        .filter(|(index, row)| *index == 0 || rows[index - 1] != **row)
+        .filter(move |(index, row)| *index == 0 || !same(&rows[index - 1], row))
         .map(|(_, row)| row)
 }
 

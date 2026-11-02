@@ -606,8 +606,8 @@ pub(super) struct ReachabilityInputs<'a> {
 
 pub(super) struct ReachabilityState<'a> {
     pub(super) files: &'a mut HashMap<solid_facts::core::SourcePath, CachedReachabilityFile>,
-    pub(super) multiplicity_by_path: &'a mut HashMap<String, Vec<usize>>,
-    pub(super) calls: &'a mut HashMap<Location, usize>,
+    pub(super) multiplicity_by_path: &'a mut HashMap<String, Vec<u64>>,
+    pub(super) calls: &'a mut HashMap<Location, u64>,
     pub(super) function_symbols: &'a mut HashSet<SymbolId>,
 }
 
@@ -620,7 +620,7 @@ pub(super) fn reachability_stage(
     inputs: ReachabilityInputs<'_>,
     cache: Option<&mut Option<crate::cache::CachedReachability>>,
     build_timings: &mut crate::BuildTimings,
-) -> Option<HashMap<Location, usize>> {
+) -> Option<HashMap<Location, u64>> {
     let facts = inputs.facts;
     let Some(cache) = cache else {
         let substage_started = std::time::Instant::now();
@@ -894,17 +894,8 @@ pub(super) fn reachable_call_multiplicity_incremental(
     }
     roots.sort_unstable();
     roots.dedup();
-    let mut multiplicity = vec![0_usize; functions.len()];
     let mut visits = 0_u64;
-    for root in roots {
-        accumulate_function(
-            root,
-            &edges,
-            &mut HashSet::default(),
-            &mut multiplicity,
-            &mut visits,
-        );
-    }
+    let multiplicity = path_counts(&roots, &edges, &mut visits);
     multiplicity_by_path.clear();
     let mut offset = 0;
     for file in &facts.files {
@@ -963,7 +954,7 @@ pub(super) fn reachable_call_multiplicity<'a>(
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     lookup: &'a SemanticLookup<'a>,
-) -> (HashMap<Location, usize>, u64) {
+) -> (HashMap<Location, u64>, u64) {
     let mut files = HashMap::default();
     let mut multiplicity_by_path = HashMap::default();
     let mut calls = HashMap::default();
@@ -988,20 +979,101 @@ pub(super) fn reachable_call_multiplicity<'a>(
     (calls, visits)
 }
 
-fn accumulate_function(
+/// How many paths reach each function from the (distinct) `roots`: the
+/// paths that never revisit a function, a parallel edge counting as its own
+/// path, and a root counting once for itself besides the paths into it.
+///
+/// On a graph without cycles every path is such a path, and the count is
+/// arithmetic in topological order: a function's count is its own root one
+/// plus, once per edge into it, the count of the edge's source. A self edge
+/// never extends a path (the function is already on it), so it is dropped.
+/// Only the functions some root reaches are ordered: a cycle no root reaches
+/// changes nothing. Where a root reaches a cycle, a path's continuation
+/// depends on the functions already on it, so each path is walked
+/// ([`walk_paths`]). Counts saturate at `u64::MAX`; a count is read as zero
+/// or not (a call runs or not), and saturation never makes it zero.
+fn path_counts(roots: &[usize], edges: &[Vec<usize>], visits: &mut u64) -> Vec<u64> {
+    let mut reached = vec![false; edges.len()];
+    let mut stack = Vec::new();
+    for &root in roots {
+        if !reached[root] {
+            reached[root] = true;
+            stack.push(root);
+        }
+    }
+    let mut incoming = vec![0_usize; edges.len()];
+    let mut reached_count = 0;
+    while let Some(function) = stack.pop() {
+        reached_count += 1;
+        *visits += 1;
+        for &target in &edges[function] {
+            *visits += 1;
+            if target == function {
+                continue;
+            }
+            incoming[target] += 1;
+            if !reached[target] {
+                reached[target] = true;
+                stack.push(target);
+            }
+        }
+    }
+    let mut ready = (0..edges.len())
+        .filter(|&function| reached[function] && incoming[function] == 0)
+        .collect::<Vec<_>>();
+    let mut order = Vec::with_capacity(reached_count);
+    while let Some(function) = ready.pop() {
+        order.push(function);
+        for &target in &edges[function] {
+            if target == function {
+                continue;
+            }
+            incoming[target] -= 1;
+            if incoming[target] == 0 {
+                ready.push(target);
+            }
+        }
+    }
+    if order.len() != reached_count {
+        let mut counts = vec![0_u64; edges.len()];
+        for &root in roots {
+            walk_paths(root, edges, &mut HashSet::default(), &mut counts, visits);
+        }
+        return counts;
+    }
+    let mut counts = vec![0_u64; edges.len()];
+    for &root in roots {
+        counts[root] = counts[root].saturating_add(1);
+    }
+    for function in order {
+        *visits += 1;
+        let count = counts[function];
+        for &target in &edges[function] {
+            *visits += 1;
+            if target != function {
+                counts[target] = counts[target].saturating_add(count);
+            }
+        }
+    }
+    counts
+}
+
+/// [`path_counts`] by walking every path from `function`: counts each
+/// function once per path that reaches it without revisiting one.
+fn walk_paths(
     function: usize,
     edges: &[Vec<usize>],
     visiting: &mut HashSet<usize>,
-    multiplicity: &mut [usize],
+    counts: &mut [u64],
     visits: &mut u64,
 ) {
     *visits += 1;
     if !visiting.insert(function) {
         return;
     }
-    multiplicity[function] += 1;
+    counts[function] = counts[function].saturating_add(1);
     for target in &edges[function] {
-        accumulate_function(*target, edges, visiting, multiplicity, visits);
+        walk_paths(*target, edges, visiting, counts, visits);
     }
     visiting.remove(&function);
 }
@@ -1009,6 +1081,90 @@ fn accumulate_function(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The reference: every path walked from every root.
+    fn walked(roots: &[usize], edges: &[Vec<usize>]) -> Vec<u64> {
+        let mut counts = vec![0; edges.len()];
+        for &root in roots {
+            walk_paths(root, edges, &mut HashSet::default(), &mut counts, &mut 0);
+        }
+        counts
+    }
+
+    /// Small directed multigraphs (self edges, parallel edges, diamonds,
+    /// mutual recursion, roots with incoming edges, cycles no root reaches,
+    /// disconnected functions): the arithmetic count is the walk's.
+    #[test]
+    fn path_counts_are_the_walked_counts_on_small_multigraphs() {
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |bound: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            usize::try_from(state % bound as u64).unwrap()
+        };
+        let (mut acyclic, mut cyclic) = (0, 0);
+        for _ in 0..20_000 {
+            let functions = 1 + next(6);
+            let mut edges = vec![Vec::new(); functions];
+            for _ in 0..next(13) {
+                let from = next(functions);
+                // Mostly forward edges, so most graphs have no cycle.
+                let to = if next(4) == 0 {
+                    next(functions)
+                } else {
+                    from + next(functions - from)
+                };
+                edges[from].push(to);
+            }
+            let mut roots = (0..functions).filter(|_| next(3) == 0).collect::<Vec<_>>();
+            roots.sort_unstable();
+            roots.dedup();
+            let mut visits = 0;
+            let counted = path_counts(&roots, &edges, &mut visits);
+            assert_eq!(counted, walked(&roots, &edges), "{roots:?} {edges:?}");
+            let has_cycle = (0..functions)
+                .any(|function| edges[function].iter().any(|&target| target < function));
+            if has_cycle {
+                cyclic += 1;
+            } else {
+                acyclic += 1;
+            }
+        }
+        assert!(acyclic > 1_000 && cyclic > 1_000, "{acyclic} {cyclic}");
+    }
+
+    /// Nested in-place layers: each layer reached by two edges. The count is
+    /// 2^depth-sized; the work is linear in the graph.
+    #[test]
+    fn layered_paths_are_counted_without_walking_them() {
+        let depth = 40;
+        let layered = |depth: usize| {
+            (0..=depth)
+                .map(|layer| {
+                    if layer < depth {
+                        vec![layer + 1, layer + 1]
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let edges = layered(depth);
+        let mut visits = 0;
+        let counts = path_counts(&[0], &edges, &mut visits);
+        assert_eq!(counts[depth], 1 << depth);
+        assert!(visits <= 6 * (depth as u64 + 1), "{visits}");
+        // Past u64, a count saturates and stays nonzero.
+        let depth = 70;
+        let edges = layered(depth);
+        assert_eq!(path_counts(&[0], &edges, &mut 0)[depth], u64::MAX);
+        // A cycle no root reaches leaves the arithmetic count in place.
+        let edges = vec![vec![1, 1], vec![2, 2], vec![], vec![4], vec![3]];
+        let mut visits = 0;
+        assert_eq!(path_counts(&[0], &edges, &mut visits), [1, 2, 4, 0, 0]);
+        assert_eq!(walked(&[0], &edges), [1, 2, 4, 0, 0]);
+    }
 
     #[test]
     fn effective_reachability_topology_ignores_only_unresolved_symbols() {

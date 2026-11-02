@@ -48,6 +48,18 @@ const TSCONFIG: &str = r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext"
 
 const MAX_DEPTH: usize = 20;
 
+/// The deepest program built for `layer`. Named closures stop at 12: their
+/// write-role queries still cost time exponential in the depth (debug,
+/// whole build: 286 ms at depth 10, 8.1 s at 15, 32 s at 17, 69 s at 20),
+/// though rows and visits stay flat. That is role work this ladder does not
+/// count.
+fn max_depth(layer: Layer) -> usize {
+    match layer {
+        Layer::Closure => 12,
+        _ => MAX_DEPTH,
+    }
+}
+
 /// How a layer wraps what it holds; every one runs its body once, in place.
 #[derive(Clone, Copy, Debug)]
 enum Layer {
@@ -138,32 +150,15 @@ fn within_envelope(series: &[usize], depth: usize) -> bool {
 
 /// The `(layer, host)` series whose rows still grow exponentially. Each must
 /// leave the envelope, so a fix that makes one near-linear fails here until
-/// it is removed. Measured at b38255c8b (every layer kind alike): rows per
-/// host at depths 1-4 are 10, 22, 46, 94 in the body and 25, 55, 115, 235 in
-/// the memo and the handler -- a write or action row per reachable path.
-const KNOWN_EXPONENTIAL_ROWS: &[(&str, char)] = &[
-    ("Iife", 'B'),
-    ("Iife", 'M'),
-    ("Iife", 'H'),
-    ("Closure", 'B'),
-    ("Closure", 'M'),
-    ("Closure", 'H'),
-    ("Helper", 'B'),
-    ("Helper", 'M'),
-    ("Helper", 'H'),
-    ("ModuleHelper", 'B'),
-    ("ModuleHelper", 'M'),
-    ("ModuleHelper", 'H'),
-    ("Carrier", 'B'),
-    ("Carrier", 'M'),
-    ("Carrier", 'H'),
-];
+/// it is removed. Empty since rows carry their path count: at b38255c8b
+/// every series doubled per layer (body 10, 22, 46, 94 rows at depths 1-4;
+/// memo and handler 25, 55, 115, 235).
+const KNOWN_EXPONENTIAL_ROWS: &[(&str, char)] = &[];
 
-/// The layers whose reachability visits still grow exponentially (the walk
-/// enumerates every path). Measured at b38255c8b, depths 1-4: 44, 87, 178,
-/// 365 (IIFE, closure, carrier), 63, 137, 283, 573 (helper), 51, 113, 247,
-/// 525 (module helper).
-const KNOWN_EXPONENTIAL_VISITS: &[&str] = &["Iife", "Closure", "Helper", "ModuleHelper", "Carrier"];
+/// The layers whose reachability visits still grow exponentially. Empty
+/// since the count is arithmetic on the acyclic graph: at b38255c8b the walk
+/// enumerated every path (44, 87, 178, 365 visits at depths 1-4).
+const KNOWN_EXPONENTIAL_VISITS: &[&str] = &[];
 
 #[test]
 fn checker_work_grows_near_linearly_with_nested_layers() {
@@ -210,7 +205,8 @@ fn checker_work_grows_near_linearly_with_nested_layers() {
         let mut visits = Vec::<u64>::new();
         let mut alive = HOSTS.to_vec();
         let mut curve = Vec::new();
-        for depth in 1..=MAX_DEPTH {
+        let deepest = max_depth(layer);
+        for depth in 1..=deepest {
             let source = program(layer, depth, &alive);
             fs::write(&app, &source).unwrap();
             version += 1;
@@ -307,8 +303,8 @@ fn checker_work_grows_near_linearly_with_nested_layers() {
         eprintln!("ladder {name}: {}", curve.join("; "));
         for (index, &host) in HOSTS.iter().enumerate() {
             let known = KNOWN_EXPONENTIAL_ROWS.contains(&(name.as_str(), host));
-            let polynomial = rows[index].len() == MAX_DEPTH
-                && (1..=MAX_DEPTH).all(|depth| within_envelope(&rows[index], depth));
+            let polynomial = rows[index].len() == deepest
+                && (1..=deepest).all(|depth| within_envelope(&rows[index], depth));
             if known && polynomial {
                 failures.push(format!(
                     "{name}/{host}: rows {:?} are near-linear now; remove it from KNOWN_EXPONENTIAL_ROWS",
@@ -316,8 +312,8 @@ fn checker_work_grows_near_linearly_with_nested_layers() {
                 ));
             }
         }
-        let visits_polynomial = visits.len() == MAX_DEPTH
-            && (1..=MAX_DEPTH).all(|depth| {
+        let visits_polynomial = visits.len() == deepest
+            && (1..=deepest).all(|depth| {
                 within_envelope(
                     &visits
                         .iter()

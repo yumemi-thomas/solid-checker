@@ -91,6 +91,7 @@ fn catalog_prose_program() -> Program {
             execution: ExecutionRole::TrackedJsx,
             owned_write: solid_reactive_ir::OwnedWriteOption::Off,
             context: "sample computation".into(),
+            multiplicity: 1,
         }],
         missing_owners: vec![OwnerRequirement {
             operation: OwnerRequirementOperation::Cleanup,
