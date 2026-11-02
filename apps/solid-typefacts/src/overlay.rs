@@ -55,6 +55,8 @@ struct Lookups {
     misses: AtomicU64,
     /// `read_file` calls that reached the base (contents are not kept).
     reads: AtomicU64,
+    /// The paths those calls read.
+    read_paths: SyncMap<String, bool>,
 }
 
 impl Lookups {
@@ -87,6 +89,74 @@ impl Lookups {
             reads: self.reads.load(Ordering::Relaxed),
         }
     }
+
+    /// Every question this build asked the base, by kind.
+    fn queries(&self) -> BuildQueries {
+        // A bundled library (`bundled:///...`) is not on the disk.
+        let keys = |keys: Vec<String>| -> BTreeSet<String> {
+            keys.into_iter()
+                .filter(|path| !path.contains("://"))
+                .collect()
+        };
+        BuildQueries {
+            files: keys(self.files.keys()),
+            directories: keys(self.directories.keys()),
+            stats: keys(self.stats.keys()),
+            realpaths: keys(self.realpaths.keys()),
+            entries: keys(self.entries.keys()),
+            reads: keys(self.read_paths.keys()),
+        }
+    }
+}
+
+/// The questions program builds asked the base file system, by kind
+/// (`typefacts::BuildInputs`): what a program's file set, resolutions and
+/// texts were decided from, below the overlay's own buffers.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct BuildQueries {
+    pub files: BTreeSet<String>,
+    pub directories: BTreeSet<String>,
+    pub stats: BTreeSet<String>,
+    pub realpaths: BTreeSet<String>,
+    pub entries: BTreeSet<String>,
+    pub reads: BTreeSet<String>,
+}
+
+impl BuildQueries {
+    /// Whether `self` asked nothing `other` did not.
+    #[must_use]
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.files.is_subset(&other.files)
+            && self.directories.is_subset(&other.directories)
+            && self.stats.is_subset(&other.stats)
+            && self.realpaths.is_subset(&other.realpaths)
+            && self.entries.is_subset(&other.entries)
+            && self.reads.is_subset(&other.reads)
+    }
+
+    /// Adds what `other` asked.
+    pub fn extend(&mut self, other: Self) {
+        self.files.extend(other.files);
+        self.directories.extend(other.directories);
+        self.stats.extend(other.stats);
+        self.realpaths.extend(other.realpaths);
+        self.entries.extend(other.entries);
+        self.reads.extend(other.reads);
+    }
+
+    /// The wire form.
+    #[must_use]
+    pub fn to_inputs(&self) -> typefacts::BuildInputs {
+        let list = |set: &BTreeSet<String>| set.iter().map(|path| path.as_str().into()).collect();
+        typefacts::BuildInputs {
+            files: list(&self.files),
+            directories: list(&self.directories),
+            stats: list(&self.stats),
+            realpaths: list(&self.realpaths),
+            entries: list(&self.entries),
+            reads: list(&self.reads),
+        }
+    }
 }
 
 /// What a [`BuildScope`] answered from its lookups and what it asked the disk
@@ -108,11 +178,19 @@ pub struct BuildScope<'a> {
 
 impl BuildScope<'_> {
     /// Ends the scope, returning its counters.
-    pub fn finish(mut self) -> LookupStats {
+    pub fn finish(self) -> LookupStats {
+        self.finish_with_queries().0
+    }
+
+    /// Ends the scope, returning its counters and the questions it asked the
+    /// base (none for an inert scope: the enclosing one has them).
+    pub fn finish_with_queries(mut self) -> (LookupStats, BuildQueries) {
         self.fs
             .take()
             .and_then(OverlayFs::end_build)
-            .map_or_else(LookupStats::default, |lookups| lookups.stats())
+            .map_or_else(Default::default, |lookups| {
+                (lookups.stats(), lookups.queries())
+            })
     }
 }
 
@@ -363,6 +441,9 @@ impl FS for OverlayFs {
             .as_ref()
         {
             lookups.count(&lookups.reads);
+            if lookups.read_paths.load(&path).is_none() {
+                lookups.read_paths.store(path.clone(), true);
+            }
         }
         self.base.read_file(&path)
     }

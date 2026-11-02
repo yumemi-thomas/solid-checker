@@ -53,7 +53,9 @@ use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, stand
 use crate::{StaticDefect, StaticDefectKind, location};
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, CallFact, FunctionFact, FunctionKind};
+use solid_facts::ast::{
+    ArgumentValueKind, CallFact, FunctionFact, FunctionKind, TaggedTemplateFact,
+};
 use solid_facts::core::Span;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -61,6 +63,12 @@ use typefacts::AsyncFunctionFact;
 
 /// Nesting limit for callbacks inside callbacks and for chained promises.
 const MAX_DEPTH: usize = 6;
+
+/// ADR 0537: the in-place regions (an IIFE, an inline callback, a function
+/// handed by name to a carrier) the stack walk follows below a chain: ADR
+/// 0532's climb bound of 16 layers. Past it a call is an obligation, never a
+/// silent clean.
+const MAX_REGION_DEPTH: usize = MAX_DEPTH + 16;
 
 /// One function whose continuation is part of a tracked async computation:
 /// the computation itself, or a helper its returned promise awaits.
@@ -692,6 +700,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         // The producer's dominance facts: accessor calls after the first
         // await that dominates them.
         let mut after_await_calls: Vec<(&'f FileFacts, &'f CallFact)> = Vec::new();
+        let mut after_await_templates: Vec<(&'f FileFacts, &'f TaggedTemplateFact)> = Vec::new();
         for call in &function.calls_after_await {
             let ast_call = self.files.get(&*call.path).and_then(|file| {
                 file.ast
@@ -900,9 +909,19 @@ impl<'f, 'a> Reach<'f, 'a> {
                     after_await_calls.push((file, call));
                 }
             }
+            for template in &file.ast.tagged_templates {
+                if template.span.start >= boundary
+                    && crate::owners::owned_by_body(&file.ast, ast_function, template.span)
+                {
+                    after_await_templates.push((file, template));
+                }
+            }
         }
         for (file, call) in after_await_calls {
             self.visit_call(draft, &mut walk, file, call, 0);
+        }
+        for (file, template) in after_await_templates {
+            self.visit_template(draft, &mut walk, file, template, 0);
         }
         if let Some((file, ast_function)) = ast_function(&self.files, function) {
             // A catch/finally may follow a rejected await even though the
@@ -1041,6 +1060,14 @@ impl<'f, 'a> Reach<'f, 'a> {
                 self.visit_call(draft, walk, file, call, 0);
             }
         }
+        for template in &file.ast.tagged_templates {
+            if function.body.contains(template.span)
+                && template.span.start >= boundary
+                && written_directly_in(&file.ast, function, template.span)
+            {
+                self.visit_template(draft, walk, file, template, 0);
+            }
+        }
         mark_uncertain(draft, mark);
     }
 
@@ -1055,7 +1082,11 @@ impl<'f, 'a> Reach<'f, 'a> {
         call: &'f CallFact,
         depth: usize,
     ) {
-        if depth > MAX_DEPTH || !walk.visited.insert(call.span) {
+        if !walk.visited.insert(call.span) {
+            return;
+        }
+        if depth > MAX_REGION_DEPTH {
+            self.push_unfollowed(draft, walk, file, call, call.callee);
             return;
         }
         let ctx = self.ctx;
@@ -1154,6 +1185,33 @@ impl<'f, 'a> Reach<'f, 'a> {
         let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
             return;
         };
+        // ADR 0537: `f.call(…)` and `f.apply(…)` run `f` before they return
+        // (ADR 0531's carrier), on this stack: an exact project function's
+        // prefix is the continuation's, as an IIFE's is.
+        if let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee))
+            && crate::indexes::standard_library_declaration_of(
+                Some(resolved),
+                typefacts::CallKind::Call,
+            )
+            .is_some_and(|declaration| {
+                matches!(
+                    declaration.qualified_name.as_ref(),
+                    "Function.call"
+                        | "Function.apply"
+                        | "CallableFunction.call"
+                        | "CallableFunction.apply"
+                        | "NewableFunction.call"
+                        | "NewableFunction.apply"
+                )
+            })
+            && crate::local_access::dispatch_invokes(file, call)
+            && let Some((function_file, function)) = self.named_function(file, member.object)
+        {
+            if !function.generator {
+                self.report_prefix(draft, walk, function_file, function, depth);
+            }
+            return;
+        }
         for (index, argument) in call.arguments.iter().enumerate() {
             if argument.spread {
                 continue;
@@ -1164,12 +1222,22 @@ impl<'f, 'a> Reach<'f, 'a> {
             if !is_inline_standard_callback(resolved, callability, index) {
                 continue;
             }
-            match callback_argument_literal(file, argument.span) {
+            // ADR 0537: a literal, or an exact project function named here
+            // (`[1].forEach(hf)`, `Reflect.apply(hf, …)`), whose prefix runs
+            // on this stack as the literal's does.
+            let named = callback_argument_literal(file, argument.span)
+                .map(|callback| (file, callback))
+                .or_else(|| {
+                    (argument.value == ArgumentValueKind::Identifier)
+                        .then(|| self.named_function(file, argument.span))
+                        .flatten()
+                });
+            match named {
                 // Whether these run depends on the contents: a comparator, and
                 // a reducer without an initial value, are never called for
                 // fewer than two elements, a replacer when nothing matches. A
                 // read in one is a proof obligation.
-                Some(callback)
+                Some((file, callback))
                     if !callback.generator
                         && (matches!(
                             standard_call_name(resolved),
@@ -1187,13 +1255,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                 {
                     self.report_conditional_region(draft, walk, file, callback, depth);
                 }
-                Some(callback) if !callback.generator => {
+                Some((file, callback)) if !callback.generator => {
                     self.report_prefix(draft, walk, file, callback, depth);
                 }
                 // A literal queued as a member of the promise chain reports
                 // for itself; anything else the body of which cannot be
                 // inspected stays an obligation, never a silent clean.
-                Some(callback)
+                Some((file, callback))
                     if walk
                         .queued
                         .contains(&(file.path.to_string(), callback.span)) => {}
@@ -1333,6 +1401,101 @@ impl<'f, 'a> Reach<'f, 'a> {
             self.report_call_read(draft, walk, file, call);
             self.visit_call(draft, walk, file, call, depth + 1);
         }
+        for template in &file.ast.tagged_templates {
+            if callback.body.contains(template.span)
+                && written_directly_in(&file.ast, callback, template.span)
+            {
+                self.visit_template(draft, walk, file, template, depth + 1);
+            }
+        }
+    }
+
+    /// ADR 0537: a tagged template calls its tag where it is written (ADR
+    /// 0531): an exact project function's (or a literal tag's) prefix runs
+    /// on this stack, as a call's does. Any other tag is not followed, as a
+    /// call of it is not.
+    fn visit_template(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        file: &'f FileFacts,
+        template: &TaggedTemplateFact,
+        depth: usize,
+    ) {
+        if !walk.visited.insert(template.span) {
+            return;
+        }
+        let tag = file.ast.peel_ts_sugar_span(template.tag);
+        let Some((tag_file, function)) = callback_argument_literal(file, tag)
+            .map(|function| (file, function))
+            .or_else(|| self.named_function(file, tag))
+        else {
+            return;
+        };
+        if function.generator {
+            return;
+        }
+        if depth > MAX_REGION_DEPTH {
+            draft.push_defect(StaticDefect {
+                kind: StaticDefectKind::ReactiveCallbackUnresolved {
+                    callee: file.source_text(tag).unwrap_or("this tag").to_owned(),
+                },
+                location: location(file.path.shared(), tag),
+                analysis_context: walk.member.context.clone(),
+                fixes: vec![],
+                uncertain: false,
+            });
+            return;
+        }
+        self.report_prefix(draft, walk, tag_file, function, depth);
+    }
+
+    /// ADR 0537: the exact, current project function the identifier at
+    /// `span` names (a carrier's argument, a `call`/`apply` receiver, a
+    /// template's tag), through the exact reference resolution.
+    fn named_function(
+        &self,
+        file: &FileFacts,
+        span: Span,
+    ) -> Option<(&'f FileFacts, &'f FunctionFact)> {
+        let lookup = self.ctx.semantic_lookup;
+        let span = file.ast.peel_ts_sugar_span(span);
+        if !crate::owners::is_identifier_span(file, span) {
+            return None;
+        }
+        lookup
+            .function_called_at(file.path.as_str(), span)
+            .or_else(|| {
+                let (_, _, symbol) = lookup.binding_at_reference(file.path.as_str(), span)?;
+                lookup.function_for_symbol(&symbol)
+            })
+            .filter(|(function_file, function)| {
+                lookup.function_value_is_current(function_file, function)
+            })
+    }
+
+    /// ADR 0537: a call past the region bound: what it runs is not followed,
+    /// so it is an obligation.
+    fn push_unfollowed(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &Walk<'_>,
+        file: &FileFacts,
+        call: &CallFact,
+        at: Span,
+    ) {
+        draft.push_defect(StaticDefect {
+            kind: StaticDefectKind::ReactiveCallbackUnresolved {
+                callee: call
+                    .static_callee(&file.source)
+                    .unwrap_or("this callee")
+                    .to_owned(),
+            },
+            location: location(file.path.shared(), at),
+            analysis_context: walk.member.context.clone(),
+            fixes: vec![],
+            uncertain: false,
+        });
     }
 
     /// A function literal's body that runs only on some executions or some

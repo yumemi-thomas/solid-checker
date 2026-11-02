@@ -275,6 +275,7 @@ fn updates_that_cannot_reuse_the_program_rebuild_it() {
             packages: false,
             distinct_bare_imports: false,
             omit_modules: false,
+            build_inputs: false,
         },
     )
     .unwrap();
@@ -513,6 +514,7 @@ fn a_rebuilt_chain_over_project_references_keeps_the_reference_mapping() {
                 packages: false,
                 distinct_bare_imports: false,
                 omit_modules: false,
+                build_inputs: false,
             },
         )
         .unwrap();
@@ -589,6 +591,7 @@ fn a_file_created_after_a_failed_probe_is_found_by_the_next_build() {
                 packages: false,
                 distinct_bare_imports: false,
                 omit_modules: false,
+                build_inputs: false,
             },
         )
         .unwrap();

@@ -20,17 +20,21 @@ pub(crate) fn semantic_write_execution_role(
     lookup: &SemanticLookup<'_>,
     root_body: RootBodyGuard,
 ) -> ExecutionRole {
-    let allowed = write_allowed_spans(file, allowed, lookup);
-    semantic_write_execution_role_within(
-        file,
-        span,
-        &allowed,
-        entities,
-        symbol_names,
-        lookup,
-        root_body,
-        &mut HashSet::default(),
-    )
+    crate::role_log::decide("write", file.path.as_str(), span, || {
+        let allowed = write_allowed_spans(file, allowed, lookup);
+        super::write_components::bounded_walk(lookup, || {
+            semantic_write_execution_role_within(
+                file,
+                span,
+                &allowed,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+                &mut HashSet::default(),
+            )
+        })
+    })
 }
 
 /// The regions a write may treat as imperative.
@@ -103,6 +107,11 @@ pub(super) enum WriteRegionAdjustment {
     /// operation's [`RootBodyGuard`] decides, short of a suspension before
     /// the write.
     CreatedRoot,
+    /// ADR 0551: the write sits directly in a callback that runs as the
+    /// compute of a computation the call creates
+    /// ([`solid_dialect::Dialect::callback_runs_as_created_computation`]):
+    /// rejected as in a memo's compute, short of a suspension before it.
+    CreatedComputation,
     /// [`WriteRegionAdjustment::CreatedRoot`] for a function a helper runs in
     /// place and also hands on or keeps (ADR 0457): one run is under the root,
     /// which proves a rejection and no legal write.
@@ -124,6 +133,11 @@ pub(super) enum WriteRegionAdjustment {
     /// ([`solid_dialect::CallbackOwner::Conditional`]): null detaches it, an
     /// owner does not. Neither is proven, so the write is unplaced (ADR 0455).
     OwnerUnknown,
+    /// ADR 0532: the climb from the write reached its bound without ending at
+    /// a callback or at a layer it could place. A layer past the bound may be
+    /// an owner-keeping callback or a created root, so neither a placement
+    /// nor the lexical role is proven: the write is unplaced.
+    ClimbExhausted,
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -158,6 +172,12 @@ pub(super) fn write_region_adjustment(
             // places it, and the write guard leaves it unplaced.
             if !direct_callback_runs(file, call.arguments[index].span, span) {
                 return None;
+            }
+            if lookup
+                .dialect
+                .callback_runs_as_created_computation(primitive, index)
+            {
+                return Some(WriteRegionAdjustment::CreatedComputation);
             }
             // The root is the owner whenever the callback runs, so its
             // timing is not asked (rc.17 `hydrate` states none).
@@ -241,7 +261,14 @@ fn detached_in_place(
     // Whether a layer on the way holds the site past an await.
     let mut suspended = false;
     // Bounded: each step moves to the call that holds the previous function.
-    for _ in 0..16 {
+    // At the bound nothing is proven (ADR 0532): the layers past it are not
+    // read, and the lexical role would answer for them.
+    let mut steps = 0;
+    loop {
+        if steps == 16 {
+            return Some(WriteRegionAdjustment::ClimbExhausted);
+        }
+        steps += 1;
         let Some(function) = crate::owners::owning_function(&file.ast, at) else {
             break;
         };
@@ -318,6 +345,42 @@ fn detached_in_place(
                     }
                     _ => {}
                 }
+            }
+            // ADR 0540: a callback its call runs with no owner whenever it
+            // runs (`createReaction`'s, run as its effect's apply from the
+            // flush; `createEffect`'s apply): the guard has no owner to key
+            // on, there or in a layer run in place on its stack.
+            if execution.is_some()
+                && !lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index)
+                && callback_owner_at_call(file, call, primitive, index, lookup)
+                    == Some(solid_dialect::CallbackOwner::None)
+            {
+                if by_name_others {
+                    return None;
+                }
+                if among_others {
+                    return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                return Some(WriteRegionAdjustment::Detached);
+            }
+            // ADR 0551: the layers run on the stack of a callback that runs
+            // as a created computation's compute (`resolve`'s thunk): the
+            // computation is the owner there too.
+            if (layered || by_name)
+                && execution.is_some()
+                && lookup
+                    .dialect
+                    .callback_runs_as_created_computation(primitive, index)
+            {
+                if suspended {
+                    return None;
+                }
+                if in_list || among_others || by_name_others {
+                    return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                return Some(WriteRegionAdjustment::CreatedComputation);
             }
             // ADR 0460: the layers run on the stack of a callback that shares
             // its call's owner on its first run (`createRenderEffect`'s apply),
@@ -808,13 +871,38 @@ fn returned_effect_cleanup(
     lookup: &SemanticLookup<'_>,
     prove_rerun: bool,
 ) -> bool {
-    let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
+    let Some(outer) = function_returning(file, function) else {
         return false;
     };
+    file.ast
+        .arguments_containing(outer.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+        })
+        .any(|(call, index)| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .returned_cleanup_runs_outside_disposal(primitive, index)
+                        && (!prove_rerun
+                            || effect_provably_reruns(file, call, index, outer, function, lookup))
+                })
+        })
+}
+
+/// The function whose body returns `function` itself (an expression body or a
+/// `return` of that function, not of a nested one), if any.
+fn function_returning<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    let outer = crate::owners::owning_function(&file.ast, function.span)?;
     if !outer.body.contains(function.span) {
-        return false;
+        return None;
     }
-    let returned = outer
+    outer
         .expression_return
         .as_ref()
         .into_iter()
@@ -830,27 +918,154 @@ fn returned_effect_cleanup(
                     && crate::owners::owning_function(&file.ast, ret.span)
                         .is_some_and(|owner| owner.span == outer.span)
             })
-        });
-    returned
+        })
+        .then_some(outer)
+}
+
+/// ADR 0539: a read in `function`, when `function` is the cleanup an effect's
+/// apply returns and a rerun calls it in the apply's strict-read window
+/// ([`solid_dialect::Dialect::returned_cleanup_reruns_in_read_window`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum WindowedCleanup {
+    /// The effect's compute provably reads nothing ([`effect_never_reruns`]):
+    /// only a disposal calls the cleanup, outside the window.
+    NeverReruns,
+    /// A rerun may call it in the window; nothing orders the owner's disposal
+    /// (which would call it outside the window) against that rerun.
+    MayRerun,
+}
+
+/// ADR 0539: whether `span` runs in place in the cleanup an effect's apply
+/// returns, a rerun of which may call it in the apply's strict-read window
+/// ([`WindowedCleanup::MayRerun`]). An exhausted climb answers `true`.
+pub(crate) fn inside_rerun_effect_cleanup(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let at = match in_place_run_site(file, span, lookup) {
+        Some((climb, _)) if climb.exhausted => return true,
+        Some((climb, _)) => climb.at,
+        None => span,
+    };
+    crate::owners::containing_ast_function(&file.ast, at).is_some_and(|function| {
+        windowed_returned_cleanup(file, function, lookup) == Some(WindowedCleanup::MayRerun)
+    })
+}
+
+pub(super) fn windowed_returned_cleanup(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WindowedCleanup> {
+    let outer = function_returning(file, function)?;
+    let mut answer = None;
+    for (call, index) in file
+        .ast
+        .arguments_containing(outer.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+        })
+    {
+        let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+            continue;
+        };
+        if !lookup
+            .dialect
+            .returned_cleanup_reruns_in_read_window(primitive, index)
+        {
+            continue;
+        }
+        if effect_never_reruns(file, call, index) {
+            answer.get_or_insert(WindowedCleanup::NeverReruns);
+        } else {
+            return Some(WindowedCleanup::MayRerun);
+        }
+    }
+    // An apply named at the position (`createEffect(compute, apply)`): its
+    // compute is not read here, so a rerun is never excluded.
+    let named = lookup.named_callback_roles(file).get(outer.span);
+    if answer.is_none()
+        && named.effect_apply
+        && named
+            .effect_apply_primitive
+            .single()
+            .is_none_or(|primitive| {
+                lookup
+                    .dialect
+                    .returned_cleanup_reruns_in_read_window(primitive, 1)
+            })
+    {
+        return Some(WindowedCleanup::MayRerun);
+    }
+    answer
+}
+
+/// Whether the effect's compute (its first argument, an inline function the
+/// apply at `index` 1 follows) provably tracks nothing, so that the effect
+/// never reruns: a synchronous function with no call, no identifier
+/// reference, no `this`, `super` or `arguments` in its text, whose every
+/// `return` gives a primitive or nullish literal. Any other compute may track.
+fn effect_never_reruns(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> bool {
+    use solid_facts::ast::{IdentifierRole, RuntimeValueKind};
+    if index != 1 {
+        return false;
+    }
+    let Some(compute) = call
+        .arguments
+        .first()
+        .filter(|compute| !compute.spread)
+        .and_then(|compute| crate::cleanup::callback_argument_literal(file, compute.span))
+    else {
+        return false;
+    };
+    if compute.r#async || compute.generator {
+        return false;
+    }
+    let text = usize::try_from(compute.span.start)
+        .ok()
+        .zip(usize::try_from(compute.span.end).ok())
+        .and_then(|(start, end)| file.source.get(start..end));
+    let Some(text) = text else {
+        return false;
+    };
+    if ["this", "super", "arguments"]
+        .iter()
+        .any(|word| text.contains(word))
+    {
+        return false;
+    }
+    let returns_literal = |ret: &solid_facts::ast::ReturnFact| {
+        ret.argument.is_none()
+            || matches!(
+                ret.runtime_value_kind,
+                RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+            )
+    };
+    !file
+        .ast
+        .calls
+        .iter()
+        .any(|inner| compute.span.contains(inner.span))
+        && !file
+            .ast
+            .identifiers
+            .iter()
+            .any(|id| id.role == IdentifierRole::Reference && compute.body.contains(id.span))
+        && compute
+            .expression_return
+            .as_ref()
+            .is_none_or(returns_literal)
         && file
             .ast
-            .arguments_containing(outer.span)
-            .filter(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
-            })
-            .any(|(call, index)| {
-                lookup
-                    .primitive_at_call(file, call.span)
-                    .is_some_and(|primitive| {
-                        lookup
-                            .dialect
-                            .returned_cleanup_runs_outside_disposal(primitive, index)
-                            && (!prove_rerun
-                                || effect_provably_reruns(
-                                    file, call, index, outer, function, lookup,
-                                ))
-                    })
-            })
+            .returns
+            .iter()
+            .filter(|ret| compute.body.contains(ret.span))
+            .all(returns_literal)
 }
 
 /// Whether the effect whose apply (or tracked body) is `outer` provably tracks
@@ -1018,7 +1233,8 @@ fn named_closure_in_root_callback<'a>(
 
 /// Whether the first function around `function` that a primitive call takes as
 /// its callback, by the literal or by its binding, is taken in a position whose
-/// callback runs in a root the call creates.
+/// callback runs in a root the call creates, or lies past the climb's bound
+/// (ADR 0532: unread, so not proven otherwise).
 fn innermost_primitive_callback_is_root(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -1041,7 +1257,9 @@ fn innermost_primitive_callback_is_root(
                 .callback_runs_in_created_root(primitive, index)
         });
     }
-    false
+    // ADR 0532: past the bound the callback is unread, so the permissive role
+    // around it is no proof: answer as a root would (the entries decide).
+    true
 }
 
 /// ADR 0471: whether `span` runs, through layers that run in place (an IIFE,
@@ -1082,7 +1300,9 @@ fn in_place_in_root_named_callback(
             LayerRun::FreshStack | LayerRun::Elsewhere => return false,
         }
     }
-    false
+    // ADR 0532: the layers past the bound are unread; the permissive role
+    // around them is no proof for the site.
+    true
 }
 
 /// The primitive call positions that take `function`: as the literal argument,
@@ -1258,7 +1478,9 @@ fn unrun_layer_in_owner_keeping_callback(
             }
         }
     }
-    false
+    // ADR 0532: an owner-keeping callback past the bound is unread, so the
+    // deferred role is no proof.
+    true
 }
 
 /// A closure nested in a leaf callback (`createTrackedEffect`, `onSettled`):
@@ -1317,7 +1539,22 @@ pub(super) fn semantic_write_execution_role_within(
         root_body,
         visiting,
         &mut decided,
+        None,
     );
+    write_role_fallback(file, span, role, decided, root_body, lookup)
+}
+
+/// What [`semantic_write_execution_role_within`] answers for the walk's
+/// `role` at `span`: an `Unknown` that is not final takes the invocation
+/// flow's role ([`write_flow_role`]), when there is one.
+pub(super) fn write_role_fallback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    decided: bool,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
     if role != ExecutionRole::Unknown || decided || file.compiler.withheld() {
         return role;
     }
@@ -1359,15 +1596,20 @@ pub(super) fn semantic_write_role_walk(
         root_body,
         visiting,
         &mut false,
+        None,
     )
 }
 
 /// [`semantic_write_role_walk`], and whether its `Unknown` is final: the write
 /// runs under an owner the call gave it, so what its function's other callers
 /// run it under places nothing (`decided`).
+///
+/// With `plan`, a walk whose position proves nothing stops where its
+/// function's entries would decide: the [`LoopPlan`] goes to `plan` and the
+/// answer returned means nothing ([`super::write_components`] folds it).
 #[allow(clippy::too_many_arguments)]
-fn write_role_walk(
-    file: &solid_facts::FileFacts,
+pub(super) fn write_role_walk<'f>(
+    file: &'f solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],
     entities: &EntitySymbols,
@@ -1376,10 +1618,14 @@ fn write_role_walk(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
     decided: &mut bool,
+    plan: Option<&mut Option<LoopPlan<'f>>>,
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused places no write.
     if file.compiler.withheld() {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "write_roles.write_role_walk.unknown",
+            ExecutionRole::Unknown
+        );
     }
     // Write legality follows the runtime's *owner* context, which is not
     // always the read-execution context: leaf scopes are write-legal though
@@ -1389,7 +1635,12 @@ fn write_role_walk(
     let mut span = span;
     loop {
         match write_region_adjustment(file, span, lookup) {
-            Some(WriteRegionAdjustment::LeafScope) => return ExecutionRole::DeferredCallback,
+            Some(WriteRegionAdjustment::LeafScope) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.deferred-callback",
+                    ExecutionRole::DeferredCallback
+                );
+            }
             Some(WriteRegionAdjustment::CallSite(outer)) => span = outer,
             Some(WriteRegionAdjustment::CallSiteAmongOthers(outer)) => {
                 let role = semantic_write_execution_role_within(
@@ -1403,10 +1654,13 @@ fn write_role_walk(
                     visiting,
                 );
                 if role.reports_disallowed_write() {
-                    return role;
+                    return role_arm!("write_roles.walk-role-1", role);
                 }
                 *decided = true;
-                return ExecutionRole::Unknown;
+                return role_arm!(
+                    "write_roles.write_role_walk.unknown-2",
+                    ExecutionRole::Unknown
+                );
             }
             // A root body is a one-shot, untracked run under a
             // children-capable owner -- in dev builds exactly what a
@@ -1418,24 +1672,43 @@ fn write_role_walk(
             //
             // Past an await the body runs on a later task with no owner, so
             // the root is no longer the ambient owner.
+            Some(WriteRegionAdjustment::CreatedComputation) => {
+                if let Some(role) = suspended_write_role(file, span, lookup) {
+                    return role_arm!("write_roles.created-computation-suspended", role);
+                }
+                return role_arm!("write_roles.created-computation", ExecutionRole::TrackedJsx);
+            }
             Some(
                 adjustment @ (WriteRegionAdjustment::CreatedRoot
                 | WriteRegionAdjustment::CreatedRootAmongOthers),
             ) => {
                 if let Some(role) = suspended_write_role(file, span, lookup) {
-                    return role;
+                    return role_arm!("write_roles.walk-role-2", role);
                 }
                 match root_body {
-                    RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
+                    RootBodyGuard::Rejects => {
+                        return role_arm!(
+                            "write_roles.write_role_walk.untracked-rendering",
+                            ExecutionRole::UntrackedRendering
+                        );
+                    }
                     // Legal in the run under the root; the callback's other runs
                     // are not placed, so a legal write is no claim there.
                     RootBodyGuard::Exempts
                         if matches!(adjustment, WriteRegionAdjustment::CreatedRootAmongOthers) =>
                     {
                         *decided = true;
-                        return ExecutionRole::Unknown;
+                        return role_arm!(
+                            "write_roles.write_role_walk.unknown-3",
+                            ExecutionRole::Unknown
+                        );
                     }
-                    RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
+                    RootBodyGuard::Exempts => {
+                        return role_arm!(
+                            "write_roles.write_role_walk.untracked-callback",
+                            ExecutionRole::UntrackedCallback
+                        );
+                    }
                     // The guard stands down while an owner is disposed, on the
                     // release that says so, and the write is written in a
                     // callback that runs only then (ADR 0455 amendment). A
@@ -1446,20 +1719,32 @@ fn write_role_walk(
                         use solid_dialect::WriteGuardInDisposal as Guard;
                         let guard = lookup.dialect.write_guard_in_disposal();
                         if guard == Guard::Rejects {
-                            return ExecutionRole::UntrackedRendering;
+                            return role_arm!(
+                                "write_roles.write_role_walk.untracked-rendering-2",
+                                ExecutionRole::UntrackedRendering
+                            );
                         }
                         // A violation needs the proof that the write is not in a
                         // disposal; a legal write needs the release to say so.
                         // Neither is the call sites' to give: the owner is the
                         // call's, whatever runs the function.
                         return match runs_in_disposal(file, span, lookup) {
-                            DisposalReach::NotIn => ExecutionRole::UntrackedRendering,
+                            DisposalReach::NotIn => role_arm!(
+                                "write_roles.created-root-outside-disposal",
+                                ExecutionRole::UntrackedRendering
+                            ),
                             DisposalReach::Only if guard == Guard::StandsDown => {
-                                ExecutionRole::UntrackedCallback
+                                role_arm!(
+                                    "write_roles.created-root-disposal-stands-down",
+                                    ExecutionRole::UntrackedCallback
+                                )
                             }
                             DisposalReach::Only | DisposalReach::Unplaced => {
                                 *decided = true;
-                                ExecutionRole::Unknown
+                                role_arm!(
+                                    "write_roles.created-root-disposal-unplaced",
+                                    ExecutionRole::Unknown
+                                )
                             }
                         };
                     }
@@ -1467,10 +1752,32 @@ fn write_role_walk(
             }
             // Whether a root wraps this callback is not audited on this
             // release, so the write has no placement the checker can prove.
-            Some(WriteRegionAdjustment::UnauditedRoot) => return ExecutionRole::Unknown,
+            Some(WriteRegionAdjustment::UnauditedRoot) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.unknown-4",
+                    ExecutionRole::Unknown
+                );
+            }
             // No owner reaches the write: the guard has nothing to reject.
-            Some(WriteRegionAdjustment::Detached) => return ExecutionRole::UntrackedCallback,
-            Some(WriteRegionAdjustment::OwnerUnknown) => return ExecutionRole::Unknown,
+            Some(WriteRegionAdjustment::Detached) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.untracked-callback-2",
+                    ExecutionRole::UntrackedCallback
+                );
+            }
+            Some(WriteRegionAdjustment::OwnerUnknown) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.unknown-5",
+                    ExecutionRole::Unknown
+                );
+            }
+            // ADR 0532: the bound of the climb proves nothing either way.
+            Some(WriteRegionAdjustment::ClimbExhausted) => {
+                return role_arm!(
+                    "write_roles.write_role_walk.climb-exhausted",
+                    ExecutionRole::Unknown
+                );
+            }
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -1491,8 +1798,12 @@ fn write_role_walk(
                     visiting,
                 );
                 match first_run {
-                    ExecutionRole::DiscardedRendering => return first_run,
-                    ExecutionRole::Unknown | ExecutionRole::Unreported => return first_run,
+                    ExecutionRole::DiscardedRendering => {
+                        return role_arm!("write_roles.first-run-discarded", first_run);
+                    }
+                    ExecutionRole::Unknown | ExecutionRole::Unreported => {
+                        return role_arm!("write_roles.first-run-unplaced", first_run);
+                    }
                     // ADR 0503: a first run proven synchronous throws there,
                     // when nothing in the apply runs before the write (an
                     // earlier call, a pending read among them, may throw
@@ -1501,16 +1812,16 @@ fn write_role_walk(
                         return if first_run_proven_at_call(file, call, lookup)
                             && apply_runs_nothing_before(file, call, span, lookup)
                         {
-                            role
+                            role_arm!("write_roles.first-run-reporting", role)
                         } else {
-                            ExecutionRole::Unknown
+                            role_arm!("write_roles.first-run-unproven", ExecutionRole::Unknown)
                         };
                     }
                     _ => break,
                 }
             }
             None => {
-                if !visiting.contains(&lexical_only_marker())
+                if !visit_contains(visiting, &lexical_only_marker())
                     && let Some(role) = named_callback_write_role(
                         file,
                         span,
@@ -1525,14 +1836,14 @@ fn write_role_walk(
                     if role.reports_disallowed_write()
                         && let Some(suspended) = suspended_write_role(file, span, lookup)
                     {
-                        return suspended;
+                        return role_arm!("write_roles.walk-suspended-1", suspended);
                     }
                     // A call a disposal leaves unplaced is final: no other
                     // entry of the function places what its owner decides.
                     if role == ExecutionRole::Unknown {
                         *decided = true;
                     }
-                    return role;
+                    return role_arm!("write_roles.walk-role-3", role);
                 }
                 break;
             }
@@ -1559,15 +1870,25 @@ fn write_role_walk(
             // or `throw` on a fresh generator runs none of the body, and a
             // write a `yield` may precede runs on no step there is.
             return match step.first_step {
-                StepReach::Reaches => role,
-                StepReach::Never => ExecutionRole::Unreported,
-                StepReach::Unproven => ExecutionRole::Unknown,
+                StepReach::Reaches => role_arm!("write_roles.stepped-generator-reaches", role),
+                StepReach::Never => {
+                    role_arm!(
+                        "write_roles.stepped-generator-never",
+                        ExecutionRole::Unreported
+                    )
+                }
+                StepReach::Unproven => {
+                    role_arm!(
+                        "write_roles.stepped-generator-unproven",
+                        ExecutionRole::Unknown
+                    )
+                }
             };
         }
         // Legal where the call is, or never run: legal. Unplaced stays so;
         // the read walk's answer at the call would claim more than the
         // write's own adjustments allow.
-        return role;
+        return role_arm!("write_roles.stepped-generator", role);
     }
     // ADR 0315: write legality keeps the role it had before the use-site arm;
     // that arm places only reads.
@@ -1631,7 +1952,10 @@ fn write_role_walk(
         && root_body == RootBodyGuard::Exempts
         && runs_directly_in_component_root(file, span, lookup)
     {
-        return ExecutionRole::UntrackedCallback;
+        return role_arm!(
+            "write_roles.write_role_walk.untracked-callback-3",
+            ExecutionRole::UntrackedCallback
+        );
     }
     // The rendering role places code by where it is written. For a write in a
     // function literal nested in the body that is a proof only when the
@@ -1651,7 +1975,7 @@ fn write_role_walk(
     // change that. The tracked or rendering role such a wrapper gives the
     // *expression* is not a proof about the function inside it.
     if direct.reports_disallowed_write() && enclosed_by_jsx_attribute_function(file, span) {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-1", unknown);
     }
     // A tracked role reaches every closure written inside the tracked region
     // or callback, including ones only stored there (`createMemo(() => ({ go:
@@ -1660,7 +1984,7 @@ fn write_role_walk(
     if direct == ExecutionRole::TrackedJsx
         && enclosed_by_stored_function(file, span, entities, symbol_names, lookup)
     {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-2", unknown);
     }
     // The same holds for a closure bound to a name inside the tracked scope
     // (ADR 0452): the scope runs its construction, not its body. The closure's
@@ -1707,13 +2031,19 @@ fn write_role_walk(
     if direct == ExecutionRole::DeferredCallback
         && unrun_layer_in_owner_keeping_callback(file, span, lookup)
     {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "write_roles.write_role_walk.unknown-6",
+            ExecutionRole::Unknown
+        );
     }
     // Past an await that dominates it, the write runs on a later task with no
     // owner, whatever its lexical role or its function's callers: legal, and
     // proven so, though in no single role.
     if follows_dominating_await(file, span) || follows_try_head_await(file, span, lookup) {
-        return ExecutionRole::Unreported;
+        return role_arm!(
+            "write_roles.write_role_walk.unreported",
+            ExecutionRole::Unreported
+        );
     }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
@@ -1724,7 +2054,7 @@ fn write_role_walk(
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
         && may_follow_suspension(file, span)
     {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-3", unknown);
     }
     // A site in a parameter list (a default value, a pattern, a function written
     // inside either) runs when its function is called without the argument:
@@ -1740,7 +2070,7 @@ fn write_role_walk(
         .into_iter()
         .any(|function| parameter_slot(function, span).is_some())
     {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-4", unknown);
     }
     // ADR 0456: a disposal callback whose handle the code calls also runs at
     // those calls, outside the disposal, so its lexical role is no proof there.
@@ -1761,13 +2091,13 @@ fn write_role_walk(
                 if role == ExecutionRole::Unknown {
                     *decided = true;
                 }
-                return role;
+                return role_arm!("write_roles.walk-role-4", role);
             }
             // The entries of the layer decide, but none of them places a write
             // that follows a suspension (as above).
             Some(HandleRole::Unrun) if may_follow_suspension(file, span) => {
                 *decided = true;
-                return unknown;
+                return role_arm!("write_roles.walk-unknown-5", unknown);
             }
             Some(HandleRole::Unrun) => ExecutionRole::Unknown,
             None => direct,
@@ -1777,7 +2107,10 @@ fn write_role_walk(
     // the effect owns, as the same compute written inline does: a write it runs
     // in place is rejected there, whatever the function's other entries do.
     if !direct.reports_disallowed_write() && named_effect_compute_runs(file, span, lookup) {
-        return ExecutionRole::TrackedJsx;
+        return role_arm!(
+            "write_roles.write_role_walk.tracked-jsx",
+            ExecutionRole::TrackedJsx
+        );
     }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
     // A permissive role read off the positions that name the function as a
@@ -1803,10 +2136,10 @@ fn write_role_walk(
     let possible_render = direct == ExecutionRole::UntrackedRendering
         && innermost_identity_is_possible(file, span, lookup);
     if direct != ExecutionRole::Unknown && named_callback.is_none() && !possible_render {
-        return direct;
+        return role_arm!("write_roles.walk-direct-1", direct);
     }
     let Some(innermost) = innermost else {
-        return unknown;
+        return role_arm!("write_roles.walk-unknown-6", unknown);
     };
     // ADR 0452: the named closure built in a tracked scope is entered by its
     // calls, and the write runs with it only through layers that run in place
@@ -1815,16 +2148,19 @@ fn write_role_walk(
     let entry = match tracked_named {
         Some(closure) if closure.span == innermost.span => Some(closure),
         Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
-        Some(_) => return unknown,
+        Some(_) => return role_arm!("write_roles.walk-unknown-entry", unknown),
         None => None,
     };
     // ADR 0327: every invocation of the writing function, followed forward
     // through the closed program, is an event delivery. No other entry exists.
     if event_only_entries(file, entry.unwrap_or(innermost), lookup) {
-        return ExecutionRole::EventCallback;
+        return role_arm!(
+            "write_roles.write_role_walk.event-callback",
+            ExecutionRole::EventCallback
+        );
     }
-    if visiting.contains(&lexical_only_marker()) {
-        return unknown;
+    if visit_contains(visiting, &lexical_only_marker()) {
+        return role_arm!("write_roles.walk-unknown-7", unknown);
     }
     let function = named.or(entry).unwrap_or(innermost);
     // The write is in a closure nested in the named callback: a call of the
@@ -1854,7 +2190,7 @@ fn write_role_walk(
             .tracked_owned
     {
         return if current {
-            ExecutionRole::TrackedJsx
+            role_arm!("write_roles.named-tracked-owned", ExecutionRole::TrackedJsx)
         } else {
             unknown
         };
@@ -1896,16 +2232,178 @@ fn write_role_walk(
             .collect::<HashSet<_>>()
             .len();
         if !current || (several && adjusted_inline) || (distinct > 1 && owner_keeping) {
-            return unknown;
+            return role_arm!("write_roles.walk-unknown-8", unknown);
         }
     }
-    let key = (file.path.to_string(), function.span);
-    if !visiting.insert(key.clone()) {
+    let loop_plan = LoopPlan {
+        function,
+        direct,
+        named: named.is_some(),
+        nested,
+        current,
+        possible_render,
+        unknown,
+    };
+    if let Some(plan) = plan {
+        *plan = Some(loop_plan);
         return unknown;
     }
-    let mut imperative = named.map(|_| direct);
+    caller_loop(
+        file,
+        loop_plan,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        visiting,
+    )
+}
+
+/// Where a write's walk goes when its position proves nothing: the function
+/// whose entries decide (its call sites, followed by [`caller_loop`]) and
+/// how the walk folds them.
+#[derive(Clone, Copy)]
+pub(super) struct LoopPlan<'f> {
+    pub(super) function: &'f solid_facts::ast::FunctionFact,
+    /// The role the position itself gave, one entry when `named`.
+    pub(super) direct: ExecutionRole,
+    /// The function is a named callback whose positions gave `direct`.
+    pub(super) named: bool,
+    /// The write is in a closure nested in the function, which a call of it
+    /// does not run: a rejecting entry proves nothing.
+    pub(super) nested: bool,
+    /// The function's binding holds this function only.
+    pub(super) current: bool,
+    /// A rendering role is only a possibility here (ADR 0331).
+    pub(super) possible_render: bool,
+    /// What an unplaced walk answers: `Unknown`, or `Unreported` when the
+    /// position proved a non-reporting mix.
+    pub(super) unknown: ExecutionRole,
+}
+
+impl LoopPlan<'_> {
+    /// Whether the loop answers exactly what its entries fold to: a hit
+    /// as itself, an unplaced fold as `Unknown`, a placed one as its first
+    /// role (or `Unknown` without a complete census).
+    pub(super) fn plain(&self) -> bool {
+        !self.named
+            && !self.nested
+            && self.current
+            && !self.possible_render
+            && self.unknown == ExecutionRole::Unknown
+    }
+}
+
+/// What the entries of a function fold to ([`caller_loop`]): the first
+/// entry that rejects the write, or the first role and whether an entry
+/// left it unplaced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CallerFold {
+    Rejected(ExecutionRole),
+    Entries {
+        imperative: Option<ExecutionRole>,
+        unplaced: bool,
+    },
+}
+
+/// The role a write takes from the entries of the function `plan` names: a
+/// call written in a function this walk is already deriving is that
+/// function's business; every other call is placed by its own walk.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn caller_loop(
+    file: &solid_facts::FileFacts,
+    plan: LoopPlan<'_>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    let LoopPlan {
+        function,
+        direct,
+        named,
+        nested,
+        current,
+        possible_render,
+        unknown,
+    } = plan;
+    let key = (file.path.to_string(), function.span);
+    if !visit_insert(visiting, key.clone()) {
+        return role_arm!("write_roles.walk-unknown-9", unknown);
+    }
+    let imperative = named.then_some(direct);
+    let folded = super::write_components::region_fold(
+        file,
+        function,
+        imperative,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        visiting,
+    )
+    .unwrap_or_else(|| {
+        path_fold(
+            file,
+            function,
+            imperative,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            visiting,
+        )
+    });
+    visiting.remove(&key);
+    let (imperative, unplaced) = match folded {
+        CallerFold::Rejected(role) => return if nested || !current { unknown } else { role },
+        CallerFold::Entries {
+            imperative,
+            unplaced,
+        } => (imperative, unplaced),
+    };
+    if possible_render {
+        return role_arm!("write_roles.walk-unknown-10", unknown);
+    }
+    let Some(role) = imperative.filter(|_| !unplaced) else {
+        return role_arm!("write_roles.walk-unknown-11", unknown);
+    };
+    // A permissive role is inherited only from a complete census of the
+    // function's entries: a use the walk did not follow (handed to a child
+    // component, stored, aliased, exported) may run it in an owned scope.
+    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
+        role
+    } else {
+        unknown
+    }
+}
+
+/// The reference fold of [`caller_loop`]: every entry of `function` in
+/// order, each placed by its own walk, which follows every path through the
+/// callers that revisits no function on it.
+#[allow(clippy::too_many_arguments)]
+fn path_fold(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    mut imperative: Option<ExecutionRole>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+) -> CallerFold {
     let mut unplaced = false;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        lookup.count_write_walk_steps(1);
+        // ADR 0560: past its bound the walk unwinds; it answers `Unknown`
+        // ([`super::write_components::bounded_walk`]).
+        if !super::write_components::walk_step() {
+            return CallerFold::Entries {
+                imperative: None,
+                unplaced: true,
+            };
+        }
         // A call written directly in a function this walk is already deriving
         // (the function itself, or one of its callers) runs in that
         // function's role, which its other entries decide -- when it is a
@@ -1914,7 +2412,7 @@ fn write_role_walk(
         // effect: such a re-entry has a role of its own the walk cannot
         // derive here.
         if let Some(caller) = crate::owners::containing_body_function(&caller_file.ast, callee)
-            .filter(|caller| visiting.contains(&(caller_file.path.to_string(), caller.span)))
+            .filter(|caller| visit_contains(visiting, &(caller_file.path.to_string(), caller.span)))
         {
             if !plain_call_outside_jsx(caller_file, caller, callee) {
                 unplaced = true;
@@ -1937,8 +2435,7 @@ fn write_role_walk(
             visiting,
         );
         if role.reports_disallowed_write() {
-            visiting.remove(&key);
-            return if nested || !current { unknown } else { role };
+            return CallerFold::Rejected(role);
         }
         if role == ExecutionRole::Unknown {
             // An entry no fact places leaves the function's role unplaced,
@@ -1948,20 +2445,9 @@ fn write_role_walk(
             imperative.get_or_insert(role);
         }
     }
-    visiting.remove(&key);
-    if possible_render {
-        return unknown;
-    }
-    let Some(role) = imperative.filter(|_| !unplaced) else {
-        return unknown;
-    };
-    // A permissive role is inherited only from a complete census of the
-    // function's entries: a use the walk did not follow (handed to a child
-    // component, stored, aliased, exported) may run it in an owned scope.
-    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
-        role
-    } else {
-        unknown
+    CallerFold::Entries {
+        imperative,
+        unplaced,
     }
 }
 
@@ -1999,7 +2485,7 @@ fn named_effect_compute_runs(
 /// the census must be bounded at all: a method is entered by member access
 /// through any receiver holding it, and an export by modules this build may
 /// not see (an open program, or a module whose namespace escapes unnamed).
-fn entry_census_complete(
+pub(super) fn entry_census_complete(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
@@ -2118,8 +2604,12 @@ fn layers_run_inline(
     fresh_stack_ok: bool,
 ) -> bool {
     let mut layer = inner;
+    // Named functions that are each other's one call (ADR 0479: `const f1 =
+    // () => f2(); const f2 = () => f1();`) lead the climb round a cycle that
+    // never reaches `outer`: nothing proves they run there.
+    let mut crossed = HashSet::default();
     while layer.span != outer.span {
-        if layer.generator || !outer.span.contains(layer.span) {
+        if layer.generator || !outer.span.contains(layer.span) || !crossed.insert(layer.span) {
             return false;
         }
         let call = match layer_run(file, layer, lookup) {
@@ -2269,6 +2759,8 @@ fn sole_call_of_named_function(
 /// Where a site runs once the function layers around it that run in place
 /// ([`layer_run`]) are crossed (ADR 0469).
 pub(crate) struct InPlaceClimb {
+    /// The bound left outer layers unread: no placement role is proven.
+    pub(crate) exhausted: bool,
     /// The call of the outermost layer crossed: the site runs on its stack.
     pub(crate) at: Span,
     /// A layer holds the climbed site in its parameter list (ADR 0454): it
@@ -2398,12 +2890,20 @@ fn apply_runs_nothing_before(
         return own_calls().count() <= 1;
     }
     let mut position = span;
+    let mut reached = false;
     for _ in 0..32 {
         match crate::owners::containing_ast_function(ast, position) {
-            Some(function) if function.span == apply.span => break,
+            Some(function) if function.span == apply.span => {
+                reached = true;
+                break;
+            }
             Some(function) => position = function.span,
             None => return false,
         }
+    }
+    // Past the bound the apply is not reached: no proof (ADR 0532).
+    if !reached {
+        return false;
     }
     !own_calls().any(|other| other.span.end <= position.start)
         && runs_nothing_before_in_layers(file, span, apply.span, lookup)
@@ -2566,7 +3066,8 @@ pub(crate) fn pending_apply_first_read_from(
     let ast = &file.ast;
     let at = match climb_in_place_layers(file, site, lookup) {
         Some(climb)
-            if !climb.in_list
+            if !climb.exhausted
+                && !climb.in_list
                 && !climb.among_others
                 && climb.suspended.is_none()
                 && !climb_crosses_library_callback(file, site, climb.at, lookup) =>
@@ -3461,13 +3962,14 @@ fn climb_in_place_layers_recording(
     passed: &mut Vec<Span>,
 ) -> Option<InPlaceClimb> {
     let mut climb = InPlaceClimb {
+        exhausted: false,
         at: span,
         in_list: false,
         among_others: false,
         suspended: None,
     };
     // Bounded: each step moves to the call that holds the previous function.
-    for _ in 0..16 {
+    for step in 0..16 {
         let Some(function) = crate::owners::owning_function(&file.ast, climb.at) else {
             break;
         };
@@ -3510,6 +4012,7 @@ fn climb_in_place_layers_recording(
         }
         climb.at = call;
         passed.push(call);
+        climb.exhausted = step == 15;
     }
     (climb.at != span).then_some(climb)
 }
@@ -3560,13 +4063,14 @@ fn in_place_run_site_recording(
     passed: &mut Vec<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
     let mut climb = InPlaceClimb {
+        exhausted: false,
         at: span,
         in_list: false,
         among_others: false,
         suspended: None,
     };
     let mut through_generator = false;
-    for _ in 0..8 {
+    for step in 0..8 {
         if let Some(next) = climb_in_place_layers_recording(file, climb.at, lookup, within, passed)
         {
             climb.in_list |= next.in_list;
@@ -3577,6 +4081,10 @@ fn in_place_run_site_recording(
                 (None, None) => None,
             };
             climb.at = next.at;
+            if next.exhausted {
+                climb.exhausted = true;
+                break;
+            }
         }
         let Some(created) = crate::owners::owning_function(&file.ast, climb.at)
             .filter(|function| {
@@ -3590,6 +4098,7 @@ fn in_place_run_site_recording(
         through_generator = true;
         climb.at = created.span;
         passed.push(created.span);
+        climb.exhausted = step == 7;
     }
     (climb.at != span).then_some((climb, through_generator))
 }
@@ -3751,7 +4260,7 @@ fn helper_runs_layer_inline(
 
 /// Whether the call at `callee` in `caller` is a plain call expression written
 /// outside every JSX element of `caller`'s body.
-fn plain_call_outside_jsx(
+pub(super) fn plain_call_outside_jsx(
     file: &solid_facts::FileFacts,
     caller: &solid_facts::ast::FunctionFact,
     callee: Span,
@@ -3795,7 +4304,7 @@ pub(crate) fn module_exports(
 /// through a closed program, is an event delivery, and no synchronous dispatch
 /// can hand a delivery its caller's owner. Such a function runs with no owner
 /// however it is passed around.
-fn event_only_entries(
+pub(super) fn event_only_entries(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,

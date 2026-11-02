@@ -47,8 +47,28 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
+      "start": 1965,
+      "end": 1977,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
       "start": 2308,
       "end": 2320,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
+      "start": 2617,
+      "end": 2629,
       "fixes": 0
     },
     {

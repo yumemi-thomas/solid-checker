@@ -165,8 +165,10 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
  * A checker run's result from what it printed (`runChecker`, and the Rust executor's raw answers, exec.mjs): exit 0 and 1 carry one
  * JSON document; anything else, or findings that map to no program file, is a failed run.
  */
-export function checkerResult({ status, stdout, stderr = "", wallMs = 0, spawnError }, dir) {
+export function checkerResult({ status, stdout, stderr = "", wallMs = 0, spawnError, warm }, dir) {
   if (spawnError) return { ok: false, findings: [], wallMs, error: spawnError };
+  // `--warm-verify` (ADR 0543): the retained daemon's answer must be the one-shot answer at the same path, byte for byte.
+  if (warm?.identical === false) return { ok: false, findings: [], wallMs, exitStatus: status, error: `the warm checker's answer differs from a one-shot run at ${dir} (exit ${status} against ${warm.oneShotStatus})` };
   // The oracle reads the native child's stdout as one JSON document; exit 0 and 1 both carry one.
   if (status !== 0 && status !== 1) return { ok: false, findings: [], wallMs, exitStatus: status, error: stderr.slice(-800) || `exit ${status}` };
   try {

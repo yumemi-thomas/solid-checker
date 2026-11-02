@@ -8,23 +8,28 @@
 //! pages with Vite and the Solid plugin, as the oracle compiles them, and maps a record's stack positions through Vite's source maps.
 //!
 //! Protocol: one JSON object per line on stdin, one per line on stdout, matched by `seq`.
-//!   init     the tools, the concurrency, and (optional) the Chrome settings; answers `ready`
+//!   init     the tools, the concurrency, (optional) the Chrome settings and `warmChecker` (off, on, verify); answers `ready`
 //!   prepare  the case's files, its clean and twin projects (in a fixed slot pair, or given directories), the type checks and the
 //!            checker run; answers the type checks and the checker's raw output
 //!   run      cases to run in Chrome; answers their records by id
+//!   checks   how many checker runs may run at once from now on (at most the step-1 pool); answers the new number
 //! Parsing the checker's output and every verdict stay in JS: this process returns what the tools printed.
 
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+mod typecheck;
+
+use typecheck::{typecheck_batch, typecheck_one};
 
 type Res<T> = Result<T, String>;
 
@@ -41,17 +46,20 @@ impl Out {
     }
 }
 
+/// A counting semaphore whose capacity can change while it is held (`resize`): `free` goes below zero when it shrinks under its
+/// holders, and acquiring waits until releases bring it back above.
 struct Semaphore {
-    free: Mutex<usize>,
+    free: Mutex<isize>,
+    capacity: Mutex<usize>,
     ready: Condvar,
 }
 impl Semaphore {
     fn new(count: usize) -> Self {
-        Self { free: Mutex::new(count.max(1)), ready: Condvar::new() }
+        Self { free: Mutex::new(count.max(1) as isize), capacity: Mutex::new(count.max(1)), ready: Condvar::new() }
     }
     fn acquire(&self) {
         let mut free = self.free.lock().unwrap();
-        while *free == 0 {
+        while *free <= 0 {
             free = self.ready.wait(free).unwrap();
         }
         *free -= 1;
@@ -60,6 +68,28 @@ impl Semaphore {
         *self.free.lock().unwrap() += 1;
         self.ready.notify_one();
     }
+    /// The semaphore's capacity, now `count` (at least 1).
+    fn resize(&self, count: usize) {
+        let count = count.max(1);
+        let mut capacity = self.capacity.lock().unwrap();
+        *self.free.lock().unwrap() += count as isize - *capacity as isize;
+        *capacity = count;
+        self.ready.notify_all();
+    }
+    fn capacity(&self) -> usize {
+        *self.capacity.lock().unwrap()
+    }
+}
+
+/// Held around every process start. On macOS `std` creates a child's pipes and marks them close-on-exec in two steps, so a child
+/// another thread starts in between inherits them: a retained checker daemon (`--warm-checker`) that a client started then holds
+/// another command's stdout open for minutes, and that command's reader never sees its end (a grid stalled on one `prepare`).
+static SPAWN: Mutex<()> = Mutex::new(());
+
+/// `command.spawn()` with no other start in progress (`SPAWN`).
+fn spawn(command: &mut Command) -> std::io::Result<std::process::Child> {
+    let _held = SPAWN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    command.spawn()
 }
 
 struct Ran {
@@ -69,16 +99,68 @@ struct Ran {
     killed: bool,
     wall_ms: u128,
     spawn_error: Option<String>,
+    /// The process's resource use as `wait4` gave it (Linux only; the harness's cost record, never a verdict input).
+    usage: Option<Usage>,
+}
+
+/// A finished process's CPU time, peak resident set and block writes, including the children it waited for (Linux `wait4`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Usage {
+    cpu_ms: u64,
+    max_rss_kb: u64,
+    write_kb: u64,
+}
+
+/// Waits for `child` as `Child::wait` does, with its resource use from `wait4`; the exit code is `ExitStatus::code`'s.
+#[cfg(target_os = "linux")]
+fn wait_with_usage(child: &mut std::process::Child) -> (Option<i32>, Option<Usage>) {
+    #[repr(C)]
+    struct Timeval {
+        sec: i64,
+        usec: i64,
+    }
+    #[repr(C)]
+    struct Rusage {
+        utime: Timeval,
+        stime: Timeval,
+        // maxrss, ixrss, idrss, isrss, minflt, majflt, nswap, inblock, oublock, msgsnd, msgrcv, nsignals, nvcsw, nivcsw
+        longs: [i64; 14],
+    }
+    unsafe extern "C" {
+        fn wait4(pid: i32, status: *mut i32, options: i32, rusage: *mut Rusage) -> i32;
+    }
+    let pid = child.id() as i32;
+    let mut status = 0i32;
+    let mut usage = Rusage { utime: Timeval { sec: 0, usec: 0 }, stime: Timeval { sec: 0, usec: 0 }, longs: [0; 14] };
+    loop {
+        // SAFETY: `pid` is this process's unreaped child; `status` and `usage` are valid for the call's writes.
+        let reaped = unsafe { wait4(pid, &mut status, 0, &mut usage) };
+        if reaped == pid {
+            break;
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return (child.wait().ok().and_then(|status| status.code()), None);
+        }
+    }
+    let code = if status & 0x7f == 0 { Some((status >> 8) & 0xff) } else { None };
+    let ms = |t: &Timeval| (t.sec.max(0) as u64) * 1000 + (t.usec.max(0) as u64) / 1000;
+    let usage = Usage { cpu_ms: ms(&usage.utime) + ms(&usage.stime), max_rss_kb: usage.longs[0].max(0) as u64, write_kb: (usage.longs[8].max(0) as u64) / 2 };
+    (code, Some(usage))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wait_with_usage(child: &mut std::process::Child) -> (Option<i32>, Option<Usage>) {
+    (child.wait().ok().and_then(|status| status.code()), None)
 }
 
 /// Runs a command to completion with its outputs read on threads, killed after `timeout`.
 fn run_command(mut command: Command, timeout: Duration) -> Ran {
     let started = Instant::now();
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = match command.spawn() {
+    let mut child = match spawn(&mut command) {
         Ok(child) => child,
         Err(error) => {
-            return Ran { status: None, stdout: String::new(), stderr: String::new(), killed: false, wall_ms: 0, spawn_error: Some(error.to_string()) };
+            return Ran { status: None, stdout: String::new(), stderr: String::new(), killed: false, wall_ms: 0, spawn_error: Some(error.to_string()), usage: None };
         }
     };
     let mut stdout = child.stdout.take().unwrap();
@@ -103,12 +185,22 @@ fn run_command(mut command: Command, timeout: Duration) -> Ran {
         }
         false
     });
-    let status = child.wait().ok().and_then(|status| status.code());
+    let (status, usage) = wait_with_usage(&mut child);
     let _ = finished.send(());
     let killed = watchdog.join().unwrap_or(false);
     let stdout = String::from_utf8_lossy(&out.join().unwrap_or_default()).into_owned();
     let stderr = String::from_utf8_lossy(&err.join().unwrap_or_default()).into_owned();
-    Ran { status, stdout, stderr, killed, wall_ms: started.elapsed().as_millis(), spawn_error: None }
+    Ran { status, stdout, stderr, killed, wall_ms: started.elapsed().as_millis(), spawn_error: None, usage }
+}
+
+/// The checker answer's cost fields (`cost.mjs`): the process's CPU time, peak RSS and block writes, or null with the reason. A warm
+/// check's process is the client that hands the program to its slot's daemon, whose use it does not include.
+fn usage_fields(ran: &Ran, warm: bool) -> Value {
+    match (warm, ran.usage) {
+        (true, _) => json!({ "cpuMs": null, "maxRssKb": null, "writeKb": null, "usageWhy": "warm daemon" }),
+        (false, Some(usage)) => json!({ "cpuMs": usage.cpu_ms, "maxRssKb": usage.max_rss_kb, "writeKb": usage.write_kb }),
+        (false, None) => json!({ "cpuMs": null, "maxRssKb": null, "writeKb": null, "usageWhy": "no wait4 rusage on this platform" }),
+    }
 }
 
 fn write_file(path: &str, text: &str) -> Res<()> {
@@ -117,98 +209,6 @@ fn write_file(path: &str, text: &str) -> Res<()> {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
     std::fs::write(path, text).map_err(|e| format!("write {}: {e}", path.display()))
-}
-
-/// `path.resolve(base, relative)` without touching the disk.
-fn resolve_lexical(base: &Path, relative: &str) -> PathBuf {
-    let joined = base.join(relative);
-    let mut out = PathBuf::new();
-    for component in joined.components() {
-        match component {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            other => out.push(other.as_os_str()),
-        }
-    }
-    out
-}
-
-// ---------------------------------------------------------------------------------------------------------------------------------
-// Type checks (scripts/fuzz/typecheck.mjs: `typecheck` and `typecheckBatch`, the same answers)
-
-fn has_ts_error(line: &str) -> bool {
-    line.find("error TS").is_some_and(|at| line[at + 8..].starts_with(|c: char| c.is_ascii_digit()))
-}
-
-/// `typecheck(dir)`: one `tsrs -p`.
-fn typecheck_one(tsc: &str, dir: &str) -> Value {
-    if !Path::new(tsc).exists() {
-        return json!({ "ok": false, "errors": [format!("type checker not found: {tsc}")], "missing": true });
-    }
-    let mut command = Command::new(tsc);
-    command.args(["-p", &format!("{dir}/tsconfig.json"), "--noEmit"]).current_dir(dir);
-    let ran = run_command(command, Duration::from_secs(60));
-    if let Some(error) = ran.spawn_error {
-        return json!({ "ok": false, "errors": [error], "missing": true });
-    }
-    let out = format!("{}{}", ran.stdout, ran.stderr);
-    let errors: Vec<&str> = out.split('\n').filter(|line| has_ts_error(line)).collect();
-    json!({ "ok": ran.status == Some(0) && errors.is_empty(), "errors": errors })
-}
-
-/// `typecheckBatch(dirs)`: one `tsrs -b --force`; `None` where the batch gives no answer (the caller checks each alone).
-fn typecheck_batch(tsc: &str, dirs: &[String]) -> Option<Vec<Value>> {
-    // A directory twice in one batch could not tell its two answers apart: each is checked alone.
-    let distinct: std::collections::HashSet<&String> = dirs.iter().collect();
-    if !Path::new(tsc).exists() || dirs.is_empty() || distinct.len() != dirs.len() {
-        return None;
-    }
-    let mut command = Command::new(tsc);
-    command.arg("-b").arg("--force");
-    for dir in dirs {
-        command.arg(format!("{dir}/tsconfig.json"));
-    }
-    command.arg("--noEmit").current_dir(&dirs[0]);
-    let ran = run_command(command, Duration::from_secs(120));
-    for dir in dirs {
-        let _ = std::fs::remove_file(format!("{dir}/tsconfig.tsbuildinfo"));
-    }
-    if ran.spawn_error.is_some() {
-        return None;
-    }
-    batch_answers(dirs, &format!("{}{}", ran.stdout, ran.stderr), ran.status, ran.killed)
-}
-
-/// A batch's output as one answer per project, or `None` (typecheck.mjs `typecheckBatch`'s rules).
-fn batch_answers(dirs: &[String], out: &str, status: Option<i32>, killed: bool) -> Option<Vec<Value>> {
-    let lines: Vec<&str> = out.split('\n').filter(|line| has_ts_error(line)).collect();
-    if killed || (status != Some(0) && lines.is_empty()) {
-        return None;
-    }
-    let mut answers: Vec<(bool, Vec<String>)> = dirs.iter().map(|_| (true, Vec::new())).collect();
-    let base = Path::new(&dirs[0]);
-    for line in lines {
-        // `^(.*?)\(\d+,\d+\): error TS\d+`
-        let at = line.find("): error TS")?;
-        let open = line[..at].rfind('(')?;
-        let numbers = &line[open + 1..at];
-        let mut parts = numbers.split(',');
-        let valid = parts.next().is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-            && parts.next().is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-            && parts.next().is_none();
-        if !valid {
-            return None;
-        }
-        let file_text = &line[..open];
-        let file = resolve_lexical(base, file_text);
-        let index = dirs.iter().position(|dir| file.starts_with(dir) && file != Path::new(dir))?;
-        let relative = file.strip_prefix(&dirs[index]).ok()?.to_string_lossy().into_owned();
-        answers[index].0 = false;
-        answers[index].1.push(format!("{relative}{}", &line[file_text.len()..]));
-    }
-    Some(answers.into_iter().map(|(ok, errors)| json!({ "ok": ok, "errors": errors })).collect())
 }
 
 struct TypecheckJob {
@@ -274,27 +274,95 @@ impl Batcher {
 const CHECKER_ARGS: [&str; 9] = ["--format", "json", "--feedback-facts", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
 const ORDINARY_ARGS: [&str; 8] = ["--format", "json", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
 
+/// `init.warmChecker` (ADR 0543): a slot's feedback-facts check is answered by a retained checker daemon, one per slot directory
+/// (the daemon's socket is keyed by the project path), instead of a fresh checker and producer per program. `Verify` also runs the
+/// one-shot check at the same path after each warm one and reports whether stdout and the exit status are byte-identical.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Warm {
+    Off,
+    On,
+    Verify,
+}
+
 struct Checker {
     bin: String,
     env: Vec<(String, String)>,
+    warm: Warm,
+    /// The slot directories a warm check ran in: their daemons are stopped when the executor ends.
+    warmed: Mutex<std::collections::BTreeSet<String>>,
 }
 
 impl Checker {
-    fn run(&self, dir: &str, ordinary: bool) -> Value {
-        if !Path::new(&self.bin).exists() {
-            return json!({ "spawnError": format!("checker binary not found: {}", self.bin), "dir": dir });
-        }
+    fn command(&self, dir: &str, args: &[&str], daemon: bool, program: Option<&str>) -> Command {
         let mut command = Command::new(&self.bin);
-        command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(if ordinary { &ORDINARY_ARGS[..] } else { &CHECKER_ARGS[..] }).current_dir(dir);
+        command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(args).current_dir(dir);
         for (key, value) in &self.env {
             command.env(key, value);
         }
-        command.env("SOLID_CHECKER_DAEMON", "0");
-        let ran = run_command(command, Duration::from_secs(180));
+        // The role log (ADR 0533) attributes the check's decisions to its program by this name, not by the directory: a warm slot's
+        // directory is the same for every program it holds (`prepare_projects`).
+        if let Some(program) = program {
+            command.env("SOLID_CHECKER_IR_ROLE_LOG_PROGRAM", program);
+        }
+        command.env("SOLID_CHECKER_DAEMON", if daemon { "1" } else { "0" });
+        // A slot's daemon lives while the executor does (it stops them at its end, `stop_warm`); the checker's two-minute default
+        // would end one during a long Chrome wave and start it cold again.
+        if daemon && !self.env.iter().any(|(key, _)| key == "SOLID_CHECKER_DAEMON_IDLE_SECS") {
+            command.env("SOLID_CHECKER_DAEMON_IDLE_SECS", "900");
+        }
+        command
+    }
+
+    /// The checker on `dir` for `program`. `slotted`: `dir` is a slot the executor rewrites per program, which a warm daemon may serve.
+    fn run(&self, dir: &str, ordinary: bool, slotted: bool, program: Option<&str>) -> Value {
+        if !Path::new(&self.bin).exists() {
+            return json!({ "spawnError": format!("checker binary not found: {}", self.bin), "dir": dir });
+        }
+        let warm = self.warm != Warm::Off && slotted && !ordinary;
+        if warm {
+            self.warmed.lock().unwrap().insert(dir.to_string());
+        }
+        let args = if ordinary { &ORDINARY_ARGS[..] } else { &CHECKER_ARGS[..] };
+        let ran = run_command(self.command(dir, args, warm, program), Duration::from_secs(180));
+        // A warm check that did not answer may leave its daemon working on this program: it is stopped (after it finishes what it
+        // accepted) before the slot goes to the next program.
+        if warm && (ran.killed || ran.spawn_error.is_some() || !matches!(ran.status, Some(0 | 1))) {
+            self.stop(dir);
+        }
         if let Some(error) = ran.spawn_error {
             return json!({ "spawnError": error, "dir": dir, "wallMs": ran.wall_ms as u64 });
         }
-        json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir })
+        let usage = usage_fields(&ran, warm);
+        let mut answer = json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir, "usage": usage });
+        if warm && self.warm == Warm::Verify {
+            let once = run_command(self.command(dir, args, false, program), Duration::from_secs(180));
+            let identical = once.spawn_error.is_none() && !once.killed && once.status == ran.status && once.stdout == ran.stdout;
+            answer["warm"] = json!({ "identical": identical, "oneShotStatus": once.status, "oneShotWallMs": once.wall_ms as u64 });
+        } else if warm {
+            answer["warm"] = json!({});
+        }
+        answer
+    }
+
+    /// Ends `dir`'s daemon once it has answered every check it accepted (`--stop-daemon`).
+    fn stop(&self, dir: &str) {
+        let mut args = vec!["--stop-daemon"];
+        args.extend(CHECKER_ARGS);
+        // The stop waits for what the daemon accepted, at most `SOLID_CHECKER_DAEMON_STOP_SECS` (60 s), then ends it by its pid.
+        let ran = run_command(self.command(dir, &args, true, None), Duration::from_secs(120));
+        if ran.killed || ran.status != Some(0) {
+            eprintln!("fuzz-exec: could not stop the checker daemon of {dir}: {}", ran.stderr.trim());
+        }
+    }
+
+    /// Stops every slot daemon this executor used.
+    fn stop_warm(&self) {
+        let dirs = std::mem::take(&mut *self.warmed.lock().unwrap());
+        thread::scope(|scope| {
+            for dir in &dirs {
+                scope.spawn(move || self.stop(dir));
+            }
+        });
     }
 }
 
@@ -561,13 +629,7 @@ impl Chrome {
     fn start(settings: &Value) -> Res<Chrome> {
         let text = |key: &str| settings.get(key).and_then(Value::as_str).map(str::to_string).ok_or(format!("chrome.{key} missing"));
         // The Vite helper: one line `{ base, work }` once it serves.
-        let mut vite = Command::new(text("node")?)
-            .arg(text("viteHost")?)
-            .arg(settings.to_string())
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
+        let mut vite = spawn(Command::new(text("node")?).arg(text("viteHost")?).arg(settings.to_string()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::inherit()))
             .map_err(|e| format!("vite helper: {e}"))?;
         let helper_out = vite.stdout.take().unwrap();
         let line = read_line_within(helper_out, Duration::from_secs(120)).map_err(|e| {
@@ -582,16 +644,17 @@ impl Chrome {
 
         static STARTS: AtomicU64 = AtomicU64::new(0);
         let profile = std::env::temp_dir().join(format!("fuzz-exec-profile-{}-{}", std::process::id(), STARTS.fetch_add(1, Ordering::Relaxed)));
-        let mut browser = Command::new(text("browser")?)
-            .args(BROWSER_ARGS)
-            .arg(format!("--user-data-dir={}", profile.display()))
-            .arg("--remote-debugging-port=0")
-            .arg("--no-startup-window")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("browser: {e}"))?;
+        let mut browser = spawn(
+            Command::new(text("browser")?)
+                .args(BROWSER_ARGS)
+                .arg(format!("--user-data-dir={}", profile.display()))
+                .arg("--remote-debugging-port=0")
+                .arg("--no-startup-window")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped()),
+        )
+        .map_err(|e| format!("browser: {e}"))?;
         // The browser's stderr: its DevTools endpoint, then a bounded tail kept for the log of an exit (`supervise`).
         let tail = Arc::new(Mutex::new(std::collections::VecDeque::<String>::new()));
         let (endpoint, found) = channel::<Option<String>>();
@@ -887,11 +950,11 @@ impl Chrome {
 /// The fixed project directories a program's step 1 borrows (a clean and a twin project): rewritten in place per program instead of
 /// created and removed, so a grid's file churn is a few rewritten files per program.
 struct Slots {
-    free: Mutex<Vec<(PathBuf, PathBuf)>>,
+    free: Mutex<Vec<(SlotDir, SlotDir)>>,
     ready: Condvar,
 }
 impl Slots {
-    fn take(&self) -> (PathBuf, PathBuf) {
+    fn take(&self) -> (SlotDir, SlotDir) {
         let mut free = self.free.lock().unwrap();
         loop {
             if let Some(pair) = free.pop() {
@@ -900,10 +963,61 @@ impl Slots {
             free = self.ready.wait(free).unwrap();
         }
     }
-    fn give(&self, pair: (PathBuf, PathBuf)) {
+    fn give(&self, pair: (SlotDir, SlotDir)) {
         self.free.lock().unwrap().push(pair);
         self.ready.notify_one();
     }
+}
+
+/// One slot directory, `<slotRoot>/<n>/<program>`: the project lives in a directory named for the program it holds, renamed (its files
+/// kept, so `sync_files` still rewrites only what changed) when the slot takes the next program. The checker's paths then name the
+/// program: the role log (roles.mjs `programOf`) keys each decision by the directory above the file, and with one fixed directory
+/// per slot every program of a grid folded as one ("slots"), so decisions of different programs deduplicated against each other.
+struct SlotDir {
+    parent: PathBuf,
+    name: Option<String>,
+}
+impl SlotDir {
+    fn new(parent: PathBuf) -> Self {
+        Self { parent, name: None }
+    }
+    /// The slot's directory for program `id`, the previous program's directory renamed to it.
+    fn place(&mut self, id: &str) -> std::io::Result<PathBuf> {
+        let name = slot_name(id);
+        let target = self.parent.join(&name);
+        match self.name.as_deref() {
+            Some(current) if current == name => {}
+            Some(current) if self.parent.join(current).is_dir() => std::fs::rename(self.parent.join(current), &target)?,
+            _ => std::fs::create_dir_all(&target)?,
+        }
+        self.name = Some(name);
+        Ok(target)
+    }
+}
+
+/// A program id as one directory name: `[A-Za-z0-9_-]` and inner dots as they are, every other byte `%XX` (roles.mjs decodes it with
+/// `decodeURIComponent`). An id that would pass 200 bytes keeps its first 160 and an FNV-1a hash of the whole: still one name per id.
+fn slot_name(id: &str) -> String {
+    let mut name = String::new();
+    for (index, byte) in id.bytes().enumerate() {
+        if byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-' || (byte == b'.' && index > 0) {
+            name.push(byte as char);
+        } else {
+            name.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    if name.is_empty() {
+        return "%00".into();
+    }
+    if name.len() > 200 {
+        let hash = id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
+        let mut cut = 160;
+        while !name.is_char_boundary(cut) || name[..cut].ends_with('%') || name[..cut.saturating_sub(1)].ends_with('%') {
+            cut -= 1;
+        }
+        name = format!("{}~{hash:016x}", &name[..cut]);
+    }
+    name
 }
 
 /// Makes `dir` hold exactly `files` (top-level names): other entries removed, a changed file rewritten in place, an equal one untouched.
@@ -965,10 +1079,16 @@ impl Executor {
         let batch = request.get("typecheckBatch").and_then(Value::as_u64).unwrap_or(24) as usize;
         batcher.start(tsc.clone(), batch, Duration::from_millis(15), Arc::new(Semaphore::new(concurrency)));
         let env = request.get("env").and_then(Value::as_object).map(|env| env.iter().filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string()))).collect()).unwrap_or_default();
-        let checker = Arc::new(Checker { bin: text("checkerBin")?, env });
+        let warm = match request.get("warmChecker").and_then(Value::as_str) {
+            None | Some("off") => Warm::Off,
+            Some("on") => Warm::On,
+            Some("verify") => Warm::Verify,
+            Some(other) => return Err(format!("init.warmChecker is off, on or verify, not {other}")),
+        };
+        let checker = Arc::new(Checker { bin: text("checkerBin")?, env, warm, warmed: Mutex::new(Default::default()) });
         let slot_root = PathBuf::from(text("slotRoot")?);
         let slots = Slots {
-            free: Mutex::new((0..concurrency * 2).map(|slot| (slot_root.join(format!("slot-{slot}")), slot_root.join(format!("slot-{slot}-run")))).collect()),
+            free: Mutex::new((0..concurrency * 2).map(|slot| (SlotDir::new(slot_root.join(format!("{slot}"))), SlotDir::new(slot_root.join(format!("{slot}-run"))))).collect()),
             ready: Condvar::new(),
         };
         let chrome_settings = request.get("chrome").cloned().unwrap_or(Value::Null);
@@ -1061,9 +1181,14 @@ impl Executor {
         // A project with a directory of its own (a program that ships a package, or `--keep-work`) is written fresh there and removed
         // after; the others borrow a slot pair.
         let slotted = project.is_some_and(|p| p.get("dir").is_none()) || twin_project.is_some_and(|p| p.get("dir").is_none());
-        let slot = slotted.then(|| self.slots.take());
+        let mut slot = slotted.then(|| self.slots.take());
+        // The program's id names its slot directory (`SlotDir`); a request without one (an older caller) shares the name `program`.
+        // A warm checker's slot keeps one name: its daemon is keyed by the project path, so a directory per program would start a
+        // daemon per program. The role log then names the program from the check's environment instead (`Checker::command`).
+        let program = request["id"].as_str();
+        let id = if self.checker.warm == Warm::Off { program.unwrap_or("program") } else { "program" };
         let result = (|| -> Res<Value> {
-            let place = |project: &serde_json::Map<String, Value>, slot_dir: Option<&PathBuf>| -> Res<PathBuf> {
+            let place = |project: &serde_json::Map<String, Value>, slot_dir: Option<&mut SlotDir>| -> Res<PathBuf> {
                 let files = project.get("files").and_then(Value::as_object).ok_or("project without files")?;
                 match project.get("dir").and_then(Value::as_str) {
                     Some(dir) => {
@@ -1071,14 +1196,15 @@ impl Executor {
                         Ok(PathBuf::from(dir))
                     }
                     None => {
-                        let dir = slot_dir.ok_or("no slot")?;
-                        sync_files(dir, files).map_err(|e| format!("slot {}: {e}", dir.display()))?;
-                        Ok(dir.clone())
+                        let slot_dir = slot_dir.ok_or("no slot")?;
+                        let dir = slot_dir.place(id).map_err(|e| format!("slot {}: {e}", slot_dir.parent.display()))?;
+                        sync_files(&dir, files).map_err(|e| format!("slot {}: {e}", dir.display()))?;
+                        Ok(dir)
                     }
                 }
             };
-            let dir = project.map(|p| place(p, slot.as_ref().map(|s| &s.0))).transpose()?;
-            let twin_dir = twin_project.map(|p| place(p, slot.as_ref().map(|s| &s.1))).transpose()?;
+            let dir = project.map(|p| place(p, slot.as_mut().map(|s| &mut s.0))).transpose()?;
+            let twin_dir = twin_project.map(|p| place(p, slot.as_mut().map(|s| &mut s.1))).transpose()?;
             let string = |path: &PathBuf| path.to_string_lossy().into_owned();
             let clean = (request["clean"] == true).then(|| dir.as_ref().map(|dir| self.batcher.submit(string(dir)))).flatten();
             let twin = (request["twin"] == true).then(|| twin_dir.as_ref().map(|dir| self.batcher.submit(string(dir)))).flatten();
@@ -1096,7 +1222,8 @@ impl Executor {
                 (Some(check), Some(dir)) => {
                     let ordinary = check.get("ordinary").and_then(Value::as_bool).unwrap_or(false);
                     self.checks.acquire();
-                    let answer = self.checker.run(&string(dir), ordinary);
+                    let slotted = project.is_some_and(|p| p.get("dir").is_none());
+                    let answer = self.checker.run(&string(dir), ordinary, slotted, program);
                     self.checks.release();
                     Some(answer)
                 }
@@ -1142,7 +1269,7 @@ fn main() {
     // Step-1 work runs on a pool twice the concurrency (a program waiting for its batch holds no checker), Chrome runs on their own.
     let (jobs, queue) = channel::<Value>();
     let queue = Arc::new(Mutex::new(queue));
-    let workers = executor.checks.free.lock().map(|free| *free).unwrap_or(8) * 2;
+    let workers = executor.checks.capacity() * 2;
     for _ in 0..workers {
         let executor = Arc::clone(&executor);
         let queue = Arc::clone(&queue);
@@ -1160,6 +1287,13 @@ fn main() {
             Some("prepare") => {
                 let _ = jobs.send(request);
             }
+            // A new number of concurrent checker runs (matrix.mjs: with every runtime cached, the idle Chrome share goes to the
+            // checker). Capped at the step-1 pool, which is twice the starting concurrency.
+            Some("checks") => {
+                let count = request["count"].as_u64().unwrap_or(1) as usize;
+                executor.checks.resize(count.min(workers));
+                executor.out.emit(&json!({ "seq": request["seq"].clone(), "checks": executor.checks.capacity() }));
+            }
             Some("run") => {
                 let executor = Arc::clone(&executor);
                 thread::spawn(move || {
@@ -1174,15 +1308,62 @@ fn main() {
             _ => {}
         }
     }
-    // stdin closed: the run is over. The browser and the Vite helper are killed and waited on.
+    // stdin closed: the run is over. The browser and the Vite helper are killed and waited on, and every slot's checker daemon is
+    // stopped.
     if let Some(chrome) = executor.current_chrome() {
         chrome.stop();
     }
+    executor.checker.stop_warm();
 }
 
 #[cfg(test)]
 mod tests {
+    use super::typecheck::{batch_answers, has_ts_error, resolve_lexical};
     use super::*;
+
+    #[test]
+    fn a_command_answers_its_exit_code_and_on_linux_its_resource_use() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 3"]);
+        let ran = run_command(command, Duration::from_secs(10));
+        assert_eq!(ran.status, Some(3));
+        assert_eq!(ran.usage.is_some(), cfg!(target_os = "linux"));
+        if let Some(usage) = ran.usage {
+            assert!(usage.max_rss_kb > 0);
+        }
+        // A signal leaves no code, as `ExitStatus::code` says.
+        let mut command = Command::new("sh");
+        command.args(["-c", "kill -9 $$"]);
+        assert_eq!(run_command(command, Duration::from_secs(10)).status, None);
+        let fields = usage_fields(&run_command(Command::new("true"), Duration::from_secs(10)), true);
+        assert_eq!(fields["usageWhy"], "warm daemon");
+        assert!(fields["maxRssKb"].is_null());
+    }
+
+    #[test]
+    fn a_semaphore_grows_and_shrinks_under_its_holders() {
+        let semaphore = Arc::new(Semaphore::new(1));
+        semaphore.acquire();
+        semaphore.resize(3);
+        semaphore.acquire();
+        semaphore.acquire();
+        assert_eq!(*semaphore.free.lock().unwrap(), 0);
+        // Shrunk below its three holders: a fourth waits until two of them release.
+        semaphore.resize(1);
+        assert_eq!(*semaphore.free.lock().unwrap(), -2);
+        let waiting = {
+            let semaphore = Arc::clone(&semaphore);
+            thread::spawn(move || semaphore.acquire())
+        };
+        semaphore.release();
+        semaphore.release();
+        thread::sleep(Duration::from_millis(50));
+        assert!(!waiting.is_finished());
+        semaphore.release();
+        waiting.join().unwrap();
+        assert_eq!(semaphore.capacity(), 1);
+        assert_eq!(*semaphore.free.lock().unwrap(), 0);
+    }
 
     /// A DevTools endpoint that accepts one WebSocket, answers its first command, then closes: what a browser that dies looks like.
     fn dying_endpoint() -> String {
@@ -1284,9 +1465,114 @@ mod tests {
     }
 
     #[test]
+    fn a_slot_directory_is_named_for_its_program_and_keeps_its_files_across_programs() {
+        let root = std::env::temp_dir().join(format!("fuzz-exec-slot-name-test-{}", std::process::id()));
+        let mut slot = SlotDir::new(root.join("0"));
+        let files = |text: &str| [("App.tsx".to_string(), json!(text)), ("main.tsx".to_string(), json!("m"))].into_iter().collect::<serde_json::Map<_, _>>();
+        let first = slot.place("lg-a-closure").unwrap();
+        assert_eq!(first, root.join("0/lg-a-closure"));
+        sync_files(&first, &files("a")).unwrap();
+        let main = std::fs::metadata(first.join("main.tsx")).unwrap().modified().unwrap();
+        let second = slot.place("lg-a-closure-helper").unwrap();
+        assert_eq!(second, root.join("0/lg-a-closure-helper"));
+        assert!(!first.exists(), "the previous program's directory is renamed, not kept");
+        sync_files(&second, &files("b")).unwrap();
+        assert_eq!(std::fs::metadata(second.join("main.tsx")).unwrap().modified().unwrap(), main, "an equal file survives the rename untouched");
+        assert_eq!(slot.place("lg-a-closure-helper").unwrap(), second);
+        let names: Vec<String> = std::fs::read_dir(root.join("0")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["lg-a-closure-helper"]);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_slot_name_is_one_directory_name_per_id() {
+        assert_eq!(slot_name("mx-flush-in-effect-callback-effect-apply-direct-none-m-show"), "mx-flush-in-effect-callback-effect-apply-direct-none-m-show");
+        assert_eq!(slot_name("a/b c"), "a%2Fb%20c");
+        assert_eq!(slot_name(".."), "%2E.");
+        assert_eq!(slot_name(""), "%00");
+        let long = "x".repeat(300);
+        let name = slot_name(&long);
+        assert!(name.len() <= 200 && name.starts_with(&"x".repeat(160)), "{name}");
+        assert_ne!(name, slot_name(&format!("{long}y")));
+        let encoded = slot_name(&"/".repeat(100));
+        assert!(encoded.len() <= 200 && !encoded.split('~').next().unwrap().ends_with('%'), "{encoded}");
+    }
+
+    #[test]
     fn an_error_line_is_one_that_names_a_ts_code() {
         assert!(has_ts_error("App.tsx(1,1): error TS2322: x"));
         assert!(!has_ts_error("error TSX"));
         assert_eq!(resolve_lexical(Path::new("/w/a"), "../b/./App.tsx"), PathBuf::from("/w/b/App.tsx"));
+    }
+
+    /// A stand-in checker: logs `<SOLID_CHECKER_DAEMON> <args>` (and `program=<id>` when the role log's program is set) and prints
+    /// what its environment says, or exits 9 when told to.
+    fn fake_checker(dir: &Path) -> (String, PathBuf) {
+        let log = dir.join("calls.log");
+        let bin = dir.join("fake-checker");
+        std::fs::write(
+            &bin,
+            format!(
+                "#!/bin/sh\necho \"$SOLID_CHECKER_DAEMON $*\" >> {0}\n[ -n \"$SOLID_CHECKER_IR_ROLE_LOG_PROGRAM\" ] && echo \"program=$SOLID_CHECKER_IR_ROLE_LOG_PROGRAM\" >> {0}\ncase \"$*\" in *--stop-daemon*) exit 0;; esac\n[ \"$FAKE_FAIL$SOLID_CHECKER_DAEMON\" = 11 ] && exit 9\nprintf '{{\"daemon\":%s,\"diverge\":%s}}' \"$SOLID_CHECKER_DAEMON\" \"${{FAKE_DIVERGE:-0}}\"\n",
+                log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&bin).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+        std::fs::set_permissions(&bin, permissions).unwrap();
+        (bin.to_string_lossy().into_owned(), log)
+    }
+
+    fn checker(bin: &str, warm: Warm, env: &[(&str, &str)]) -> Checker {
+        Checker { bin: bin.into(), env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), warm, warmed: Mutex::new(Default::default()) }
+    }
+
+    #[test]
+    fn a_warm_checker_serves_slots_only_and_stops_their_daemons() {
+        let dir = std::env::temp_dir().join(format!("fuzz-exec-warm-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (bin, log) = fake_checker(&dir);
+        let calls = || std::fs::read_to_string(&log).unwrap_or_default();
+        let slot = dir.to_string_lossy().into_owned();
+
+        // Off: one-shot everywhere.
+        let answer = checker(&bin, Warm::Off, &[]).run(&slot, false, true, None);
+        assert_eq!(answer["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert!(answer.get("warm").is_none());
+        assert!(!calls().contains("program="));
+
+        // On: a slot's feedback check goes to the daemon; an ordinary check and a project with its own directory do not.
+        std::fs::remove_file(&log).unwrap();
+        let warm = checker(&bin, Warm::On, &[]);
+        assert_eq!(warm.run(&slot, false, true, Some("fuzz-3"))["stdout"], "{\"daemon\":1,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, true, true, None)["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, false, false, None)["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert!(calls().lines().next().unwrap().starts_with("1 --project"));
+        // The role log's program goes with the check that named it, warm or not.
+        assert_eq!(calls().lines().nth(1), Some("program=fuzz-3"));
+        assert_eq!(calls().matches("program=").count(), 1);
+        // The executor's end stops the daemon of each slot a warm check used, once, with the check's own mode flags.
+        warm.stop_warm();
+        let stops: Vec<String> = calls().lines().filter(|line| line.contains("--stop-daemon")).map(str::to_string).collect();
+        assert_eq!(stops.len(), 1);
+        assert!(stops[0].contains("--feedback-facts"), "{}", stops[0]);
+        warm.stop_warm();
+        assert_eq!(calls().lines().filter(|line| line.contains("--stop-daemon")).count(), 1);
+
+        // A warm check that fails stops its daemon before the slot is reused.
+        std::fs::remove_file(&log).unwrap();
+        let failing = checker(&bin, Warm::On, &[("FAKE_FAIL", "1")]);
+        assert_eq!(failing.run(&slot, false, true, None)["status"], 9);
+        assert!(calls().lines().last().unwrap().contains("--stop-daemon"));
+
+        // Verify: the one-shot run at the same path follows, and the two are compared.
+        let verify = checker(&bin, Warm::Verify, &[]);
+        let answer = verify.run(&slot, false, true, Some("fuzz-4"));
+        assert_eq!(answer["warm"]["identical"], false, "the stand-in prints its mode, so the outputs differ");
+        assert_eq!(answer["warm"]["oneShotStatus"], 0);
+        // Both runs of a verified check name its program.
+        assert_eq!(calls().matches("program=fuzz-4").count(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

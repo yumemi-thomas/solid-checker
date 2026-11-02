@@ -124,7 +124,11 @@ the result, read after the action resolves (`await save(); …`).
   proof reads. Not claimed: an `untrack` callback, a named closure called in
   place, a call after an await in its layer, a layer in a parameter list, and
   any other function written in the body, although the probes show the
-  synchronous ones throw.
+  synchronous ones throw. Uncertifiable (ADRs 0537, 0538): a named function
+  run at an inline carrier (`[1].forEach(f)`) or called from a step, one
+  handed to a project helper, written as a member's value or an object slot,
+  a method of a class written in the body, and a chain of in-place layers
+  past the climb's bound of 16, re-asked from where it stopped.
 - **After a suspension.** In an async generator, a call that any `await`,
   `for await`, `yield*` or `await using` of the body can run before — or that
   a loop can reach again after one — is not claimed. A later `yield` re-enters

@@ -317,8 +317,8 @@ createRoot(() => {
   });
   moduleAndEffect();
 
-  // Negative: a cleanup the apply returns runs at the next run (inside the
-  // marker) and at disposal (outside it): no single answer, so none is claimed.
+  // Uncertifiable (ADR 0541): a cleanup the apply returns runs at the next run
+  // (inside the marker) and at disposal (outside it): no single answer.
   createEffect(value, () => () => {
     flush();
   });

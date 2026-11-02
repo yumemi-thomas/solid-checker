@@ -135,7 +135,13 @@ effect.
   the effect. Unresolved callees, generators (calling one runs none of its
   body), methods, parameter initializers, a `let` helper, a callback handed to
   a timer, listener or promise, and an async function's code after its first
-  `await` are not claimed.
+  `await` are not claimed. A named function handed to an inline carrier
+  (`[1].forEach(f)`, ``f`x` ``, `f.call(…)`, `Reflect.apply(f, …)`) runs at
+  the carrier, which is a layer; a callback prop of a project component that
+  only calls it (`props.run()`, a destructured `run()`) runs at those calls
+  (ADR 0538). One handed to a project helper, written as a member's value or
+  an object slot, or a method of a class written in the apply is reported as
+  uncertifiable, anchored at the code around it.
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or
@@ -161,10 +167,12 @@ effect.
 - **Positions it does not place.** An apply passed by name
   (`createEffect(v, applyFn)`), the `{ effect, error }` bundle form, and an
   apply the engine proves absent (`defer: true` on a constant compute: it
-  reports nothing there, ADR 0302). `createRenderEffect`
-  is never claimed (see the table).
+  reports nothing there, ADR 0302). `createRenderEffect`'s apply is
+  uncertifiable on rc.17, never a violation (ADR 0541; see the table).
 - **Returned cleanups.** A cleanup function the apply returns reports only on
-  the run that replaces it, so no single answer holds.
+  the run that replaces it, so no single answer holds: uncertifiable (ADR 0541).
+- **`createReaction`.** On rc.17 its callback is a deferred user effect's apply
+  and runs only from the draining flush: claimed as an apply is (ADR 0541).
 
 ## Premises
 

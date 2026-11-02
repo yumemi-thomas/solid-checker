@@ -28,7 +28,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { assertFindingsMapped, checkerEnv, checkerWorkDir, keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
-import { fileHash, treeStat, withRuntimeCache } from "./cache.mjs";
+import { fileHash, treeStat, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
@@ -38,7 +38,7 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "no-typecheck-batch", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "no-typecheck-batch", "warm-checker", "no-warm-checker", "warm-verify", "help"]);
 const VALUES = new Set(["executor", "fast-host", "chrome-concurrency", "chrome-clock", "chrome-pages", "cache-dir", "seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
@@ -71,6 +71,14 @@ export const defaultParallelism = (cores = availableParallelism(), { allCores = 
  */
 export const defaultWorkers = (cores = availableParallelism(), { virtualClock = false } = {}) => Math.max(1, virtualClock ? cores : cores * 2);
 
+/**
+ * The executor's `warmChecker` (ADR 0543): `--warm-verify` compares every warm answer with a one-shot run, `--warm-checker` alone does
+ * not. On the Rust executor it is on by default (`rust`): the sampled grids under `--warm-verify` (warm-verify-1, 48,973 programs, every
+ * warm answer byte-identical to the one-shot one) were its proof; `--no-warm-checker` turns it off.
+ */
+export const warmCheckerMode = (options, { rust = false } = {}) =>
+  options.warmVerify ? "verify" : options.noWarmChecker ? "off" : options.warmChecker || rust ? "on" : "off";
+
 /** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
 export function attachDaemon(config, options) {
   // The fast path's runner in real Chrome (chrome-host.mjs) by default: a reused page per worker on Chrome's virtual time,
@@ -82,9 +90,12 @@ export function attachDaemon(config, options) {
     const executor = options.executor ?? (settings.pages === "reuse" && settings.clock === "virtual-time" ? "rust" : "node");
     if (executor === "rust") {
       // The Rust executor (exec.mjs): the projects, type checks, checker runs and pages off this process's thread.
+      // The role log (ADR 0533) combines with --warm-checker: each check names its program (SOLID_CHECKER_IR_ROLE_LOG_PROGRAM), and a
+      // slot's daemon logs each answer to the log and program its client names (ADR 0543).
       if (settings.pages !== "reuse" || settings.clock !== "virtual-time") throw new Error("--executor rust runs --chrome-pages reuse on --chrome-clock virtual-time only");
       const executor = lazyExecutor({
         tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork, slotRoot: checkerWorkDir(config.install, "slots"),
+        warmChecker: warmCheckerMode(options, { rust: true }),
         env: checkerEnv({ typefacts: config.typefacts, env: Object.fromEntries(["SOLID_CHECKER_RUNTIME_RESOLVER", "SOLID_TYPEFACTS_BIN"].filter((key) => process.env[key]).map((key) => [key, process.env[key]])) }),
         chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, oracleInstall: config.install, pages: Number(options.chromeConcurrency ?? 16) },
       });
@@ -95,6 +106,7 @@ export function attachDaemon(config, options) {
       fast: createChromeHost({ install: config.fastInstall, oracleInstall: config.install, concurrency: Number(options.chromeConcurrency ?? 16), ...settings }) };
   }
   if (options.executor === "rust") throw new Error("--executor rust needs --fast-host chrome");
+  if (warmCheckerMode(options) !== "off") throw new Error("--warm-checker and --warm-verify need the Rust executor");
   if (options.fastHost !== undefined && options.fastHost !== "happy-dom") throw new Error(`--fast-host takes happy-dom or chrome, not ${options.fastHost}`);
   return options.noDaemon ? config : { ...config, fast: createFastDaemon({ install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock }) };
 }
@@ -175,6 +187,9 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--fast-host chrome|happy-dom]  the fast path's runtime (default chrome: real Chrome, the oracle's browser; happy-dom: the Vitest daemon)
   [--chrome-pages reuse|fresh-page|fresh-context] [--chrome-clock virtual-time|js|real]  (defaults reuse, virtual-time)
   [--executor node|rust]  rust (the default with Chrome's defaults): projects, type checks, checker runs and pages in the Rust executor (exec.mjs)
+  [--warm-checker]    with the Rust executor: one retained checker daemon per slot answers its feedback-facts checks (ADR 0543; the Rust executor's default)
+  [--no-warm-checker] a fresh checker and producer per program
+  [--warm-verify]     --warm-checker, and every warm answer is compared with a one-shot run at the same path (a difference is a harness failure)
   [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache.noindex)
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
@@ -311,10 +326,10 @@ async function sweep(options, config, out) {
     knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.map(({ code, coarseKey, ref }) => ({ code, coarseKey, ref })), recallGaps: falseClean.recallGaps,
   };
   writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-"), falseClean: falseCleanReport, unexecuted: unexecutedReport }, null, 2)}\n`);
-  if (config.runtimeCache) {
+  if (config.runtimeCache || config.typecheckCache) {
     // Beside the run's files, not in them: a cached run's results are the uncached run's.
-    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
-    console.error(`runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
+    console.error(`runtime cache ${JSON.stringify(cacheStats(config))}`);
   }
   const certifiedFalseCleans = rows.flatMap((row) => row.items).filter((item) => item.kind === "candidate-false-clean" && item.certified).length;
   writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, certifiedFalseCleans, candidates: candidates.length, confirmed, groups: groups.length,

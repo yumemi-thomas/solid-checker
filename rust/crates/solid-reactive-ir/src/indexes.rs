@@ -835,6 +835,21 @@ pub(super) struct SemanticLookup<'a> {
     memos: crate::base::memo::build::LookupMemos<'a>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    /// The named-closure placements this build computed (instrumentation,
+    /// [`crate::BuildTimings::closure_placements`]).
+    closure_placements: std::sync::atomic::AtomicU64,
+    /// The write walk's caller steps this build took (instrumentation,
+    /// [`crate::BuildTimings::write_walk_steps`]).
+    write_walk_steps: std::sync::atomic::AtomicU64,
+    /// The site-reach derivations this build evaluated (instrumentation,
+    /// [`crate::BuildTimings::reach_evaluations`]).
+    reach_evaluations: std::sync::atomic::AtomicU64,
+    /// The most work one bounded walk did, and how many ended at their
+    /// bound (ADR 0560, [`crate::BuildTimings::bounded_walk_peak`]).
+    bounded_walk_peak: std::sync::atomic::AtomicU64,
+    bounded_walks_exhausted: std::sync::atomic::AtomicU64,
+    /// The functions of every file, counted once (ADR 0546).
+    function_count: OnceLock<usize>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
@@ -1200,6 +1215,12 @@ impl<'a> SemanticLookup<'a> {
             hand_out_reads: hand_outs::HandOutReads::default(),
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
+            closure_placements: std::sync::atomic::AtomicU64::new(0),
+            write_walk_steps: std::sync::atomic::AtomicU64::new(0),
+            function_count: OnceLock::new(),
+            reach_evaluations: std::sync::atomic::AtomicU64::new(0),
+            bounded_walk_peak: std::sync::atomic::AtomicU64::new(0),
+            bounded_walks_exhausted: std::sync::atomic::AtomicU64::new(0),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -1247,6 +1268,92 @@ impl<'a> SemanticLookup<'a> {
             effect_apply_regions: crate::base::reads::Recorded::new(),
             effect_apply_calls: crate::base::reads::Recorded::new(),
         }
+    }
+
+    /// Counts one computed named-closure placement
+    /// ([`crate::BuildTimings::closure_placements`]).
+    pub(crate) fn count_closure_placement(&self) {
+        self.closure_placements
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The named-closure placements this build has computed so far.
+    pub(crate) fn closure_placements(&self) -> u64 {
+        self.closure_placements
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Counts `steps` write-walk caller steps
+    /// ([`crate::BuildTimings::write_walk_steps`]).
+    pub(crate) fn count_write_walk_steps(&self, steps: u64) {
+        self.write_walk_steps
+            .fetch_add(steps, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Counts one evaluated site-reach derivation of a function
+    /// ([`crate::BuildTimings::reach_evaluations`]).
+    pub(crate) fn count_reach_evaluation(&self) {
+        self.reach_evaluations
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// ADR 0560: one bounded walk's work (a climb's followed calls, a write
+    /// walk's caller steps, a site-reach query's derivations) and whether
+    /// it ended at its bound.
+    pub(crate) fn note_bounded_walk(&self, steps: u64, exhausted: bool) {
+        self.bounded_walk_peak
+            .fetch_max(steps, std::sync::atomic::Ordering::Relaxed);
+        if exhausted {
+            self.bounded_walks_exhausted
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// The largest [`Self::note_bounded_walk`] work, and how many walks
+    /// ended at their bound, so far.
+    pub(crate) fn bounded_walks(&self) -> (u64, u64) {
+        (
+            self.bounded_walk_peak
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.bounded_walks_exhausted
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
+    /// The site-reach derivations this build has evaluated so far.
+    pub(crate) fn reach_evaluations(&self) -> u64 {
+        self.reach_evaluations
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// `file` as one of this lookup's own files (the same facts, not a file
+    /// of that path): a position in [`Self::files`], read by address. It
+    /// reads no other file.
+    pub(crate) fn own_file(&self, file: &FileFacts) -> Option<&'a FileFacts> {
+        let files = self.files();
+        let at = std::ptr::from_ref(file) as usize;
+        let start = files.as_ptr() as usize;
+        let index = at.checked_sub(start)? / std::mem::size_of::<FileFacts>().max(1);
+        files.get(index).filter(|own| std::ptr::eq(*own, file))
+    }
+
+    /// How many functions the program's files hold (every file's
+    /// [`solid_facts::ast::AstFacts::functions`]). ADR 0546: it chooses how
+    /// the site-reach query computes its answers, which are the same either
+    /// way (`SiteReach::least_fixed_point`), so it is no read of the answers.
+    pub(crate) fn function_count(&self) -> usize {
+        *self.function_count.get_or_init(|| {
+            self.files()
+                .iter()
+                .map(|file| file.ast.functions.len())
+                .sum()
+        })
+    }
+
+    /// The write-walk caller steps this build has taken so far.
+    pub(crate) fn write_walk_steps(&self) -> u64 {
+        self.write_walk_steps
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// The exact compiler symbol demanded at one span of one file, if any.
@@ -1353,6 +1460,14 @@ impl<'a> SemanticLookup<'a> {
     ) -> bool {
         let count = answer.arguments as usize;
         let slot = answer.slot.map(|slot| slot as usize);
+        // ADR 0549: the owner pass reads the creating call's placement.
+        if self
+            .dialect
+            .returned_invocation_owner_requirement_role(answer.primitive)
+            .is_some()
+        {
+            return true;
+        }
         (0..count).any(|argument| {
             let semantics = self.dialect.returned_callback_semantics_at(
                 answer.primitive,
@@ -1425,6 +1540,21 @@ impl<'a> SemanticLookup<'a> {
                     text(&mut hasher, &format!("{:?}", answer.primitive));
                     hasher.update(answer.slot.map_or(u64::MAX, u64::from).to_le_bytes());
                     hasher.update(answer.arguments.to_le_bytes());
+                    // ADR 0549: where the function was created, as the owner
+                    // pass reads it.
+                    text(&mut hasher, self.memos.table().path_of(answer.factory.0));
+                    span(&mut hasher, answer.factory.1);
+                    hasher.update([
+                        u8::from(answer.exact),
+                        u8::from(answer.factory_at_module_scope),
+                    ]);
+                    match answer.placement {
+                        Some((placed, at)) => {
+                            text(&mut hasher, self.memos.table().path_of(placed));
+                            span(&mut hasher, at);
+                        }
+                        None => hasher.update([0xfe]),
+                    }
                 }
                 hasher.update([0xff]);
             }

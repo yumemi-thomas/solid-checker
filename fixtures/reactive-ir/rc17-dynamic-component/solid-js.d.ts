@@ -44,6 +44,9 @@ declare module "solid-js" {
     effect: (value: Next, prev?: Next) => (() => void) | void,
     options?: object
   ): void;
+  // Published rc.17 dist/types/core/scheduler.d.ts:384-385.
+  export function flush(): void;
+  export function flush<T>(fn: () => T): T;
   export function untrack<T>(fn: () => T, strictReadLabel?: string | false): T;
   export interface DynamicOptions {
       /**

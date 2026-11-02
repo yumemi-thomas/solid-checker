@@ -64,6 +64,18 @@ other owner-creating callback, as much as under a component body: the root owns
 the first run only. Under an unowned call site every run is unowned, and the
 operation stays a proven violation.
 
+`createReaction` captures the owner current at its call, and each call of the
+tracker it returns creates its effect under that owner (rc.17 `dist/dev.js:2630-2651`):
+a tracker created with no owner is a violation at every `track()` call, wherever
+that call runs; one created in a body is owned there. The tracker is followed
+through `const` bindings, closed object and tuple literals, and a `const`
+hook's single literal return; through a `let` the call is an obligation. One
+created in another module is placed only when it is created at that module's
+top level. A tracker a hook makes and returns is placed at the hook's call (one hook,
+same module). A tracker that escapes where no call is named (exported, passed
+to a call or a JSX attribute, returned, assigned) is an obligation at its
+creation unless that is owned (ADRs 0549, 0551).
+
 A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
 later calls it. The owner walk does not follow the returned value to those
@@ -72,7 +84,9 @@ calls, so an owner operation in it is uncertifiable, never certified (ADR 0472).
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
 `createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a
-`runWithOwner(null, fn)` callback -- is not owned by it, so an operation there
+`runWithOwner(null, fn)` callback, the `error` member of an exact
+`createEffect` or `createReaction` bundle (rc.17 calls it from the flush before
+the window opens; ADR 0548) -- is not owned by it, so an operation there
 inside a `createRoot` callback is the same proven violation it is inside a
 component, and an `onSettled` there is out-of-band. A root created inside such
 a callback, or a compiled JSX child, which the render effect the compiler
@@ -192,12 +206,12 @@ yielding it (a getter's body, a tagged template's substitution, an operand of
 `void`) is not placed. Each of these uncertain cases is uncertifiable, never a
 violation (ADR 0345).
 
-Two approximations remain. A nested callback the owner graph gives no owner
-edge at all, such as a callback handed to a function the analysis does not
-model, or handed to a scheduler through a wrapper call
-(`setTimeout(wrap(() => ...))`), is still treated as owned by the
-owner-creating callback it is written in, and is not reported inside a
-component. Where it runs with no owner, that is a false negative.
+A callback with no proven run under its lexical owner (a wrapper callback,
+stored member, class member or getter) is uncertifiable (ADR 0534). Dormant
+exports remain silent; unnamed namespace escapes remain uncertain. JSX
+boundaries retain the region's answer. An operation in an exported helper's
+own body names its unseen callers instead: the open-world seed is its edge
+(fixture `owner-exported-seed-cause`).
 
 An invoked function literal is an owner edge (ADR 0347): the call runs its body
 under the owner of the code around the call, so a plain IIFE at module scope or

@@ -180,6 +180,36 @@
       "start": 1759,
       "end": 1768,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 2625,
+      "end": 2634,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 2700,
+      "end": 2709,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 3391,
+      "end": 3400,
+      "fixes": 0
     }
   ]
 }

@@ -127,6 +127,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 910,
+      "end": 917,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 938,
       "end": 979,
       "fixes": 0
@@ -289,6 +299,16 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 3291,
       "end": 3322,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 3460,
+      "end": 3467,
       "fixes": 0
     },
     {

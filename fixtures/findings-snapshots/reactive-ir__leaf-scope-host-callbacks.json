@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
+      "start": 592,
+      "end": 601,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -69,6 +79,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
       "start": 2207,
       "end": 2215,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
+      "start": 2238,
+      "end": 2247,
       "fixes": 0
     },
     {
@@ -132,6 +152,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 942,
+      "end": 951,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -139,6 +169,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
       "start": 286,
       "end": 305,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 603,
+      "end": 612,
       "fixes": 0
     },
     {
@@ -159,6 +199,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
       "start": 798,
       "end": 816,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 921,
+      "end": 930,
       "fixes": 0
     },
     {

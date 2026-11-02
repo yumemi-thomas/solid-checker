@@ -127,6 +127,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   await in a nested closure belongs to that closure. A destructuring default
   runs after the value it destructures, so it follows that value's await. A
   helper called at such a site is uncertifiable at the call.
+- **Named hand-offs (ADR 0531).** Resolved synchronous standard-library carriers,
+  template tags and Function.call/apply place a named reader at the carrier's
+  role. Other hand-offs are obligations; reviewed fresh-stack callbacks stay legal.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
   scope only stores has no execution role; a read there is reported as
@@ -247,6 +250,18 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   0509), both stay uncertifiable at the read, this rule's and that one's
   (ADR 0511): a `<Loading>` that shows its fallback holds a user effect to the
   reveal, where the warning fires instead.
+- **An effect's returned cleanup and its error arm.** A read in the cleanup an
+  apply returns is uncertifiable: a rerun runs it in the window, a disposal
+  outside it (ADR 0539). A compute with no call, no reference and a literal
+  return never reruns, and its cleanup is silent. A read in an exact bundle's
+  `error` member is silent: rc.17 runs it before the window opens (ADR 0540),
+  a `createReaction` bundle's too (ADR 0548).
+  An action body's read before its first suspending `yield` runs on the
+  stack of the action's call, in that caller's window: called from an effect
+  apply or a `createReaction` callback it is reported; from a handler, an
+  `error` arm or a leaf scope it is silent. An action whose calls are not all
+  followed, or that is also called where nothing proves the run, leaves its
+  body's reads obligations (ADR 0547).
 
 ## Why is this bad?
 
@@ -319,3 +334,7 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — the async variant, which throws
 
 A read in a callback named at its sole `createRoot`/`runWithOwner` position, or in a layer that callback runs in place, is placed at the call as the inline callback is; any other entry is an obligation (ADR 0517). So is a read through `r.call(…)` or `r.bind(…)()` in a closure the body calls, and a read written after a mention that may precede its declarator.
+
+ADRs 0528–0530: eager IIFEs in handler expressions do not inherit the yielded handler's dispatch exemption. Binding-dispatched reads in proven in-place layers retain an undecided enclosing-summary row (an obligation). A closed dynamic-only component entry has the unwindowed role: a stale snapshot, with no promise of a runtime diagnostic; mixed entries stay unproven.
+
+Placement climbs that exhaust their budget retain an uncertifiable read (ADR 0532): 16 in-place layers, eight generator steps, or eight layers inspected for a pre-suspension window. Outer unread layers cannot supply a deferred or unwindowed role.

@@ -786,6 +786,24 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// Source: `runEffect` opens the window (`setStrictRead("an effect
+    /// callback")`) before it calls the previous cleanup, then the apply
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1991-2005`); a read there
+    /// takes the strict-read warning (`dist/dev-shared.js:5441`). A tracked
+    /// effect calls its cleanup inside its compute, where `recompute` turns
+    /// tracking on and the window off (`dist/dev.js:2063-2066`,
+    /// `dist/dev-shared.js:4195-4201`).
+    fn returned_cleanup_reruns_in_read_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+        )
+    }
+
     /// Answered from the resolved `@solidjs/signals` (`releases.rs`): rc.17
     /// adds `!disposalDepth` to `setSignal` (`dist/dev-shared.js:5620-5626`),
     /// `markRefresh` (`:5801-5806`) and `devGuardStoreSetterWrite`
@@ -829,6 +847,18 @@ impl Dialect for Solid2 {
             && (primitive == Primitive::CreateRoot
                 || (self.render_creates_root
                     && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
+    }
+
+    /// ADR 0551: `resolve(fn)` and `until(fn)` run `fn` as the compute of a
+    /// `computed` that `watch` creates under a fresh `createRoot`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2694-2735`, `:2756-2770`,
+    /// `:2909`), on its first pass and on every re-derivation: a signal write
+    /// there throws REACTIVE_WRITE_IN_OWNED_SCOPE (probed in both thunks,
+    /// Fable's precision report row 43). Read on rc.17 only.
+    fn callback_runs_as_created_computation(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && matches!(primitive, Primitive::Resolve | Primitive::Until)
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
     }
 
     /// ADR 0353. Off rc.13, `render`'s and `hydrate`'s `code` callback is not
@@ -2031,6 +2061,18 @@ impl Dialect for Solid2 {
     /// component body, with and without `name`: `observers(source)` is `[]`, a
     /// write leaves the mapper's run count and output unchanged, and only the
     /// named calls raise `STRICT_READ_UNTRACKED`.
+    // rc.17 signals dist/dev.js:2657-2660 calls fn() without replacing
+    // tracking or strictRead, before draining the queue.
+    fn callback_preserves_read_window(&self, primitive: Primitive, argument: usize) -> bool {
+        self.callback_inherits_calling_window(primitive, argument)
+            || (self.rc17_callback_exports && primitive == Primitive::Flush && argument == 0)
+    }
+
+    fn dynamic_mount_is_unwindowed(&self, primitive: Primitive) -> bool {
+        self.rc17_callback_exports
+            && matches!(primitive, Primitive::Dynamic | Primitive::DynamicComponent)
+    }
+
     fn callback_runs_untracked_without_window(
         &self,
         primitive: Primitive,
@@ -2305,6 +2347,37 @@ impl Dialect for Solid2 {
         primitive == Primitive::Action && argument == 0
     }
 
+    /// ADR 0548: `runEffect` calls a user effect's `_errorFn` when the
+    /// compute errored, before `setStrictRead`, `setEffectCallback` and
+    /// `enterCallback`, from the draining flush whose owner is `null`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1969-1985`, `:1993-1995`).
+    /// `createEffect` unwraps the bundle (`:2519`); `createReaction` passes
+    /// `effectFn.error` to its arm, a user effect (`:2653-2672`). Probed:
+    /// `createEffect` there warns NO_OWNER_EFFECT, `onCleanup`
+    /// NO_OWNER_CLEANUP, `useContext` throws; a read, a write, `createRoot` and
+    /// an action call are silent. `createRenderEffect` takes no bundle.
+    /// Read on rc.17 only.
+    fn bundle_error_member_runs_unowned(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect, 1) | (Primitive::CreateReaction, 0)
+        ) && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+    }
+
+    /// ADR 0547: rc.17's `step` (`@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev.js:1573-1600`) sets the action depth, the callback depth and
+    /// clears the effect-callback marker around `it.next(v)`; it leaves
+    /// `strictRead` and `tracking` as the invoking stack had them, and a
+    /// plain-value `yield` resumes in `inTransaction(…, () => step(v))` on the
+    /// same stack (`:1637`). From an effect apply a body read warns "an effect
+    /// callback" (probed). Read on rc.17 only (the release key ADRs 0456,
+    /// 0483 and 0541 use); every other release claims nothing.
+    fn action_step_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::Action
+            && argument == 0
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+    }
+
     /// `createComponent(Comp, props)`, argument 0, on every release the
     /// reviews read. The export is `solid-js`'s; `@solidjs/web` re-exports it
     /// unchanged in every build (`export { …, createComponent, … } from
@@ -2433,6 +2506,20 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// ADR 0549: `createReaction` captures `getOwner()` at its call and every
+    /// `track()` runs `runWithOwner(owner, () => effect(…))`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2630-2651`): the arm
+    /// effect's parent is the creation owner, and with none `effect()` warns
+    /// NO_OWNER_EFFECT at each `track()` (`:1869`; probed). Read on rc.17 only.
+    fn returned_invocation_owner_requirement_role(
+        &self,
+        primitive: Primitive,
+    ) -> Option<OwnerRequirementRole> {
+        (primitive == Primitive::CreateReaction
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown)
+            .then_some(OwnerRequirementRole::Effect)
+    }
+
     /// `Dynamic`'s `component`, on every release the reviews read. `Dynamic`
     /// is `@solidjs/web`'s, the same function in every build of rc.3 and rc.9
     /// (rc.3 `web.js:1865`, `dev.js:1935`, `server.js:3208`; rc.9 `web.js:2099`,
@@ -2520,8 +2607,27 @@ impl Dialect for Solid2 {
     /// so the draining flush is always the one on the stack. `createRenderEffect`
     /// is not: unless `schedule` is set its first run is the synchronous
     /// `runEffect(node, LANE_RUN)` at creation, with no flush in progress.
+    ///
+    /// ADR 0541: rc.17's `createReaction` callback is the apply of a user
+    /// effect created `{ user: true, defer: true }` (`dist/dev.js:2630-2675`),
+    /// so it too runs only from `runEffect` in the draining flush. Read on
+    /// rc.17 only (`disposal_write_guard`, as
+    /// [`Solid2::throws_creating_in_effect_callback`]).
     fn callback_runs_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
-        primitive == Primitive::CreateEffect && argument == 1
+        (primitive == Primitive::CreateEffect && argument == 1)
+            || (primitive == Primitive::CreateReaction
+                && argument == 0
+                && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown)
+    }
+
+    /// ADR 0541: `createRenderEffect`'s apply runs first synchronously at
+    /// creation (no flush, the caller's owner) and on every later run from
+    /// `runEffect` in the draining flush with no owner (rc.17 `dist/dev.js`
+    /// `effect`, `runEffect` at `:1946-2026`). Read on rc.17 only.
+    fn callback_reruns_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::CreateRenderEffect
+            && argument == 1
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
     }
 
     /// Once a flush is running, `flush` returns without draining, after

@@ -384,6 +384,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
         }],
         unknown_import_paths: vec!["/project/absent.ts".into()],
         unmapped_roots: Vec::new(),
+        build_inputs: None,
     });
     let demands = Arc::clone(&backend.module_demands);
     let mut session = session_over(backend);
@@ -402,6 +403,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
         packages: true,
         distinct_bare_imports: false,
         omit_modules: false,
+        build_inputs: false,
     });
     let modules = lifecycle(&mut session, modules_request);
     assert!(modules.ok, "modules response = {modules:?}");

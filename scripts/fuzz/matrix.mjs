@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
+import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { codeOfThrown, codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
@@ -31,17 +31,22 @@ import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, 
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
-  CALLBACK_CONTEXTS, CALLBACK_FORMS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
+  CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
 } from "./misuse.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
 import { isSite, walk } from "./model.mjs";
-import { evaluate, finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
+import { gridProfile } from "./perf.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { setExecutorChecks } from "./exec.mjs";
+import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
+import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
@@ -169,8 +174,13 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  */
 export function recallAxes(code, context, base, variants, { legal = false } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
-  const shapes = recallCell ? [...base] : [];
-  for (const variant of variants) {
+  // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
+  const takes = (variant) => !SPEC[code].recallVariantsNotIn?.[context]?.includes(variant);
+  const shapes = recallCell ? base.filter((shape) => takes(shape.variant)) : [];
+  // A callback-prop context (misuse.mjs CBP_CONTEXTS) takes its base grid only: its own axis is the pass form (30 contexts a code),
+  // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold.
+  if (CBP_CONTEXTS.includes(context)) return shapes;
+  for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
     // axes are written on the local source, which it cannot take.
     if (SPEC[code].variantSources?.[variant]) continue;
@@ -181,13 +191,15 @@ export function recallAxes(code, context, base, variants, { legal = false } = {}
     for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
   }
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
-  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context))) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
-  const local = base.filter((shape) => !shape.mount && !shape.source);
+  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context)).filter(takes)) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
+  const local = base.filter((shape) => !shape.mount && !shape.source && takes(shape.variant));
   if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's
   // strict-read window never opens there: rc.17 is silent on a stale body read, and a pending one re-runs the body without end.
   const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
-  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled)) for (const shape of local) shapes.push({ ...shape, mount });
+  // A mount a recall-only context's code cannot take (`recallMountsNotIn`: there Solid reports nothing).
+  const mountTakes = (mount) => !SPEC[code].recallMountsNotIn?.[context]?.includes(mount);
+  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount)) for (const shape of local) shapes.push({ ...shape, mount });
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
@@ -479,6 +491,8 @@ export function gate(baseline, current) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
   }
+  // A sampled grid (`--grid-sample`) is for iterating, never a gate: the gate compares whole grids.
+  for (const [side, matrix] of [["baseline", baseline], ["current", current]]) if (matrix.gridSample) return { ok: false, refused: `the ${side} matrix is a sample (--grid-sample ${matrix.gridSample.fraction}): the gate compares whole grids`, ...empty };
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
   const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
@@ -579,6 +593,7 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
                                         layers, callback forms, mounts and file sources, each across the base grid, and the recall contexts
   [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
                                         other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
+  [--scratch <dir>]                     cases/ and chrome-cases/ in <dir> behind links (scratch.mjs; focus.mjs passes the VM's tmpfs)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache.noindex)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
@@ -586,11 +601,25 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
 
 const CHUNK = 150;
 
+/**
+ * A grid's measurement files beside its rows (matrix.mjs and legal.mjs): `costs.jsonl` and `cost.json` (cost.mjs), `profile.json`
+ * (perf.mjs `gridProfile`, with the pipeline's busy totals). Nothing reads them back into a row or a verdict.
+ * SOLID_CHECKER_FUZZ_PERF=0 writes neither (the control of the rows-unchanged check).
+ */
+export function writeGridPerf(out, label, rows, values, budget, profile) {
+  if (process.env.SOLID_CHECKER_FUZZ_PERF === "0") return;
+  const summary = writeCosts(out, rows.map((row) => costLine(row, values.get(row.id))), budget);
+  writeFileSync(join(out, "profile.json"), `${JSON.stringify(profile.json({ programs: rows.length, busy: phaseTimings() }), null, 2)}\n`);
+  for (const line of costLines(summary, { prefix: label })) console.error(line);
+}
+
 export async function runMatrix(options) {
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
+  // `--scratch <dir>`: cases/ and chrome-cases/ there, behind links at their usual paths (scratch.mjs).
+  if (options.scratch) linkScratch(out, resolve(options.scratch));
   const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
     return await sweep(options, config, out);
@@ -600,6 +629,10 @@ export async function runMatrix(options) {
 }
 
 async function sweep(options, config, out) {
+  // The grid's phase clock (perf.mjs) and its budget (cost.mjs): measurement only, beside the rows.
+  const profile = gridProfile();
+  const budget = budgetOf(options);
+  const phaseStart = performance.now();
   const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(","), recall: options.recall });
   let entries = [];
   // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
@@ -612,6 +645,14 @@ async function sweep(options, config, out) {
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
   if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+  // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; matrix.json records it.
+  const sampling = gridSampleOptions(options);
+  let gridSample = null;
+  if (sampling) {
+    ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
+    console.error(`matrix: ${sampleLine(gridSample)}`);
+  }
+  profile.add("generate", performance.now() - phaseStart);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();
@@ -619,6 +660,8 @@ async function sweep(options, config, out) {
   const plain = (list) => list.map(({ program, built }) => ({ program, built }));
   const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
   if (run !== config) console.error(`matrix: every program's runtime is cached; checker concurrency ${run.concurrency} (${config.concurrency} + the ${config.workers} idle workers)`);
+  // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
+  if (run !== config) await setExecutorChecks(run);
   // Chunk k's fast path runs while chunk k+1 is type-checked and checked: one checker pool and one Vitest batch at a time, as before, but
   // never one waiting on the other. Each chunk's records and verdicts are what `evaluate` gives it.
   const chunks = [];
@@ -633,7 +676,7 @@ async function sweep(options, config, out) {
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
       const site = siteOf(built);
-      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built) });
+      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built) }));
       const misuse = program.components[0].misuse;
       const others = otherRegions(built);
       rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
@@ -642,6 +685,8 @@ async function sweep(options, config, out) {
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
   }
 
+  if (run !== config) await setExecutorChecks(config);
+  profile.add("evaluate", Date.now() - started);
   console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
   const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
@@ -650,6 +695,7 @@ async function sweep(options, config, out) {
   if (broken) throw new Error(broken);
 
   // Chrome: a sample of agree programs per cell, every wrong-rule and false-clean one.
+  const chromePhase = performance.now();
   if (options.confirmWithChrome) {
     const pick = [];
     const bySample = new Map();
@@ -688,8 +734,10 @@ async function sweep(options, config, out) {
 
   // The runtime differential (`--runtime-diff <N|all>`): Happy DOM's record against Chrome's, without the checker, on up to N programs
   // per stratum. Beside the matrix, never in it.
+  if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
   const perStratum = parsePerStratum(options.runtimeDiff);
-  if (perStratum) await runtimeDifferential(rows, values, perStratum, config, options, out, "matrix");
+  if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "matrix"));
+  const shrinkPhase = performance.now();
 
   // Shrink one representative per false-clean cell (the smallest program that Chrome did not refute).
   if (options.shrink) {
@@ -719,6 +767,8 @@ async function sweep(options, config, out) {
     }
   }
 
+  if (options.shrink) profile.add("shrink", performance.now() - shrinkPhase);
+  const writePhase = performance.now();
   // Typed-away codes: the evidence is the type checker's own error on the one-line misuse.
   const typedAway = {};
   for (const code of MISUSE_CODES.filter((c) => SPEC[c].typedAway)) {
@@ -729,16 +779,18 @@ async function sweep(options, config, out) {
   }
 
   const header = { label: options.checkerLabel ?? null, bin: options.checkerBin ? "release build" : null };
-  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values) };
+  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values), ...(gridSample ? { gridSample } : {}) };
   const statuses = codeStatuses(matrix);
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
   writeFileSync(join(out, "matrix.md"), markdown(matrix, statuses));
-  if (config.runtimeCache) {
+  if (config.runtimeCache || config.typecheckCache) {
     // Beside the matrix, not in it: a cached run's matrix.json is the uncached run's, byte for byte.
-    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
-    console.error(`matrix: runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
+    console.error(`matrix: runtime cache ${JSON.stringify(cacheStats(config))}`);
   }
+  profile.add("write", performance.now() - writePhase);
+  writeGridPerf(out, "matrix", rows, values, budget, profile);
   console.error(`matrix: wrote ${join(out, "matrix.md")}`);
   if (options.baseline) return reportGate(gate(JSON.parse(readFileSync(resolve(options.baseline), "utf8")), JSON.parse(JSON.stringify(matrix))));
   return 0;
@@ -751,7 +803,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

@@ -1373,25 +1373,31 @@ impl NativeIncrementalSession {
     /// import resolutions: what a retained caller observes to notice that the
     /// filesystem now resolves the program differently (a relinked package, an
     /// edited manifest). Relative imports and repeated specifiers read nothing
-    /// more, and all of them together can exceed the frame limit.
+    /// more, and all of them together can exceed the frame limit. With them,
+    /// every question the program's builds asked the file system
+    /// ([`typefacts::ModuleGraph::build_inputs`]): what a relative or mapped
+    /// resolution read too.
     pub fn resolution_graph(&mut self) -> Result<typefacts::ModuleGraph, BackendError> {
-        self.typescript
-            .module_graph(&typefacts::ModuleGraphDemand::with_distinct_bare_imports())
+        self.typescript.module_graph(
+            &typefacts::ModuleGraphDemand::with_distinct_bare_imports().with_build_inputs(),
+        )
     }
 
     /// [`Self::resolution_graph`] scoped to the imports of `paths`, without
-    /// the module inventory when `without_modules` (the caller holds it).
+    /// the module inventory and the build inputs when `graph_kept` (the
+    /// caller holds both: the update kept the program's files and asked the
+    /// disk nothing new, [`Self::update_kept_graph`]).
     pub fn resolution_graph_of(
         &mut self,
         paths: &[String],
-        without_modules: bool,
+        graph_kept: bool,
     ) -> Result<typefacts::ModuleGraph, BackendError> {
         let demand = typefacts::ModuleGraphDemand::with_distinct_bare_imports()
             .import_paths(paths.iter().cloned());
-        self.typescript.module_graph(&if without_modules {
+        self.typescript.module_graph(&if graph_kept {
             demand.without_modules()
         } else {
-            demand
+            demand.with_build_inputs()
         })
     }
 

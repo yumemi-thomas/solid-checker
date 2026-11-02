@@ -184,7 +184,7 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
-    pub(crate) reachable_calls: &'a HashMap<Location, usize>,
+    pub(crate) reachable_calls: &'a HashMap<Location, u64>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) rule_options: &'a RuleOptions,
     /// The files whose source and TypeFacts rows are the last build's
@@ -683,7 +683,30 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         report_memos(&report, &mut build_timings, emit_timings);
     }
     program.runtime_configuration = runtime_configuration;
+    crate::role_log::flush();
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
+    build_timings.closure_placements = semantic_lookup.closure_placements();
+    build_timings.write_walk_steps = semantic_lookup.write_walk_steps();
+    build_timings.reach_evaluations = semantic_lookup.reach_evaluations();
+    (
+        build_timings.bounded_walk_peak,
+        build_timings.bounded_walks_exhausted,
+    ) = semantic_lookup.bounded_walks();
+    if emit_timings {
+        // The walks' work (ADR 0546, ADR 0560): what the complexity ladder
+        // gates on, per build.
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "reactiveIrWalkWork": {
+                    "writeWalkSteps": build_timings.write_walk_steps,
+                    "reachEvaluations": build_timings.reach_evaluations,
+                    "boundedWalkPeak": build_timings.bounded_walk_peak,
+                    "boundedWalksExhausted": build_timings.bounded_walks_exhausted,
+                }
+            })
+        );
+    }
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))
 }

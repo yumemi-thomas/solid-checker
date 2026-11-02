@@ -8,17 +8,39 @@
 //   node scripts/fuzz/focus.mjs --codes A,B --checker-bin <solid-checker-rust> --typefacts <solid-typefacts>
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
-//     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>]
+//     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]]
+//     [--scratch <dir>] [--sample-big <fraction> [--sample-codes A,B] [--sample-big-seed N] [--sample-big-min K]] [--warm-checker]
+//     [--budget-ms 1000] [--budget-mb 500] [--idle-stretch-s 10] [--perf-against <earlier run dir> [--perf-threshold 0.2]]
 // `--split-codes`: one grid process per code (`<grid>/<code>/`), so a large grid (mx-recall, 277k programs) stays within a heap and a
 // failure or hang costs one code; `--prune-cases`: delete each grid's `cases/` and `chrome-cases/` once its rows are read (a program is
 // a directory of files: three full runs filled a VM disk's inodes); `--grid-timeout`: a grid process that runs longer is killed and
 // reported (default 120 minutes; a stalled Chrome or a paused VM once hung a run for hours); `--heap-mb`: the grid process's heap
 // (default 12000 for the recall grids, Node's default otherwise). Each grid's output streams to `<grid>.log` while it runs.
+// `--scratch` (default $SOLID_CHECKER_FUZZ_SCRATCH, which vm.sh points at the VM's tmpfs): each grid's `cases/`, `chrome-cases/` and
+// role log live there behind links at their usual paths (scratch.mjs), so the per-program writes never reach a disk.
+// `--role-log` (ADR 0533): each grid's checkers append the role log to `<grid>.roles.jsonl` (one file: a directory would take an inode
+// per program); it is folded into `<grid>/roles.json` and the run's
+// `<out>/roles.json` (roles.mjs: arms hit and never hit, yield, new arms against `--roles-against`, silent-by-default decisions).
+// `--warm-checker` (ADR 0543): each grid's slot checks go to one retained checker daemon per executor slot; with `--role-log` each
+// check names its program, which the daemon's log lines carry.
 // `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json),
 // plus `--sample` of its other programs picked anew each run (`--sample-seed` repeats a run's pick; the summary prints it).
+// `--sample-big <fraction>` (sample.mjs): while iterating, the two codes that are ~40% of a full run (STORE_WRITE_OUTSIDE_SETTER,
+// REACTIVE_WRITE_IN_OWNED_SCOPE; `--sample-codes` names others) keep that fraction of every (code, context, layer, variant) stratum,
+// at least `--sample-big-min` (1) programs each, picked by `--sample-big-seed` (1); every other code stays whole, each grid records
+// the sample (`gridSample` in matrix.json and legal.json), the summary says so, and the matrix gate refuses a sampled matrix. A run
+// without the flag (the full run before a PR) is complete.
+// The run's self-profile (perf.mjs, cost.mjs; measurement only, no row or verdict reads it): each grid writes its program costs
+// (`costs.jsonl`, `cost.json`: checker wall time, CPU, peak RSS, role decisions with --role-log, every program over `--budget-ms` or
+// `--budget-mb`) and its phases (`profile.json`); this process samples the machine's CPU and disks (Linux /proc) and prints one
+// `perf <unit>:` line per unit (a grid, or a grid's code with --split-codes): programs/s, phases, checker p50/p99, CPU busy, idle
+// stretches of at least `--idle-stretch-s`, disk MiB per program. It writes them to `<unit>/perf.json` and the run's to
+// `<out>/perf.json`. `--perf-against <run dir>`: the run's perf.json against that run's (perf-compare.mjs); a comparable unit more than
+// `--perf-threshold` worse, or runs that are not comparable, need a look. SOLID_CHECKER_FUZZ_PERF=0 records none of it.
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
 // by code, context, source, mount and outcome (runtime-diff.mjs DEFAULT_DIFF_AXES), many more programs. `--oracle-axes` picks.
 import { spawnSync } from "node:child_process";
+import { Worker } from "node:worker_threads";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -27,7 +49,13 @@ import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
+import { mergeGridReports, summaryLine } from "./roles.mjs";
+import { linkRoleLog } from "./scratch.mjs";
+import { BIG_CODES, sampleLine } from "./sample.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
+import { cpus, platform, totalmem } from "node:os";
+import { cacheState, machineWindow, perfLine, samplerUnavailable, startSampler, unitPerf } from "./perf.mjs";
+import { compareLines, comparePerf, readRun } from "./perf-compare.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MOUNTS = ["--mounts", "root,child,show,for"];
@@ -65,7 +93,10 @@ export function readGrid(out) {
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
   const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind)));
-  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour };
+  // A sampled grid (`--sample-big`) says so in its report.
+  const report = ["matrix.json", "legal.json"].map((name) => join(out, name)).find((path) => existsSync(path));
+  const gridSample = report ? JSON.parse(readFileSync(report, "utf8")).gridSample ?? null : null;
+  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample };
 }
 
 /**
@@ -85,15 +116,47 @@ export function roomAt(dir, { statfs = statfsSync } = {}) {
   return null;
 }
 
-export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runtime = NODE }) {
+export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runtime = NODE, env = process.env }) {
   mkdirSync(dirname(logPath), { recursive: true });
   const log = openSync(logPath, "w");
   try {
-      const run = spawnSync(runtime, [...(heapMb ? [`--max-old-space-size=${heapMb}`] : []), script, ...args], { stdio: ["ignore", log, log], timeout: timeoutMs, killSignal: "SIGTERM" });
+      const run = spawnSync(runtime, [...(heapMb ? [`--max-old-space-size=${heapMb}`] : []), script, ...args], { stdio: ["ignore", log, log], timeout: timeoutMs, killSignal: "SIGTERM", env });
       return { status: run.status, signal: run.signal, timedOut: run.error?.code === "ETIMEDOUT" };
     } finally {
       closeSync(log);
     }
+  }
+
+  /**
+   * The run's perf.json (perf-compare.mjs reads it): what makes two runs comparable (codes, seed, selection, checker mode, budget,
+   * host), each unit's record in run order, and the machine over the whole run, its idle stretches named by the unit they fell in.
+   */
+  export function runPerf({ options, out, units, sampler, runStarted, runEnded, stretchOptions }) {
+    const ordered = [...units].sort((a, b) => a.startedAt - b.startedAt);
+    const machine = sampler ? machineWindow(sampler.samples(runStarted, runEnded), stretchOptions) : { why: samplerUnavailable() ?? "not sampled" };
+    for (const stretch of machine.idleStretches ?? []) {
+      const at = runStarted + stretch.atS * 1000;
+      const unit = ordered.find((u) => at >= u.startedAt && at < u.endedAt);
+      stretch.during = unit ? `during ${unit.label}` : ordered.some((u) => u.startedAt > at) ? "between units" : "after the last unit (folds, merge)";
+    }
+    const programs = ordered.reduce((a, u) => a + u.programs, 0);
+    return {
+      version: 1, out,
+      codes: options.codes, seed: options.seed,
+      selection: { grids: options.grids, splitCodes: Boolean(options.splitCodes), smoke: Boolean(options.smoke), ...(options.smoke ? { sample: options.sample, sampleSeed: options.sampleSeed } : {}), sampleBig: options.sampleBig ?? null, ...(options.sampleBig ? { sampleCodes: options.sampleCodes ?? null, sampleBigSeed: options.sampleBigSeed ?? "1", sampleBigMin: options.sampleBigMin ?? "1" } : {}), oracle: options.runtimeDiff === "0" ? null : { perStratum: options.runtimeDiff, axes: options.oracleAxes }, extra: options.extra },
+      mode: { warmChecker: Boolean(options.warmChecker), roleLog: Boolean(options.roleLog) },
+      budget: { ms: Number(options.budgetMs ?? 1000), mb: Number(options.budgetMb ?? 500) },
+      host: { cpus: cpus().length, memGiB: Math.round(totalmem() / 2 ** 30), platform: platform(), checkerBin: options.checkerBin ?? null },
+      wallMs: runEnded - runStarted, programs, programsPerSecond: runEnded > runStarted ? Math.round((programs / ((runEnded - runStarted) / 1000)) * 100) / 100 : null,
+      machine, units: ordered,
+    };
+  }
+
+  /** The run's perf record as one line. */
+  export function runPerfLine(report) {
+    const m = report.machine;
+    const machine = m.cpuBusy != null ? `cpu busy ${Math.round(m.cpuBusy * 100)}% (iowait ${Math.round(m.iowait * 100)}%), disk ${m.diskMiB} MiB, ${m.idleStretches.length} idle stretch${m.idleStretches.length === 1 ? "" : "es"}` : `machine not sampled (${m.why})`;
+    return `perf: ${report.programs} programs in ${Math.round(report.wallMs / 1000)}s = ${report.programsPerSecond ?? "-"}/s over ${report.units.length} units; ${machine}`;
   }
 
   export function parse(argv) {
@@ -103,26 +166,49 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-      if (key === "splitCodes" || key === "pruneCases") { options[key] = true; index -= 1; continue; }
-      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
+      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
+    options.scratch ??= process.env.SOLID_CHECKER_FUZZ_SCRATCH || undefined;
+    if (options.rolesAgainst && !options.roleLog) throw new Error("focus.mjs: --roles-against needs --role-log");
     // A smoke manifest names one grid's programs across its codes: a per-code process would not generate them all.
     if (options.splitCodes && options.smoke) throw new Error("focus.mjs: --split-codes does not apply to --smoke (a smoke grid is small)");
+    if (options.sampleBig !== undefined) {
+      if (options.smoke) throw new Error("focus.mjs: --sample-big does not apply to --smoke (a smoke manifest names its programs)");
+      if (!(Number(options.sampleBig) > 0 && Number(options.sampleBig) <= 1)) throw new Error(`focus.mjs: --sample-big takes a fraction in (0, 1], not ${options.sampleBig}`);
+    } else if (options.sampleCodes || options.sampleBigSeed || options.sampleBigMin) throw new Error("focus.mjs: --sample-codes, --sample-big-seed and --sample-big-min need --sample-big");
+    if (options.perfThreshold && !options.perfAgainst) throw new Error("focus.mjs: --perf-threshold needs --perf-against");
+    for (const key of ["budgetMs", "budgetMb", "idleStretchS", "perfThreshold"]) if (options[key] !== undefined && !(Number(options[key]) >= 0)) throw new Error(`focus.mjs: --${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} takes a non-negative number`);
     for (const grid of options.grids.split(",")) if (!GRIDS[grid]) throw new Error(`focus.mjs: no grid ${grid} (${Object.keys(GRIDS).join(", ")})`);
     return options;
   }
 
-  function main() {
+  async function main() {
     const options = parse(process.argv.slice(2));
     const out = resolve(options.out ?? join(tmpdir(), "solid-checker-fuzz-focus.noindex", `${Date.now()}`));
     mkdirSync(out, { recursive: true });
     const tools = [...(options.checkerBin ? ["--checker-bin", options.checkerBin] : []), ...(options.typefacts ? ["--typefacts", options.typefacts] : [])];
     const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
-    const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...oracle];
+    const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : []), ...oracle];
+    // `--sample-big`: the grids' stratified sample of the big codes (sample.mjs); the others stay whole.
+    const sampleCodes = options.sampleCodes ? options.sampleCodes.split(",") : BIG_CODES;
+    const sampled = options.sampleBig === undefined ? [] : ["--grid-sample", options.sampleBig, "--grid-sample-codes", sampleCodes.join(","), "--grid-sample-seed", options.sampleBigSeed ?? "1", "--grid-sample-min", options.sampleBigMin ?? "1"];
+    const budgetArgs = [...(options.budgetMs ? ["--budget-ms", options.budgetMs] : []), ...(options.budgetMb ? ["--budget-mb", options.budgetMb] : [])];
+    // The self-profile: the machine sampler (null off Linux or with SOLID_CHECKER_FUZZ_PERF=0) and each unit's record.
+    const perfOn = process.env.SOLID_CHECKER_FUZZ_PERF !== "0";
+    const sampler = perfOn ? startSampler() : null;
+    const stretchOptions = { minSeconds: Number(options.idleStretchS ?? 10) };
+    const runStarted = Date.now();
+    const perfUnits = [];
     const attention = [];
-    console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}`);
+    const scratchRoot = options.scratch ? join(resolve(options.scratch), `focus-${process.pid}-${Date.now()}`) : null;
+    const folded = [];
+    const pending = [];
+    const sampledUnits = [];
+    const against = options.rolesAgainst ? { ...JSON.parse(readFileSync(resolve(options.rolesAgainst), "utf8")), path: resolve(options.rolesAgainst) } : null;
+    console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}${sampled.length ? `; SAMPLED: ${options.sampleBig} of every stratum of ${sampleCodes.join(", ")} (seed ${options.sampleBigSeed ?? "1"}, at least ${options.sampleBigMin ?? "1"} each), not a full run` : ""}`);
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
@@ -135,12 +221,24 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const select = [...(unit.codes ? ["--codes", unit.codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
       const heap = options.heapMb ?? (grid.endsWith("-recall") ? "12000" : undefined);
       const logPath = `${unit.dir}.log`;
-      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, "--out", unit.dir, ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap });
-      const seconds = Math.round((Date.now() - started) / 1000);
-      const { outcomes, flagged, oracle, behaviour } = readGrid(unit.dir);
+      // The role log: one file per grid that every checker process appends whole lines to (role_log.rs), folded once the grid's rows
+      // are written; a line two processes interleaved is counted as malformed, never folded.
+      const roles = options.roleLog ? `${unit.dir}.roles.jsonl` : null;
+      // With a scratch directory the checkers write the log there and the fold reads it through `roles`, a link (scratch.mjs).
+      const unitScratch = scratchRoot ? join(scratchRoot, unit.label) : null;
+      const written = roles && unitScratch ? linkRoleLog(unit.dir, unitScratch) : roles;
+      if (roles && !unitScratch) rmSync(roles, { force: true });
+      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: written } : process.env;
+      // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
+      const unitSampled = sampled.length && (!unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
+      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...budgetArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
+      const ended = Date.now();
+      const seconds = Math.round((ended - started) / 1000);
+      const { outcomes, flagged, oracle, behaviour, gridSample } = readGrid(unit.dir);
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
       const summary = oracle ? `oracle ${oracle.compared} compared, ${oracle.behaviour} behaviour, ${oracle.attributionOnly} attribution, ${oracle.inconclusive ?? 0} inconclusive` : "no oracle sample";
       console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${total} programs ${JSON.stringify(outcomes)}  ${summary}`);
+      if (gridSample) { console.log(`           ${sampleLine(gridSample)}`); sampledUnits.push(unit.label); }
       const tail = () => readFileSync(logPath, "utf8").trim().split("\n").slice(-3).join(" | ").slice(0, 400);
       if (run.timedOut) attention.push(`${unit.label}: killed after ${options.gridTimeout ?? 120} minutes (${logPath}): ${tail()}`);
       else if (run.status !== 0) attention.push(`${unit.label}: exited ${run.status ?? run.signal} (${logPath}): ${tail()}`);
@@ -160,8 +258,34 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
         if (moved.worse.length > 10) attention.push(`${unit.label}: ... ${moved.worse.length - 10} more worse`);
         for (const move of moved.other.slice(0, 5)) console.log(`             ${move.id} ${move.from} -> ${move.to}`);
       }
+      // The unit's perf record, once its fold (if any) has added the role decisions and the fold and prune times.
+      let recorded = false;
+      const recordPerf = (fold) => {
+        if (recorded || !perfOn) return;
+        recorded = true;
+        const cache = existsSync(join(unit.dir, "cache.json")) ? cacheState(JSON.parse(readFileSync(join(unit.dir, "cache.json"), "utf8"))) : "none";
+        const machine = sampler ? machineWindow(sampler.samples(started, ended), stretchOptions) : null;
+        const perf = { ...unitPerf({ label: unit.label, dir: unit.dir, startedAt: started, endedAt: ended, programs: total, machine, fold, cache, gridSample }), startedAt: started, endedAt: ended };
+        if (existsSync(unit.dir)) writeFileSync(join(unit.dir, "perf.json"), `${JSON.stringify(perf, null, 2)}\n`);
+        perfUnits.push(perf);
+        console.log(`  ${perfLine(perf)}`);
+      };
+      // The fold and the pruning run in a worker (fold-worker.mjs) while the next grid runs; the run-wide report waits for them all.
+      if ((roles && existsSync(join(unit.dir, "programs.jsonl"))) || options.pruneCases) {
+        pending.push(new Promise((settle) => {
+          const worker = new Worker(join(here, "fold-worker.mjs"), { workerData: { dir: unit.dir, roles, against, pruneCases: Boolean(options.pruneCases) } });
+          worker.once("message", (message) => {
+            recordPerf({ foldMs: message.foldMs ?? null, pruneMs: message.pruneMs ?? null });
+            if (message.summary) console.log(`  ${unit.label}: ${message.summary}`);
+            if (message.notInInventory?.length) attention.push(`${unit.label}: role log arms missing from the source inventory: ${message.notInInventory.join(", ")}`);
+            if (message.error) attention.push(`${unit.label}: role fold failed: ${message.error}`);
+            if (message.folded) folded.push(unit.dir);
+          });
+          worker.once("error", (error) => { attention.push(`${unit.label}: fold worker failed: ${String(error).slice(0, 200)}`); recordPerf(null); settle(); });
+          worker.once("exit", () => { recordPerf(null); settle(); });
+        }));
+      } else recordPerf(null);
       if (oracle?.inconclusive) attention.push(`${unit.label}: ${oracle.inconclusive} oracle runs inconclusive (${join(unit.dir, "runtime-diff.jsonl")})`);
-      if (options.pruneCases) for (const name of ["cases", "chrome-cases"]) rmSync(join(unit.dir, name), { recursive: true, force: true });
     };
     try {
     for (const grid of options.grids.split(",")) {
@@ -180,6 +304,34 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     attention.push(`stopped: ${error.message}`);
     process.exitCode = 2;
   }
+  await Promise.all(pending);
+  if (perfOn) {
+    const report = runPerf({ options, out, units: perfUnits, sampler, runStarted, runEnded: Date.now(), stretchOptions });
+    sampler?.stop();
+    writeFileSync(join(out, "perf.json"), `${JSON.stringify(report, null, 2)}\n`);
+    console.log(`\n${runPerfLine(report)} (${join(out, "perf.json")})`);
+    for (const stretch of report.machine.idleStretches ?? []) console.log(`  idle ${stretch.seconds}s at +${stretch.atS}s (${Math.round(stretch.idle * 100)}% idle, ${Math.round(stretch.iowait * 100)}% iowait) ${stretch.during}`);
+    if (options.perfAgainst) {
+      try {
+        const result = comparePerf(readRun(options.perfAgainst), report, options.perfThreshold === undefined ? {} : { threshold: Number(options.perfThreshold) });
+        console.log("");
+        for (const line of compareLines(result)) console.log(line);
+        if (!result.comparable) attention.push(`perf: not comparable with ${options.perfAgainst}: ${result.reasons.slice(0, 3).join("; ")}`);
+        for (const worse of result.worse) attention.push(`perf: worse than ${options.perfAgainst}: ${worse}`);
+      } catch (error) {
+        attention.push(`perf: ${error.message}`);
+      }
+    }
+  }
+  // Pruned grids left only their empty scratch directories; kept ones (no --prune-cases) still need theirs.
+  if (scratchRoot && options.pruneCases) rmSync(scratchRoot, { recursive: true, force: true });
+  if (folded.length) {
+    // From the grids' roles.json: --prune-cases has deleted their raw logs by now.
+    const report = mergeGridReports(folded, { against });
+    writeFileSync(join(out, "roles.json"), `${JSON.stringify(report, null, 2)}\n`);
+    console.log(`\n${summaryLine(report)} (${join(out, "roles.json")})`);
+  }
+  if (sampledUnits.length) console.log(`\nsampled (--sample-big ${options.sampleBig}), not a full run: ${sampledUnits.join(", ")}`);
   if (attention.length) {
     console.log(`\nneeds a look (${attention.length}):`);
     for (const line of attention) console.log(`  ${line}`);
@@ -187,4 +339,4 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
   } else console.log("\nnothing needs a look");
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

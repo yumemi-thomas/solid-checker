@@ -1405,3 +1405,61 @@ fn a_test_runner_registration_records_its_symbols_declarations() {
         "the alias target is a recorded read the third build answers differently"
     );
 }
+
+#[test]
+fn in_place_climb_marks_the_exact_bound_unproven() {
+    for (layers, exhausted) in [(15, false), (16, true), (17, true)] {
+        let source = format!(
+            "function outer() {{ {}read();{} }}",
+            "(() => { ".repeat(layers),
+            " })();".repeat(layers)
+        );
+        with_lookup(&source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let site = span_of(&source, "read()", 0);
+            let climb = crate::execution_role::climb_in_place_layers(file, site, lookup).unwrap();
+            assert_eq!(climb.exhausted, exhausted, "{layers} layers");
+            let (run, _) = crate::execution_role::in_place_run_site(file, site, lookup).unwrap();
+            assert_eq!(run.exhausted, exhausted, "run site: {layers} layers");
+        });
+    }
+}
+
+#[test]
+fn stepped_generator_run_site_marks_the_exact_bound_unproven() {
+    for (layers, exhausted) in [(7, false), (8, true), (9, true)] {
+        let source = format!(
+            "function outer() {{ {}read();{} }}",
+            "(function* () { ".repeat(layers),
+            " })().next();".repeat(layers)
+        );
+        with_lookup(&source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let site = span_of(&source, "read()", 0);
+            let (climb, through_generator) =
+                crate::execution_role::in_place_run_site(file, site, lookup).unwrap();
+            assert!(through_generator);
+            assert_eq!(climb.exhausted, exhausted, "{layers} generator steps");
+        });
+    }
+}
+
+#[test]
+fn callback_result_identity_exhaustion_retains_typed_candidates() {
+    for aliases in [15, 16, 17] {
+        let mut source = "const a0 = 0;".to_owned();
+        for index in 1..=aliases {
+            source.push_str(&format!("const a{index} = a{};", index - 1));
+        }
+        source.push_str(&format!(" a{aliases}();"));
+        with_lookup(&source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let site = span_of(&source, &format!("a{aliases}()"), 0);
+            let callee = file.ast.call_at(site).unwrap().callee;
+            assert!(
+                !crate::callback_return::binding_is_callback_result(lookup, file, callee),
+                "{aliases} aliases cannot prove callback-result identity"
+            );
+        });
+    }
+}

@@ -77,6 +77,26 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
+      "start": 210,
+      "end": 219,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
+      "start": 324,
+      "end": 333,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
       "start": 372,
       "end": 381,
       "fixes": 0

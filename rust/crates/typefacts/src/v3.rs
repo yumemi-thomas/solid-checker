@@ -651,6 +651,9 @@ pub struct ModuleGraphRequest {
     /// requested imports and the paths the program does not hold.
     #[serde(default, skip_serializing_if = "is_false")]
     pub omit_modules: bool,
+    /// Answer `buildInputs` too (ADR 0543).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub build_inputs: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -734,7 +737,9 @@ pub struct Response {
     /// An `Update` answer: the producer replaced the one changed file in place
     /// and rebuilt nothing, so every other file's text, every file's module
     /// resolution and the program's file set are the previous generation's;
-    /// only the changed file's own import positions can differ.
+    /// only the changed file's own import positions can differ. It asked the
+    /// file system nothing new either: the program's build inputs are the
+    /// previous generation's (ADR 0543).
     #[serde(default, skip_serializing_if = "is_false")]
     pub graph_kept: bool,
     pub project_id: String,
@@ -742,6 +747,10 @@ pub struct Response {
     pub generation: u64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub state_token: String,
+    /// A `Modules` answer asked for them: the file-system questions the
+    /// program's builds asked (ADR 0543).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_inputs: Option<crate::BuildInputs>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source_arena: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

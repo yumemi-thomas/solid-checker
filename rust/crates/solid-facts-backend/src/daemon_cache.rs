@@ -27,6 +27,10 @@ pub(crate) struct CachedAnswer {
     pub(crate) enable_rules: Vec<String>,
     pub(crate) host_suppressions: Vec<String>,
     pub(crate) runtime: RuntimeEnvironment,
+    /// `--feedback-facts`: the answer carries the development feedback
+    /// models (ADR 0543). A daemon serves one mode, and this keeps an answer
+    /// of the other from being reused even so.
+    pub(crate) feedback_facts: bool,
     pub(crate) status: Arc<str>,
     pub(crate) body: Arc<[u8]>,
     pub(crate) index: Arc<crate::json_output::FindingIndex>,
@@ -36,6 +40,9 @@ pub(crate) struct CachedAnswer {
 }
 
 impl CachedAnswer {
+    // One argument per input the answer is reused under, so a new input
+    // cannot be left out of a call.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn snapshot_if_current(
         &self,
         generation: u64,
@@ -44,13 +51,15 @@ impl CachedAnswer {
         enable_rules: &[String],
         host_suppressions: &[String],
         runtime: &RuntimeEnvironment,
+        feedback_facts: bool,
     ) -> Option<CachedSnapshot> {
         (self.generation == generation
             && self.input_files == input_files
             && self.presets == presets
             && self.enable_rules == enable_rules
             && self.host_suppressions == host_suppressions
-            && self.runtime == *runtime)
+            && self.runtime == *runtime
+            && self.feedback_facts == feedback_facts)
             .then(|| (Arc::clone(&self.status), Arc::clone(&self.body)))
     }
 }
@@ -73,6 +82,7 @@ mod tests {
             enable_rules: vec!["prefer-show".into()],
             host_suppressions: Vec::new(),
             runtime: RuntimeEnvironment::default(),
+            feedback_facts: false,
             status: Arc::from("certified"),
             body: Arc::from(&b"snapshot"[..]),
             index: Arc::default(),
@@ -92,6 +102,7 @@ mod tests {
                 &cached.enable_rules,
                 &cached.host_suppressions,
                 &cached.runtime,
+                cached.feedback_facts,
             ),
             Some((Arc::from("certified"), Arc::from(&b"snapshot"[..])))
         );
@@ -103,6 +114,7 @@ mod tests {
                 &cached.enable_rules,
                 &cached.host_suppressions,
                 &cached.runtime,
+                cached.feedback_facts,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -111,6 +123,7 @@ mod tests {
                 &cached.enable_rules,
                 &cached.host_suppressions,
                 &cached.runtime,
+                cached.feedback_facts,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -119,6 +132,7 @@ mod tests {
                 &cached.enable_rules,
                 &cached.host_suppressions,
                 &cached.runtime,
+                cached.feedback_facts,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -127,6 +141,7 @@ mod tests {
                 &[],
                 &cached.host_suppressions,
                 &cached.runtime,
+                cached.feedback_facts,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -135,6 +150,7 @@ mod tests {
                 &cached.enable_rules,
                 &["strict-read-untracked".into()],
                 &cached.runtime,
+                cached.feedback_facts,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -146,6 +162,16 @@ mod tests {
                     target: Some(RuntimeTarget::Browser),
                     ..RuntimeEnvironment::default()
                 },
+                cached.feedback_facts,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.input_files,
+                &cached.presets,
+                &cached.enable_rules,
+                &cached.host_suppressions,
+                &cached.runtime,
+                !cached.feedback_facts,
             ),
         ];
         assert!(changed.into_iter().all(|snapshot| snapshot.is_none()));

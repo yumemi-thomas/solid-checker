@@ -193,6 +193,9 @@ fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         runtime: RuntimeEnvironment::default(),
         dependency_sources: vec!["dep-b".into(), "*".into(), "dep-b".into()],
         only_file: None,
+        feedback_facts: false,
+        stop: false,
+        role_log: None,
     };
     normalize_enablement(&mut repeated);
     assert_eq!(repeated.presets, ["preferences", "z"]);
@@ -208,7 +211,14 @@ fn a_dependency_source_domain_is_its_own_daemon() {
     let base = socket_path("/p/tsconfig.json", "/bin/typefacts", "solid-v2", "c");
     assert_eq!(
         base,
-        socket_path_in_domain("/p/tsconfig.json", "/bin/typefacts", "solid-v2", "c", None),
+        socket_path_in_domain(
+            "/p/tsconfig.json",
+            "/bin/typefacts",
+            "solid-v2",
+            "c",
+            None,
+            false
+        ),
         "the ordinary daemon keeps its identity"
     );
     let domain = |text: &str| {
@@ -218,11 +228,31 @@ fn a_dependency_source_domain_is_its_own_daemon() {
             "solid-v2",
             "c",
             Some(text),
+            false,
         )
     };
     assert_ne!(base, domain("a"));
     assert_ne!(domain("a"), domain("b"));
     assert_eq!(domain("a"), domain("a"));
+}
+
+#[test]
+fn the_feedback_facts_mode_is_its_own_daemon() {
+    // ADR 0543: a feedback-facts answer carries the development models an
+    // ordinary one does not, so each mode retains its own state.
+    let socket = |domain: Option<&str>, feedback_facts: bool| {
+        socket_path_in_domain(
+            "/p/tsconfig.json",
+            "/bin/typefacts",
+            "solid-v2",
+            "c",
+            domain,
+            feedback_facts,
+        )
+    };
+    assert_ne!(socket(None, false), socket(None, true));
+    assert_ne!(socket(Some("a"), false), socket(Some("a"), true));
+    assert_eq!(socket(None, true), socket(None, true));
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

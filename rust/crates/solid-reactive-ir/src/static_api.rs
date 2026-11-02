@@ -58,7 +58,7 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(super) reachable_calls: &'a HashMap<Location, usize>,
+    pub(super) reachable_calls: &'a HashMap<Location, u64>,
     /// No server build of the Solid packages is selected.
     pub(super) client_build: bool,
     /// Which installed `solid-js` each file loads at runtime.
@@ -333,13 +333,15 @@ impl StaticApiContext<'_> {
                 )
             {
                 let reached = match origin.helper_calls {
-                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    0 => format!("directly in {}", origin.callback_label()),
                     1 => format!(
-                        "in a function that the apply callback of a createEffect in {} calls",
+                        "in a function that {} in {} calls",
+                        origin.callback_label(),
                         origin.path
                     ),
                     calls => format!(
-                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        "in a function reached through {calls} calls from {} in {}",
+                        origin.callback_label(),
                         origin.path
                     ),
                 };
@@ -401,13 +403,15 @@ impl StaticApiContext<'_> {
                                 origin.apply.contains(*tag) && tag.end <= call.span.start
                             })));
                 let reached = match origin.helper_calls {
-                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    0 => format!("directly in {}", origin.callback_label()),
                     1 => format!(
-                        "in a function that the apply callback of a createEffect in {} calls",
+                        "in a function that {} in {} calls",
+                        origin.callback_label(),
                         origin.path
                     ),
                     calls => format!(
-                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        "in a function reached through {calls} calls from {} in {}",
+                        origin.callback_label(),
                         origin.path
                     ),
                 };
@@ -513,7 +517,7 @@ impl StaticApiContext<'_> {
                         .get(&location(file.path.shared(), call.callee))
                         .copied()
                 {
-                    let role = semantic_write_execution_role(
+                    let role = crate::local_access::handed_write_execution(
                         file,
                         call.callee,
                         &allowed,
@@ -521,10 +525,20 @@ impl StaticApiContext<'_> {
                         self.symbol_names,
                         self.lookup,
                         RootBodyGuard::RejectsOutsideDisposal,
+                        semantic_write_execution_role(
+                            file,
+                            call.callee,
+                            &allowed,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                            RootBodyGuard::RejectsOutsideDisposal,
+                        ),
                     );
                     if role.reports_disallowed_write() || role.reports_unplaced() {
-                        for _ in 0..multiplicity {
-                            result.writes.push(ReactiveWrite {
+                        // One record standing for every reachable path.
+                        if multiplicity > 0 {
+                            let write = ReactiveWrite {
                                 setter: format!(
                                     "refresh({})",
                                     file.source_text(target.span).unwrap_or("…")
@@ -545,7 +559,9 @@ impl StaticApiContext<'_> {
                                     self.lookup,
                                 )
                                 .into(),
-                            });
+                                multiplicity,
+                            };
+                            result.writes.push(write);
                         }
                     }
                 }
@@ -601,24 +617,36 @@ impl StaticApiContext<'_> {
             let Some((name, declaration)) = self.accessors.get(symbol) else {
                 continue;
             };
-            for _ in 0..multiplicity {
-                result.writes.push(ReactiveWrite {
-                    setter: format!("refresh({name})").into(),
-                    operation: crate::ReactiveWriteOperation::Refresh,
-                    source_kind: kind,
-                    location: location(
-                        file.path.as_str(),
-                        Span::new(
-                            call.span.start,
-                            call.arguments
-                                .last()
-                                .map_or(call.span.end, |argument| argument.span.end),
-                        ),
+            if multiplicity == 0 {
+                continue;
+            }
+            // One record standing for every reachable path: its role is
+            // decided once.
+            let write = ReactiveWrite {
+                setter: format!("refresh({name})").into(),
+                operation: crate::ReactiveWriteOperation::Refresh,
+                source_kind: kind,
+                location: location(
+                    file.path.as_str(),
+                    Span::new(
+                        call.span.start,
+                        call.arguments
+                            .last()
+                            .map_or(call.span.end, |argument| argument.span.end),
                     ),
-                    declaration: declaration.clone(),
-                    // `refresh`'s guard has no root exemption on any release
-                    // (probed rc.0-rc.9, dev).
-                    execution: semantic_write_execution_role(
+                ),
+                declaration: declaration.clone(),
+                // `refresh`'s guard has no root exemption on any release
+                // (probed rc.0-rc.9, dev).
+                execution: crate::local_access::handed_write_execution(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::RejectsOutsideDisposal,
+                    semantic_write_execution_role(
                         file,
                         call.callee,
                         &allowed,
@@ -627,22 +655,24 @@ impl StaticApiContext<'_> {
                         self.lookup,
                         RootBodyGuard::RejectsOutsideDisposal,
                     ),
-                    owned_write: self
-                        .source_owned_write
-                        .get(symbol)
-                        .copied()
-                        .unwrap_or_default(),
-                    context: analysis_context(
-                        file,
-                        call.span,
-                        self.entities,
-                        self.symbol_names,
-                        dialect,
-                        self.lookup,
-                    )
-                    .into(),
-                });
-            }
+                ),
+                owned_write: self
+                    .source_owned_write
+                    .get(symbol)
+                    .copied()
+                    .unwrap_or_default(),
+                context: analysis_context(
+                    file,
+                    call.span,
+                    self.entities,
+                    self.symbol_names,
+                    dialect,
+                    self.lookup,
+                )
+                .into(),
+                multiplicity,
+            };
+            result.writes.push(write);
         }
         result
     }
@@ -677,7 +707,8 @@ fn resolve_tracked_scope(
         // A library callback may run zero times (ADR 0493 review), so it is
         // not crossed.
         Some(climb)
-            if !climb.in_list
+            if !climb.exhausted
+                && !climb.in_list
                 && climb.suspended.is_none()
                 && !crate::execution_role::climb_crosses_library_callback(
                     file,
@@ -778,6 +809,7 @@ fn resolve_scope_unplaced(
     // call runs under that observer whenever it runs: an obligation.
     if let Some(climb) =
         crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
+        && !climb.exhausted
         && !climb.in_list
         && climb.suspended.is_none()
         && crate::owners::containing_body_function(&file.ast, climb.at).is_some_and(|function| {
@@ -956,10 +988,79 @@ fn action_step_body(
     site: Span,
     context: &StaticApiContext<'_>,
 ) -> Option<(&'static str, bool)> {
+    action_step_body_bounded(file, site, context, 4)
+}
+
+/// [`action_step_body`] with `depth` unplaced layers left to cross
+/// ([`action_step_body_unplaced`]).
+fn action_step_body_bounded(
+    file: &FileFacts,
+    site: Span,
+    context: &StaticApiContext<'_>,
+    depth: usize,
+) -> Option<(&'static str, bool)> {
     if let Some(body) = action_step_body_at(file, site, context) {
         return Some((body, false));
     }
     action_step_body_through(file, site, context, 4)
+        .or_else(|| {
+            // ADR 0537: a site inside an enclosing named function some call
+            // of which runs in a step, where the layers between them are not
+            // placed (a member's value, a climb past its bound): an
+            // obligation.
+            crate::execution_role::functions_around(file, site)
+                .into_iter()
+                .filter(|function| function.body.contains(site) && function.body != site)
+                .find_map(|function| action_step_body_through(file, function.body, context, 4))
+        })
+        .or_else(|| action_step_body_unplaced(file, site, context, depth).map(|body| (body, true)))
+}
+
+/// ADR 0538: the site runs where no layer places it, and the code around
+/// that layer is in a step: an obligation, never a violation. The layer is
+/// one of: the in-place climb from the site reaching ADR 0532's bound (the
+/// layers past it are unread, so the position is asked again from where the
+/// climb stopped); the function around the climb written as a member's value
+/// or an object slot, or handed whole by name to project code or an
+/// unresolved call ([`crate::local_access::run_unplaced`]); a method of a
+/// class or object literal written inside a function. A layer proven to run
+/// elsewhere (after an await, a scheduled callback, a kept listener, a
+/// generator) is not crossed: the enclosing proof refuses it as before.
+fn action_step_body_unplaced(
+    file: &FileFacts,
+    site: Span,
+    context: &StaticApiContext<'_>,
+    depth: usize,
+) -> Option<&'static str> {
+    if depth == 0 {
+        return None;
+    }
+    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
+        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
+        Some(climb) if climb.exhausted => {
+            return action_step_body_bounded(file, climb.at, context, depth - 1)
+                .map(|(body, _)| body);
+        }
+        Some(climb) => climb.at,
+        None => site,
+    };
+    let function = crate::owners::owning_function(&file.ast, at)
+        .filter(|function| function.body.contains(at) && !function.generator)?;
+    let anchor = if function.method_name.is_some() {
+        file.ast
+            .classes
+            .iter()
+            .filter(|class| class.span.contains(function.span))
+            .min_by_key(|class| class.span.end - class.span.start)
+            .map_or(function.span, |class| class.span)
+    } else if crate::local_access::run_unplaced(file, function, context.lookup) {
+        function.span
+    } else {
+        return None;
+    };
+    // Module-level code runs in no step.
+    crate::owners::containing_ast_function(&file.ast, anchor)?;
+    action_step_body_bounded(file, anchor, context, depth - 1).map(|(body, _)| body)
 }
 
 /// ADR 0516: the layers [`action_step_body_at`] does not cross, as an
@@ -976,7 +1077,7 @@ fn action_step_body_through(
         return None;
     }
     let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
         Some(_) => return None,
         None => site,
     };
@@ -1023,6 +1124,12 @@ fn action_step_body_through(
                 calls.push((caller, call.span));
             }
         }
+        // ADR 0537: a carrier it is handed to by name runs it in place there.
+        calls.extend(
+            crate::local_access::inline_carriers(file, function, context.lookup)
+                .into_iter()
+                .map(|carrier| (file, carrier)),
+        );
     }
     calls.into_iter().find_map(|(caller, call)| {
         action_step_body_at(caller, call, context)
@@ -1047,7 +1154,7 @@ fn action_step_body_at(
     // neither is claimed. One in-place run proves the throw, so a helper that
     // also hands its callback on still counts.
     let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
         Some(_) => return None,
         None => site,
     };

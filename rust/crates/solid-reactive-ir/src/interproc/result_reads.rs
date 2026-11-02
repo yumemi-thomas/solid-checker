@@ -332,7 +332,51 @@ fn call_result_reads(
     }
     let object_callable = runs_in_unrendered_object_callable(file, call.callee, lookup);
     let mut execution = execution;
-    if !object_callable
+    // ADR 0536: the call is a read of its named function's, as a read written
+    // there is (ADR 0531/0535, `local_access`): where the binding is handed to
+    // a carrier that runs it before returning (`[1].map(hf)`, `hf.call(null)`,
+    // `` hf`x` ``) at a position that reports untracked reads, the reads run
+    // at that carrier, and its timing is theirs; a hand-off nothing follows,
+    // or a function written as a member's value, places them nowhere.
+    let in_named = inside_non_component_function(file, call.callee, lookup)
+        || crate::local_access::nested_named_function(file, call.callee, lookup);
+    // ADR 0320: a call past an await on every path decides nothing.
+    let continuation =
+        crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup);
+    let handed = (!object_callable && in_named && !continuation)
+        .then(|| {
+            crate::local_access::handed_read_role(
+                file,
+                call.callee,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+            )
+        })
+        .flatten();
+    let mut placed_at = None;
+    if let Some((role, Some(carrier))) = handed
+        && role.reports_untracked_read()
+    {
+        execution = role;
+        placed_at = Some(carrier);
+    } else if !crate::execution_role::named_at_tracked_position(file, call.callee, lookup)
+        && !continuation
+        && (crate::local_access::escapes_nested(file, call.callee, lookup)
+            // ADR 0539: a hand-off whose carrier is unplaced is unplaced in a
+            // function a named callback nests too.
+            || (in_named
+                && (handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown)
+                    || (named_callback_execution_role(file, call.callee, lookup).is_none()
+                        && crate::local_access::function_escapes_unfollowed(
+                            file,
+                            call.callee,
+                            lookup,
+                        )))))
+    {
+        execution = ExecutionRole::Unknown;
+    } else if !object_callable
         && (inside_non_component_function(file, call.callee, lookup)
             || runs_in_unproven_stored_literal(file, call.callee, entities, symbol_names, lookup))
         && named_callback_execution_role(file, call.callee, lookup).is_none()
@@ -344,11 +388,18 @@ fn call_result_reads(
         // silence. The direct-read path makes the same answer for a read
         // written in the member (`local_access`); a call there of a helper or
         // a hook's accessor returned silence.
-        if !crate::execution_role::inside_class_member(file, call.callee, lookup) {
+        // ADR 0539: so is a call in the cleanup an effect's apply returns,
+        // which a rerun may run in the apply's window (its role is unplaced).
+        if !crate::execution_role::inside_class_member(file, call.callee, lookup)
+            && !(execution == ExecutionRole::Unknown
+                && crate::execution_role::inside_rerun_effect_cleanup(file, call.callee, lookup))
+        {
             return;
         }
         execution = ExecutionRole::Unknown;
     }
+    // ADR 0536: the timing of reads a carrier places is the carrier's.
+    let timing_at = placed_at.unwrap_or(call.span);
     let mut context = None::<String>;
     let get_context = property_gets::ReadContext {
         file,
@@ -460,12 +511,12 @@ fn call_result_reads(
                 origin: Some(read.origin),
                 origin_context: read.origin_context.into(),
                 uncertain: read.undecided,
-                missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
+                missing_jsx_census: missing_jsx_census(file, timing_at, execution),
+                host_callback_timing: host_callback_timing(file, timing_at, execution, lookup),
                 project_consumer_non_strict: false,
                 callback_invocation_unproven: false,
                 callee_callback_timing: object_callable
-                    || callee_callback_timing(file, call.span, execution, lookup),
+                    || callee_callback_timing(file, timing_at, execution, lookup),
                 summary_attributed: !direct,
                 transported: read.transported
                     || transported.is_some()
@@ -1740,7 +1791,8 @@ fn body_site_runs_during_call_through_layers(
     else {
         return false;
     };
-    !through_generator
+    !climb.exhausted
+        && !through_generator
         && climb.suspended.is_none()
         && !climb.in_list
         && body_site_runs_during_call(file, function, climb.at)
@@ -1978,8 +2030,14 @@ pub(crate) fn body_site_runs_during_call(
     // JSX may lower to a getter; class fields may wait for construction.
     // Neither lexical containment nor source order proves evaluation then.
     // A method's own body lies inside its class; only a class written in
-    // this function defers the site.
-    if file.ast.any_jsx_containing(site)
+    // this function defers the site. So for JSX (ADR 0536): an element around
+    // the whole function (a function written as a component's prop) defers
+    // its definition, not its body once it is called.
+    if (file.ast.any_jsx_containing(site)
+        && file
+            .ast
+            .jsx_containing(site)
+            .any(|element| function.body.contains(element.span)))
         || file
             .ast
             .classes

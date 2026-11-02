@@ -91,6 +91,7 @@ fn catalog_prose_program() -> Program {
             execution: ExecutionRole::TrackedJsx,
             owned_write: solid_reactive_ir::OwnedWriteOption::Off,
             context: "sample computation".into(),
+            multiplicity: 1,
         }],
         missing_owners: vec![OwnerRequirement {
             operation: OwnerRequirementOperation::Cleanup,
@@ -101,6 +102,7 @@ fn catalog_prose_program() -> Program {
             conditional_owner: false,
             later_run_unowned: false,
             component_uncertain: false,
+            unplaced_callback: false,
             after_await: false,
             after_yield: false,
             missing_jsx_census: false,

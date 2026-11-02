@@ -981,6 +981,18 @@ fn only_an_effect_returned_cleanup_runs_outside_a_disposal() {
     }
 }
 
+/// ADR 0539: a rerun calls an apply's returned cleanup in the apply's
+/// strict-read window; a tracked effect calls its cleanup inside its compute.
+#[test]
+fn only_an_apply_returned_cleanup_reruns_in_the_read_window() {
+    let dialect = Solid2::AUDITED;
+    assert!(dialect.returned_cleanup_reruns_in_read_window(Primitive::CreateEffect, 1));
+    assert!(dialect.returned_cleanup_reruns_in_read_window(Primitive::CreateRenderEffect, 1));
+    assert!(!dialect.returned_cleanup_reruns_in_read_window(Primitive::CreateTrackedEffect, 0));
+    assert!(!dialect.returned_cleanup_reruns_in_read_window(Primitive::CreateEffect, 0));
+    assert!(!dialect.returned_cleanup_reruns_in_read_window(Primitive::OnSettled, 0));
+}
+
 /// Only `onCleanup`'s callback runs solely in a disposal: an effect apply's
 /// returned cleanup is no registration, and no other slot is one.
 #[test]

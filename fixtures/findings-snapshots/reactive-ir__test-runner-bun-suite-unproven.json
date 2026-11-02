@@ -10,6 +10,16 @@
       "start": 259,
       "end": 277,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-bun/variants/suite-unproven/App.test.tsx",
+      "start": 673,
+      "end": 691,
+      "fixes": 0
     }
   ]
 }

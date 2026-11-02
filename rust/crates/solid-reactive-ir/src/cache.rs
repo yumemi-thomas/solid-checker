@@ -552,8 +552,8 @@ pub(crate) fn build_typescript_indexes(
 pub(crate) struct CachedReachability {
     pub(crate) inputs: HashMap<String, (SourceHash, Arc<solid_facts::ast::AstFacts>)>,
     pub(crate) files: HashMap<SourcePath, CachedReachabilityFile>,
-    pub(crate) calls: HashMap<Location, usize>,
-    pub(crate) multiplicity_by_path: HashMap<String, Vec<usize>>,
+    pub(crate) calls: HashMap<Location, u64>,
+    pub(crate) multiplicity_by_path: HashMap<String, Vec<u64>>,
     pub(crate) function_symbols: HashSet<SymbolId>,
 }
 
@@ -643,7 +643,7 @@ pub(crate) struct CachedLocalAccessFile {
     pub(crate) proof: ReadProof,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) dependencies: HashSet<SymbolId>,
-    pub(crate) call_multiplicities: Vec<(Location, Option<usize>)>,
+    pub(crate) call_multiplicities: Vec<(Location, Option<u64>)>,
     pub(crate) contribution: LocalAccessResult,
 }
 

@@ -20,6 +20,16 @@
       "start": 221,
       "end": 225,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-iteration-veto/factory.ts",
+      "start": 126,
+      "end": 133,
+      "fixes": 0
     }
   ]
 }

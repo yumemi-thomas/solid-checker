@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
+import { browserExecutionCache, cacheStats, withRuntimeCache } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
@@ -27,7 +27,9 @@ import { codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.m
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
-import { fnv, regionOf, runtimeDifferential, siteOf } from "./matrix.mjs";
+import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf } from "./matrix.mjs";
+import { budgetOf } from "./cost.mjs";
+import { gridProfile } from "./perf.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
 import { axesKey, combined, mountSuffix, mountsOption, recallAxes, shapeAxes } from "./matrix.mjs";
@@ -35,7 +37,10 @@ import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { setExecutorChecks } from "./exec.mjs";
+import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
+import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
 export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
@@ -127,8 +132,14 @@ export async function runLegal(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
+  // `--scratch <dir>`: cases/ and chrome-cases/ there, behind links at their usual paths (scratch.mjs).
+  if (options.scratch) linkScratch(out, resolve(options.scratch));
   const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
+    // The grid's phase clock and budget (matrix.mjs `writeGridPerf`): measurement only, beside the rows.
+    const profile = gridProfile();
+    const budget = budgetOf(options);
+    const phaseStart = performance.now();
     const cells = legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) }).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
     let entries = [];
     for (const cell of cells) {
@@ -138,6 +149,14 @@ export async function runLegal(options) {
     }
     // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
     if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+    // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; legal.json records it.
+    const sampling = gridSampleOptions(options);
+    let gridSample = null;
+    if (sampling) {
+      ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
+      console.error(`legal: ${sampleLine(gridSample)}`);
+    }
+    profile.add("generate", performance.now() - phaseStart);
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();
@@ -147,6 +166,8 @@ export async function runLegal(options) {
     const plain = (list) => list.map(({ program, built }) => ({ program, built }));
     const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
     if (run !== config) console.error(`legal: every program's runtime is cached; checker concurrency ${run.concurrency}`);
+    // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
+    if (run !== config) await setExecutorChecks(run);
     const chunks = [];
     for (let at = 0; at < entries.length; at += 150) chunks.push(entries.slice(at, at + 150));
     const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
@@ -159,13 +180,15 @@ export async function runLegal(options) {
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);
         const site = siteOf(built);
-        const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judgeLegalProgram({ code: cell.code, built, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan });
+        const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judgeLegalProgram({ code: cell.code, built, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan }));
         const misuse = program.components[0].misuse;
         rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo } : {}), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);
       }
       console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
     }
+    if (run !== config) await setExecutorChecks(config);
+    profile.add("evaluate", Date.now() - started);
     console.error(`legal: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
     assertFindingsMapped();
     const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length);
@@ -177,6 +200,7 @@ export async function runLegal(options) {
     // Each twin runs with the hit ledger beside its clean control.
     let confirmed = 0;
     const candidates = rows.filter((row) => row.outcome === "false-positive");
+    const chromePhase = performance.now();
     if (options.confirmWithChrome) {
       const sampled = new Map();
       const limit = options.chromeSample ?? 2;
@@ -204,8 +228,10 @@ export async function runLegal(options) {
       }
     }
     // The runtime differential (`--runtime-diff <N|all>`, matrix.mjs `runtimeDifferential`): Happy DOM's record against Chrome's.
+    if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
     const perStratum = parsePerStratum(options.runtimeDiff);
-    if (perStratum) await runtimeDifferential(rows, values, perStratum, config, options, out, "legal");
+    if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "legal"));
+    const writePhase = performance.now();
     const checked = rows.filter((row) => row.chrome);
     const chrome = checked.length ? Object.fromEntries(["confirmed", "not-confirmed", "same", "differs", "chrome-inconclusive"].map((status) => [status, checked.filter((row) => row.chrome.status === status).length])) : null;
     const differs = checked.filter((row) => row.chrome.status === "differs").map(({ id, outcome, chrome: c }) => ({ id, fast: outcome, chrome: c.outcome }));
@@ -216,11 +242,18 @@ export async function runLegal(options) {
       cell[row.outcome] += 1;
       cell.verdicts[String(row.seed)] = row.outcome;
     }
-    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
+    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(gridSample ? { gridSample } : {}), ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
       falsePositives: candidates.map(({ id, code, context, variant, binding, layer, detail, chrome }) => ({ id, code, context, variant, binding, layer, rules: detail.rules, chrome })),
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync(join(out, "programs.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    if (config.runtimeCache || config.typecheckCache) {
+      // Beside the grid's files, as matrix.mjs writes it: a cached run's rows are the uncached run's.
+      writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
+      console.error(`legal: caches ${JSON.stringify(cacheStats(config))}`);
+    }
+    profile.add("write", performance.now() - writePhase);
+    writeGridPerf(out, "legal", rows, values, budget, profile);
     console.error(`legal: ${JSON.stringify(report.total)}${chrome ? `; Chrome ${JSON.stringify(chrome)}` : ""}`);
     for (const d of differs) console.error(`legal: Chrome differs ${d.id}: fast ${d.fast}, Chrome ${d.chrome}`);
     for (const fp of report.falsePositives) console.error(`legal: candidate false positive ${fp.id} [${fp.rules.join(", ")}]${fp.chrome ? ` chrome ${fp.chrome.status}` : ""}`);
@@ -235,11 +268,12 @@ export async function runLegal(options) {
 const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine] [--recall]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
   [--chrome-concurrency N]   Chrome pages at a time (default the oracle's: at most 8)
   [--runtime-diff <N|all> [--runtime-diff-axes a,b]]   compare Happy DOM's runtime record with Chrome's on up to N programs per stratum, or all
-  [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
+  [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]
+  [--scratch <dir>]   cases/ and chrome-cases/ in <dir> behind links (scratch.mjs)`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

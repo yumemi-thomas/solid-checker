@@ -51,9 +51,9 @@ pub(super) fn runs_in_retained_value_literal(
 
 /// Whether the call at `span`, written inside a component, sits in a function
 /// literal that nothing proves runs while the component body does: a literal
-/// stored in a binding or an object property, returned, or written as a JSX
-/// attribute value (`const api = { go: () => helper() }`,
-/// `return () => helper()`, `ref={() => helper()}`).
+/// stored in a binding or an object property, returned, or written as an
+/// intrinsic element's attribute value (`const api = { go: () => helper() }`,
+/// `return () => helper()`).
 ///
 /// The summary path may attribute a call to the body only when invocation
 /// during that body is established, and the lexical `inside_component` role
@@ -125,6 +125,14 @@ pub(super) fn runs_in_unproven_stored_literal(
         {
             span = call;
             continue;
+        }
+        // ADR 0536: a project component's prop literal is timed as a read
+        // written in it is: its consumer's calls place it
+        // (`callee_use_site_role`) and the read is proven only where the
+        // consumer calls it while it renders (ADR 0204,
+        // `callee_callback_timing`), an obligation otherwise. Never silence.
+        if crate::execution_role::component_prop_literal(file, literal.span).is_some() {
+            return false;
         }
         return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
             .is_none();

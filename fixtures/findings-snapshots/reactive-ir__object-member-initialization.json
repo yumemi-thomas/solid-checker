@@ -4,11 +4,41 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-initialization/App.tsx",
+      "start": 204,
+      "end": 213,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/object-member-initialization/App.tsx",
       "start": 443,
       "end": 452,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-initialization/App.tsx",
+      "start": 706,
+      "end": 715,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-initialization/App.tsx",
+      "start": 1053,
+      "end": 1062,
       "fixes": 0
     },
     {
@@ -39,6 +69,16 @@
       "path": "fixtures/reactive-ir/object-member-initialization/cycle-a.ts",
       "start": 153,
       "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-initialization/module-tdz.ts",
+      "start": 164,
+      "end": 173,
       "fixes": 0
     }
   ]

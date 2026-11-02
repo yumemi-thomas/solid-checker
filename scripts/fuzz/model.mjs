@@ -27,7 +27,7 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -92,8 +92,12 @@ export const createOwnerExpr = () => ({ k: "createOwner" });
  * member of a literal, a member assigned later, a hoisted `function`. Each is a block, so `hf` shadows nothing around it.
  */
 export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", "handoff-sort", "handoff-call", "handoff-apply", "handoff-reflect",
-  "handoff-tagged", "handoff-wrapper", "handoff-member", "handoff-assign", "handoff-function"];
-export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS];
+  "handoff-tagged", "handoff-wrapper", "handoff-member", "handoff-assign", "handoff-function",
+  // T3 `member-assign`: the function assigned as a member of a parameter, of an object a factory returns, or of `this` in a class.
+  "handoff-assign-param", "handoff-assign-returned", "handoff-assign-this"];
+/** T2 `depth`: the site under N closures each called in place, N at and around the engine's 16-layer climb bound. */
+export const DEPTH_FORMS = ["depth-15", "depth-16", "depth-17"];
+export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
 export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
@@ -139,7 +143,18 @@ export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
 /** The flow components whose function child the `flow` item writes a body for (`FLOW_FORMS`, misuse.mjs `FLOW_CONTEXTS`). */
 export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
 /** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
-export const flowEl = (id, flow, body) => ({ k: "flow", id, flow, body });
+// `on` (misuse.mjs EFFECT_WINDOW_CONTEXTS): a signal the flow's condition reads (`<Show when={t()}>`, `<For each={t() ? [1] : []}>`), so a
+// button writing 0 disposes the body's owner; absent, the condition is the constant it always was.
+export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, body, ...extra });
+/**
+ * A callback prop (misuse.mjs CBP_CONTEXTS): `<KidN run={e} />`, where `KidN` is a component of the same file that calls
+ * `props.run()` at `call` (CBP_CALLS: in its body, its JSX, a click handler, an effect apply, `onSettled`, or never); `form`
+ * (CBP_FORMS) is how `run` reaches it: written inline or named by C1 (`e` a function or a name), forwarded by `FwdN`
+ * (`<KidN run={props.run} />`), destructured by `KidN` (`({ run })`), or spread by `FwdN` (`<KidN {...props} />`).
+ */
+export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never"];
+export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
+export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
 /** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD). */
 export const loadingView = (on, children) => ({ k: "loading", on, children });
 
@@ -162,6 +177,8 @@ export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe
 export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-list" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
+/** A `createReaction` tracker (`const track1 = createReaction(() => {})`); misuse.mjs NO_OWNER_EFFECT's `reaction-track` variants call it. */
+export const reactionSignal = (name) => ({ ...signal(name, 0, "src"), kind: "reaction" });
 /** `const a = createMemo(async () => { t(); await Promise.resolve(); return 1; })`: an async memo that reads `dep`, so a write to it refetches. */
 export const asyncDepSignal = (name, dep) => ({ ...signal(name, 0, "src"), kind: "async-dep", dep });
 
@@ -330,12 +347,22 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "handler-expr": typeOf(item.e, scope); break;
         case "flow": {
           if (!FLOW_FORMS.includes(item.flow)) fail(`${where}: unknown flow ${item.flow}`);
+          if (item.on !== undefined) {
+            sigCheck(item.on, "read");
+            if (!["for", "show"].includes(item.flow)) fail(`${where}: only For and Show take a condition signal`);
+          }
           checkBlock(item.body, scopeOf(scope), "free");
           break;
         }
         case "ref": {
           const type = typeOf(item.e, scope);
           if (type && type.t !== "fn") fail(`${where}: a ref must be a function, not ${type.t}`);
+          break;
+        }
+        case "cbprop": {
+          if (!CBP_CALLS.includes(item.call) || !CBP_FORMS.includes(item.form)) fail(`${where}: unknown callback prop ${item.call}/${item.form}`);
+          const type = typeOf(item.e, scope);
+          if (type && type.t !== "fn") fail(`${where}: a callback prop must be a function, not ${type.t}`);
           break;
         }
         case "loading": sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
@@ -373,7 +400,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
             if (!CTL_FORMS.includes(stmt.form)) fail(`${where}: unknown control form ${stmt.form}`);
             if (CTL_ASYNC_FORMS.has(stmt.form) && !scope.async) fail(`${where}: ${stmt.form} outside an async function`);
             // A generator's body is its own function: no await, and its own return.
-            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || HANDOFF_FORMS.includes(stmt.form) ? false : scope.async }), "free");
+            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) ? false : scope.async }), "free");
             break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
@@ -506,6 +533,14 @@ export function validate(program, { maxNodes = 400 } = {}) {
       switch (e.name) {
         case "memo": return T.acc(fnTypeChecked(e.fn, scope, RETURNS.memo).ret);
         case "effect": {
+          // `errorArm` (misuse.mjs `effect-error-arm`): `fn` is the bundle's `error` handler; the printed compute throws once the
+          // signal `errorArm` names reads 2, and the bundle's `effect` is empty.
+          if (e.errorArm !== undefined) {
+            sigCheck(e.errorArm, "read");
+            if (e.apply) fail(`${where}: an error-arm effect takes no apply`);
+            fnTypeChecked(e.fn, scope, "free");
+            return T.void;
+          }
           const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
           if (!e.apply) fail(`${where}: effect without an apply`);
           else fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
@@ -531,11 +566,16 @@ export function validate(program, { maxNodes = 400 } = {}) {
           return T.void;
         }
         case "tracked": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // createReaction(effectFn): the tracker it returns takes the tracking function.
+        // `errorArm`: `fn` is the bundle's `error` handler (misuse.mjs `reaction-error-arm`).
+        case "reaction": fnTypeChecked(e.fn, scope, e.errorArm ? "free" : RETURNS.applyFn); return T.fn(T.void);
         // action(function* () { ... }): the generator body is a block; its result is the action function.
         case "action": fnTypeChecked(e.fn, scope, "free"); return T.fn(T.unknown);
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
         // onCleanup returns a Disposable in the published typings, not void.
         case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
+        // resolve(fn) / until(fn) (misuse.mjs `resolve-thunk`, `until-thunk`): printed with a `.catch`, a statement.
+        case "resolve": case "until": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "timer": case "then": fnTypeChecked(e.fn, scope, "free"); return T.void;
         default: fail(`${where}: unknown prim ${e.name}`); return null;
       }

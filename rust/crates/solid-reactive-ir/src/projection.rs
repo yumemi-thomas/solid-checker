@@ -654,9 +654,7 @@ pub fn project_findings(
             }),
     );
     findings.extend(
-        program
-            .writes
-            .iter()
+        distinct_runs(&program.writes, ReactiveWrite::same_row)
             .filter(|write| write_reported(write, capabilities))
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
@@ -751,9 +749,7 @@ pub fn project_findings(
     }
     if capabilities.actions {
         findings.extend(
-            program
-                .actions
-                .iter()
+            distinct_runs(&program.actions, ActionInvocation::same_row)
                 .filter(|action| action_reported(action))
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
@@ -765,6 +761,20 @@ pub fn project_findings(
         }
     }
     finish_findings(findings, total_started, construction_started)
+}
+
+/// `rows` without the rows that are the one before them on other paths
+/// (`same`, every field but the multiplicity equal). A write or an action
+/// stands for every reachable path to its call
+/// ([`ReactiveWrite::multiplicity`]); held once per path, the copies were
+/// adjacent and equal, projected to adjacent equal findings, and
+/// [`finish_findings`]'s stable sort kept them adjacent and its `dedup`
+/// dropped them. Projecting one row of such a run leaves the same findings.
+fn distinct_runs<T>(rows: &[T], same: fn(&T, &T) -> bool) -> impl Iterator<Item = &T> {
+    rows.iter()
+        .enumerate()
+        .filter(move |(index, row)| *index == 0 || !same(&rows[index - 1], row))
+        .map(|(_, row)| row)
 }
 
 fn read_reported(read: &crate::ReactiveRead, capabilities: CatalogCapabilities) -> bool {
@@ -817,7 +827,9 @@ fn async_read_reported(read: &crate::AsyncRead) -> bool {
     if read.async_provenance
         && (read.leaf_owner.is_some()
             || read.execution == crate::ExecutionRole::ModuleInitialization
-            || read.execution == crate::ExecutionRole::UntrackedRendering)
+            || read.execution == crate::ExecutionRole::UntrackedRendering
+            || (read.execution == crate::ExecutionRole::Unknown
+                && read.invocation_context_unproven))
     {
         return true;
     }

@@ -65,3 +65,9 @@ path = "tests/dialects_process.rs"
 [[test]]
 name = "backend_process"
 path = "tests/backend_process.rs"
+
+# Its own executable: it switches the process-wide role log on and off
+# (ADR 0546), which would move the other process tests' work counters.
+[[test]]
+name = "write_walk_strategies_process"
+path = "tests/write_walk_strategies_process.rs"

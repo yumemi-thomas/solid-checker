@@ -123,7 +123,7 @@ fn assert_script_matches_fresh(
         let retained = incremental
             .demand_table_for_groups(&ctx, generation, &groups(&demands), &[])
             .unwrap_or_else(|error| panic!("incremental materialization {step}: {error}"));
-        let mut fresh = open_closure(&config);
+        let mut fresh = crate::file_regions::without_parse_cache(|| open_closure(&config));
         for (replay, change) in changes.iter().enumerate().take(step + 1) {
             fresh
                 .update(&ctx, std::slice::from_ref(change))
@@ -1164,6 +1164,12 @@ struct Reuse {
     contributions: usize,
     reference_files: usize,
     symbols: usize,
+    /// Files a rebuilt chain of the retained side took from its parse cache;
+    /// the oracle has none (`file_regions::without_parse_cache`).
+    parsed_files_taken: u64,
+    /// Modules whose export scan a rebuilt chain of the retained side kept
+    /// (ADR 0546); every update checks the kept scan against a fresh one.
+    kept_export_scans: u64,
 }
 
 fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
@@ -1237,8 +1243,10 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
         reuse.symbols += stats.cached_symbol_facts;
 
         // The oracle replays every edit so far as its own update, as the
-        // retained side saw them, and then materializes the whole batch.
-        let mut fresh = open_closure(&config);
+        // retained side saw them, and then materializes the whole batch. It
+        // parses every chain afresh, so a file the retained side took from
+        // its parse cache is compared with a new parse of the same text.
+        let mut fresh = crate::file_regions::without_parse_cache(|| open_closure(&config));
         for (replay, changes) in history.iter().enumerate() {
             fresh
                 .update(&ctx, changes)
@@ -1281,9 +1289,15 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
             );
         }
     }
+    reuse.parsed_files_taken = incremental.backend_mut().parse_cache_hits();
+    reuse.kept_export_scans = incremental.backend_mut().kept_export_scans();
     eprintln!(
-        "seed {seed}: {steps} steps, {} retained contributions, {} reused reference files, {} reused entity symbols",
-        reuse.contributions, reuse.reference_files, reuse.symbols
+        "seed {seed}: {steps} steps, {} retained contributions, {} reused reference files, {} reused entity symbols, {} parsed files taken, {} export scans kept",
+        reuse.contributions,
+        reuse.reference_files,
+        reuse.symbols,
+        reuse.parsed_files_taken,
+        reuse.kept_export_scans
     );
     reuse
 }
@@ -1292,16 +1306,26 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
 /// updates, and every generation equals a fresh whole-batch one.
 #[test]
 fn seeded_random_edit_sequences_match_fresh() {
-    let (mut files, mut symbols) = (0, 0);
+    let (mut files, mut symbols, mut taken, mut kept) = (0, 0, 0, 0);
     for seed in seed_range() {
         let reuse = run_seed(seed, step_count(), 5, false);
         assert_eq!(reuse.contributions, 0, "an update reused a contribution");
         files += reuse.reference_files;
         symbols += reuse.symbols;
+        taken += reuse.parsed_files_taken;
+        kept += reuse.kept_export_scans;
     }
     assert!(
         files > 0 && symbols > 0,
         "nothing was reused ({files} reference files, {symbols} entity symbols): the comparison is vacuous"
+    );
+    assert!(
+        taken > 0,
+        "no rebuilt chain took a parsed file: the parse cache went untested"
+    );
+    assert!(
+        kept > 0,
+        "no rebuilt chain kept an export scan: the comparison is vacuous"
     );
 }
 
@@ -1390,7 +1414,7 @@ fn ids_within_a_generation_do_not_depend_on_demand_order() {
         (text_demands, "b.ts"),
         (symbol_only_demands, "b.ts"),
     ] {
-        let mut fresh = open_closure(&config);
+        let mut fresh = crate::file_regions::without_parse_cache(|| open_closure(&config));
         let all = demands_of(&mut fresh);
         let whole = describe(
             &fresh

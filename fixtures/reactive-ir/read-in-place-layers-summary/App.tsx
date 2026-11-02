@@ -221,3 +221,65 @@ export function RefRowGenerator() {
     </div>
   );
 }
+
+// ADR 0528: the IIFE is evaluated now; only the sequence tail is a handler.
+export function EagerHandlerAlias() {
+  const [read] = createSignal(1);
+  let alias = read;
+  return <button onClick={((() => { alias(); return 1; })(), () => {})}>x</button>;
+}
+export function LegalHandlerAlias() {
+  const [read] = createSignal(1);
+  let alias = read;
+  return <button onClick={() => { alias(); }}>x</button>;
+}
+// ADR 0529: member dispatch enters the layer's summary after direct rows.
+export function RefMemberLayer() {
+  const [read] = createSignal(1);
+  const useThing = () => ({ useIt: read });
+  const thing = useThing();
+  const factory = () => { h1(() => { thing.useIt(); }); return () => {}; };
+  return <p ref={factory()}>x</p>;
+}
+export function LegalMemberLayer() {
+  const [read] = createSignal(1);
+  const useThing = () => ({ useIt: read });
+  const thing = useThing();
+  const factory = () => { h1(() => { thing.useIt(); }); return () => {}; };
+  return <button onClick={() => { factory(); }}>x</button>;
+}
+
+export function EagerHandlerSetterAlias() {
+  const [read, set] = createSignal(1);
+  let alias = set;
+  return <button onClick={((() => { alias(2); return 1; })(), () => {})}>{read()}</button>;
+}
+export function LegalHandlerSetterAlias() {
+  const [read, set] = createSignal(1);
+  let alias = set;
+  return <button onClick={() => { alias(2); }}>{read()}</button>;
+}
+export function RefCompositeLayer() {
+  const [read] = createSignal(1);
+  let held: typeof read | undefined;
+  const factory = () => { h1(() => { (held ||= read)(); }); return () => {}; };
+  return <p ref={factory()}>x</p>;
+}
+export function RefBoundLayer() {
+  const [read] = createSignal(1);
+  const factory = () => { (() => { read.bind(null)(); })(); return () => {}; };
+  return <p ref={factory()}>x</p>;
+}
+
+import { action } from "solid-js";
+
+export function EagerHandlerActionAlias() {
+  const act = action(function* () {});
+  let alias = act;
+  return <button onClick={((() => { alias(); return 1; })(), () => {})}>x</button>;
+}
+export function LegalHandlerActionAlias() {
+  const act = action(function* () {});
+  let alias = act;
+  return <button onClick={() => { alias(); }}>x</button>;
+}

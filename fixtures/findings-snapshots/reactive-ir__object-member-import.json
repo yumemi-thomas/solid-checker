@@ -147,6 +147,16 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 459,
+      "end": 468,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 540,
       "end": 549,
       "fixes": 0
@@ -249,6 +259,16 @@
       "path": "fixtures/reactive-ir/object-member-import/source.ts",
       "start": 574,
       "end": 581,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/object-member-import/source.ts",
+      "start": 623,
+      "end": 630,
       "fixes": 0
     },
     {

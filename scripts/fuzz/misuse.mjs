@@ -13,8 +13,9 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
-  HANDOFF_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  CBP_CALLS, CBP_FORMS, cbProp,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -146,8 +147,9 @@ export const MODULE = { "solid-js": "S", "@solidjs/web": "W" };
  */
 const OWNER_LIFETIME = ["root-named", "root-method", "root-hook", "root-stored", "owner-bound", "owner-create"];
 // Measured in Chrome (2026-10-30): a signal write or an action call in an effect's returned cleanup on a rerun reports nothing on
-// rc.17 (a store write there does, so the cleanup runs), and a component rendered in a timer reports nothing from its `onSettled`:
-// neither is a misuse context. A write in a cleanup's `createRoot` is exempt (the disposal); an action call there throws.
+// rc.17 (a store write there does, so the cleanup runs; both are legal cells of EFFECT_WINDOW_CONTEXTS), and a component rendered in a
+// timer reports nothing from its `onSettled`: not a misuse context. A write in a cleanup's `createRoot` is exempt (the disposal); an
+// action call there throws.
 const FALSE_CLEAN_CONTEXTS = ["comp-slot", "comp-rendered"];
 const ASYNC_CONTROL = ["async-loop", "async-for-await", "async-finally"];
 /** The contexts whose site sits in a callback handed to a primitive: the callback-form axis can pass it by name. */
@@ -163,9 +165,9 @@ export const CALLBACK_FORMS = ["const", "function", "alias", "named", "let", "bu
 /** The recall layers: control flow around the site (model.mjs CTL_FORMS), and the helper imported from `helpers.ts` in other forms. */
 export const CONTROL_LAYERS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator"];
 export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "module-ns"];
-// The hand-off layers (model.mjs HANDOFF_FORMS) are measured with the owner-region, read-hand-off and climb-bound fixes they
-// expose (saturation research B1-B3: false cleans on main as well), not in this grid yet.
-export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS];
+// The saturation transforms (model.mjs): T1/T3 hand-off and member-assign layers (HANDOFF_FORMS) and T2 depth layers at the
+// 16-layer climb bound (DEPTH_FORMS), with the fixes they exposed (ADRs 0531, 0532, 0534).
+export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS];
 /**
  * The recall bindings. Of an API: destructurings of the namespace other than the base `const { flush: flushD } = S` (nested, with a
  * default, with a rest, `let`, exported, through another `const` holding the namespace), a `const` member alias, and Solid re-exported
@@ -263,9 +265,18 @@ export const SPEC = {
     call: (node, [sig]) => local(sig.name),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
+  // effect under the owner current at `createReaction` (`@solidjs/signals` dist/dev.js:2630-2651, `runWithOwner(owner, …)`): none
+  // there, so every `track1()` warns, wherever it is called. `reaction-track-owned` (legal only): the tracker the component (or its
+  // parent, or a hook the body calls) creates, owned there, so a call anywhere is legal.
   NO_OWNER_EFFECT: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL,
-    variants: ["effect", "render"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
-    call: (node) => api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}"),
+    variants: ["effect", "render"], gridVariants: ["reaction-track"], legalVariants: ["effect", "render", "reaction-track-owned"],
+    variantSources: { "reaction-track": ["module", "module-barrel"],
+      "reaction-track-owned": ["local", ...SOURCE_AXES.props.filter((source) => source !== "prop-value"), ...SOURCE_AXES.context, "module-hook", "module-hook-member"] },
+    contexts: UNOWNED, bindings: BINDINGS, bindingsFor: (variant) => (variant?.startsWith("reaction-track") ? ["direct", "alias", "destructured", "wrapper"] : BINDINGS),
+    setup: (variant, name) => (variant?.startsWith("reaction-track") ? [reactionSignal(name("track"))] : []),
+    call: (node, sigs) => (node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
+      : api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}")),
   },
   NO_OWNER_BOUNDARY: { recallContexts: ASYNC_CONTROL,
     variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
@@ -419,7 +430,140 @@ const FLOW_PLACEMENT = {
   NO_OWNER_EFFECT: { legal: FLOW_CONTEXTS },
   NO_OWNER_CONTEXT: { legal: FLOW_CONTEXTS },
 };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+/**
+ * The callback props (`--recall` only; catalogue rank 3, section 3.11): C1 hands the site's function to a same-file child as a prop,
+ * `<KidN run={() => { …site… }} />`, and the child calls `props.run()` in its body, its JSX, a click handler, an effect apply,
+ * `onSettled`, or never (model.mjs CBP_CALLS); `run` is written inline, named by C1 (`function runN() {}`), forwarded by a middle
+ * component, destructured by the child, or spread by a middle component (CBP_FORMS). `cbp-<call>` is the inline form,
+ * `cbp-<call>-<form>` the others. Measured on rc.17's fast runtime first (2026-11-01, 372 programs, probe in
+ * /tmp/sc-scratch.noindex/callback-props; the five forms agree on every site): the call runs where the child places it.
+ *   body      the child's body (owned, labelled "<KidN>"): a write, a refresh or an action throws, a read warns, a pending read
+ *             throws, a store proxy write warns, an owner operation is legal, a no-default `useContext` reports CONTEXT_NOT_FOUND
+ *   jsx       a render effect (owned, tracked): a write or an action throws, a read is silent, a pending read is
+ *             ASYNC_OUTSIDE_LOADING_BOUNDARY, a store proxy write warns, an owner operation is legal, CONTEXT_NOT_FOUND
+ *   handler   no owner: a write, an action and a read are legal; `onCleanup`, an effect, a boundary, `useContext` and `onSettled`
+ *             report NO_OWNER_*; a store proxy write warns
+ *   apply     an effect apply (no owner, strict-read window open): a write and an action are legal; a read warns, a pending read
+ *             throws; `onCleanup`, a boundary, `useContext`, `onSettled` report NO_OWNER_*; a primitive is PRIMITIVE_IN_EFFECT_CALLBACK,
+ *             `flush()` FLUSH_IN_EFFECT_CALLBACK
+ *   settled   onSettled's leaf owner: a write, an action, a read and `useContext` are legal; `onCleanup` is CLEANUP_IN_FORBIDDEN_SCOPE,
+ *             a primitive or boundary PRIMITIVE_IN_FORBIDDEN_SCOPE, a pending read PENDING_ASYNC_FORBIDDEN_SCOPE, `flush()`
+ *             FLUSH_IN_TRACKED_QUEUE_CALLBACK, `onSettled` SETTLED_CLEANUP_UNOWNED, CONTEXT_NOT_FOUND
+ *   never     the site never runs: legal for every code
+ * Not cells: an effect in an apply (PRIMITIVE_IN_EFFECT_CALLBACK, not NO_OWNER_EFFECT) or in onSettled, a boundary in onSettled,
+ * a pending read in JSX or onSettled for PENDING_ASYNC_UNTRACKED_READ (another code fires there, so neither misuse nor legal).
+ */
+export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
+const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.includes(/^cbp-([a-z]+)/.exec(context)[1]));
+const CBP_PLACEMENT = {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: cbp("body", "jsx", "handler", "apply", "settled"), legal: cbp("never") },
+  STRICT_READ_UNTRACKED: { misuse: cbp("body", "apply"), legal: cbp("jsx", "handler", "settled", "never") },
+  PENDING_ASYNC_UNTRACKED_READ: { misuse: cbp("body", "apply"), legal: cbp("handler", "never") },
+  NO_OWNER_CLEANUP: { misuse: cbp("handler", "apply"), legal: cbp("body", "jsx", "never") },
+  NO_OWNER_EFFECT: { misuse: cbp("handler"), legal: cbp("body", "jsx", "never") },
+  NO_OWNER_BOUNDARY: { misuse: cbp("handler", "apply"), legal: cbp("body", "jsx", "never") },
+  NO_OWNER_CONTEXT: { misuse: cbp("handler", "apply"), legal: cbp("body", "jsx", "settled", "never") },
+  SETTLED_CLEANUP_UNOWNED: { misuse: cbp("handler", "apply", "settled"), legal: cbp("body", "jsx", "never") },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { misuse: cbp("settled"), legal: cbp("body", "jsx", "never") },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { misuse: cbp("settled"), legal: cbp("body", "jsx", "never") },
+  PRIMITIVE_IN_EFFECT_CALLBACK: { misuse: cbp("apply"), legal: cbp("body", "jsx", "never") },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { misuse: cbp("settled"), legal: cbp("handler", "never") },
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { misuse: cbp("jsx"), legal: cbp("handler", "never") },
+  FLUSH_IN_EFFECT_CALLBACK: { misuse: cbp("apply"), legal: cbp("body", "jsx", "handler", "never") },
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { misuse: cbp("settled"), legal: cbp("body", "jsx", "handler", "never") },
+  CONTEXT_NOT_FOUND: { misuse: cbp("body", "jsx", "settled"), legal: cbp("never") },
+};
+/**
+ * The effect windows (`--recall` only; catalogue rank 4): the site in an effect's returned cleanup when the effect reruns
+ * (`effect-cleanup-rerun`, `render-cleanup-rerun`: the compute reads a signal a button sets to 2) and when its owner is disposed (a
+ * root's `dispose()` from a button, a `Show` turned off, a `For` row removed: a button sets the condition to 0), in a user effect's
+ * `error` arm (the compute throws once the button sets 2), in a render effect's apply on its rerun only (`render-apply-guarded-rerun`)
+ * and in a `createReaction` callback. `effect-cleanup-rerun-named` names the apply by a binding (ADR 0539: the checker read only
+ * inline applies' cleanups). Measured on rc.17's fast runtime first (2026-11-01, 247 probes; `@solidjs/signals`
+ * dist/dev.js, dev-shared.js):
+ *   cleanup on a rerun, render apply rerun, reaction   `runEffect` (dev.js:1991-2026) runs the previous cleanup and the apply in the
+ *                       effect-callback window (`setStrictRead("an effect callback")`, `setEffectCallback(true)`) with no owner (the
+ *                       flush): a read warns, a primitive or flush reports, an owner operation is NO_OWNER_*, a write or an action is legal
+ *   cleanup on a root's dispose or a Show turned off   `disposeChildren` (dev-shared.js:1287-1293) under `enterDisposal`, no owner and
+ *                       no window: a read, a write, an action, a primitive and flush are silent; an owner operation is NO_OWNER_*
+ *   cleanup on a For row removed   the row is disposed inside `runWithOwner(this._owner)` (dev.js:3347): owned and under disposal, so a
+ *                       write is exempt (dev-shared.js:5621-5626) but an action throws (its guard has no disposal exemption, dev.js:1535)
+ *                       and an owner operation is silent
+ *   error arm           `_errorFn` runs from `runEffect` (dev.js:1966-1989) outside the window and with no owner: like a root's dispose
+ * A store proxy write warns in each. A `createReaction` callback runs as its effect's apply (dev.js:2653-2664); its `error` handler is
+ * the effect's error arm, the same as `effect-error-arm`.
+ */
+export const EFFECT_WINDOW_CONTEXTS = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-rerun-named", "effect-cleanup-dispose", "effect-cleanup-show", "effect-cleanup-for",
+  "effect-error-arm", "render-apply-guarded-rerun", "reaction", "reaction-error-arm"];
+const WINDOWED = ["effect-cleanup-rerun", "render-cleanup-rerun", "effect-cleanup-rerun-named", "render-apply-guarded-rerun", "reaction"];
+const UNWINDOWED = ["effect-cleanup-dispose", "effect-cleanup-show", "effect-error-arm", "reaction-error-arm"];
+const ROW_DISPOSAL = ["effect-cleanup-for"];
+const EFFECT_WINDOW_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: EFFECT_WINDOW_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: ROW_DISPOSAL, legal: [...WINDOWED, ...UNWINDOWED] },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: EFFECT_WINDOW_CONTEXTS },
+  NO_OWNER_CLEANUP: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  // In the window an effect is PRIMITIVE_IN_EFFECT_CALLBACK, not this code: neither cell.
+  NO_OWNER_EFFECT: { misuse: UNWINDOWED, legal: ROW_DISPOSAL },
+  NO_OWNER_BOUNDARY: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  NO_OWNER_CONTEXT: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  SETTLED_CLEANUP_UNOWNED: { misuse: [...WINDOWED, ...UNWINDOWED], legal: ROW_DISPOSAL },
+  // Out of the window an unowned effect is NO_OWNER_EFFECT: the `effect` variant is not a legal program there (`recallVariantsNotIn`).
+  PRIMITIVE_IN_EFFECT_CALLBACK: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
+  FLUSH_IN_EFFECT_CALLBACK: { misuse: WINDOWED, legal: [...UNWINDOWED, ...ROW_DISPOSAL] },
+};
+SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn = Object.fromEntries(UNWINDOWED.map((context) => [context, ["effect"]]));
+/**
+ * The action step (`--recall` only; Fable's precision report 2026-11-02, section 3): the site in an action's first synchronous slice,
+ * the action called from an effect apply, a `createReaction` callback, an owned `onSettled`, a `createTrackedEffect` or an effect's
+ * `error` arm, and after a plain-value `yield 1` from an apply. rc.17's `step` (`@solidjs/signals` dist/dev.js:1573-1600) sets the
+ * action depth and clears the effect-callback marker; the owner, the tracking state and the strict-read window are the caller's,
+ * and a plain-value `yield` resumes synchronously on the same stack (dev.js:1637). Measured on the fast runtime (2026-11-02):
+ *   from an apply, a reaction callback, after `yield 1` from an apply   no owner, window "an effect callback": a read warns, an owner
+ *                       operation is NO_OWNER_*, a memo or root is legal (the marker is cleared), a write or an action is legal
+ *   from an owned onSettled or a tracked effect   the leaf owner: a memo, root or effect is PRIMITIVE_IN_FORBIDDEN_SCOPE, onCleanup
+ *                       CLEANUP_IN_FORBIDDEN_SCOPE; a read, a write and an action are legal
+ *   from an error arm   no owner, no window: a read, a write and an action are legal; an owner operation is NO_OWNER_*
+ * `flush` throws FLUSH_IN_ACTION in each (SC2006's, already a cell through `action`).
+ */
+export const ACTION_STEP_CONTEXTS = ["action-from-apply", "action-from-reaction", "action-plain-yield-from-apply", "action-from-settled", "action-from-tracked", "action-from-error-arm"];
+const ACTION_WINDOWED = ["action-from-apply", "action-from-reaction", "action-plain-yield-from-apply"];
+const ACTION_LEAF = ["action-from-settled", "action-from-tracked"];
+const ACTION_STEP_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { misuse: ACTION_WINDOWED, legal: [...ACTION_LEAF, "action-from-error-arm"] },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { misuse: ACTION_LEAF },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { misuse: ACTION_LEAF },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ACTION_STEP_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { legal: ACTION_STEP_CONTEXTS },
+  NO_OWNER_CLEANUP: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  NO_OWNER_EFFECT: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  NO_OWNER_BOUNDARY: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  NO_OWNER_CONTEXT: { misuse: [...ACTION_WINDOWED, "action-from-error-arm"] },
+  // The marker is cleared for the step: a memo or root in the body is legal where the apply itself reports.
+  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ACTION_WINDOWED },
+};
+/**
+ * The thunk contexts (`--recall` only; ADR 0551): `resolve(fn)` and `until(fn)` run `fn` as the compute of a `computed` under a fresh
+ * root (`@solidjs/signals` rc.17 dist/dev.js:2694-2770, :2909), measured in Fable's precision probes (row 43): a write or an action
+ * throws, a read, a root, a cleanup and an effect are legal.
+ */
+const THUNK_CONTEXTS = ["resolve-thunk", "until-thunk"];
+const THUNK_PLACEMENT = {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: THUNK_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: THUNK_CONTEXTS },
+  STRICT_READ_UNTRACKED: { legal: THUNK_CONTEXTS },
+  NO_OWNER_CLEANUP: { legal: THUNK_CONTEXTS },
+  NO_OWNER_EFFECT: { legal: THUNK_CONTEXTS },
+};
+// With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
+for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
+// Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
+// instead (fast runtime, 2026-11-01): Solid never names this code there.
+SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -584,7 +728,7 @@ function valueBinding(bind, name) {
 
 /** Wraps `stmts` in a layer (a closure called in place, a helper taking the callback, an IIFE). */
 function applyLayer(layer, stmts, kit) {
-  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer)) return [ctl(layer, stmts)];
+  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer) || DEPTH_FORMS.includes(layer)) return [ctl(layer, stmts)];
   if (FILE_LAYERS.includes(layer)) return [expr(call(ref(kit.ensureHelper("call", { module: true, via: layer.slice("module-".length) })), [fn(stmts)]))];
   switch (layer) {
     case "closure": { const f = kit.name("f"); return [decl(f, fn(stmts)), expr(call(ref(f)))]; }
@@ -680,6 +824,36 @@ function recallContext(context, stmts, kit) {
       const t = trigger();
       return { body: [expr(prim("effect", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
+    case "render-cleanup-rerun": {
+      const t = trigger();
+      return { body: [expr(prim("render", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // ADR 0539: the apply named by a binding, not written inline.
+    case "effect-cleanup-rerun-named": {
+      const t = trigger();
+      const a = kit.name("apply");
+      return { body: [decl(a, fn([ret(fn(stmts))])), expr(prim("effect", fn([ret(read(t.name))]), { apply: ref(a) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    case "effect-cleanup-dispose": {
+      const d = kit.name("disp");
+      const effect = expr(prim("effect", fn([ret(num(1))]), { apply: fn([ret(fn(stmts))]) }));
+      return { body: [decl(d, prim("rootd", fn([effect, ret(ref("dispose"))])))], view: [button(kit.name("b"), [expr(call(ref(d)))])] };
+    }
+    case "effect-cleanup-show": case "effect-cleanup-for": {
+      const t = trigger();
+      const effect = expr(prim("effect", fn([ret(num(1))]), { apply: fn([ret(fn(stmts))]) }));
+      const flow = context === "effect-cleanup-show" ? "show" : "for";
+      return { body: [], view: [flowEl(kit.name("v"), flow, [effect], { on: t.name }), button(kit.name("b"), [expr(write(t.name, 0))])], sigs: [t] };
+    }
+    case "effect-error-arm": {
+      const t = trigger();
+      return { body: [expr(prim("effect", fn(stmts), { errorArm: t.name }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    case "reaction": {
+      const t = trigger();
+      const track = kit.name("track");
+      return { body: [decl(track, prim("reaction", fn(stmts))), expr(call(ref(track), [fn([expr(read(t.name))])]))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
     case "comp-slot": return { body: [contain("comp-slot", 9, [...stmts, ret(num(1))])], view: [] };
     case "comp-rendered": return { body: [contain("comp-rendered", 9, [...stmts, ret(jsx())])], view: [] };
     case "timer-comp-settled": return { body: [expr(prim("timer", fn([contain("comp-rendered", 9, [expr(prim("settled", fn(stmts))), ret(jsx())])])))], view: [] };
@@ -699,6 +873,42 @@ function recallContext(context, stmts, kit) {
       return { body: [decl(g, fn(stmts)), decl(a, prim("action", fn(calls)))], view: [button(kit.name("b"), [expr(call(ref(a)))]), caller] };
     }
     case "action-after-yield": { const a = kit.name("a"); return { body: [decl(a, prim("action", fn(stmts), { afterYield: true }))], view: [button(kit.name("b"), [expr(call(ref(a)))])] }; }
+    // ACTION_STEP_CONTEXTS: the site in an action's first synchronous slice, the action called by the named caller.
+    case "action-from-apply": case "action-plain-yield-from-apply": {
+      const a = kit.name("a");
+      const act = prim("action", fn(stmts), context === "action-plain-yield-from-apply" ? { plainYield: true } : {});
+      return { body: [decl(a, act), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(a)))]) }))], view: [] };
+    }
+    case "action-from-reaction": {
+      const t = trigger();
+      const a = kit.name("a");
+      const track = kit.name("track");
+      return {
+        body: [decl(a, prim("action", fn(stmts))), decl(track, prim("reaction", fn([expr(call(ref(a)))]))), expr(call(ref(track), [fn([expr(read(t.name))])]))],
+        view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t],
+      };
+    }
+    case "action-from-settled": case "action-from-tracked": {
+      const a = kit.name("a");
+      return { body: [decl(a, prim("action", fn(stmts))), expr(prim(context === "action-from-settled" ? "settled" : "tracked", fn([expr(call(ref(a)))])))], view: [] };
+    }
+    case "action-from-error-arm": {
+      const t = trigger();
+      const a = kit.name("a");
+      return { body: [decl(a, prim("action", fn(stmts))), expr(prim("effect", fn([expr(call(ref(a)))]), { errorArm: t.name }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // ADR 0551: the site in `resolve`'s or `until`'s thunk, called in the body: the compute of a computed under a fresh root.
+    case "resolve-thunk": return { body: [expr(prim("resolve", fn([...stmts, ret(num(1))])))], view: [] };
+    case "until-thunk": return { body: [expr(prim("until", fn([...stmts, ret(num(1))])))], view: [] };
+    // The site in a reaction bundle's `error` member: the tracker throws once the button sets 2.
+    case "reaction-error-arm": {
+      const t = trigger();
+      const track = kit.name("track");
+      return {
+        body: [decl(track, prim("reaction", fn(stmts), { errorArm: true })), expr(call(ref(track), [{ ...fn([expr(read(t.name))]), throwOn: t.name }]))],
+        view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t],
+      };
+    }
     case "tracked-rerun": {
       const t = trigger();
       return { body: [expr(prim("tracked", fn([expr(read(t.name)), ...stmts])))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
@@ -730,6 +940,14 @@ function recallContext(context, stmts, kit) {
       return { body: [], view: [item], loading: true };
     }
     default: {
+      // `cbp-<call>[-<form>]` (CBP_CONTEXTS): the site in a callback prop a same-file child calls.
+      const prop = /^cbp-([a-z]+)(?:-([a-z]+))?$/.exec(context);
+      if (prop && CBP_CALLS.includes(prop[1]) && CBP_FORMS.includes(prop[2] ?? "inline") && prop[2] !== "inline") {
+        const [, call, form = "inline"] = prop;
+        if (form !== "named") return { body: [], view: [cbProp(kit.name("v"), fn(stmts), call, form)] };
+        const r = kit.name("run");
+        return { body: [decl(r, fn(stmts, { form: "function" }))], view: [cbProp(kit.name("v"), ref(r), call, form)] };
+      }
       // `flow-<form>` (FLOW_CONTEXTS): the site in the body of a flow component's function child.
       const flow = /^flow-(.+)$/.exec(context)?.[1];
       if (flow && FLOW_FORMS.includes(flow)) return { body: [], view: [flowEl(kit.name("v"), flow, stmts)] };

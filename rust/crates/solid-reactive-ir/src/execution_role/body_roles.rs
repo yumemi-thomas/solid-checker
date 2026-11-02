@@ -160,12 +160,7 @@ pub(super) fn unrun_closure_within(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    thread_local! {
-        /// The named closures whose calls are being placed on this thread: a
-        /// call written in the closure itself (recursion) or in another being
-        /// placed asks again, and a closure already in progress is unproven.
-        static IN_PROGRESS: std::cell::RefCell<HashSet<(String, Span)>> = std::cell::RefCell::default();
-    }
+    let _placing = PlacingQuery::enter();
     functions_around(file, span).into_iter().any(|function| {
         region.contains(function.span)
             && region != function.span
@@ -177,25 +172,201 @@ pub(super) fn unrun_closure_within(
                 if parameter_slot(function, span).is_some() {
                     return true;
                 }
-                let key = (file.path.to_string(), function.span);
                 lookup.function_component_status(file, function) == ComponentStatus::No
-                    && (!IN_PROGRESS.with(|seen| seen.borrow_mut().insert(key.clone())) || {
-                        let proven = named_helper_runs_during_body(
-                            file,
-                            function,
-                            None,
-                            ExecutionRole::TrackedJsx,
-                            ExecutionRole::TrackedJsx,
-                            lookup,
-                            &mut HashSet::default(),
-                        );
-                        IN_PROGRESS.with(|seen| seen.borrow_mut().remove(&key));
-                        !proven
-                    })
+                    && closure_unplaced(file, function, lookup)
             } else {
                 stored_function(file, function, entities, symbol_names, lookup)
             }
     })
+}
+
+/// A named closure's key: its file and span.
+type ClosureKey = (String, Span);
+
+/// What a kept placement was computed in, besides the closures in progress:
+/// the read-recording frame its reads reached
+/// ([`crate::base::reads::current_frame`]), whether a role-log decision was
+/// open (what its arms are logged as), the flow-cache state
+/// ([`super::flow_cache_state`]) and the callbacks `inherits_callback_role`
+/// was placing.
+type PlacementContext = (u64, bool, (bool, bool, u64), Vec<ClosureKey>);
+
+/// A kept placement: whether the closure's calls were proven to run in
+/// tracked positions, the closures its computation entered (a range of
+/// [`ClosurePlacing::entered`]; the first is the closure itself), and what the
+/// role log recorded while it ran.
+struct KeptPlacement {
+    proven: bool,
+    entered: std::ops::Range<usize>,
+    recorded: Option<crate::role_log::Recorded>,
+}
+
+/// The named closures whose calls are being placed on this thread, and the
+/// placements kept while the outermost [`unrun_closure_within`] query runs.
+#[derive(Default)]
+struct ClosurePlacing {
+    /// The closures in progress, each with its depth on the stack: a call
+    /// written in the closure itself (recursion) or in another being placed
+    /// asks again, and a closure already in progress is unproven (a cut).
+    in_progress: HashMap<ClosureKey, usize>,
+    /// Every closure entered since the outermost placement began, in order.
+    entered: Vec<ClosureKey>,
+    /// The shallowest depth a cut met since the innermost placement began.
+    lowest_cut: usize,
+    kept: HashMap<(ClosureKey, PlacementContext), KeptPlacement>,
+    /// The [`unrun_closure_within`] queries running on this thread; the kept
+    /// placements are dropped when the outermost one ends.
+    queries: usize,
+}
+
+/// One [`unrun_closure_within`] query on this thread's [`PLACING`]: the
+/// outermost one's end (or unwind) drops what was kept and entered.
+struct PlacingQuery;
+
+impl PlacingQuery {
+    fn enter() -> Self {
+        PLACING.with(|placing| placing.borrow_mut().queries += 1);
+        Self
+    }
+}
+
+impl Drop for PlacingQuery {
+    fn drop(&mut self) {
+        PLACING.with(|placing| {
+            let mut placing = placing.borrow_mut();
+            placing.queries -= 1;
+            if placing.queries == 0 {
+                placing.kept.clear();
+                placing.entered.clear();
+                placing.lowest_cut = usize::MAX;
+            }
+        });
+    }
+}
+
+thread_local! {
+    static PLACING: std::cell::RefCell<ClosurePlacing> = std::cell::RefCell::new(ClosurePlacing {
+        lowest_cut: usize::MAX,
+        ..ClosurePlacing::default()
+    });
+}
+
+/// ADR 0544: whether the named closure `function` is not proven to be entered only by
+/// calls in tracked positions ([`named_helper_runs_during_body`]), or is
+/// already being placed on this thread.
+///
+/// Nested named closures ask the same question of every closure around them
+/// at every layer, 2^depth placements for a closure called once per layer;
+/// so a placement is kept while the outermost [`unrun_closure_within`] query
+/// runs and reused only where recomputing it would answer the same:
+/// - its computation met no cut on a closure that was in progress before it
+///   began (a cut on itself or on one it entered is part of the answer);
+/// - none of the closures it entered is in progress now (each would cut);
+/// - its [`PlacementContext`] is the same.
+///
+/// It is computed directly (not kept, not reused) while a probe answers or a
+/// proof checks recorded reads: their thread state (deferred tables) is not
+/// in the key. A reuse replays what the role log recorded the first time.
+fn closure_unplaced(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let key = (file.path.to_string(), function.span);
+    let keeps = !crate::indexes::probing() && !crate::base::memo::derived::is_deferring();
+    let context = keeps.then(|| {
+        (
+            crate::base::reads::current_frame(),
+            crate::role_log::frame_open(),
+            super::flow_cache_state(),
+            super::inherits_placing_snapshot(),
+        )
+    });
+    enum Start {
+        Cut,
+        Kept(bool, Option<crate::role_log::Recorded>),
+        Compute {
+            depth: usize,
+            outer_cut: usize,
+            first_entered: usize,
+        },
+    }
+    let start = PLACING.with(|placing| {
+        let mut placing = placing.borrow_mut();
+        if let Some(&depth) = placing.in_progress.get(&key) {
+            placing.lowest_cut = placing.lowest_cut.min(depth);
+            return Start::Cut;
+        }
+        if let Some(context) = &context
+            && let Some(kept) = placing.kept.get(&(key.clone(), context.clone()))
+            && placing.entered[kept.entered.clone()]
+                .iter()
+                .all(|entered| !placing.in_progress.contains_key(entered))
+        {
+            return Start::Kept(kept.proven, kept.recorded.clone());
+        }
+        let depth = placing.in_progress.len();
+        placing.in_progress.insert(key.clone(), depth);
+        let first_entered = placing.entered.len();
+        placing.entered.push(key.clone());
+        let outer_cut = std::mem::replace(&mut placing.lowest_cut, usize::MAX);
+        Start::Compute {
+            depth,
+            outer_cut,
+            first_entered,
+        }
+    });
+    let (depth, outer_cut, first_entered) = match start {
+        Start::Cut => return true,
+        Start::Kept(proven, recorded) => {
+            if let Some(recorded) = &recorded {
+                crate::role_log::replay(recorded);
+            }
+            return !proven;
+        }
+        Start::Compute {
+            depth,
+            outer_cut,
+            first_entered,
+        } => (depth, outer_cut, first_entered),
+    };
+    lookup.count_closure_placement();
+    let place = || {
+        named_helper_runs_during_body(
+            file,
+            function,
+            None,
+            ExecutionRole::TrackedJsx,
+            ExecutionRole::TrackedJsx,
+            lookup,
+            &mut HashSet::default(),
+        )
+    };
+    let (proven, recorded) = if keeps {
+        crate::role_log::record(place)
+    } else {
+        (place(), None)
+    };
+    PLACING.with(|placing| {
+        let mut placing = placing.borrow_mut();
+        placing.in_progress.remove(&key);
+        let cut = placing.lowest_cut;
+        placing.lowest_cut = outer_cut.min(cut);
+        if let Some(context) = context
+            && cut >= depth
+        {
+            let entered = first_entered..placing.entered.len();
+            placing.kept.insert(
+                (key, context),
+                KeptPlacement {
+                    proven,
+                    entered,
+                    recorded,
+                },
+            );
+        }
+    });
+    !proven
 }
 
 /// ADR 0452: the innermost function around `span` that is bound to a name
@@ -814,7 +985,8 @@ pub(super) fn named_callback_write_role(
     // A library callback may run zero times (ADR 0493 review): no rejection.
     let at = match super::write_roles::climb_in_place_layers(file, span, lookup) {
         Some(climb)
-            if !climb.in_list
+            if !climb.exhausted
+                && !climb.in_list
                 && climb.suspended.is_none()
                 && !super::write_roles::climb_crosses_library_callback(
                     file, span, climb.at, lookup,
@@ -832,7 +1004,7 @@ pub(super) fn named_callback_write_role(
     };
     let symbol = function_symbol(file, function, entities)?;
     let key = (file.path.to_string(), function.span);
-    if !visiting.insert(key.clone()) {
+    if !super::write_components::visit_insert(visiting, key.clone()) {
         return None;
     }
     let mut rejected = None;
@@ -929,7 +1101,10 @@ pub(super) fn semantic_execution_role_within(
     // is real, but which of its code runs tracked, deferred, on an event or
     // during rendering is exactly what the missing compiler facts decide.
     if file.compiler.withheld() {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "body_roles.semantic_execution_role_within.unknown",
+            ExecutionRole::Unknown
+        );
     }
     let role = semantic_role_before_awaits(
         file,
@@ -941,7 +1116,10 @@ pub(super) fn semantic_execution_role_within(
         classifying,
     );
     if role == ExecutionRole::EventCallback && lookup.synchronous_event_read_dispatch_present() {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "body_roles.semantic_execution_role_within.unknown-2",
+            ExecutionRole::Unknown
+        );
     }
     // ADR 0323: code after an await its async function reaches on every path
     // runs from a promise continuation, on a later task. The strict-read
@@ -965,7 +1143,10 @@ pub(super) fn semantic_execution_role_within(
     // later render -- not in this body's strict-read window, which the
     // lexical rendering role assumes. No proven untracked read.
     if role == ExecutionRole::UntrackedRendering && inside_component_element_children(file, span) {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "body_roles.semantic_execution_role_within.unknown-3",
+            ExecutionRole::Unknown
+        );
     }
     role
 }
@@ -986,12 +1167,18 @@ pub(super) fn window_after_awaits(
             || follows_dominating_await(file, span)
             || follows_try_head_await(file, span, lookup))
     {
-        return ExecutionRole::Unreported;
+        return role_arm!(
+            "body_roles.window_after_awaits.unreported",
+            ExecutionRole::Unreported
+        );
     }
     if role.reports_untracked_read()
         && (follows_any_suspension(file, span) || may_follow_own_await(file, span))
     {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "body_roles.window_after_awaits.unknown",
+            ExecutionRole::Unknown
+        );
     }
     role
 }

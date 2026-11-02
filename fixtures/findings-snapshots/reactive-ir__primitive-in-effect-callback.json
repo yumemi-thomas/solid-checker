@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
-      "start": 1626,
-      "end": 1638,
+      "start": 1634,
+      "end": 1646,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
-      "start": 1739,
-      "end": 1751,
+      "start": 1747,
+      "end": 1759,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
-      "start": 1821,
-      "end": 1833,
+      "start": 1829,
+      "end": 1841,
       "fixes": 0
     },
     {
@@ -137,8 +137,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
-      "start": 1893,
-      "end": 1911,
+      "start": 1901,
+      "end": 1919,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1958,
+      "end": 1968,
       "fixes": 0
     }
   ]

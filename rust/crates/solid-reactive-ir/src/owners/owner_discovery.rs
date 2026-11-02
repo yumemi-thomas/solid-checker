@@ -55,6 +55,7 @@ pub(crate) fn discover_owner_file(
             })
         })
     };
+    let region_of = |span| providing_region(&providing_regions, span);
     // The callback an argument names, exactly as `owner_callback_index` reads
     // it: the function literal itself (or an event tuple's handler slot), or
     // the function a bare identifier names. A function literal inside any other
@@ -282,11 +283,40 @@ pub(crate) fn discover_owner_file(
             callback_edges.is_empty() && known_primitive(&call_primitives[call_index]).is_none();
         for edge in callback_edges {
             let kind = callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
-            if let Some(target) = call
+            // ADR 0548: an exact effect bundle names its members: the `effect`
+            // member runs as the slot's callback, the `error` member from the
+            // flush's error branch with no owner.
+            let bundle_targets = || {
+                let primitive = known_primitive(&call_primitives[call_index])?;
+                let error = crate::execution_role::bundle_error_member(
+                    lookup.dialect,
+                    primitive,
+                    call,
+                    edge.argument,
+                )?;
+                let effect = crate::execution_role::effect_apply_span(call, edge.argument)
+                    .filter(|effect| *effect != call.arguments[edge.argument].span);
+                Some(
+                    effect
+                        .and_then(|effect| callback_target(effect, false))
+                        .map(|target| (target, kind))
+                        .into_iter()
+                        .chain(
+                            callback_target(error, false)
+                                .map(|target| (target, OwnerEdgeKind::Unowned)),
+                        )
+                        .collect::<Vec<_>>(),
+                )
+            };
+            let targets = match call
                 .arguments
                 .get(edge.argument)
                 .and_then(|argument| callback_target(argument.span, false))
             {
+                Some(target) => vec![(target, kind)],
+                None => bundle_targets().unwrap_or_default(),
+            };
+            for (target, kind) in targets {
                 let source = lookup
                     .files()
                     .iter()
@@ -450,6 +480,71 @@ pub(crate) fn discover_owner_file(
             )),
             _ => None,
         };
+        // ADR 0549: the creating call of such a function whose result escapes
+        // where no invocation can be named (exported, handed whole to a call,
+        // a JSX attribute's value, or held by no binding): some invocation
+        // may run its work under this call's owner, so an obligation here.
+        if !in_list
+            && let Some(primitive) = known
+            && dialect.returned_invocation_owner_requirement_role(primitive)
+                == Some(OwnerRequirementRole::Effect)
+            && returned_function_escapes(file, call)
+        {
+            requirements.push(OwnerRequirementCandidate {
+                operation: "effect",
+                operation_span: call.callee,
+                owner,
+                report_mask: OWNER_CONTEXT_UNOWNED,
+                allow_uncertain: true,
+                runtime_uncertain: true,
+                settled_target: None,
+                settled_gate: None,
+                providing_region_chain: providing_region_chain.clone(),
+                providing_region: region_of(call.span),
+                context_argument: None,
+                in_parameter_list: false,
+            });
+        }
+        // ADR 0549: an invocation of a function a primitive returned that
+        // creates its work under the owner captured where the primitive was
+        // called (`createReaction`'s `track()`): the requirement is placed at
+        // the invocation and judged at the creating call. A chain through a
+        // `let` is an obligation; a creating call
+        // in another file is placed only at its module's top level, where no
+        // owner is current.
+        if known.is_none()
+            && !in_list
+            && let Some((placed_here, answer)) = lookup.returned_factory_at(file, call)
+            && answer.slot.is_none()
+            && dialect.returned_invocation_owner_requirement_role(answer.primitive)
+                == Some(OwnerRequirementRole::Effect)
+        {
+            // Placed at the call whose owner created the function, in this
+            // file; another module's top level has none. Anything else is the
+            // creating call's escape obligation (`returned_function_escapes`).
+            let placement = match placed_here {
+                Some(at) => Some((owner_at(at), region_chain(at), region_of(at))),
+                None => answer.factory_at_module_scope.then_some((None, None, None)),
+            };
+            if let Some((owner, providing_region_chain, providing_region)) = placement {
+                requirements.push(OwnerRequirementCandidate {
+                    operation: "effect",
+                    operation_span: call.callee,
+                    owner,
+                    report_mask: OWNER_CONTEXT_UNOWNED,
+                    allow_uncertain: true,
+                    // A `let` on the walk may hold another function by the
+                    // time it is called: an obligation, never a proof.
+                    runtime_uncertain: !answer.exact,
+                    settled_target: None,
+                    settled_gate: None,
+                    providing_region_chain,
+                    providing_region,
+                    context_argument: None,
+                    in_parameter_list: false,
+                });
+            }
+        }
         if let Some((operation, report_mask, settled_target, operation_span, runtime_uncertain)) =
             operation
         {
@@ -473,6 +568,7 @@ pub(crate) fn discover_owner_file(
                 settled_target,
                 settled_gate,
                 providing_region_chain,
+                providing_region: region_of(call.span),
                 context_argument,
                 in_parameter_list: in_list,
             });
@@ -560,6 +656,7 @@ pub(crate) fn discover_owner_file(
                 settled_target: None,
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
+                providing_region: region_of(element.span),
                 context_argument: None,
                 in_parameter_list: list_site(element.span),
             });
@@ -731,4 +828,112 @@ pub(crate) fn find_missing_owners_incremental(
             ..timings
         },
     )
+}
+
+/// ADR 0549: whether the function `call` returns reaches code no returned-
+/// invocation walk names. Followed: a call's callee, the object of a member
+/// that is a call's callee, the initializer of a single-name binding (a copy),
+/// and a value of a closed object literal or a tuple literal that is a
+/// binding's whole initializer (that binding's names are followed in turn).
+/// Anything else escapes: the call is no binding's whole initializer, a holder
+/// is exported, or a reference is handed to a call, written as a JSX
+/// attribute's value, returned, assigned, or written in any other position.
+fn returned_function_escapes(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    let ast = &file.ast;
+    let peel = |span: Span| ast.peel_ts_sugar_span(span);
+    let Some(name) = ast
+        .bindings_initializer_containing(call.span)
+        .find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| peel(initializer) == call.span)
+        })
+        .and_then(|binding| binding.names.first())
+    else {
+        return true;
+    };
+    // The binding whose whole initializer is the literal directly holding
+    // `value` (its property's value or its element), when that literal is a
+    // closed object literal or a tuple literal.
+    let literal_binding = |value: Span| {
+        let literal = ast
+            .object_get_shapes
+            .iter()
+            .filter(|shape| shape.closed && shape.span.contains(value))
+            .map(|shape| shape.span)
+            .chain(
+                ast.array_literal_elements
+                    .iter()
+                    .filter(|array| {
+                        array.elements.iter().any(|element| {
+                            element.kind == solid_facts::ast::ArrayElementKind::Value
+                                && peel(element.span) == value
+                        }) && !array.elements.iter().any(|element| {
+                            element.kind == solid_facts::ast::ArrayElementKind::Spread
+                        })
+                    })
+                    .map(|array| array.span),
+            )
+            .min_by_key(|span| span.end - span.start)?;
+        // The value must be the literal's own: a property value or element,
+        // not something nested deeper.
+        let own = ast.array_literal_at(literal).is_some()
+            || crate::execution_role::closed_literal_value_is_own(file, literal, value);
+        if !own {
+            return None;
+        }
+        ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| peel(initializer) == literal)
+        })
+    };
+    let mut holders = vec![name.span];
+    let mut index = 0;
+    while index < holders.len() {
+        let holder = holders[index];
+        index += 1;
+        if index > 16 || crate::execution_role::flow_binding_exported(file, holder) {
+            return true;
+        }
+        for &(reference, declaration) in &ast.reference_declarations {
+            if declaration != holder {
+                continue;
+            }
+            if ast
+                .calls
+                .iter()
+                .any(|inner| peel(inner.callee) == reference)
+            {
+                continue;
+            }
+            if ast.members.iter().any(|member| {
+                peel(member.object) == reference
+                    && ast
+                        .calls
+                        .iter()
+                        .any(|inner| peel(inner.callee) == member.span)
+            }) {
+                continue;
+            }
+            if let Some(copy) = ast.bindings.iter().find(|binding| {
+                binding
+                    .initializer
+                    .is_some_and(|initializer| peel(initializer) == reference)
+            }) {
+                holders.extend(copy.names.iter().map(|name| name.span));
+                continue;
+            }
+            match literal_binding(reference) {
+                Some(binding) => holders.extend(binding.names.iter().map(|name| name.span)),
+                None => return true,
+            }
+        }
+    }
+    false
 }

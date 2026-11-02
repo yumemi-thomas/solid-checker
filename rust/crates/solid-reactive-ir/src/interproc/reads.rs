@@ -350,7 +350,8 @@ fn in_place_layer_owners(
         else {
             continue;
         };
-        if climb.suspended == Some(true)
+        if climb.exhausted
+            || climb.suspended == Some(true)
             || climb.at != call
             || file.ast.function_at(node.span).is_none_or(|function| {
                 !crate::owners::written_directly_in(&file.ast, function, call)
@@ -783,6 +784,35 @@ pub(super) fn interprocedural_reads(
         &mut edges,
         &mut summary_propagation,
     );
+    // Binding dispatch rows arrive after the direct-reference layer climb.
+    // Preserve them at each proven in-place caller too. Their summary edge
+    // does not establish an unconditional read, so keep the new row undecided.
+    let mut layered = Vec::new();
+    for (owner, node) in nodes.iter().enumerate() {
+        // file_by_path records the slot; this assembly also records stage reads.
+        let Some(file) = lookup.file_by_path(&node.path) else {
+            continue;
+        };
+        for layer in in_place_layer_owners(context, nodes, nodes_by_path, file, node.body, owner) {
+            for (hops, read) in summaries[owner].rows() {
+                if summaries[layer.owner].rows().any(|(_, existing)| {
+                    existing.symbol == read.symbol && existing.origin == read.origin
+                }) {
+                    continue;
+                }
+                let mut read = read.clone();
+                read.owner = nodes[layer.owner].symbol.clone();
+                read.origin_context = nodes[layer.owner].name.clone().unwrap_or_default();
+                read.local |= layer.local;
+                read.undecided = true;
+                layered.push((layer.owner, hops, read));
+            }
+        }
+    }
+    for (owner, hops, read) in layered {
+        summaries[owner].insert(read, hops);
+    }
+    summary_propagation.run(&mut summaries);
     fixed_points.dispatch = step_started.elapsed();
     let step_started = Instant::now();
     add_returned_function_reads(

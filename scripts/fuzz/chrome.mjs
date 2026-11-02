@@ -5,7 +5,8 @@
 // oracle's row for the case into the same `runtime` and `checker` records the comparator
 // reads for the fast path, so one classifier judges both.
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync } from "node:fs";
+import { freshDir } from "./scratch.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { caseFiles, caseKey, recordDigest } from "./cache.mjs";
@@ -182,8 +183,8 @@ export const cacheableChrome = (record) => Boolean(record?.row) && record.row.ve
 async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, withClean = false, closeRetries = 1, oracle, env = process.env, executionCache }) {
   if (!bin || !typefacts) throw new Error("Chrome confirmation needs the checker binary and typefacts (--checker-bin, --typefacts)");
   const root = join(resolve(out), "chrome-cases");
-  rmSync(root, { recursive: true, force: true });
-  mkdirSync(root, { recursive: true });
+  // A link into a scratch directory (scratch.mjs) stays one.
+  freshDir(root);
   const cleanToo = withClean && !control;
   for (const { id, dir } of cases) {
     cpSync(dir, join(root, id), { recursive: true });

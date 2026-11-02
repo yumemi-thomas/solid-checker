@@ -36,8 +36,16 @@ describe("rediscovery.json", () => {
   });
 
   it("lists programs the grids still generate, and the smoke set holds them", () => {
+    // One grid build per (grid, code): several entries share one (five name mx-recall STRICT_READ_UNTRACKED), and each build is a
+    // whole recall grid's ids, which took this test past its limit on a loaded machine.
+    const built = new Map();
+    const idsOf = (grid, code) => {
+      const key = `${grid}\0${code}`;
+      if (!built.has(key)) built.set(key, new Set(gridIds(grid, code)));
+      return built.get(key);
+    };
     for (const entry of registry.filter((e) => !e.outside)) {
-      const generated = new Set(gridIds(entry.grid, entry.code));
+      const generated = idsOf(entry.grid, entry.code);
       expect(entry.ids.filter((id) => !generated.has(id))).toEqual([]);
       const manifest = join(here, "smoke", `${entry.grid}.json`);
       if (existsSync(manifest)) {

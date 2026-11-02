@@ -110,6 +110,16 @@
       "start": 768,
       "end": 834,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-origin-member-dispatch/source.ts",
+      "start": 887,
+      "end": 894,
+      "fixes": 0
     }
   ]
 }

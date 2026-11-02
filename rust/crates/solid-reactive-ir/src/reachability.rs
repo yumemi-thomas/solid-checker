@@ -413,6 +413,45 @@ fn discover_reachability_file(
                     }
                 }
             }
+            // ADR 0531: a function handed by name to a standard-library call
+            // that invokes its argument (`[1].forEach(f)`, `new Promise(f)`,
+            // `Reflect.apply(f, …)`; a scheduler too, since reaching says
+            // nothing about when) runs when the call does. A function nested
+            // in a reached body is reached already; this reaches a module-level
+            // or imported one. The fact is the compiler-selected declaration's,
+            // never the callee's spelling.
+            if primitive.is_none()
+                && let Some(resolved) = lookup.resolved_callee_call(file, call.callee)
+            {
+                use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
+                for (index, argument) in call.arguments.iter().enumerate() {
+                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                        || argument.spread
+                        || withheld(argument.span)
+                    {
+                        continue;
+                    }
+                    let callability = lookup
+                        .entity_at(file.path.as_str(), argument.span)
+                        .and_then(|entity| entity.callability);
+                    if !matches!(
+                        argument_behavior(resolved, callability, index),
+                        Some(
+                            RuntimeArgumentBehavior::InlineCallback
+                                | RuntimeArgumentBehavior::DeferredCallback
+                                | RuntimeArgumentBehavior::FreshStackCallback
+                        )
+                    ) {
+                        continue;
+                    }
+                    if let Some(symbol) = entities.value_symbol(file, argument.span) {
+                        edges.push(ReachabilityEdge {
+                            owner,
+                            target: ReachabilityTarget::Symbol(symbol.clone()),
+                        });
+                    }
+                }
+            }
             for property in call
                 .arguments
                 .iter()
@@ -466,6 +505,25 @@ fn discover_reachability_file(
                 })
                 .collect::<Vec<_>>();
             edges.extend(added);
+        }
+    }
+    // ADR 0531: a tagged template calls its tag where it is written.
+    for template in &file.ast.tagged_templates {
+        if lookup.may_precede_initialization(file.path.as_str(), template.tag) {
+            continue;
+        }
+        let Some(symbol) = entities.value_symbol(file, template.tag) else {
+            continue;
+        };
+        edges.push(ReachabilityEdge {
+            owner: body_owner(template.tag),
+            target: ReachabilityTarget::Symbol(symbol.clone()),
+        });
+        if let Some(listed) = list_owner(template.tag) {
+            edges.push(ReachabilityEdge {
+                owner: Some(listed),
+                target: ReachabilityTarget::Symbol(symbol.clone()),
+            });
         }
     }
     // A function created in a function's body (or parameter list) is reached
@@ -548,8 +606,8 @@ pub(super) struct ReachabilityInputs<'a> {
 
 pub(super) struct ReachabilityState<'a> {
     pub(super) files: &'a mut HashMap<solid_facts::core::SourcePath, CachedReachabilityFile>,
-    pub(super) multiplicity_by_path: &'a mut HashMap<String, Vec<usize>>,
-    pub(super) calls: &'a mut HashMap<Location, usize>,
+    pub(super) multiplicity_by_path: &'a mut HashMap<String, Vec<u64>>,
+    pub(super) calls: &'a mut HashMap<Location, u64>,
     pub(super) function_symbols: &'a mut HashSet<SymbolId>,
 }
 
@@ -562,11 +620,11 @@ pub(super) fn reachability_stage(
     inputs: ReachabilityInputs<'_>,
     cache: Option<&mut Option<crate::cache::CachedReachability>>,
     build_timings: &mut crate::BuildTimings,
-) -> Option<HashMap<Location, usize>> {
+) -> Option<HashMap<Location, u64>> {
     let facts = inputs.facts;
     let Some(cache) = cache else {
         let substage_started = std::time::Instant::now();
-        let calls = reachable_call_multiplicity(
+        let (calls, visits) = reachable_call_multiplicity(
             facts,
             inputs.indexes,
             inputs.entities,
@@ -574,6 +632,7 @@ pub(super) fn reachability_stage(
             inputs.lookup,
         );
         build_timings.reachability = substage_started.elapsed();
+        build_timings.reachability_visits = visits;
         return Some(calls);
     };
     let can_reuse = inputs.typescript_unchanged
@@ -612,7 +671,7 @@ pub(super) fn reachability_stage(
             multiplicity_by_path: HashMap::default(),
             function_symbols: HashSet::default(),
         });
-        let (reused_files, recomputed_files) = reachable_call_multiplicity_incremental(
+        let (reused_files, recomputed_files, visits) = reachable_call_multiplicity_incremental(
             inputs,
             ReachabilityState {
                 files: &mut cached.files,
@@ -624,6 +683,7 @@ pub(super) fn reachability_stage(
         build_timings.reachability = substage_started.elapsed();
         build_timings.reachability_reused_files = reused_files;
         build_timings.reachability_recomputed_files = recomputed_files;
+        build_timings.reachability_visits = visits;
         cached.inputs = facts
             .files
             .iter()
@@ -638,10 +698,12 @@ pub(super) fn reachability_stage(
     None
 }
 
+/// Returns the reused and recomputed file counts and the count's work
+/// ([`crate::BuildTimings::reachability_visits`]).
 pub(super) fn reachable_call_multiplicity_incremental(
     inputs: ReachabilityInputs<'_>,
     state: ReachabilityState<'_>,
-) -> (u64, u64) {
+) -> (u64, u64, u64) {
     let ReachabilityInputs {
         facts,
         indexes,
@@ -759,7 +821,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
             }
         }
         if topology_unchanged {
-            return (reused_files, recomputed_files);
+            return (reused_files, recomputed_files, 0);
         }
     }
 
@@ -832,10 +894,8 @@ pub(super) fn reachable_call_multiplicity_incremental(
     }
     roots.sort_unstable();
     roots.dedup();
-    let mut multiplicity = vec![0_usize; functions.len()];
-    for root in roots {
-        accumulate_function(root, &edges, &mut HashSet::default(), &mut multiplicity);
-    }
+    let mut visits = 0_u64;
+    let multiplicity = path_counts(&roots, &edges, &mut visits);
     multiplicity_by_path.clear();
     let mut offset = 0;
     for file in &facts.files {
@@ -871,7 +931,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
             }
         }
     }
-    (reused_files, recomputed_files)
+    (reused_files, recomputed_files, visits)
 }
 
 /// Reachability for a build with no cache to answer from.
@@ -894,12 +954,12 @@ pub(super) fn reachable_call_multiplicity<'a>(
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     lookup: &'a SemanticLookup<'a>,
-) -> HashMap<Location, usize> {
+) -> (HashMap<Location, u64>, u64) {
     let mut files = HashMap::default();
     let mut multiplicity_by_path = HashMap::default();
     let mut calls = HashMap::default();
     let mut function_symbols = HashSet::default();
-    reachable_call_multiplicity_incremental(
+    let (_, _, visits) = reachable_call_multiplicity_incremental(
         ReachabilityInputs {
             facts,
             indexes,
@@ -916,28 +976,364 @@ pub(super) fn reachable_call_multiplicity<'a>(
             function_symbols: &mut function_symbols,
         },
     );
-    calls
+    (calls, visits)
 }
 
-fn accumulate_function(
-    function: usize,
+/// How many paths reach each function from the (distinct) `roots`: the
+/// paths that never revisit a function, a parallel edge counting as its own
+/// path, and a root counting once for itself besides the paths into it.
+///
+/// On a graph without cycles every path is such a path, and the count is
+/// arithmetic in topological order: a function's count is its own root one
+/// plus, once per edge into it, the count of the edge's source. A self edge
+/// never extends a path (the function is already on it), so it is dropped.
+/// Only the functions some root reaches are ordered: a cycle no root reaches
+/// changes nothing.
+///
+/// Where a root reaches a cycle, the count is the same arithmetic on the
+/// condensation (ADR 0544) ([`condensation_counts`]): each strongly connected component
+/// counts as one function, and edges inside one are dropped as a self edge
+/// is. That is not the number of paths through the cycle (counting those is
+/// as hard as walking them: every simple path, factorially many in a dense
+/// cycle), but it is nonzero exactly where one is: every function a root
+/// reaches lies on some path that revisits none, and the condensation count
+/// of every component a root reaches is at least 1. Only that is read: a
+/// call is reachable or not ([`crate::ReactiveWrite::multiplicity`]).
+/// Counts saturate at `u64::MAX`, and saturation never makes one zero.
+fn path_counts(roots: &[usize], edges: &[Vec<usize>], visits: &mut u64) -> Vec<u64> {
+    let mut reached = vec![false; edges.len()];
+    let mut stack = Vec::new();
+    for &root in roots {
+        if !reached[root] {
+            reached[root] = true;
+            stack.push(root);
+        }
+    }
+    let mut incoming = vec![0_usize; edges.len()];
+    let mut reached_count = 0;
+    while let Some(function) = stack.pop() {
+        reached_count += 1;
+        *visits += 1;
+        for &target in &edges[function] {
+            *visits += 1;
+            if target == function {
+                continue;
+            }
+            incoming[target] += 1;
+            if !reached[target] {
+                reached[target] = true;
+                stack.push(target);
+            }
+        }
+    }
+    let mut ready = (0..edges.len())
+        .filter(|&function| reached[function] && incoming[function] == 0)
+        .collect::<Vec<_>>();
+    let mut order = Vec::with_capacity(reached_count);
+    while let Some(function) = ready.pop() {
+        order.push(function);
+        for &target in &edges[function] {
+            if target == function {
+                continue;
+            }
+            incoming[target] -= 1;
+            if incoming[target] == 0 {
+                ready.push(target);
+            }
+        }
+    }
+    if order.len() != reached_count {
+        return condensation_counts(roots, edges, &reached, visits);
+    }
+    let mut counts = vec![0_u64; edges.len()];
+    for &root in roots {
+        counts[root] = counts[root].saturating_add(1);
+    }
+    for function in order {
+        *visits += 1;
+        let count = counts[function];
+        for &target in &edges[function] {
+            *visits += 1;
+            if target != function {
+                counts[target] = counts[target].saturating_add(count);
+            }
+        }
+    }
+    counts
+}
+
+/// [`path_counts`] where a root reaches a cycle: the count on the
+/// condensation of the functions `reached` marks. A component's count is its
+/// roots plus, once per edge into it from another component, that
+/// component's count; each function takes its component's. On a graph whose
+/// components are single functions this is [`path_counts`]' own arithmetic.
+fn condensation_counts(
+    roots: &[usize],
     edges: &[Vec<usize>],
-    visiting: &mut HashSet<usize>,
-    multiplicity: &mut [usize],
-) {
-    if !visiting.insert(function) {
-        return;
+    reached: &[bool],
+    visits: &mut u64,
+) -> Vec<u64> {
+    let (component, components) = reached_components(edges, reached, visits);
+    let mut members = vec![Vec::new(); components];
+    for (function, &held) in component.iter().enumerate() {
+        if reached[function] {
+            members[held].push(function);
+        }
     }
-    multiplicity[function] += 1;
-    for target in &edges[function] {
-        accumulate_function(*target, edges, visiting, multiplicity);
+    let mut component_counts = vec![0_u64; components];
+    for &root in roots {
+        component_counts[component[root]] = component_counts[component[root]].saturating_add(1);
     }
-    visiting.remove(&function);
+    // Components are numbered in reverse topological order: every edge
+    // between two runs from a higher number to a lower one.
+    for held in (0..components).rev() {
+        let count = component_counts[held];
+        for &function in &members[held] {
+            *visits += 1;
+            for &target in &edges[function] {
+                *visits += 1;
+                let into = component[target];
+                if into != held {
+                    component_counts[into] = component_counts[into].saturating_add(count);
+                }
+            }
+        }
+    }
+    let mut counts = vec![0_u64; edges.len()];
+    for (function, count) in counts.iter_mut().enumerate() {
+        if reached[function] {
+            *count = component_counts[component[function]];
+        }
+    }
+    counts
+}
+
+/// The strongly connected components of the functions `reached` marks
+/// (Tarjan's algorithm, iterative), each function's component and their
+/// number. Components are numbered in the order they complete, which is
+/// reverse topological: a component completes after every one it reaches.
+/// `reached` is closed under edges, so no edge leaves it. Unreached functions
+/// keep `usize::MAX`.
+fn reached_components(
+    edges: &[Vec<usize>],
+    reached: &[bool],
+    visits: &mut u64,
+) -> (Vec<usize>, usize) {
+    const UNSEEN: usize = usize::MAX;
+    let mut index = vec![UNSEEN; edges.len()];
+    let mut low = vec![0_usize; edges.len()];
+    let mut on_stack = vec![false; edges.len()];
+    let mut component = vec![UNSEEN; edges.len()];
+    let mut stack = Vec::new();
+    // (function, position of its next edge)
+    let mut frames: Vec<(usize, usize)> = Vec::new();
+    let mut next_index = 0;
+    let mut components = 0;
+    for start in 0..edges.len() {
+        if !reached[start] || index[start] != UNSEEN {
+            continue;
+        }
+        index[start] = next_index;
+        low[start] = next_index;
+        next_index += 1;
+        stack.push(start);
+        on_stack[start] = true;
+        frames.push((start, 0));
+        while let Some(frame) = frames.last_mut() {
+            let function = frame.0;
+            if let Some(&target) = edges[function].get(frame.1) {
+                frame.1 += 1;
+                *visits += 1;
+                if index[target] == UNSEEN {
+                    index[target] = next_index;
+                    low[target] = next_index;
+                    next_index += 1;
+                    stack.push(target);
+                    on_stack[target] = true;
+                    frames.push((target, 0));
+                } else if on_stack[target] {
+                    low[function] = low[function].min(index[target]);
+                }
+                continue;
+            }
+            frames.pop();
+            *visits += 1;
+            if let Some(&(parent, _)) = frames.last() {
+                low[parent] = low[parent].min(low[function]);
+            }
+            if low[function] == index[function] {
+                while let Some(member) = stack.pop() {
+                    on_stack[member] = false;
+                    component[member] = components;
+                    if member == function {
+                        break;
+                    }
+                }
+                components += 1;
+            }
+        }
+    }
+    (component, components)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Counts each function once per path from `function` that reaches it
+    /// without revisiting one, by walking every path (what [`path_counts`]
+    /// did where a root reaches a cycle, before [`condensation_counts`]).
+    fn walk_paths(
+        function: usize,
+        edges: &[Vec<usize>],
+        visiting: &mut HashSet<usize>,
+        counts: &mut [u64],
+    ) {
+        if !visiting.insert(function) {
+            return;
+        }
+        counts[function] = counts[function].saturating_add(1);
+        for target in &edges[function] {
+            walk_paths(*target, edges, visiting, counts);
+        }
+        visiting.remove(&function);
+    }
+
+    /// The reference: every path walked from every root.
+    fn walked(roots: &[usize], edges: &[Vec<usize>]) -> Vec<u64> {
+        let mut counts = vec![0; edges.len()];
+        for &root in roots {
+            walk_paths(root, edges, &mut HashSet::default(), &mut counts);
+        }
+        counts
+    }
+
+    /// Small directed multigraphs (self edges, parallel edges, diamonds,
+    /// mutual recursion, roots with incoming edges, cycles no root reaches,
+    /// disconnected functions): the arithmetic count is the walk's where no
+    /// root reaches a cycle, and zero exactly where the walk's is otherwise.
+    #[test]
+    fn path_counts_are_the_walked_counts_on_small_multigraphs() {
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |bound: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            usize::try_from(state % bound as u64).unwrap()
+        };
+        let (mut acyclic, mut cyclic) = (0, 0);
+        for _ in 0..20_000 {
+            let functions = 1 + next(6);
+            let mut edges = vec![Vec::new(); functions];
+            for _ in 0..next(13) {
+                let from = next(functions);
+                // Mostly forward edges, so most graphs have no cycle.
+                let to = if next(4) == 0 {
+                    next(functions)
+                } else {
+                    from + next(functions - from)
+                };
+                edges[from].push(to);
+            }
+            let mut roots = (0..functions).filter(|_| next(3) == 0).collect::<Vec<_>>();
+            roots.sort_unstable();
+            roots.dedup();
+            let mut visits = 0;
+            let counted = path_counts(&roots, &edges, &mut visits);
+            let walked = walked(&roots, &edges);
+            let reaches_cycle = reaches_cycle(&roots, &edges);
+            if reaches_cycle {
+                let zero = |counts: &[u64]| counts.iter().map(|&c| c == 0).collect::<Vec<_>>();
+                assert_eq!(zero(&counted), zero(&walked), "{roots:?} {edges:?}");
+                cyclic += 1;
+            } else {
+                assert_eq!(counted, walked, "{roots:?} {edges:?}");
+                acyclic += 1;
+            }
+        }
+        assert!(acyclic > 1_000 && cyclic > 1_000, "{acyclic} {cyclic}");
+    }
+
+    /// Whether a root reaches a function that reaches itself through another
+    /// (a self edge alone is no cycle a path could take).
+    fn reaches_cycle(roots: &[usize], edges: &[Vec<usize>]) -> bool {
+        let reach = |from: usize| {
+            let mut seen = vec![false; edges.len()];
+            let mut stack = vec![from];
+            while let Some(function) = stack.pop() {
+                for &target in &edges[function] {
+                    if target != function && !seen[target] {
+                        seen[target] = true;
+                        stack.push(target);
+                    }
+                }
+            }
+            seen
+        };
+        let mut reached = vec![false; edges.len()];
+        for &root in roots {
+            reached[root] = true;
+            for (function, seen) in reach(root).into_iter().enumerate() {
+                reached[function] |= seen;
+            }
+        }
+        (0..edges.len()).any(|function| reached[function] && reach(function)[function])
+    }
+
+    /// A dense cycle a root reaches: every function calls every other, so
+    /// the paths that revisit none number about 13! here. The condensation
+    /// count is one component, nonzero for every function, in work linear in
+    /// the graph.
+    #[test]
+    fn dense_cycles_are_counted_on_the_condensation() {
+        let functions = 14;
+        let mut edges = (0..functions)
+            .map(|from| (1..functions).filter(|&to| to != from).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        edges[0] = vec![1];
+        let mut visits = 0;
+        let counts = path_counts(&[0], &edges, &mut visits);
+        assert_eq!(counts[0], 1);
+        assert!(counts[1..].iter().all(|&count| count == 1), "{counts:?}");
+        let edge_count = edges.iter().map(Vec::len).sum::<usize>() as u64;
+        assert!(visits <= 4 * (functions as u64 + edge_count), "{visits}");
+        // A chain after the cycle keeps the arithmetic: two edges out of the
+        // cycle's component into the next function count twice.
+        let edges = vec![vec![1], vec![2], vec![1, 3, 3], vec![]];
+        assert_eq!(path_counts(&[0], &edges, &mut 0), [1, 1, 1, 2]);
+    }
+
+    /// Nested in-place layers: each layer reached by two edges. The count is
+    /// 2^depth-sized; the work is linear in the graph.
+    #[test]
+    fn layered_paths_are_counted_without_walking_them() {
+        let depth = 40;
+        let layered = |depth: usize| {
+            (0..=depth)
+                .map(|layer| {
+                    if layer < depth {
+                        vec![layer + 1, layer + 1]
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let edges = layered(depth);
+        let mut visits = 0;
+        let counts = path_counts(&[0], &edges, &mut visits);
+        assert_eq!(counts[depth], 1 << depth);
+        assert!(visits <= 6 * (depth as u64 + 1), "{visits}");
+        // Past u64, a count saturates and stays nonzero.
+        let depth = 70;
+        let edges = layered(depth);
+        assert_eq!(path_counts(&[0], &edges, &mut 0)[depth], u64::MAX);
+        // A cycle no root reaches leaves the arithmetic count in place.
+        let edges = vec![vec![1, 1], vec![2, 2], vec![], vec![4], vec![3]];
+        let mut visits = 0;
+        assert_eq!(path_counts(&[0], &edges, &mut visits), [1, 2, 4, 0, 0]);
+        assert_eq!(walked(&[0], &edges), [1, 2, 4, 0, 0]);
+    }
 
     #[test]
     fn effective_reachability_topology_ignores_only_unresolved_symbols() {

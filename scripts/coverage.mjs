@@ -179,6 +179,8 @@ if (stubProblems.length > 0) {
  * `rust/crates/solid-reactive-ir/src/findings.rs` instead.
  */
 const KEEPS_WORDING = new Set([
+  // ADR 0530: an unwindowed read must promise no runtime warning.
+  "reactive-ir/rc17-dynamic-component",
   "reactive-ir/dialect-solid-2",
   "reactive-ir/jsx-census-gap-solid-2",
   "reactive-ir/jsx-void-child-divergence-solid-2",
@@ -199,7 +201,10 @@ const KEEPS_WORDING = new Set([
   "reactive-ir/context-read-owner",
   "reactive-ir/context-read-package",
   // ADR 0352: the SC4002 wording names the ContextNotFoundError throw, the claim.
-  "reactive-ir/context-provider-closed"
+  "reactive-ir/context-provider-closed",
+  // ADR 0534 amendment: which owner clause an exported helper's obligation
+  // names (its unseen callers, or an unplaced callback) is the claim.
+  "reactive-ir/owner-exported-seed-cause"
 ]);
 
 /**

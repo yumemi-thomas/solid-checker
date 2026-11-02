@@ -71,7 +71,9 @@ pub struct UpdateOutcome {
     /// every file's module resolution and the program's file set are the
     /// previous generation's, and only the changed file's own import
     /// positions can differ (`Response::graph_kept`). The compiler's own
-    /// in-place condition (`UpdateKind::Reused`) is what this reports.
+    /// in-place condition (`UpdateKind::Reused`) is what this reports, when
+    /// the update also asked the file system nothing the program's builds had
+    /// not asked (its build inputs are unchanged, ADR 0543).
     pub graph_kept: bool,
 }
 
@@ -85,6 +87,9 @@ pub struct ModuleInventory {
     /// Configured roots the program holds no file for although the loader's
     /// lookup finds one (`module_graph::root_positions`).
     pub unmapped_roots: Vec<Arc<str>>,
+    /// The file-system questions the program's builds asked, when the demand
+    /// asked for them (`overlay::BuildQueries`).
+    pub build_inputs: Option<typefacts::BuildInputs>,
 }
 
 /// The live project surface the demand closure materializes from. Every method
@@ -249,6 +254,18 @@ pub trait ClosureBackend {
     /// How much binder-level work was reused since the last call (ADR 0369).
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         crate::references::BinderRetention::default()
+    }
+
+    /// The files a rebuilt chain took from the project's parse cache so far
+    /// (`file_regions::ParseCache`).
+    fn parse_cache_hits(&self) -> u64 {
+        0
+    }
+
+    /// The modules whose export scan a rebuilt chain kept so far (ADR 0546:
+    /// nothing that changed reaches them).
+    fn kept_export_scans(&self) -> u64 {
+        0
     }
 
     /// Per-file passes with reuse (instant-edits P3): whether the last

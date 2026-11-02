@@ -10,6 +10,16 @@
       "start": 313,
       "end": 321,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/withheld-object-member/mutate.ts",
+      "start": 185,
+      "end": 192,
+      "fixes": 0
     }
   ]
 }

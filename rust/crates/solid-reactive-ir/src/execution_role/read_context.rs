@@ -373,12 +373,22 @@ pub(crate) fn allowed_callback_spans(
         let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
             continue;
         };
-        for index in deferred_callback_positions(dialect, primitive, call.arguments.len()) {
-            if callback_execution_at_call(file, call, primitive, index, lookup).is_none() {
-                continue;
-            }
-            if let Some(argument) = call.arguments.get(index) {
+        let deferred = deferred_callback_positions(dialect, primitive, call.arguments.len())
+            .into_iter()
+            .filter(|index| {
+                callback_execution_at_call(file, call, primitive, *index, lookup).is_some()
+            })
+            .collect::<Vec<_>>();
+        for index in &deferred {
+            if let Some(argument) = call.arguments.get(*index) {
                 spans.push(argument.span);
+            }
+        }
+        // ADR 0548: an exact bundle's `error` member runs outside any window
+        // and tracking pass, wherever the slot itself is placed.
+        for index in (0..call.arguments.len()).filter(|index| !deferred.contains(index)) {
+            if let Some(error) = super::bundle_error_member(dialect, primitive, call, index) {
+                spans.push(error);
             }
         }
     }

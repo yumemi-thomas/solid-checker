@@ -232,6 +232,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 6195,
+      "end": 6207,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
@@ -254,11 +264,11 @@
     {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 9165,
-      "end": 9170,
+      "start": 8859,
+      "end": 8864,
       "fixes": 0
     },
     {
@@ -267,8 +277,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 9407,
-      "end": 9412,
+      "start": 9161,
+      "end": 9166,
       "fixes": 0
     },
     {
@@ -277,8 +287,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 9542,
-      "end": 9547,
+      "start": 9403,
+      "end": 9408,
       "fixes": 0
     },
     {
@@ -287,8 +297,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 9648,
-      "end": 9653,
+      "start": 9538,
+      "end": 9543,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 9644,
+      "end": 9649,
       "fixes": 0
     },
     {
@@ -297,8 +317,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 9671,
-      "end": 9683,
+      "start": 9667,
+      "end": 9679,
       "fixes": 0
     },
     {
@@ -307,8 +327,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 9901,
-      "end": 9906,
+      "start": 9897,
+      "end": 9902,
       "fixes": 0
     },
     {
@@ -317,8 +337,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10053,
-      "end": 10058,
+      "start": 10049,
+      "end": 10054,
       "fixes": 0
     },
     {
@@ -327,8 +347,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10076,
-      "end": 10088,
+      "start": 10072,
+      "end": 10084,
       "fixes": 0
     },
     {
@@ -337,8 +357,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10613,
-      "end": 10618,
+      "start": 10609,
+      "end": 10614,
       "fixes": 0
     },
     {
@@ -347,8 +367,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10673,
-      "end": 10678,
+      "start": 10669,
+      "end": 10674,
       "fixes": 0
     },
     {
@@ -357,8 +377,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10777,
-      "end": 10782,
+      "start": 10773,
+      "end": 10778,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 10825,
+      "end": 10837,
       "fixes": 0
     },
     {
@@ -367,8 +397,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10863,
-      "end": 10868,
+      "start": 10859,
+      "end": 10864,
       "fixes": 0
     },
     {

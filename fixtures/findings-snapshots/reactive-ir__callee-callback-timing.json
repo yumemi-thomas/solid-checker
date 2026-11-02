@@ -216,6 +216,26 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1941,
+      "end": 1949,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1941,
+      "end": 1949,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callee-callback-timing/External.tsx",
       "start": 321,
       "end": 324,

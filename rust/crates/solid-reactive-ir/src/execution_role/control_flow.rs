@@ -88,7 +88,10 @@ pub(crate) fn control_flow_execution_role(
             .max_by_key(|function| function.body.end - function.body.start)?;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
-        return Some(ExecutionRole::DeferredCallback);
+        return Some(role_arm!(
+            "control_flow.control_flow_execution_role.deferred-callback",
+            ExecutionRole::DeferredCallback
+        ));
     }
     // `Show`/`Match` run a function child as a callback only when its
     // `length` is above 0; a function of length 0 (no parameters, or a
@@ -112,7 +115,10 @@ pub(crate) fn control_flow_execution_role(
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| dialect.children_callback_requires_parameters(primitive))
     {
-        return Some(ExecutionRole::TrackedJsx);
+        return Some(role_arm!(
+            "control_flow.control_flow_execution_role.tracked-jsx",
+            ExecutionRole::TrackedJsx
+        ));
     }
     // A fragment has no element fact, so its children are consulted through
     // its own span table: `<>{tone()}</>` is as tracked as `<b>{tone()}</b>`.
@@ -126,9 +132,15 @@ pub(crate) fn control_flow_execution_role(
             .iter()
             .any(|fragment| fragment.contains(span) && callback.body.contains(*fragment))
     {
-        Some(ExecutionRole::TrackedJsx)
+        Some(role_arm!(
+            "control_flow.control_flow_execution_role.tracked-jsx-2",
+            ExecutionRole::TrackedJsx
+        ))
     } else {
-        Some(ExecutionRole::UntrackedRendering)
+        Some(role_arm!(
+            "control_flow.control_flow_execution_role.untracked-rendering",
+            ExecutionRole::UntrackedRendering
+        ))
     }
 }
 
@@ -251,6 +263,36 @@ pub(crate) fn function_runs_inline(
                             index,
                             call.arguments.len(),
                         )
+                    })
+        })
+}
+
+/// ADR 0542: whether `function` is written as the callback of a primitive that
+/// runs it during the call and keeps the caller's owner and read role
+/// ([`solid_dialect::Dialect::callback_preserves_owner_write_context`] with an
+/// inline execution: `flush(fn)`, `untrack(fn)`). Where the caller runs, it
+/// runs: no primitive places it.
+pub(crate) fn function_keeps_caller_context(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            !call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_preserves_owner_write_context(primitive)
+                            && lookup
+                                .dialect
+                                .callback_semantics_at(primitive, index, call.arguments.len())
+                                .execution
+                                == Some(Execution::Inline)
                     })
         })
 }

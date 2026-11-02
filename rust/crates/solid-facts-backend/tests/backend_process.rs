@@ -16,6 +16,8 @@ mod bookkeeping_process;
 mod callback_props_reads_process;
 #[path = "cli_process.rs"]
 mod cli_process;
+#[path = "complexity_ladder_process.rs"]
+mod complexity_ladder_process;
 #[path = "cross_file_callbacks_process.rs"]
 mod cross_file_callbacks_process;
 #[path = "cross_file_digest_process.rs"]
@@ -56,3 +58,5 @@ mod rule_quality_process;
 mod sessions_process;
 #[path = "transport_process.rs"]
 mod transport_process;
+#[path = "warm_resolution_process.rs"]
+mod warm_resolution_process;

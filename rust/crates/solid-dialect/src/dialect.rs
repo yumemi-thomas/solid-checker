@@ -513,6 +513,20 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether a rerun of the effect calls the cleanup the callback at
+    /// `argument` of `primitive` returned inside the apply's strict-read
+    /// window, so that a reactive read in that cleanup warns as one in the
+    /// apply does (ADR 0539). `false` claims nothing: the cleanup keeps the
+    /// role of a nested function no layer places.
+    fn returned_cleanup_reruns_in_read_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// What the dev owned-scope write guards (signal and store setters,
     /// `refresh`) do while the runtime disposes an owner
     /// ([`WriteGuardInDisposal`]): throw (a release before the `!disposalDepth`
@@ -537,6 +551,17 @@ pub trait Dialect: Sync {
     /// body is untracked. The default claims nothing, which leaves such a
     /// write to the ordinary callback classification.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the callback at `argument`, whenever it runs, runs as the
+    /// compute of a computation the call creates for it (ADR 0551): the
+    /// ambient owner is that children-capable computation, so a write guard
+    /// rejects a write or an action call there as in a memo's compute. Its
+    /// reads subscribe that computation, never the caller. The default claims
+    /// nothing.
+    fn callback_runs_as_created_computation(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
         false
     }
@@ -893,6 +918,28 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the `error` member of an exact effect bundle at `argument` of
+    /// `primitive` (`{ effect, error }`) runs from the flush's error branch
+    /// before the strict-read window opens, with no owner and no
+    /// effect-callback marker (ADR 0548): owner-creating work there is
+    /// unowned, a read there is outside any window, a write or an action call
+    /// is legal. The default claims nothing: the member stays unplaced.
+    fn bundle_error_member_runs_unowned(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the synchronous slices of the stepped callback at `argument`
+    /// ([`Dialect::callback_runs_as_action_steps`]) run in the strict-read
+    /// window and the tracking state of whoever invoked the action: the step
+    /// changes neither, so a read before the first suspending `yield` warns
+    /// exactly where a read written at the invocation would (ADR 0547). The
+    /// default claims nothing: the body keeps the deferred answer.
+    fn action_step_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// The argument that a call of the export declared as `name` **renders**:
     /// the call invokes that argument as a component, synchronously, before
     /// it returns, on the caller's stack.
@@ -1054,6 +1101,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` of `primitive` runs in the effect
+    /// phase on its later runs but not provably on its first (ADR 0541): code
+    /// there that the phase decides is an obligation, never a proof. The
+    /// default is `false`, which claims no run in the phase.
+    fn callback_reruns_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether calling `primitive` synchronously from an effect phase
     /// ([`Dialect::callback_runs_in_effect_phase`]) is a **no-op**, one the
     /// development build usually reports (`FLUSH_IN_EFFECT_CALLBACK`, a
@@ -1126,6 +1182,17 @@ pub trait Dialect: Sync {
     /// dialect that has not said which of its primitives render claims no
     /// boundary defect for a read in a computation.
     fn computation_read_is_render(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
+    /// Whether this inline callback keeps the caller's strict-read window.
+    fn callback_preserves_read_window(&self, primitive: Primitive, argument: usize) -> bool {
+        self.callback_inherits_calling_window(primitive, argument)
+    }
+
+    /// Whether the non-static dynamic factory mounts its returned component
+    /// under untrack in a computation, without a strict-read window.
+    fn dynamic_mount_is_unwindowed(&self, _primitive: Primitive) -> bool {
         false
     }
 
@@ -1523,6 +1590,21 @@ pub trait Dialect: Sync {
     /// is what stops that recurring quietly.
     fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
         shared_owner_requirement_role(primitive)
+    }
+
+    /// What an invocation of the function `primitive` returns does that needs
+    /// an owner, judged at the owner current where `primitive` was called
+    /// (ADR 0549): the returned function runs its owner-creating work under
+    /// that captured owner, not under its own caller's. Answering it also
+    /// says that the invocation writes nothing, calls no action and reads
+    /// nothing itself (ADR 0551): what it runs is that owned work. The default
+    /// claims nothing.
+    fn returned_invocation_owner_requirement_role(
+        &self,
+        primitive: Primitive,
+    ) -> Option<OwnerRequirementRole> {
+        let _ = primitive;
+        None
     }
 
     /// Whether an untracked read in this callback is a likely dependency bug.

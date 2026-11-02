@@ -253,7 +253,8 @@ pub(crate) fn exact_function_argument(
             .map(|(file, function)| (file.path.to_string(), function.span));
     }
     let mut declaration = ast.reference_declaration(argument)?;
-    for _ in 0..8 {
+    // A chain of `const` copies is no longer than the alias list.
+    for _ in 0..=ast.local_alias_bindings.len() {
         match ast.local_alias_binding(declaration) {
             Some(alias) => declaration = alias.source,
             None => break,
@@ -402,7 +403,7 @@ pub(crate) fn argument_may_be_generator(
             .is_some_and(|(_, function)| function.generator);
     }
     let mut declaration = ast.reference_declaration(argument);
-    for _ in 0..8 {
+    for _ in 0..=ast.local_alias_bindings.len() {
         match declaration.and_then(|at| ast.local_alias_binding(at)) {
             Some(alias) => declaration = Some(alias.source),
             None => break,

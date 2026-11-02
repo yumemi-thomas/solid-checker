@@ -3,8 +3,9 @@ import { legalCells, recallLegalShapes, generateLegal } from "./legal.mjs";
 import { cellList, generateShape, gridShapes, recallShapes, shapeSeed } from "./matrix.mjs";
 import {
   CALLBACK_CONTEXTS, CALLBACK_FORMS, CALLEE_FORMS, RECALL_API_BINDINGS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, RECALL_VALUE_BINDINGS, SOURCE_AXES,
-  REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallVariantsOf,
+  CBP_CONTEXTS, EFFECT_WINDOW_CONTEXTS, REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallLegalOf, recallVariantsOf,
 } from "./misuse.mjs";
+import { CBP_CALLS, CBP_FORMS } from "./model.mjs";
 import { RECALL_MOUNTS, mountParts } from "./mounts.mjs";
 import { legalPartner, pairOutcome, siteAnswer } from "./mutation.mjs";
 import { drivingPlan } from "./print.mjs";
@@ -217,5 +218,80 @@ describe("the store operations and the setup positions (recall only)", () => {
   it("prints a handler expression and flush(fn)", () => {
     expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-handler-expr", { variant: "signal" })["App.tsx"]).toMatch(/<p onClick=\{\(\(\(\) => \{[^]*setW\d+\([^]*\}\)\(\), \(\) => \{\}\)\}/);
     expect(text("REACTIVE_WRITE_IN_OWNED_SCOPE", "pos-flush-fn", { variant: "signal" })["App.tsx"]).toMatch(/flush\(\(\) => \{[^]*setW\d+\(/);
+  });
+});
+
+describe("the callback props (recall only)", () => {
+  const isCbp = (cell) => cell.context.startsWith("cbp-");
+  it("are recall cells of the misuse and legal grids, never base cells", () => {
+    expect(CBP_CONTEXTS.length).toBe(CBP_CALLS.length * CBP_FORMS.length);
+    expect(cellList().filter(isCbp)).toEqual([]);
+    expect(legalCells().filter(isCbp)).toEqual([]);
+    expect(cellList({ recall: true })).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "cbp-body-spread" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "cbp-handler-forwarded" });
+    expect(cellList({ recall: true })).toContainEqual({ code: "NO_OWNER_CLEANUP", context: "cbp-handler-destructured" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "NO_OWNER_CLEANUP", context: "cbp-body-named" });
+    // Every pass form of a call position is placed alike: rc.17 runs `run` where the child calls it, whatever the form.
+    for (const code of Object.keys(SPEC)) for (const list of [recallContextsOf(code), recallLegalOf(code)]) {
+      const calls = new Set(list.filter((context) => context.startsWith("cbp-")).map((context) => context.split("-")[1]));
+      for (const call of calls) for (const form of CBP_FORMS) expect(list, `${code} ${call} ${form}`).toContain(form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`);
+    }
+  });
+  it("a context is a misuse cell or a legal cell of a code, never both; a call never made is legal", () => {
+    for (const code of Object.keys(SPEC)) {
+      const misuse = new Set(recallContextsOf(code).filter((context) => context.startsWith("cbp-")));
+      expect(recallLegalOf(code).filter((context) => misuse.has(context)), code).toEqual([]);
+      expect([...misuse].filter((context) => context.startsWith("cbp-never")), code).toEqual([]);
+    }
+    expect(recallLegalOf("STRICT_READ_UNTRACKED")).toContain("cbp-never-spread");
+  });
+  it("take their base grid only", () => {
+    expect(recallShapes("STRICT_READ_UNTRACKED", "cbp-body-named")).toEqual(gridShapes("STRICT_READ_UNTRACKED", "cbp-body-named"));
+    expect(recallLegalShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "cbp-apply").every((shape) => !shape.mount && !shape.source && !shape.callback)).toBe(true);
+  });
+  it("prints each pass form", () => {
+    const app = (context) => text("REACTIVE_WRITE_IN_OWNED_SCOPE", context, { variant: "signal" })["App.tsx"];
+    expect(app("cbp-body")).toMatch(/<Kid(\d+) run=\{\(\) => \{\s+setW\d+\(7\);\s+\}\} \/>[^]*\nfunction Kid\1\(props: \{ run: \(\) => void \}\) \{\n  props\.run\(\);\n  return <p/);
+    expect(app("cbp-body")).not.toMatch(/export function Kid/);
+    expect(app("cbp-body-named")).toMatch(/function run\d+\(\) \{[^]*<Kid\d+ run=\{run\d+\} \/>/);
+    expect(app("cbp-body-forwarded")).toMatch(/<Fwd(\d+) run=\{[^]*function Fwd\1\(props: \{ run: \(\) => void \}\) \{\n  return <Kid\1 run=\{props\.run\} \/>;/);
+    expect(app("cbp-body-destructured")).toMatch(/function Kid\d+\(\{ run \}: \{ run: \(\) => void \}\) \{\n  run\(\);/);
+    expect(app("cbp-body-spread")).toMatch(/function Fwd(\d+)[^]*return <Kid\1 \{\.\.\.props\} \/>;/);
+  });
+  it("prints each call position, and clicks the child's handler", () => {
+    const files = (context, code = "STORE_WRITE_OUTSIDE_SETTER") => generateShape({ seed: 1 }, { code, context }, { variant: "assign", binding: "direct", layer: "none" }, 0).built;
+    expect(files("cbp-jsx").files["App.tsx"]).toMatch(/return <p data-view="k\d+">\{\(props\.run\(\), "x"\)\}<\/p>;/);
+    const handler = files("cbp-handler");
+    expect(handler.files["App.tsx"]).toMatch(/<button data-act="(k\d+)" onClick=\{\(\) => \{ props\.run\(\); \}\}>go<\/button>/);
+    expect(JSON.parse(handler.files["sites.json"]).plan.clicks).toEqual([/data-act="(k\d+)"/.exec(handler.files["App.tsx"])[1]]);
+    expect(files("cbp-apply").files["App.tsx"]).toMatch(/import \{[^}]*createEffect[^}]*\} from "solid-js";[^]*createEffect\(\(\) => 1, \(\) => \{ props\.run\(\); \}\);/);
+    expect(files("cbp-settled").files["App.tsx"]).toMatch(/import \{[^}]*onSettled[^}]*\} from "solid-js";[^]*onSettled\(\(\) => \{ props\.run\(\); \}\);/);
+    const never = generateLegal({ seed: 1 }, { code: "STORE_WRITE_OUTSIDE_SETTER", context: "cbp-never" }, { shape: { variant: "assign", binding: "direct", layer: "none" } }).built.files["App.tsx"];
+    expect(never).toMatch(/function Kid\d+\(props: \{ run: \(\) => void \}\) \{\n  return <p data-view="k\d+">x<\/p>;\n\}/);
+  });
+});
+
+describe("the effect windows (recall only)", () => {
+  const isWindow = (cell) => EFFECT_WINDOW_CONTEXTS.includes(cell.context);
+  it("are recall cells of the misuse and legal grids, never base cells", () => {
+    expect(cellList().filter(isWindow)).toEqual([]);
+    expect(legalCells().filter((cell) => isWindow(cell) && cell.context !== "render-apply-guarded-rerun")).toEqual([]);
+    expect(cellList({ recall: true })).toContainEqual({ code: "STRICT_READ_UNTRACKED", context: "effect-cleanup-rerun" });
+    expect(cellList({ recall: true })).toContainEqual({ code: "ACTION_CALLED_IN_OWNED_SCOPE", context: "effect-cleanup-for" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "effect-cleanup-rerun" });
+    expect(legalCells({ recall: true })).toContainEqual({ code: "NO_OWNER_CLEANUP", context: "effect-cleanup-for" });
+  });
+  it("an unowned effect out of the window is not a legal PRIMITIVE_IN_EFFECT_CALLBACK program", () => {
+    const variants = new Set(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-error-arm").map((shape) => shape.variant));
+    expect([...variants].sort()).toEqual(["memo", "root"]);
+    expect(recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-cleanup-rerun").some((shape) => shape.variant === "effect")).toBe(true);
+  });
+  it("prints each window", () => {
+    expect(text("STRICT_READ_UNTRACKED", "render-cleanup-rerun", { variant: "signal" })["App.tsx"]).toMatch(/createRenderEffect\(\(\) => \{\s+return t\d+\(\);[^]*\(v\) => \{\s+return \(\) => \{\s+r\d+\(\);/);
+    expect(text("NO_OWNER_CLEANUP", "effect-cleanup-dispose")["App.tsx"]).toMatch(/const disp\d+ = createRoot\(\(dispose\) => \{[^]*return \(\) => \{\s+onCleanup[^]*return dispose;[^]*onClick=\{\(\) => \{\s+disp\d+\(\);/);
+    expect(text("NO_OWNER_CLEANUP", "effect-cleanup-show")["App.tsx"]).toMatch(/<Show when=\{t\d+\(\)\}>\s+\{\(_u\) => \{\s+createEffect\([^]*setT\d+\(0\)/);
+    expect(text("ACTION_CALLED_IN_OWNED_SCOPE", "effect-cleanup-for")["App.tsx"]).toMatch(/<For each=\{t\d+\(\) \? \[1\] : \[\]\}>/);
+    expect(text("NO_OWNER_CLEANUP", "effect-error-arm")["App.tsx"]).toMatch(/createEffect\(\(\) => \{ if \(t\d+\(\) === 2\) throw new Error\("x"\); return 1; \}, \{ effect: \(\) => \{\}, error: \(\) => \{\s+onCleanup/);
+    expect(text("FLUSH_IN_EFFECT_CALLBACK", "reaction")["App.tsx"]).toMatch(/const track\d+ = createReaction\(\(\) => \{\s+flush\(\);\s+\}\);\s+track\d+\(\(\) => \{\s+t\d+\(\);/);
   });
 });

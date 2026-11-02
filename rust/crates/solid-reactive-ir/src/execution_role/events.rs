@@ -285,7 +285,7 @@ pub(super) fn component_invokes_prop_in_body(
 
 /// The project component element and prop name a function literal is
 /// exactly the value of, when it is one.
-pub(super) fn component_prop_literal(
+pub(crate) fn component_prop_literal(
     file: &solid_facts::FileFacts,
     literal: Span,
 ) -> Option<(&solid_facts::ast::JsxElementFact, &str)> {
@@ -515,7 +515,14 @@ pub(super) fn member_reaches_only_events(
                         .ast
                         .functions_within(callback.span)
                         .max_by_key(|handler| handler.span.end - handler.span.start)
-                        .is_some_and(|handler| handler.body.contains(member))
+                        .is_some_and(|handler| {
+                            handler.body.contains(member)
+                                && crate::owners::yielded_value_contains(
+                                    file,
+                                    callback.span,
+                                    handler.span,
+                                )
+                        })
             }) {
                 return true;
             }

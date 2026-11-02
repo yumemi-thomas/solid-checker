@@ -112,18 +112,33 @@ pub(crate) fn unwindowed_role_at_call(
             .resolved_callee_call(file, enclosing.callee)
             .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Valid)
     }) {
-        return ExecutionRole::Unreported;
+        return role_arm!(
+            "callee_roles.unwindowed_role_at_call.unreported",
+            ExecutionRole::Unreported
+        );
     }
     // A function literal invoked in place runs where its call is written, so
     // the awaits that precede that call count too (ADR 0340's reach).
     let mut at = call;
     let mut suspended = false;
-    for _ in 0..8 {
+    // ADR 0532: past the bound an await is unread, so no window is proven.
+    let mut steps = 0;
+    loop {
+        if steps == 8 {
+            return role_arm!(
+                "callee_roles.unwindowed_role_at_call.await-climb-exhausted",
+                ExecutionRole::Unknown
+            );
+        }
+        steps += 1;
         if follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
             || follows_try_head_await(file, at, lookup)
         {
-            return ExecutionRole::Unreported;
+            return role_arm!(
+                "callee_roles.unwindowed_role_at_call.unreported-2",
+                ExecutionRole::Unreported
+            );
         }
         suspended |= follows_any_suspension(file, at) || may_follow_own_await(file, at);
         let Some(function) = containing_ast_function(&file.ast, at) else {
@@ -140,9 +155,15 @@ pub(crate) fn unwindowed_role_at_call(
         at = invocation.span;
     }
     if suspended {
-        ExecutionRole::Unknown
+        role_arm!(
+            "callee_roles.unwindowed_role_at_call.unknown",
+            ExecutionRole::Unknown
+        )
     } else {
-        ExecutionRole::UntrackedUnwindowed
+        role_arm!(
+            "callee_roles.unwindowed_role_at_call.untracked-unwindowed",
+            ExecutionRole::UntrackedUnwindowed
+        )
     }
 }
 
@@ -165,7 +186,10 @@ pub(super) fn semantic_role_before_awaits(
     // position and be silently *certified*: a positive claim about dead code
     // either way.
     if discarded_region_contains(file, span) {
-        return ExecutionRole::DiscardedRendering;
+        return role_arm!(
+            "callee_roles.discarded-region",
+            ExecutionRole::DiscardedRendering
+        );
     }
     // An instance field initializer is no function fact, so every path below
     // would place it -- and any literal written in it -- in the function the
@@ -173,7 +197,7 @@ pub(super) fn semantic_role_before_awaits(
     // here places. (A static field or block runs where the class is
     // evaluated, in that function, so it keeps its placement.)
     if inside_instance_field(file, span) {
-        return ExecutionRole::Unknown;
+        return role_arm!("callee_roles.instance-field", ExecutionRole::Unknown);
     }
     // Also ahead of every semantic path, for the mirror-image reason: code
     // inside a callback that runs on reads of a returned view (rc.9's `omit`
@@ -182,7 +206,10 @@ pub(super) fn semantic_role_before_awaits(
     // enclosing component body, the one place it is least likely to run --
     // so the role is left unknown and projection claims nothing about it.
     if result_access_callback_contains(file, span, lookup) {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "callee_roles.result-access-callback",
+            ExecutionRole::Unknown
+        );
     }
     // A function argument the primitive wraps in a memo of its own (2.0's
     // `merge`) runs inside that computation, not in the caller's body.
@@ -206,13 +233,19 @@ pub(super) fn semantic_role_before_awaits(
                     })
             })
     }) {
-        return ExecutionRole::Unknown;
+        return role_arm!("callee_roles.memo-wrapped-argument", ExecutionRole::Unknown);
     }
     if let Some(role) = context_provider_value_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.context-provider-value", role);
     }
+    // ADR 0535: a function assigned to a member runs wherever the member is
+    // called, which nothing here follows (`make().m?.()`, `this.m()`): the
+    // role is unplaced, never a proven deferral.
     if assigned_member_function_contains(file, span, entities) {
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(
+            "callee_roles.assigned-member-function",
+            ExecutionRole::Unknown
+        );
     }
     // A read in a function nested in a named callback runs where the in-place
     // layers between them (a helper's callback, an IIFE, an inline library
@@ -227,6 +260,12 @@ pub(super) fn semantic_role_before_awaits(
         && super::named_callbacks::nested_in_named_callback(file, span, lookup)
         && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
     {
+        if climb.exhausted {
+            return role_arm!(
+                "callee_roles.semantic_role_before_awaits.named-climb-exhausted",
+                ExecutionRole::Unknown
+            );
+        }
         let role = semantic_execution_role_within(
             file,
             climb.at,
@@ -242,10 +281,17 @@ pub(super) fn semantic_role_before_awaits(
         // no legal shape moves.
         if role.reports_untracked_read() {
             return match climb.suspended {
-                Some(true) => ExecutionRole::Unreported,
-                Some(false) => ExecutionRole::Unknown,
-                None if climb.in_list => ExecutionRole::Unknown,
-                None => role,
+                Some(true) => role_arm!(
+                    "callee_roles.named-climb-after-await",
+                    ExecutionRole::Unreported
+                ),
+                Some(false) => {
+                    role_arm!("callee_roles.named-climb-may-await", ExecutionRole::Unknown)
+                }
+                None if climb.in_list => {
+                    role_arm!("callee_roles.named-climb-in-list", ExecutionRole::Unknown)
+                }
+                None => role_arm!("callee_roles.named-climb", role),
             };
         }
         // ADR 0517: the layers run the read at a call in the callback's body
@@ -253,26 +299,26 @@ pub(super) fn semantic_role_before_awaits(
         // callback no fact places): the read is not deferred, it runs there,
         // so its role is unknown too, never the named arm's deferred.
         if role == ExecutionRole::Unknown {
-            return ExecutionRole::Unknown;
+            return role_arm!("callee_roles.named-climb-unplaced", ExecutionRole::Unknown);
         }
     }
     if classifying.contains(&write_classification_marker()) {
         if let Some(role) =
             super::named_callbacks::named_callback_write_execution_role(file, span, lookup)
         {
-            return role;
+            return role_arm!("callee_roles.named-callback-write", role);
         }
     } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.named-callback", role);
     }
     if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.returned-callback", role);
     }
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.returned-factory-callback", role);
     }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.inline-callback", role);
     }
     // ADR 0470: a read in a JSX expression the compiler wraps, written in the
     // read's own function, runs in the render computation or getter the
@@ -284,18 +330,35 @@ pub(super) fn semantic_role_before_awaits(
     if !classifying.contains(&write_classification_marker())
         && let Some(role) = own_jsx_compiler_role(file, span)
     {
-        return role;
+        return role_arm!("callee_roles.own-jsx-compiler", role);
     }
     let dialect = lookup.dialect;
+    let mut bundle_unplaced = false;
     if file.ast.arguments_containing(span).any(|(call, index)| {
         crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
             == Some(index)
-            && direct_callback_contains(file, call.arguments[index].span, span)
+            && match effect_apply_span(call, index) {
+                Some(apply) => direct_callback_contains(file, apply, span),
+                None => {
+                    bundle_unplaced = true;
+                    false
+                }
+            }
     }) {
-        return ExecutionRole::EffectApply;
+        return role_arm!(
+            "callee_roles.effect-apply-argument",
+            ExecutionRole::EffectApply
+        );
+    }
+    // ADR 0540: a bundle whose members are not exact proves no apply.
+    if bundle_unplaced {
+        return role_arm!(
+            "callee_roles.effect-bundle-unplaced",
+            ExecutionRole::Unknown
+        );
     }
     // ADR 0323 (review round 10): a callback that runs synchronously at its
     // call with the listener cleared but the strict-read window untouched
@@ -338,15 +401,18 @@ pub(super) fn semantic_role_before_awaits(
                     })
                 })
     {
-        return inheriting_call_role(
-            file,
-            call,
-            clears_tracking,
-            allowed,
-            entities,
-            symbol_names,
-            lookup,
-            classifying,
+        return role_arm!(
+            "callee_roles.inheriting-call",
+            inheriting_call_role(
+                file,
+                call,
+                clears_tracking,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            )
         );
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
@@ -357,6 +423,10 @@ pub(super) fn semantic_role_before_awaits(
                 callback_execution_at_call(file, call, primitive, index, lookup).is_some()
                     && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
                     && direct_callback_contains(file, call.arguments[index].span, span)
+                    // ADR 0548: an exact bundle's `error` member runs before
+                    // the window opens.
+                    && !super::bundle_error_member(dialect, primitive, call, index)
+                        .is_some_and(|error| error.contains(span))
                     // JSX the map function returns tracks its own expressions.
                     && !(dialect.callback_runs_untracked_without_window(primitive, index)
                         && tracked_region_within(file, call.arguments[index].span, span))
@@ -377,13 +447,19 @@ pub(super) fn semantic_role_before_awaits(
                     resolved.validity == typefacts::ResolvedCallValidity::Valid
                 })
         }) {
-            ExecutionRole::UntrackedUnwindowed
+            role_arm!(
+                "callee_roles.untracked-unwindowed-argument",
+                ExecutionRole::UntrackedUnwindowed
+            )
         } else {
-            ExecutionRole::UntrackedCallback
+            role_arm!(
+                "callee_roles.untracked-argument",
+                ExecutionRole::UntrackedCallback
+            )
         };
     }
     if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.forwarded-tracked-compute", role);
     }
     if allowed.iter().any(|region| region.contains(span)) {
         // ADR 0469: a read in a layer that runs in place (an IIFE, a
@@ -396,6 +472,12 @@ pub(super) fn semantic_role_before_awaits(
         if !classifying.contains(&write_classification_marker())
             && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
         {
+            if climb.exhausted {
+                return role_arm!(
+                    "callee_roles.semantic_role_before_awaits.layer-climb-exhausted",
+                    ExecutionRole::Unknown
+                );
+            }
             let role = semantic_execution_role_within(
                 file,
                 climb.at,
@@ -406,11 +488,21 @@ pub(super) fn semantic_role_before_awaits(
                 classifying,
             );
             return match climb.suspended {
-                _ if !role.reports_untracked_read() => role,
-                Some(true) => ExecutionRole::Unreported,
-                Some(false) => ExecutionRole::Unknown,
-                None if climb.in_list => ExecutionRole::Unknown,
-                None => role,
+                _ if !role.reports_untracked_read() => {
+                    role_arm!("callee_roles.allowed-climb-silent", role)
+                }
+                Some(true) => role_arm!(
+                    "callee_roles.allowed-climb-after-await",
+                    ExecutionRole::Unreported
+                ),
+                Some(false) => role_arm!(
+                    "callee_roles.allowed-climb-may-await",
+                    ExecutionRole::Unknown
+                ),
+                None if climb.in_list => {
+                    role_arm!("callee_roles.allowed-climb-in-list", ExecutionRole::Unknown)
+                }
+                None => role_arm!("callee_roles.allowed-climb", role),
             };
         }
         // ADR 0516: the climb stops at a generator, whose body runs when its
@@ -434,7 +526,10 @@ pub(super) fn semantic_role_before_awaits(
             })
         {
             if classifying.contains(&write_classification_marker()) {
-                return ExecutionRole::Unknown;
+                return role_arm!(
+                    "callee_roles.allowed-generator-write",
+                    ExecutionRole::Unknown
+                );
             }
             // An async generator's body past an `await` runs on a later task.
             if let Some(created) = crate::owners::generator_iterator_used(file, function)
@@ -451,12 +546,51 @@ pub(super) fn semantic_role_before_awaits(
                     classifying,
                 );
                 if !role.reports_untracked_read() && !role.reports_unplaced() {
-                    return role;
+                    return role_arm!("callee_roles.allowed-generator-stepped", role);
                 }
             }
-            return ExecutionRole::Unknown;
+            return role_arm!("callee_roles.allowed-generator", ExecutionRole::Unknown);
         }
-        return ExecutionRole::DeferredCallback;
+        // ADR 0547: an action's generator runs its first synchronous slice on
+        // the stack of whoever calls the action, in that caller's strict-read
+        // window: a read there is placed at the action's callers.
+        if !classifying.contains(&write_classification_marker())
+            && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+            && let Some((call, index)) =
+                crate::owners::stepped_action_generator(file, function, lookup)
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    dialect.action_step_inherits_calling_window(primitive, index)
+                })
+        {
+            return action_step_role(
+                file,
+                function,
+                span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+        }
+        // ADR 0539: the cleanup an effect's apply returns runs on the effect's
+        // rerun in the apply's strict-read window, where rc.17 warns on a
+        // read; the owner's disposal calls it outside the window, and nothing
+        // orders that disposal against the rerun: unplaced, unless the
+        // effect's compute provably tracks nothing.
+        if !classifying.contains(&write_classification_marker())
+            && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+            && super::write_roles::windowed_returned_cleanup(file, function, lookup)
+                == Some(super::write_roles::WindowedCleanup::MayRerun)
+        {
+            return role_arm!(
+                "callee_roles.allowed-effect-cleanup-rerun",
+                ExecutionRole::Unknown
+            );
+        }
+        return role_arm!(default "callee_roles.allowed-unplaced-nested", ExecutionRole::DeferredCallback);
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
         // A read in a function nested in the flow callback that runs in
@@ -479,6 +613,12 @@ pub(super) fn semantic_role_before_awaits(
             && let Some((climb, through_generator)) =
                 super::write_roles::in_place_run_site(file, span, lookup)
         {
+            if climb.exhausted {
+                return role_arm!(
+                    "callee_roles.semantic_role_before_awaits.deferred-climb-exhausted",
+                    ExecutionRole::Unknown
+                );
+            }
             let placed = semantic_execution_role_within(
                 file,
                 climb.at,
@@ -490,14 +630,23 @@ pub(super) fn semantic_role_before_awaits(
             );
             if placed.reports_untracked_read() {
                 return match climb.suspended {
-                    Some(true) => ExecutionRole::Unreported,
-                    Some(false) => ExecutionRole::Unknown,
-                    None if climb.in_list || through_generator => ExecutionRole::Unknown,
-                    None => placed,
+                    Some(true) => role_arm!(
+                        "callee_roles.control-flow-climb-after-await",
+                        ExecutionRole::Unreported
+                    ),
+                    Some(false) => role_arm!(
+                        "callee_roles.control-flow-climb-may-await",
+                        ExecutionRole::Unknown
+                    ),
+                    None if climb.in_list || through_generator => role_arm!(
+                        "callee_roles.control-flow-climb-in-list",
+                        ExecutionRole::Unknown
+                    ),
+                    None => role_arm!("callee_roles.control-flow-climb", placed),
                 };
             }
         }
-        return role;
+        return role_arm!("callee_roles.control-flow", role);
     }
     {
         // A function written as a component's child expression
@@ -533,9 +682,12 @@ pub(super) fn semantic_role_before_awaits(
                             lookup,
                         ))
             }) {
-                ExecutionRole::TrackedJsx
+                role_arm!("callee_roles.tracked-region", ExecutionRole::TrackedJsx)
             } else {
-                ExecutionRole::Unknown
+                role_arm!(
+                    "callee_roles.tracked-region-unrun-closure",
+                    ExecutionRole::Unknown
+                )
             };
         }
     }
@@ -565,40 +717,49 @@ pub(super) fn semantic_role_before_awaits(
             || (!classifying.contains(&write_classification_marker())
                 && unrun_closure_within(file, argument, span, entities, symbol_names, lookup))
         {
-            ExecutionRole::Unknown
+            role_arm!(
+                "callee_roles.tracked-callback-unrun-closure",
+                ExecutionRole::Unknown
+            )
         } else {
-            ExecutionRole::TrackedJsx
+            role_arm!("callee_roles.tracked-callback", ExecutionRole::TrackedJsx)
         };
     }
     // Ahead of the compiler role and the lexical fallbacks, which place a
     // callback prop's body where the JSX is written.
     if let Some(role) = forwarded_event_prop_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.forwarded-event-prop", role);
     }
     if let Some(role) = callee_use_site_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.callee-use-site", role);
     }
     if let Some(role) = invocation_flow_role(file, span, lookup, classifying) {
-        return role;
+        return role_arm!("callee_roles.invocation-flow", role);
     }
     let compiler_role = source_execution_role(file, span, allowed);
     if compiler_role != ExecutionRole::Unknown {
-        return compiler_role;
+        return role_arm!("callee_roles.compiler-source", compiler_role);
     }
     // Ahead of the lexical fallbacks below, which place code by where it is
     // written: a callback a fresh-stack host scheduler runs is written in the
     // component body but does not execute there.
     if let Some(role) = fresh_stack_callback_role(file, span, lookup) {
-        return role;
+        return role_arm!("callee_roles.fresh-stack-callback", role);
     }
     if lookup.inside_component(file, span) {
-        return ExecutionRole::UntrackedRendering;
+        return role_arm!(
+            "callee_roles.inside-component",
+            ExecutionRole::UntrackedRendering
+        );
     }
     if lookup.inside_possible_component(file, span) {
         // Select the component execution branch so the relevant rule is
         // projected, while LocalAccess marks the read uncertifiable. Leaving
         // this Unknown would silently certify the ordinary-helper branch.
-        return ExecutionRole::UntrackedRendering;
+        return role_arm!(
+            "callee_roles.inside-possible-component",
+            ExecutionRole::UntrackedRendering
+        );
     }
     // Module initialization is an AST-proven one-shot execution context. It
     // is not a compiler-fact gap: no reactive owner or subscriber can be
@@ -609,9 +770,12 @@ pub(super) fn semantic_role_before_awaits(
     if !file.ast.any_function_body_containing(span)
         && !crate::owners::in_parameter_list(&file.ast, span)
     {
-        return ExecutionRole::ModuleInitialization;
+        return role_arm!(
+            "callee_roles.module-initialization",
+            ExecutionRole::ModuleInitialization
+        );
     }
-    ExecutionRole::Unknown
+    role_arm!("callee_roles.unplaced", ExecutionRole::Unknown)
 }
 
 /// The `classifying` entry that marks a write-legality classification, which
@@ -1103,6 +1267,176 @@ pub(super) fn callee_parameter_use_role(
     (calls > 0).then_some(role).flatten()
 }
 
+/// ADR 0538: the calls a project component makes of the callback prop
+/// `literal` is the arrow value of, when the prop reaches nothing else. The
+/// component's props parameter is one identifier read only as static members
+/// (`props.run()`), or an object pattern binding the prop to one identifier
+/// (`{ run }`), and this prop's every use is a direct call or a test (which
+/// runs nothing). `None` when the element spreads, another prop's value binds
+/// `this` and is reached through the props object, the parameter or the
+/// binding is written, a slot is computed or a rest, or a use is anything
+/// else (a value passed on, a forwarded prop, a member of the function).
+pub(crate) fn component_prop_invocations<'a>(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(&'a solid_facts::FileFacts, Vec<Span>)> {
+    // A function value receives the props object as `this` and could run
+    // another prop out of sight.
+    if literal.kind != solid_facts::ast::FunctionKind::Arrow {
+        return None;
+    }
+    let (element, prop) = component_prop_literal(file, literal.span)?;
+    if !element.spreads.is_empty()
+        || element.attributes.iter().any(|attribute| {
+            attribute
+                .expression
+                .is_some_and(|value| receiver_function_at(file, value))
+        })
+    {
+        return None;
+    }
+    let (callee_file, callee) = lookup.function_called_at(file.path.as_str(), element.name.span)?;
+    if callee.r#async || callee.generator {
+        return None;
+    }
+    let parameter = callee.parameters.first()?;
+    if parameter.initializer.is_some() || (callee.rest_parameter && callee.parameters.len() == 1) {
+        return None;
+    }
+    let ast = &callee_file.ast;
+    let path = callee_file.path.as_str();
+    let references_of = |name: Span| -> Option<Vec<Span>> {
+        let symbol = lookup.entities().at(path, name)?;
+        let mut out = Vec::new();
+        for reference in lookup.symbol_references(symbol.as_str()) {
+            if reference.path.as_ref() != path {
+                return None;
+            }
+            let span = Span::new(
+                u32::try_from(reference.start_byte).ok()?,
+                u32::try_from(reference.end_byte).ok()?,
+            );
+            if span != name {
+                out.push(span);
+            }
+        }
+        Some(out)
+    };
+    let direct_call = |callee_span: Span| {
+        ast.calls
+            .iter()
+            .find(|call| {
+                !call.construct
+                    && ast.peel_ts_sugar_span(call.callee) == callee_span
+                    && !call.arguments.iter().any(|argument| argument.spread)
+            })
+            .map(|call| call.span)
+    };
+    let tested = |span: Span| {
+        ast.conditional_expressions
+            .iter()
+            .any(|conditional| ast.peel_ts_sugar_span(conditional.test) == span)
+            || ast.logical_expressions.iter().any(|logical| {
+                logical.operator == solid_facts::ast::LogicalOperatorKind::And
+                    && ast.peel_ts_sugar_span(logical.left) == span
+            })
+    };
+    let mut calls = Vec::new();
+    match parameter.shape {
+        solid_facts::ast::BindingShape::Identifier => {
+            let [name] = parameter.names.as_slice() else {
+                return None;
+            };
+            if crate::indexes::binding_written(callee_file, name.span) {
+                return None;
+            }
+            for reference in references_of(name.span)? {
+                let member = ast
+                    .members
+                    .iter()
+                    .find(|member| ast.peel_ts_sugar_span(member.object) == reference)?;
+                if ast.computed_members.binary_search(&member.span).is_ok()
+                    || ast
+                        .assignments
+                        .iter()
+                        .any(|assignment| assignment.target.contains(member.span))
+                {
+                    return None;
+                }
+                let key = member_static_key(callee_file, member)?;
+                if key != prop {
+                    // Reading another prop runs nothing of this literal;
+                    // calling or chaining through it hands the props object
+                    // over as `this`.
+                    let hands_receiver = direct_call(member.span).is_some()
+                        || ast
+                            .members
+                            .iter()
+                            .any(|outer| ast.peel_ts_sugar_span(outer.object) == member.span)
+                        || ast
+                            .tagged_templates
+                            .iter()
+                            .any(|template| template.tag == member.span);
+                    if hands_receiver
+                        && !sibling_ignores_receiver(
+                            file,
+                            Siblings::Element(element.span),
+                            &key,
+                            lookup,
+                        )
+                    {
+                        return None;
+                    }
+                    continue;
+                }
+                if tested(member.span) {
+                    continue;
+                }
+                calls.push(direct_call(member.span)?);
+            }
+        }
+        solid_facts::ast::BindingShape::Object => {
+            let mut target = None;
+            for element in ast
+                .pattern_elements
+                .iter()
+                .filter(|element| element.pattern == parameter.pattern)
+            {
+                match &element.slot {
+                    solid_facts::ast::PatternSlot::Key(key) if key.as_str() == prop => {
+                        if element.default.is_some() || target.is_some() {
+                            return None;
+                        }
+                        target = Some(element.target);
+                    }
+                    solid_facts::ast::PatternSlot::Key(_) => {}
+                    // A computed key or a rest may carry this prop.
+                    _ => return None,
+                }
+            }
+            let target = target?;
+            // The slot binds one identifier, not a nested pattern.
+            if ast
+                .pattern_elements
+                .iter()
+                .any(|element| element.pattern == target)
+                || crate::indexes::binding_written(callee_file, target)
+            {
+                return None;
+            }
+            for reference in references_of(target)? {
+                if tested(reference) {
+                    continue;
+                }
+                calls.push(direct_call(reference)?);
+            }
+        }
+        solid_facts::ast::BindingShape::Array => return None,
+    }
+    (!calls.is_empty()).then_some((callee_file, calls))
+}
+
 /// The project component element and prop name `value` is exactly the
 /// value of, when it is one ([`component_prop_literal`] for any value).
 pub(super) fn forwarded_component_prop(
@@ -1517,8 +1851,10 @@ pub(super) fn callee_callback_timing_within(
         }
         // Calling a generator function runs none of its body: it runs on
         // the returned iterator's `next()`, wherever that is.
+        // ADR 0547: an action's stepped generator runs its first slice at the
+        // action's calls.
         if literal.generator {
-            return true;
+            return action_step_timing_unproven(file, literal, execution, lookup, following);
         }
         // The call the literal is written in: an argument in which the literal
         // is the outermost function (directly, or inside an array or object
@@ -1643,7 +1979,10 @@ pub(super) fn inheriting_call_role(
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
     if clears_tracking == Some(true) {
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(
+            "callee_roles.inheriting-cleared-tracked-region",
+            ExecutionRole::DeferredCallback
+        );
     }
     let clears_tracking = clears_tracking.is_some();
     let at_call = semantic_execution_role_within(
@@ -1694,13 +2033,260 @@ pub(super) fn inheriting_call_role(
             {
                 unwindowed_role_at_call(file, call.callee, lookup)
             } else {
-                ExecutionRole::Unreported
+                role_arm!(
+                    "callee_roles.inheriting-invalid-call",
+                    ExecutionRole::Unreported
+                )
             }
         }
-        ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
+        ExecutionRole::TrackedJsx => {
+            role_arm!(default "callee_roles.inheriting-tracked-root", ExecutionRole::DeferredCallback)
+        }
         // One-shot module evaluation is no component window, and the
         // role before this ADR was the silent deferred one.
-        ExecutionRole::ModuleInitialization => ExecutionRole::Unreported,
+        ExecutionRole::ModuleInitialization => {
+            role_arm!(
+                "callee_roles.inheriting-module-initialization",
+                ExecutionRole::Unreported
+            )
+        }
         other => other,
     }
+}
+
+/// ADR 0547: the read role of `span`, written in the body of `function`, an
+/// action's stepped generator on a dialect whose step keeps the caller's
+/// window ([`solid_dialect::Dialect::action_step_inherits_calling_window`]).
+/// The first synchronous slice (no suspending `yield` before the site:
+/// [`crate::owners::action_step_resumption`]; a plain-value `yield` resumes on
+/// the same stack) runs where the action is called, so a read there reports
+/// when a read written at some call would: in an effect apply, a reaction
+/// callback, a created root's or a bound owner's window. A call whose guard
+/// throws first (a children-capable owner, `reports_disallowed_write`) runs no
+/// step. Every reference of the action's `const` must be a call that names
+/// this generator or an event handler's value; an exported, escaping or
+/// otherwise unfollowed binding, a call no fact places, or a site that may
+/// follow a suspending `yield` is unplaced when any caller would report. A
+/// site after a proven suspension runs on a continuation with no window, and
+/// callers none of which reports keep the deferred answer.
+#[allow(clippy::too_many_arguments)]
+fn action_step_role(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    // Parameter initializers run when the iterator is created, on the
+    // caller's stack too, but no layer here places them.
+    if !function.body.contains(span) {
+        return role_arm!("callee_roles.action-step-in-list", ExecutionRole::Unknown);
+    }
+    let marker = ("action-step-callers".to_string(), function.span);
+    if !classifying.insert(marker.clone()) {
+        return role_arm!("callee_roles.action-step-recursive", ExecutionRole::Unknown);
+    }
+    let callers = action_step_callers(
+        file,
+        function,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        classifying,
+    );
+    classifying.remove(&marker);
+    let resumption = crate::owners::action_step_resumption(file, span, lookup);
+    match (callers, resumption) {
+        (_, Some(crate::owners::StepResumption::Proven)) => role_arm!(
+            "callee_roles.action-step-continuation",
+            ExecutionRole::DeferredCallback
+        ),
+        (ActionStepCallers::Silent, _) => role_arm!(
+            "callee_roles.action-step-callers-silent",
+            ExecutionRole::DeferredCallback
+        ),
+        (ActionStepCallers::Unplaced | ActionStepCallers::Reports(_), Some(_)) => role_arm!(
+            "callee_roles.action-step-may-resume",
+            ExecutionRole::Unknown
+        ),
+        (ActionStepCallers::Unplaced, None) => role_arm!(
+            "callee_roles.action-step-callers-unplaced",
+            ExecutionRole::Unknown
+        ),
+        (ActionStepCallers::Reports(role), None) => {
+            role_arm!("callee_roles.action-step-callers", role)
+        }
+    }
+}
+
+/// What the callers of an action place its first slice in: a reporting role
+/// one of them gives (the first found), else unplaced when one of them, or a
+/// use that may call the action, has no proven role, else silent.
+enum ActionStepCallers {
+    Reports(ExecutionRole),
+    Unplaced,
+    Silent,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn action_step_callers(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ActionStepCallers {
+    let Some(calls) = action_step_call_sites(file, function, lookup) else {
+        return ActionStepCallers::Unplaced;
+    };
+    let mut unplaced = false;
+    for call in calls {
+        let write = super::write_roles::semantic_write_execution_role(
+            file,
+            call.callee,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            RootBodyGuard::Rejects,
+        );
+        // The action's guard throws before the step runs.
+        if write.reports_disallowed_write() {
+            continue;
+        }
+        if write.reports_unplaced() {
+            unplaced = true;
+            continue;
+        }
+        let role = semantic_execution_role_within(
+            file,
+            call.span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        );
+        if role.reports_untracked_read() {
+            return ActionStepCallers::Reports(role);
+        }
+        unplaced |= role.reports_unplaced();
+    }
+    if unplaced {
+        ActionStepCallers::Unplaced
+    } else {
+        ActionStepCallers::Silent
+    }
+}
+
+/// ADR 0547: the calls of the action whose stepped generator is `function`,
+/// when they are all the action's invocations: every reference of the
+/// action's `const` (and of its `const` copies) is a call that names this
+/// generator ([`crate::owners::named_action_generator`]) or an event
+/// handler's value, which the host dispatches in no window. `None` when the
+/// generator has no such binding, the binding is exported or escapes
+/// ([`crate::owners::action_binding_escapes`]), the program may `eval`, or a
+/// reference is anything else.
+pub(crate) fn action_step_call_sites<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<&'a solid_facts::ast::CallFact>> {
+    let ast = &file.ast;
+    let name = crate::owners::action_binding_name(file, function, lookup)?;
+    if lookup.program_has_eval()
+        || super::flow_helpers::flow_binding_exported(file, name.span)
+        || crate::owners::action_binding_escapes(file, name.span)
+    {
+        return None;
+    }
+    let peel = |span: Span| ast.peel_ts_sugar_span(span);
+    let mut calls = Vec::new();
+    let mut holders = vec![name.span];
+    let mut index = 0;
+    while index < holders.len() {
+        let holder = holders[index];
+        index += 1;
+        for &(reference, declaration) in &ast.reference_declarations {
+            if declaration != holder {
+                continue;
+            }
+            if let Some(call) = ast.calls.iter().find(|call| peel(call.callee) == reference) {
+                if crate::owners::named_action_generator(file, call.callee, lookup)
+                    != Some(function.span)
+                {
+                    return None;
+                }
+                calls.push(call);
+                continue;
+            }
+            if file.compiler.callback_roles.iter().any(|callback| {
+                callback.span == reference
+                    && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            }) {
+                continue;
+            }
+            let copied = ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.len() == 1
+                        && binding
+                            .initializer
+                            .is_some_and(|initializer| peel(initializer) == reference)
+                })
+                .and_then(|binding| binding.names.first())?;
+            if holders.len() >= 9 {
+                return None;
+            }
+            holders.push(copied.span);
+        }
+    }
+    Some(calls)
+}
+
+/// ADR 0547: whether the run of a read in the first slice of the stepped
+/// generator `literal` is unproven ([`callee_callback_timing`]): the slice runs
+/// at the action's calls, so it is proven only when every call is, both in
+/// its own callback's timing and in the apply-region census (an apply whose
+/// defer options and compute may skip it). A generator no dialect steps on
+/// the caller's stack runs on its iterator's `next()`, which nothing follows.
+fn action_step_timing_unproven(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<(String, Span)>,
+) -> bool {
+    let Some((call, index)) = crate::owners::stepped_action_generator(file, literal, lookup) else {
+        return true;
+    };
+    if !lookup
+        .primitive_at_call(file, call.span)
+        .is_some_and(|primitive| {
+            lookup
+                .dialect
+                .action_step_inherits_calling_window(primitive, index)
+        })
+        || !following.insert((file.path.to_string(), literal.span))
+    {
+        return true;
+    }
+    let Some(calls) = action_step_call_sites(file, literal, lookup) else {
+        return true;
+    };
+    calls.is_empty()
+        || calls.into_iter().any(|call| {
+            crate::effect_execution::at_span(file, call.span, lookup)
+                != crate::effect_execution::ApplyExecution::Proven
+                || callee_callback_timing_within(file, call.span, execution, lookup, following)
+        })
 }

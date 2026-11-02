@@ -42,10 +42,12 @@ function build() {
 export const EXECUTOR_DEADLINES = { readyMs: 300_000, prepareMs: 600_000, runBaseMs: 300_000, runPerWaveMs: 90_000, closeMs: 30_000 };
 
 /**
- * Starts the executor. `chrome` (optional): `{ browser, install, pages }` runs the pages too. Returns `{ prepare(job), run(cases),
- * close() }`; `prepare` and `run` answer as exec/src/main.rs says.
+ * Starts the executor. `chrome` (optional): `{ browser, install, pages }` runs the pages too. `warmChecker`: `off` (a fresh checker
+ * per program), `on` (a slot's checks go to a retained checker daemon, one per slot, ADR 0543) or `verify` (`on`, and each warm answer
+ * is compared with a one-shot run at the same path: `checker.warm.identical`). Returns `{ prepare(job), run(cases), close() }`;
+ * `prepare` and `run` answer as exec/src/main.rs says.
  */
-export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork = false, slotRoot, chrome = null, executable = null, deadlines = EXECUTOR_DEADLINES }) {
+export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork = false, slotRoot, chrome = null, executable = null, deadlines = EXECUTOR_DEADLINES, warmChecker = "off" }) {
   if (!executable) build();
   const child = spawn(executable ?? EXECUTOR, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map();
@@ -79,7 +81,7 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   });
   const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
   send({
-    op: "init", tsc, checkerBin: bin, env, concurrency, keepWork, slotRoot,
+    op: "init", tsc, checkerBin: bin, env, concurrency, keepWork, slotRoot, warmChecker,
     chrome: chrome && { node: NODE, viteHost: join(here, "exec/vite-host.mjs"), browser: chrome.browser, install: chrome.install, oracleInstall: chrome.oracleInstall, pages: chrome.pages ?? 16, fontFamilies: FONT_FAMILIES },
   });
   const readyTimer = setTimeout(() => kill(new Error(`the executor was not ready within ${deadlines.readyMs / 1000} s`)), deadlines.readyMs);
@@ -98,6 +100,8 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   return {
     prepare: (job) => request({ op: "prepare", ...job }, deadlines.prepareMs),
     run: (cases) => request({ op: "run", cases }, deadlines.runBaseMs + waves(cases.length) * deadlines.runPerWaveMs),
+    /** How many checker runs may run at once from now on (at most twice the starting concurrency); resolves to the number set. */
+    checks: (count) => request({ op: "checks", count }, deadlines.prepareMs).then((answer) => answer.checks),
     async close() {
       if (child.exitCode !== null || child.signalCode !== null) return;
       const exited = new Promise((resolve) => child.once("exit", resolve));
@@ -107,6 +111,17 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
       clearTimeout(timer);
     },
   };
+}
+
+/**
+ * Sets the Rust executor's checker concurrency to `config.concurrency` (a grid's `run` config: its own plus the idle workers' when
+ * every runtime is cached). The executor is sized at its start; without this the grid's larger pool waited on its smaller semaphore
+ * (full-8: 10 checkers on 10 vCPUs at ~70% busy where the pool had 20). A config without an executor is left as it is.
+ */
+export async function setExecutorChecks(config) {
+  if (!config.exec) return;
+  const executor = await config.exec;
+  if (executor.checks) await executor.checks(config.concurrency);
 }
 
 /**

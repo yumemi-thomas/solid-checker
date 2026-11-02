@@ -80,6 +80,49 @@ struct Scratch {
     full_order: bool,
 }
 
+/// The declarations and arrows whose mentions one ordering proof is proving
+/// ([`SemanticLookup::declaration_runs_after`], `arrow_runs_after`).
+///
+/// ADR 0546: the proof is a conjunction over mentions in which a function
+/// already being proved counts as proved, so it fails exactly when a
+/// mention that fails on its own is reachable from the root through
+/// mentions; a function once proved within the root's proof is proved
+/// wherever the proof meets it again (as a visited set in a depth-first
+/// search), instead of being proved again on every path to it.
+struct Proving {
+    stack: Vec<(usize, Span)>,
+    proved: HashSet<(usize, Span)>,
+    /// Keeps what it proved ([`crate::follow_every_path`] off).
+    keeps: bool,
+}
+
+impl Default for Proving {
+    fn default() -> Self {
+        Self {
+            stack: Vec::new(),
+            proved: HashSet::default(),
+            keeps: !crate::execution_role::every_path_asked(),
+        }
+    }
+}
+
+impl Proving {
+    /// Whether `node` counts as proved here: in progress, or proved before.
+    fn assumed(&self, node: &(usize, Span)) -> bool {
+        self.stack.contains(node) || self.proved.contains(node)
+    }
+
+    /// Ends the innermost proof in progress, keeping it when it held.
+    fn finish(&mut self, proved: bool) {
+        if let Some(node) = self.stack.pop()
+            && proved
+            && self.keeps
+        {
+            self.proved.insert(node);
+        }
+    }
+}
+
 fn function_valued(binding: &BindingFact) -> bool {
     binding.shape == BindingShape::Identifier
         && binding.names.len() == 1
@@ -336,7 +379,7 @@ impl<'a> SemanticLookup<'a> {
                     span,
                     declaring,
                     binding,
-                    &mut Vec::new(),
+                    &mut Proving::default(),
                 );
                 // The full order, for the site downgrade (ADR 0464).
                 let ordered = graph_ordered
@@ -348,7 +391,7 @@ impl<'a> SemanticLookup<'a> {
                             span,
                             declaring,
                             binding,
-                            &mut Vec::new(),
+                            &mut Proving::default(),
                         )
                     });
                 if graph_ordered && !defaults_throw {
@@ -521,7 +564,7 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
         declaring: usize,
         binding: usize,
-        visiting: &mut Vec<(usize, Span)>,
+        visiting: &mut Proving,
     ) -> bool {
         let declaring_file = &self.facts.files[declaring];
         let caller_file = &self.facts.files[caller];
@@ -686,9 +729,9 @@ impl<'a> SemanticLookup<'a> {
         file: usize,
         function: &solid_facts::ast::FunctionFact,
         declarator_binding: (usize, usize),
-        visiting: &mut Vec<(usize, Span)>,
+        visiting: &mut Proving,
     ) -> bool {
-        if visiting.contains(&(file, function.span)) {
+        if visiting.assumed(&(file, function.span)) {
             return true;
         }
         let facts = &self.facts.files[file];
@@ -701,7 +744,7 @@ impl<'a> SemanticLookup<'a> {
         let Some(references) = self.symbol_references_if_present(symbol.as_str()) else {
             return false;
         };
-        visiting.push((file, function.span));
+        visiting.stack.push((file, function.span));
         let proved = references.iter().all(|reference| {
             let (Ok(start), Ok(end)) = (
                 u32::try_from(reference.start_byte),
@@ -725,7 +768,7 @@ impl<'a> SemanticLookup<'a> {
                     )
                 })
         });
-        visiting.pop();
+        visiting.finish(proved);
         proved
     }
 
@@ -741,9 +784,9 @@ impl<'a> SemanticLookup<'a> {
         arrow: Span,
         declarator_binding: (usize, usize),
         declarator: &Declarator,
-        visiting: &mut Vec<(usize, Span)>,
+        visiting: &mut Proving,
     ) -> bool {
-        if visiting.contains(&(file, arrow)) {
+        if visiting.assumed(&(file, arrow)) {
             // A mention inside the arrow's own proof: it runs only when the
             // arrow does.
             return true;
@@ -789,7 +832,7 @@ impl<'a> SemanticLookup<'a> {
         if mentions.is_empty() {
             return false;
         }
-        visiting.push((file, arrow));
+        visiting.stack.push((file, arrow));
         let proved = mentions.into_iter().all(|(caller, mention)| {
             (caller == file && Span::new(arrow.start, arrow.end).contains(mention))
                 || self.initialized_before(
@@ -801,7 +844,7 @@ impl<'a> SemanticLookup<'a> {
                     visiting,
                 )
         });
-        visiting.pop();
+        visiting.finish(proved);
         proved
     }
 

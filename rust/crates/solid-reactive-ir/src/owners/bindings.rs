@@ -269,7 +269,7 @@ pub(crate) fn named_action_generator(
         return None;
     }
     let mut declaration = ast.reference_declaration(span)?;
-    for _ in 0..8 {
+    for _ in 0..=ast.local_alias_bindings.len() {
         match ast.local_alias_binding(declaration) {
             Some(alias) => declaration = alias.source,
             None => break,

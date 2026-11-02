@@ -12,8 +12,11 @@ Flags `createMemo`, `createEffect`, `createRenderEffect`, `createRoot`,
 when the call runs synchronously inside the apply (second) argument of a
 `createEffect(compute, apply)` in a client build, reached directly or through
 an IIFE, an inline standard-library callback, `untrack`, or project helpers,
-and never through `runWithOwner`, `createRoot` or another call that sets an
-owner (ADR 0483).
+a named function handed to such a callback position or a callback prop the
+child component only calls (ADR 0538; a hand-off nothing places is
+uncertifiable), and never through `runWithOwner`, `createRoot` or another call
+that sets an owner (ADR 0483). A `createReaction` callback, the apply of a
+deferred user effect, is claimed the same way (ADR 0541).
 
 **Premise: read from the published bytes.** `@solidjs/signals@2.0.0-rc.17`
 runs an effect's apply from the flush with the `inEffectCallback` marker up and
@@ -38,7 +41,9 @@ The marker is one global: an effect run synchronously inside the callback
 claim is a violation only when no call runs in the apply before the creating
 call (or tagged template): in the apply and in each layer the walk crosses, and
 in a helper's own body before it calls its callback (ADR 0495); after one it is
-uncertifiable. Only
+uncertifiable. A `createRenderEffect` apply (its first run is owned, its later
+runs are not) and a cleanup an apply returns (a rerun runs it in the phase, a
+disposal outside it) are uncertifiable, never violations (ADR 0541). Only
 rc.17's bytes were read: other releases are not claimed.
 
 ## Examples

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAIN_SOURCE, UnmappedFindingsError, mainSourceFor, WORK_NAMESPACE, assertFindingsMapped, entryVeto, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
+import { MAIN_SOURCE, UnmappedFindingsError, mainSourceFor, WORK_NAMESPACE, assertFindingsMapped, checkerResult, entryVeto, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
@@ -20,6 +20,19 @@ describe("entryVeto", () => {
     expect(entryVeto({ premises: [`synchronous dispatch (ADR 0435) at ${dir}/main.tsx:39 excluded: caller await continuation`] }, dir)).toBeNull();
     expect(entryVeto({ premises: [`synchronous dispatch (ADR 0435) at ${dir}/App.tsx:9 withholds event handler owner and read proofs: receiver unknown`] }, dir)).toBeNull();
     expect(entryVeto({}, dir)).toBeNull();
+  });
+});
+
+describe("checkerResult under --warm-verify (ADR 0543)", () => {
+  const stdout = JSON.stringify({ findings: [] });
+  it("reads a warm answer that matched its one-shot run as any answer", () => {
+    expect(checkerResult({ status: 0, stdout, warm: { identical: true, oneShotStatus: 0 } }, "/d")).toMatchObject({ ok: true, findings: [] });
+    expect(checkerResult({ status: 0, stdout, warm: {} }, "/d")).toMatchObject({ ok: true });
+  });
+  it("fails a warm answer that differs from its one-shot run: a harness failure, never a verdict", () => {
+    const result = checkerResult({ status: 0, stdout, warm: { identical: false, oneShotStatus: 1 } }, "/d");
+    expect(result).toMatchObject({ ok: false, findings: [] });
+    expect(result.error).toMatch(/differs from a one-shot run at \/d \(exit 0 against 1\)/);
   });
 });
 

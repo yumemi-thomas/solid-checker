@@ -142,6 +142,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/Immediate.tsx",
+      "start": 312,
+      "end": 321,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -192,6 +202,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/Immediate.tsx",
+      "start": 1548,
+      "end": 1557,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -209,6 +229,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-helper-completion/Immediate.tsx",
       "start": 2064,
       "end": 2072,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/Immediate.tsx",
+      "start": 2222,
+      "end": 2231,
       "fixes": 0
     },
     {

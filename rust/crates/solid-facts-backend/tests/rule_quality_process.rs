@@ -19,8 +19,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // Review round 4: two zero-parameter `Show` children are tracked
         // inserts, not strict-read callbacks.
         // Two of them are uncertifiable reads in the closures the two `nested`
-        // memos return (ADR 0452), pinned below.
-        ("strict-read-untracked", 20),
+        // memos return (ADR 0452), pinned below. One more since ADR 0535,
+        // pinned as incidental below.
+        ("strict-read-untracked", 21),
         // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
         // pinned below.
         ("reactive-read-after-await", 20),
@@ -164,7 +165,17 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "effect-apply-valid.tsx",
-            [("missing-owner", 3), ("cleanup-return-unresolved", 0)].as_slice(),
+            [
+                // Three, and since ADR 0534 the exported `install`'s effect,
+                // whose callers are unknown: an obligation.
+                ("missing-owner", 4),
+                ("cleanup-return-unresolved", 0),
+                // ADR 0535: the cleanup the apply returns (`later`) runs on a
+                // rerun, where rc.17 can warn (the fuzzer's render-cleanup-rerun
+                // cell): an obligation, never a violation.
+                ("strict-read-untracked", 1),
+            ]
+            .as_slice(),
         ),
         (
             "effect-apply-extended-valid.tsx",
@@ -216,7 +227,6 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "owned-scope-valid.tsx",
             &["action-called-in-owned-scope"][..],
         ),
-        ("effect-apply-valid.tsx", &["strict-read-untracked"][..]),
         (
             "effect-apply-extended-valid.tsx",
             &["strict-read-untracked"][..],

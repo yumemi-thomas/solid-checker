@@ -2262,3 +2262,124 @@ fn an_identity_measurement_describes_the_current_generation() {
     assert_eq!(measurement.specifiers, 0);
     fs::remove_dir_all(directory).unwrap();
 }
+
+/// ADR 0543: a retained session answers a `--feedback-facts` analysis as a
+/// fresh one does, through edits that come back (A→B→A, A repeated), a
+/// reordered sequence, and requests that switch between the feedback and the
+/// ordinary mode on the same retained builder. The whole snapshot is
+/// compared: findings, evidence, certainty, premises, order and the
+/// feedback models.
+#[test]
+fn retained_feedback_facts_match_a_fresh_session_through_edit_sequences() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../fixtures/reactive-ir/callback-forwarding");
+    let directory = temporary_directory("retained-feedback-facts");
+    for name in ["tsconfig.json", "solid-js.d.ts", "App.tsx", "source.ts"] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let project = directory.join("tsconfig.json").canonicalize().unwrap();
+    let project_id = project.to_string_lossy().into_owned();
+    let app = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let original = fs::read_to_string(&app).unwrap();
+    assert!(original.contains("const value = invoke(readCount);"));
+    let programs = [
+        original.clone(),
+        // Same imports, one more operation in a body.
+        original.replace(
+            "const value = invoke(readCount);",
+            "const value = invoke(readCount) + invoke(readCount);",
+        ),
+        // A new component, and a new import of the same module.
+        format!(
+            "{}\nexport function Third() {{\n  const third = invoke(readCount);\n  return <p>{{third}}</p>;\n}}\n",
+            original.replace(
+                "import { invoke, readCount } from \"./source\";",
+                "import { invoke } from \"./source\";\nimport { readCount } from \"./source\";",
+            )
+        ),
+    ];
+    // A→B→A, A repeated, then a fixed pseudo-random order.
+    let mut sequence = vec![0, 1, 0, 0, 2, 1, 0];
+    let mut state = 0x2545_f491_u32;
+    for _ in 0..8 {
+        state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        sequence.push((state >> 16) as usize % programs.len());
+    }
+    let selected = dialect::default_dialect();
+    let enablement = |feedback_facts| solid_facts_backend::RequestedRuleEnablement {
+        feedback_facts,
+        ..Default::default()
+    };
+    let analyze = |diagnostics: &mut solid_facts_backend::DiagnosticSession,
+                   sources: &[SourceFile],
+                   facts: &solid_facts::ProjectFacts,
+                   feedback_facts: bool| {
+        let (analysis, _) = diagnostics
+            .analyze_inputs_measured_with_enablement(
+                &project,
+                sources,
+                facts,
+                solid_reactive_ir::AnalysisInputs::empty(),
+                enablement(feedback_facts),
+            )
+            .unwrap();
+        serde_json::to_value(&analysis.snapshot).unwrap()
+    };
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let (mut retained, mut sources) =
+        NativeIncrementalSession::open_pipelined(selected, project_id.clone(), typescript).unwrap();
+    let mut diagnostics = solid_facts_backend::DiagnosticSession::new(selected);
+    let mut current = 0;
+    for (step, &index) in sequence.iter().enumerate() {
+        // Every third request is an ordinary one on the same retained state.
+        let feedback_facts = step % 3 != 2;
+        fs::write(&app, &programs[index]).unwrap();
+        let facts = if step == 0 || index == current {
+            retained.analyze().unwrap()
+        } else {
+            let change = SourceChange {
+                path: app.clone(),
+                version: retained.generation() + 1,
+                source: Some(programs[index].clone()),
+                compiler_options: CompilerOptions::default(),
+            };
+            retained.edit(vec![change], None).unwrap()
+        };
+        current = index;
+        let slot = sources
+            .iter_mut()
+            .find(|source| source.path == app)
+            .unwrap();
+        slot.source = programs[index].clone().into();
+        let warm = analyze(&mut diagnostics, &sources, &facts, feedback_facts);
+
+        let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+        let (mut fresh, fresh_sources) =
+            NativeIncrementalSession::open_pipelined(selected, project_id.clone(), typescript)
+                .unwrap();
+        let fresh_facts = fresh.analyze().unwrap();
+        let cold = analyze(
+            &mut solid_facts_backend::DiagnosticSession::new(selected),
+            &fresh_sources,
+            &fresh_facts,
+            feedback_facts,
+        );
+        assert_eq!(warm, cold, "step {step}: program {index}");
+        let models = cold["feedbackFacts"]
+            .as_array()
+            .map_or(0, |files| files.len());
+        if feedback_facts {
+            assert!(models > 0, "step {step}: the fixture has feedback models");
+        } else {
+            assert_eq!(models, 0, "step {step}: an ordinary request has none");
+        }
+    }
+}

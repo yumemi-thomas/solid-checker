@@ -765,8 +765,16 @@ fn record_invoked_parameter_callback(
     // the push below).
     let chain: Option<ComposedChain> = enclosing_callback_chain(file, call.callee, lookup)
         .filter(|chain| !chain.wrappers.is_empty())
-        .filter(|chain| callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner]))
-        .map(|chain| (compose_callback_chain(&chain.wrappers), chain.wrappers));
+        .filter(|chain| {
+            chain.exhausted
+                || callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
+        })
+        .map(|chain| {
+            let composed = (!chain.exhausted)
+                .then(|| compose_callback_chain(&chain.wrappers))
+                .flatten();
+            (composed, chain.wrappers)
+        });
     let chain_execution: Option<Option<&'static str>> = chain
         .as_ref()
         .map(|(composed, _)| composed.map(|(word, _)| word));
@@ -1162,13 +1170,17 @@ fn record_primitive_slot_callback(
         // the export.
         let composed: Option<ComposedChain> = enclosing_callback_chain(file, call.span, lookup)
             .filter(|chain| {
-                chain.wrappers.is_empty()
+                chain.exhausted
+                    || chain.wrappers.is_empty()
                     || callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
             })
             .and_then(|chain| {
                 let mut wrappers = vec![callback_wrapper_at(file, call, argument_index, lookup)?];
                 wrappers.extend(chain.wrappers);
-                Some((compose_callback_chain(&wrappers), wrappers))
+                let composed = (!chain.exhausted)
+                    .then(|| compose_callback_chain(&wrappers))
+                    .flatten();
+                Some((composed, wrappers))
             });
         // ADR 0183: only an eager owned-computation slot states an owner
         // for the row. With no enclosing callback position -- no chain,

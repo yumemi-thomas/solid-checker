@@ -250,6 +250,26 @@ export function runtimeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle 
   }));
 }
 
+/**
+ * The sources that turn a project's files into a type check's answer: the JS path's `tsrs -p` and `tsrs -b` runs and their parse
+ * (typecheck.mjs) and the executor's (exec/src/typecheck.rs). The tsconfig and the entry are in the project's files (`typecheckKey`).
+ */
+export const TYPECHECK_SOURCES = () => sha256(JSON.stringify(["typecheck.mjs", "exec/src/typecheck.rs"].map((name) => fileHash(join(here, name)))));
+
+/**
+ * The environment of a type check, which depends on neither the checker nor the runtime: the `tsrs` binary, the rc.17 install the
+ * project resolves `solid-js` and `@solidjs/web` from (its lockfile, and what is installed: `treeStat` of its node_modules), and the
+ * harness that runs and parses it (`TYPECHECK_SOURCES`). Before, the type checks were entries of the runtime cache, whose key holds
+ * the fast path's sources, the Chrome host's and the executor's, the clock and the oracle: an edit to any of those re-ran every type
+ * check of every grid.
+ */
+export function typecheckEnvironmentKey(config, { code = TYPECHECK_SOURCES(), installed = config.install ? treeStat(join(config.install, "node_modules")) : "none" } = {}) {
+  return sha256(JSON.stringify({ kind: "typecheck", code, tsc: fileHash(config.tsc), oracleLock: fileHash(join(config.install ?? "", "package-lock.json")), installed }));
+}
+
+/** A type check's program half: the bytes of the project it compiles (checker.mjs `checkerProjectFiles`: App.tsx or the twin, the modules, main.tsx, tsconfig.json, packages), by path. */
+export const typecheckKey = (projectFiles) => sha256(JSON.stringify(["typecheck", Object.entries(projectFiles).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))]));
+
 /** The environment of a Chrome record: the sources that produce it, the oracle and the product scripts it runs, the browser, the oracle install's lockfile. Not the checker. */
 export function chromeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = ORACLE_SOURCES(), browser = browserKey(config.browser), installed = installedKey({ install: config.install }) } = {}) {
   return sha256(JSON.stringify({ kind: "chrome", code, oracle, browser, installed, oracleLock: fileHash(join(config.install, "package-lock.json")) }));
@@ -387,11 +407,17 @@ export const browserExecutionCache = (options) => (options.noCache || options.no
 export const chromeCacheFor = (config, options) => (options.noChromeCache ? null : new EntryCache(cacheDirectory(options), "chrome", chromeEnvironmentKey({ ...config, browser: options.browser ? resolve(options.browser) : undefined })));
 
 /**
- * The runtime cache of a run (matrix.mjs, run.mjs): Solid's answer on a program (its type checks and fast-path records) does not depend on
- * the checker, so a run after a checker fix takes them from the cache and reruns only the checker. Off with `--no-cache` and on the real
- * clock (whose records depend on the machine).
+ * The runtime cache of a run (matrix.mjs, run.mjs): Solid's answer on a program (its fast-path records) does not depend on the checker,
+ * so a run after a checker fix takes them from the cache and reruns only the checker. Off with `--no-cache` and on the real clock (whose
+ * records depend on the machine). The type checks have a cache of their own (`typecheckCache`, `typecheckEnvironmentKey`), off with
+ * `--no-cache` only: a type check does not depend on the clock either.
  */
 export function withRuntimeCache(config, options) {
-  if (options.noCache || !config.virtualClock) return config;
-  return { ...config, runtimeCache: new EntryCache(cacheDirectory(options), "runtime", runtimeEnvironmentKey(config)) };
+  if (options.noCache) return config;
+  const typecheckCache = new EntryCache(cacheDirectory(options), "typecheck", typecheckEnvironmentKey(config));
+  if (!config.virtualClock) return { ...config, typecheckCache };
+  return { ...config, typecheckCache, runtimeCache: new EntryCache(cacheDirectory(options), "runtime", runtimeEnvironmentKey(config)) };
 }
+
+/** What a run's caches did, for its `cache.json`: the runtime cache's counts, with the type-check cache's under `typecheck`. */
+export const cacheStats = (config) => ({ ...(config.runtimeCache?.stats() ?? {}), ...(config.typecheckCache ? { typecheck: config.typecheckCache.stats() } : {}) });

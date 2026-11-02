@@ -1,0 +1,7 @@
+# effect-cleanup-rerun-read
+
+ADR 0539: full-7 (2026-11-01) certified clean 3,828 rc.17 SC1001 warnings in the effect-window cells `effect-cleanup-rerun` and `render-cleanup-rerun`: a read in the cleanup an effect's apply returns. rc.17's `runEffect` opens the strict-read window before it calls the previous cleanup (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1991-2005`), so the read warns on a rerun; the owner's disposal calls the same cleanup outside the window, and nothing orders that disposal against the rerun. Such a read is an obligation, never a violation: EffectRerun, RenderRerun, RerunThroughLayer (an in-place layer in the cleanup), and NamedApply (an apply passed by name, whose compute is not read; its third apply hands a named reader to `forEach` in the cleanup, whose unplaced carrier is an obligation though a named callback nests it).
+
+ApplyRead's read in the apply itself stays a violation. NeverReruns stays silent: a compute with no call, no reference and a literal return tracks nothing, so only a disposal calls the cleanup. TrackedCleanup is unmoved (a tracked effect calls its cleanup inside its compute, tracking; it keeps an earlier obligation). UntrackedCleanup is silent. ShadowedEffect's project function named like the primitive takes none of this (its findings are the pre-existing escape obligations).
+
+The stub reduces the published rc.17 declarations. The complete source also type-checks against published solid-js rc.17 with strict ES2022 settings. Package bytes are not copied here.

@@ -5,6 +5,7 @@
 //! the compiler-fact classifier plus the semantic (AST-driven) classifier and
 //! the two role-keyed read helpers that consume its result.
 
+use crate::role_log::role_arm;
 use crate::{HashMap, HashSet};
 
 use solid_dialect::{Dialect, Execution, Primitive};
@@ -21,6 +22,10 @@ mod jsx_census;
 pub(crate) use jsx_census::*;
 mod write_roles;
 pub(crate) use write_roles::*;
+mod write_components;
+pub use write_components::{WALK_STEP_BOUND, bound_walks, follow_every_path};
+pub(crate) use write_components::{every_path, every_path_asked, walk_bound};
+use write_components::{visit_contains, visit_insert};
 mod pending_sources;
 pub(crate) use pending_sources::*;
 mod cleanup_handle;
@@ -93,6 +98,55 @@ fn effect_apply_argument(
     })
 }
 
+/// ADR 0540: the function an effect runs as its apply at `argument` of
+/// `call`. An exact bundle literal (`createEffect(compute, { effect, error })`,
+/// rc.17's `EffectBundle`) runs only its `effect` member there: `runEffect`
+/// calls the `error` member before it opens the strict-read window
+/// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1966-1989`). `None` for an
+/// object whose members are not exact (no member is proven the apply).
+pub(crate) fn effect_apply_span(
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+) -> Option<Span> {
+    let argument = call.arguments.get(argument)?;
+    if argument.runtime_value_kind != solid_facts::ast::RuntimeValueKind::Object {
+        return Some(argument.span);
+    }
+    argument
+        .literal_members
+        .iter()
+        .rev()
+        .find(|member| member.key == "effect")
+        .map(|member| member.value)
+        .filter(|_| !argument.literal_members.is_empty())
+}
+
+/// ADR 0548: the `error` member of an exact effect bundle at `argument` of
+/// `call`, where the dialect runs it from the flush's error branch with no
+/// owner and before the strict-read window opens
+/// ([`Dialect::bundle_error_member_runs_unowned`]). A bundle with a spread, a
+/// computed key or an accessor names no member exactly.
+pub(crate) fn bundle_error_member(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+) -> Option<Span> {
+    let value = call.arguments.get(argument)?;
+    if !dialect.bundle_error_member_runs_unowned(primitive, argument)
+        || value.spread
+        || !value.exact_object_literal
+    {
+        return None;
+    }
+    value
+        .literal_members
+        .iter()
+        .rev()
+        .find(|member| member.key == "error")
+        .map(|member| member.value)
+}
+
 fn callback_runs_outside_tracking(
     dialect: &dyn Dialect,
     primitive: Primitive,
@@ -153,7 +207,10 @@ fn execution_role_where(
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused has no facts to place anything.
     if facts.withheld() {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "execution_role.execution_role_where.unknown",
+            ExecutionRole::Unknown
+        );
     }
     // Only facts strictly inside `within` place `span`, when given.
     let inside =
@@ -174,10 +231,16 @@ fn execution_role_where(
         .iter()
         .any(|region| region.span.contains(span))
     {
-        return ExecutionRole::DiscardedRendering;
+        return role_arm!(
+            "execution_role.execution_role_where.discarded-rendering",
+            ExecutionRole::DiscardedRendering
+        );
     }
     if allowed.iter().any(|region| region.contains(span)) {
-        return ExecutionRole::DeferredCallback;
+        return role_arm!(
+            "execution_role.execution_role_where.deferred-callback",
+            ExecutionRole::DeferredCallback
+        );
     }
     let tracked = facts.tracked_regions.iter().filter_map(|region| {
         (region.span.contains(span) && inside(region.span)).then_some((
@@ -221,7 +284,10 @@ fn execution_role_where(
     {
         return role;
     }
-    ExecutionRole::Unknown
+    role_arm!(
+        "execution_role.execution_role_where.unknown-2",
+        ExecutionRole::Unknown
+    )
 }
 
 /// Compiler execution role for code that actually runs at `span`.
@@ -275,15 +341,17 @@ pub(super) fn semantic_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
-    semantic_execution_role_within(
-        file,
-        span,
-        allowed,
-        entities,
-        symbol_names,
-        lookup,
-        &mut HashSet::default(),
-    )
+    crate::role_log::decide("role", file.path.as_str(), span, || {
+        semantic_execution_role_within(
+            file,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            &mut HashSet::default(),
+        )
+    })
 }
 
 /// [`semantic_execution_role`] for a reactive read. A read in a function an
@@ -311,6 +379,19 @@ pub(super) fn read_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
+    crate::role_log::decide("read", file.path.as_str(), span, || {
+        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
+    })
+}
+
+fn read_execution_role_unlogged(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
     let role = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
     // Deleted code and code past an await keep their answers.
     if matches!(
@@ -325,7 +406,28 @@ pub(super) fn read_execution_role(
         return applied;
     }
     if role == ExecutionRole::DirectiveApply {
-        return ExecutionRole::Unknown;
+        return role_arm!(
+            "execution_role.read_execution_role_unlogged.unknown",
+            ExecutionRole::Unknown
+        );
+    }
+    dynamic_read_role(file, span, role, lookup)
+}
+
+pub(crate) fn dynamic_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    if role == ExecutionRole::UntrackedRendering
+        && let Some(exclusive) = dynamic_component_entry(file, span, lookup)
+    {
+        return if exclusive {
+            ExecutionRole::UntrackedUnwindowed
+        } else {
+            ExecutionRole::Unknown
+        };
     }
     role
 }
@@ -371,6 +473,9 @@ fn ref_applied_read_role(
             // of that call, so the read is unplaced there, never the deferred
             // role the callback's position gives it.
             let (climb, through_generator) = in_place_run_site(file, span, lookup)?;
+            if climb.exhausted {
+                return Some(ExecutionRole::Unknown);
+            }
             let function = containing_ast_function(&file.ast, climb.at)?;
             (
                 crate::owners::ref_applied_element(file, function, lookup)?,
@@ -389,13 +494,31 @@ fn ref_applied_read_role(
         lookup,
     );
     if created != ExecutionRole::UntrackedRendering {
-        return Some(ExecutionRole::Unknown);
+        return Some(role_arm!(
+            "execution_role.ref_applied_read_role.unknown",
+            ExecutionRole::Unknown
+        ));
     }
     if let Some((climb, through_generator)) = climb {
         match climb.suspended {
-            Some(true) => return Some(ExecutionRole::Unreported),
-            Some(false) => return Some(ExecutionRole::Unknown),
-            None if climb.in_list || through_generator => return Some(ExecutionRole::Unknown),
+            Some(true) => {
+                return Some(role_arm!(
+                    "execution_role.ref_applied_read_role.unreported",
+                    ExecutionRole::Unreported
+                ));
+            }
+            Some(false) => {
+                return Some(role_arm!(
+                    "execution_role.ref_applied_read_role.unknown-2",
+                    ExecutionRole::Unknown
+                ));
+            }
+            None if climb.in_list || through_generator => {
+                return Some(role_arm!(
+                    "execution_role.ref_applied_read_role.unknown-3",
+                    ExecutionRole::Unknown
+                ));
+            }
             None => {}
         }
     }
@@ -432,3 +555,91 @@ pub(crate) enum RootBodyGuard {
 
 #[cfg(test)]
 mod tests;
+
+/// A closed reference census for a component returned directly by the source
+/// literal of an exact dynamic factory. Other entries withhold the placement.
+pub(crate) fn dynamic_component_entry(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let mut span = span;
+    for _ in 0..32 {
+        if let Some((climb, generator)) = in_place_run_site(file, span, lookup) {
+            if generator || climb.suspended.is_some() || climb.in_list || climb.among_others {
+                return None;
+            }
+            span = climb.at;
+        }
+        let function = containing_ast_function(&file.ast, span)?;
+        let inherited = file
+            .ast
+            .arguments_containing(function.span)
+            .find_map(|(call, index)| {
+                (!call.arguments[index].spread
+                    && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_preserves_read_window(primitive, index)
+                        }))
+                .then_some(call.span)
+            });
+        let Some(call) = inherited else {
+            break;
+        };
+        span = call;
+    }
+    let function = containing_ast_function(&file.ast, span)?;
+    let name = function_binding_name(file, function)?;
+    if lookup.program_has_eval() {
+        return None;
+    }
+    let symbol = lookup.callee_symbol(file, name.span)?;
+    let references = lookup.symbol_references_if_present(symbol)?;
+    let mut dynamic = false;
+    let mut exclusive = !flow_binding_exported(file, name.span);
+    for reference in references {
+        // file_by_path records the selected file slot (or missing-path probe).
+        let Some(candidate) = lookup.file_by_path(&reference.path) else {
+            exclusive = false;
+            continue;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            exclusive = false;
+            continue;
+        };
+        let at = Span::new(start, end);
+        if candidate.path == file.path && at == name.span {
+            continue;
+        }
+        let source = candidate.ast.functions.iter().find(|source| {
+            !source.generator
+                && source.expression_body
+                && candidate.ast.peel_ts_sugar_span(source.body) == at
+        });
+        let mounted = source.is_some_and(|source| {
+            candidate
+                .ast
+                .arguments_containing(source.span)
+                .any(|(call, index)| {
+                    index == 0
+                        && !call.arguments[0].spread
+                        && candidate.ast.peel_ts_sugar_span(call.arguments[0].span) == source.span
+                        && lookup
+                            .primitive_at_call(candidate, call.span)
+                            .is_some_and(|primitive| {
+                                lookup.dialect.dynamic_mount_is_unwindowed(primitive)
+                            })
+                })
+        });
+        dynamic |= mounted;
+        exclusive &= mounted;
+    }
+    dynamic.then_some(exclusive)
+}

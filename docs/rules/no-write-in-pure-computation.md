@@ -44,7 +44,15 @@ settles on its first pass (no call, read or reference), and the call is on
 every completion of the body. `schedule` withholds the first run as `defer`
 does (ADR 0502). A `createRenderEffect` created where
 writes are legal (an event handler, module scope) leaves every run of its apply
-legal.
+legal. A callback the dialect runs with no owner whenever it runs (a
+`createReaction` callback, a `createEffect` apply, the `error` member of an exact
+bundle of either) leaves a write legal also in a layer it runs in place (an IIFE,
+a helper calling its callback; ADRs 0540, 0548).
+
+`resolve(fn)` and `until(fn)` run `fn` as the compute of a computation they
+create under a fresh root (rc.17 `dist/dev.js:2694-2770`): a write or an action
+call there, or in a layer the thunk runs in place, is a violation; past an
+`await` of an async thunk no owner is current (ADR 0551).
 
 A control-flow component's children callback (`For`'s row) runs under an
 owner, and its JSX children are render computations. A write in a function the
@@ -293,6 +301,10 @@ So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,
 `fixtures/reactive-ir/write-in-refused-creation`).
+
+The climbs through in-place layers are bounded (16 layers): a write past the
+bound is uncertifiable wherever it is written, never placed by the lexical role
+around it (ADR 0532, `fixtures/reactive-ir/write-climb-depth`).
 
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.

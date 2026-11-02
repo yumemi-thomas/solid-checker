@@ -44,11 +44,31 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-invoked-literal/App.tsx",
+      "start": 1280,
+      "end": 1292,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-invoked-literal/App.tsx",
       "start": 1808,
       "end": 1820,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-invoked-literal/App.tsx",
+      "start": 1930,
+      "end": 1942,
       "fixes": 0
     }
   ]

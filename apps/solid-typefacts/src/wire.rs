@@ -160,6 +160,7 @@ pub fn blank_response(schema: u64, request_id: u64, project_id: &str, generation
         module_imports: Vec::new(),
         unknown_import_paths: Vec::new(),
         unmapped_roots: Vec::new(),
+        build_inputs: None,
         client_decode_ns: 0,
         client_response_bytes: 0,
         client_request_send_ns: 0,

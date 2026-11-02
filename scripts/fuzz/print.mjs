@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "ref", "flow", "handler-expr", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -208,6 +208,8 @@ function render(program, instrument) {
   const ind = (depth) => INDENT.repeat(depth);
   // The line table: every lineable node's text is wrapped in span markers, read back (and stripped) below.
   const spans = [];
+  // The same-file children a callback prop renders (model.mjs `cbProp`): written after the components, which hoisting allows.
+  const kids = [];
   const span = (node, text) => {
     if (!LINE_KINDS.has(node.k)) return text;
     spans.push({ node, path: pathOf.get(node) });
@@ -226,7 +228,8 @@ function render(program, instrument) {
   function fnParts(f, depth, header) {
     const entry = entryFor(f, "fn");
     const head = header ?? `(${within({ entry, inDefault: true }, () => params(f, depth))})`;
-    return { head, body: block(f.body, depth, entry) };
+    // `throwOn` (misuse.mjs `reaction-error-arm`): the function throws once that signal reads 2, so a reaction's error arm runs.
+    return { head, body: block(f.body, depth, entry, f.throwOn ? [`if (${f.throwOn}() === 2) throw new Error("x");`] : []) };
   }
   function fnText(f, depth, { header } = {}) {
     const { head, body } = fnParts(f, depth, header);
@@ -378,10 +381,20 @@ function render(program, instrument) {
       case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
-      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); throw new Error(`cannot print control form ${c.form}`);
+      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }
   }
 
+  /** A depth form (model.mjs DEPTH_FORMS): N closures, each called in place, around the body. */
+  function depthText(c, depth) {
+    const n = Number(c.form.slice("depth-".length));
+    const lines = [];
+    for (let i = 0; i < n; i += 1) lines.push(`${ind(depth + i)}(() => {`);
+    const inner = block(c.body, depth + n - 1);
+    lines.push(`${ind(depth + n)}${inner.slice(1, -1).trim()}`);
+    for (let i = n - 1; i >= 0; i -= 1) lines.push(`${ind(depth + i)}})();`);
+    return lines.join("\n").trimStart();
+  }
   /** A hand-off form (model.mjs HANDOFF_FORMS): `hf` holds the site and is handed on by name, in a block of its own. */
   function handoffText(c, depth) {
     const inner = depth + 1;
@@ -399,6 +412,9 @@ function render(program, instrument) {
       "handoff-member": [`const hf = () => ${fnBody()};`, "const ho = { m: hf };", "ho.m();"],
       "handoff-assign": ["const ho: { m?: () => void } = {};", `ho.m = () => ${fnBody()};`, "ho.m?.();"],
       "handoff-function": [`function hf() ${fnBody()}`, "hf();"],
+      "handoff-assign-param": ["const fill = (o: { m?: () => void }) => {", `  o.m = () => ${fnBody()};`, "};", "const ho: { m?: () => void } = {};", "fill(ho);", "ho.m?.();"],
+      "handoff-assign-returned": ["const make = () => {", "  const o: { m?: () => void } = {};", `  o.m = () => ${fnBody()};`, "  return o;", "};", "make().m?.();"],
+      "handoff-assign-this": ["class HK {", "  m?: () => void;", `  constructor() { this.m = () => ${fnBody()}; }`, "}", "new HK().m?.();"],
     }[c.form];
     if (!lines) throw new Error(`cannot print control form ${c.form}`);
     return `{\n${lines.map((line) => `${ind(inner)}${line}`).join("\n")}\n${ind(depth)}}`;
@@ -427,7 +443,16 @@ function render(program, instrument) {
     const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       case "memo": used.add("createMemo"); return `createMemo(${f})`;
-      case "effect": used.add("createEffect"); return `createEffect(${f}, ${applyText(e.apply, depth)})`;
+      case "effect":
+        used.add("createEffect");
+        // `errorArm` (model.mjs): the compute throws once the signal reads 2; `fn` is the bundle's error handler.
+        if (e.errorArm !== undefined) return `createEffect(() => { if (${e.errorArm}() === 2) throw new Error("x"); return 1; }, { effect: () => {}, error: ${f} })`;
+        return `createEffect(${f}, ${applyText(e.apply, depth)})`;
+      case "reaction":
+        used.add("createReaction");
+        // `errorArm` (misuse.mjs `reaction-error-arm`): `fn` is the bundle's error handler; the bundle's `effect` is empty.
+        if (e.errorArm) return `createReaction({ effect: () => {}, error: ${f} })`;
+        return `createReaction(${f})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
       case "owner": {
@@ -437,6 +462,9 @@ function render(program, instrument) {
       }
       case "rootd": used.add("createRoot"); return `createRoot(${fnText(e.fn, depth, { header: "(dispose)" })})`;
       case "micro": return `queueMicrotask(${f})`;
+      // A write the thunk's computation refuses rejects the promise: caught, so no unhandled rejection follows.
+      case "resolve": used.add("resolve"); return `resolve(${f}).catch(() => {})`;
+      case "until": used.add("until"); return `until(${f}).catch(() => {})`;
       case "settled": used.add("onSettled"); return `onSettled(${f})`;
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;
@@ -447,6 +475,9 @@ function render(program, instrument) {
         used.add("action");
         // `afterYield` (the recall contexts): the body runs after the action's first `yield`, in a later step of its transition.
         if (e.afterYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
+        // `plainYield` (`action-plain-yield-from-apply`): a plain-value `yield` first; the next step runs synchronously on the same
+        // stack (`@solidjs/signals` dist/dev.js:1637), so the body is still in the caller's window.
+        if (e.plainYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
         const { head, body } = fnParts(e.fn, depth, "()");
         return `action(function* ${head} ${body})`;
       }
@@ -475,7 +506,9 @@ function render(program, instrument) {
         // The function child's body: the statements, then one element (a selector must match exactly one).
         const element = item.flow.startsWith("for") ? "li" : "p";
         const body = block(item.body, depth + 1, entryFor(item, "flow"), [], [`return <${element} data-view="${item.id}">x</${element}>;`]);
-        const open = { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
+        // `on` (model.mjs flowEl): the condition reads a signal a button sets to 0, which disposes the row or the branch.
+        const open = item.on !== undefined ? { for: `<For each={${item.on}() ? [1] : []}>`, show: `<Show when={${item.on}()}>` }[item.flow]
+          : { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
         const close = { for: "</For>", "for-unkeyed": "</For>", show: "</Show>", "show-keyed": "</Show>", match: "</Switch>", repeat: "</Repeat>" }[item.flow];
         for (const name of { for: ["For"], "for-unkeyed": ["For"], show: ["Show"], "show-keyed": ["Show"], match: ["Switch", "Match"], repeat: ["Repeat"] }[item.flow]) used.add(name);
         // A `Show`/`Match` child takes its parameter: rc.17 runs a function child only when `child.length > 0` (`solid.dev.js:1587`,
@@ -488,6 +521,12 @@ function render(program, instrument) {
         const callback = expr(item.e, depth);
         const value = item.form === "array" ? `[${callback}, () => {}]` : item.form === "cond" ? `1 ? ${callback} : undefined` : callback;
         return [`${ind(depth)}<p ref={${value}} data-view="${item.id}">x</p>`];
+      }
+      case "cbprop": {
+        const n = item.id.replace(/^\D+/, "");
+        const via = item.form === "forwarded" || item.form === "spread";
+        kids.push(...cbPropComponents(item, n));
+        return [`${ind(depth)}<${via ? "Fwd" : "Kid"}${n} run={${expr(item.e, depth)}} />`];
       }
       case "show": {
         used.add("Show");
@@ -507,6 +546,29 @@ function render(program, instrument) {
     }
   }
 
+  /**
+   * A callback prop's child `KidN` (model.mjs CBP_CALLS: where it calls `run`) and, for a forwarded or spread one, the `FwdN` between
+   * it and C1. Neither is exported: the runtime renders every exported component on its own, with no props.
+   */
+  function cbPropComponents(item, n) {
+    const type = "{ run: () => void }";
+    const run = item.form === "destructured" ? "run()" : "props.run()";
+    const element = `<p data-view="k${n}">x</p>`;
+    let body;
+    switch (item.call) {
+      case "body": body = [`${run};`, `return ${element};`]; break;
+      case "jsx": body = [`return <p data-view="k${n}">{(${run}, "x")}</p>;`]; break;
+      case "handler": body = [`return <button data-act="k${n}" onClick={() => { ${run}; }}>go</button>;`]; break;
+      case "apply": used.add("createEffect"); body = [`createEffect(() => 1, () => { ${run}; });`, `return ${element};`]; break;
+      case "settled": used.add("onSettled"); body = [`onSettled(() => { ${run}; });`, `return ${element};`]; break;
+      case "never": body = [`return ${element};`]; break;
+      default: throw new Error(`unknown callback prop call ${item.call}`);
+    }
+    const lines = [`function Kid${n}(${item.form === "destructured" ? `{ run }: ${type}` : `props: ${type}`}) {`, ...body.map((line) => `${INDENT}${line}`), "}", ""];
+    if (item.form === "forwarded") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} run={props.run} />;`, "}", "");
+    if (item.form === "spread") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} {...props} />;`, "}", "");
+    return lines;
+  }
   const signalLine = (sig) => signalText(sig, signals, used);
   const out = [];
   // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
@@ -540,6 +602,7 @@ function render(program, instrument) {
     });
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
+  out.push(...kids);
   // The parents of the mount axis: each renders its child component in its own JSX.
   // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
   const parentWeb = new Set();
@@ -657,6 +720,7 @@ function signalText(sig, signals, used) {
     case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
     case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
     case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
+    case "reaction": used.add("createReaction"); return `const ${sig.name} = createReaction(() => {});`;
     case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
     case "async-dep": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => { ${sig.dep}(); await Promise.resolve(); return 1; });`;
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
@@ -677,6 +741,7 @@ function signalKeys(sig) {
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
     case "async": case "async-dep": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];
+    case "reaction": return [[sig.name, "(tracking: () => void) => void"]];
     default: return [[sig.name, "Accessor<number>"], [sig.setter, "Setter<number>"]];
   }
 }
@@ -786,6 +851,10 @@ export function drivingPlan(program) {
   const clicks = [];
   // A parent that mounts its child later (mounts.mjs LATER_MOUNTS) does so on its button, before the child's own buttons exist.
   program.components.filter((c) => c.mount).forEach((component, index) => { if (LATER_MOUNTS.includes(component.mount)) clicks.push(`pm${index + 1}`); });
-  for (const { node } of walk(program)) if (node.k === "button") clicks.push(node.id);
+  for (const { node } of walk(program)) {
+    if (node.k === "button") clicks.push(node.id);
+    // A callback prop called from its child's handler (model.mjs `cbProp`): the child's button.
+    if (node.k === "cbprop" && node.call === "handler") clicks.push(`k${node.id.replace(/^\D+/, "")}`);
+  }
   return { clicks, settleMs: 400 };
 }

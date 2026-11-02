@@ -77,6 +77,9 @@ mod pipeline;
 mod projection;
 mod reachability;
 mod reactive_analysis;
+mod role_log;
+pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};
+pub use role_log::{RoleLogTarget, configure as configure_role_log};
 pub mod route_components;
 pub mod router_params;
 mod runtime_configuration;
@@ -567,6 +570,25 @@ pub struct ReactiveWrite {
     #[serde(default)]
     pub owned_write: OwnedWriteOption,
     pub context: Arc<str>,
+    /// How many reachable paths to the call this row stands for
+    /// ([`reachability`]). The row is the same on every path, so it is held
+    /// once with its count rather than once per path; expanding each row
+    /// `multiplicity` times gives the per-path table. Where a root reaches a
+    /// call graph cycle, the count is taken on the condensation (a cycle's
+    /// functions count as one), which is no path count but is nonzero
+    /// exactly where a path reaches the call: only that is read. At least 1;
+    /// saturates at `u64::MAX`.
+    #[serde(default = "one_path", skip_serializing_if = "is_one_path")]
+    pub multiplicity: u64,
+}
+
+fn one_path() -> u64 {
+    1
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_one_path(multiplicity: &u64) -> bool {
+    *multiplicity == 1
 }
 
 /// What a source's options argument proves about `ownedWrite` (ADR 0424),
@@ -597,6 +619,31 @@ impl ReactiveWrite {
     pub fn is_uncertifiable(&self) -> bool {
         self.execution == ExecutionRole::Unknown
     }
+
+    /// Whether `other` is this row on other paths: every field but
+    /// [`Self::multiplicity`] equal.
+    #[must_use]
+    pub fn same_row(&self, other: &Self) -> bool {
+        let Self {
+            setter,
+            operation,
+            source_kind,
+            location,
+            declaration,
+            execution,
+            owned_write,
+            context,
+            multiplicity: _,
+        } = self;
+        *setter == other.setter
+            && *operation == other.operation
+            && *source_kind == other.source_kind
+            && *location == other.location
+            && *declaration == other.declaration
+            && *execution == other.execution
+            && *owned_write == other.owned_write
+            && *context == other.context
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -615,6 +662,14 @@ pub struct ActionInvocation {
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub context: Arc<str>,
+    /// How many reachable paths to the call this row stands for
+    /// ([`reachability`], as [`ReactiveWrite::multiplicity`], on the
+    /// condensation where a root reaches a cycle). The row is the same on
+    /// every path, so it is held once with its count rather than once per
+    /// path; expanding each row `multiplicity` times gives the per-path
+    /// table. At least 1; saturates at `u64::MAX`.
+    #[serde(default = "one_path", skip_serializing_if = "is_one_path")]
+    pub multiplicity: u64,
 }
 
 impl ActionInvocation {
@@ -623,6 +678,24 @@ impl ActionInvocation {
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
         self.execution == ExecutionRole::Unknown
+    }
+
+    /// [`ReactiveWrite::same_row`].
+    #[must_use]
+    pub fn same_row(&self, other: &Self) -> bool {
+        let Self {
+            action,
+            location,
+            declaration,
+            execution,
+            context,
+            multiplicity: _,
+        } = self;
+        *action == other.action
+            && *location == other.location
+            && *declaration == other.declaration
+            && *execution == other.execution
+            && *context == other.context
     }
 }
 
@@ -1139,6 +1212,13 @@ pub struct OwnerRequirement {
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// ADR 0534: the operation's callback is written inside an owner-providing
+    /// region, but no owner edge proves it runs there: it is handed to a
+    /// wrapper, stored, a class member or a getter, and whoever calls it (a
+    /// timer, a handler) is not followed, so the region's owner is not proven
+    /// current when it runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unplaced_callback: bool,
     /// The operation runs after an `await` on every path through its async
     /// function's body: a promise continuation on an empty stack, where the
     /// dialect says no owner is current. Proven unowned whatever context the
@@ -1366,6 +1446,10 @@ pub struct UnreachedSite {
     /// callback (ADR 0475).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refused_creation: bool,
+    /// ADR 0560: the query stopped at its depth limit or work bound before
+    /// it decided whether any execution reaches the site.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub undecided: bool,
 }
 
 /// The [`UnreachedSite`] at exactly the byte range `start..end` of `path`,
@@ -1556,6 +1640,31 @@ pub struct BuildTimings {
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
     pub reachability_recomputed_files: u64,
+    /// The reachability count's work when its graph was assembled: function
+    /// visits plus edges followed ([`reachability`]). Zero when the stage
+    /// was reused. Deterministic, so the complexity ladder gates on it.
+    pub reachability_visits: u64,
+    /// The named-closure placements the build computed: closures bound to a
+    /// name whose calls a read's role had to place (`execution_role`'s
+    /// `closure_unplaced`), each computation counted, a kept answer's reuse
+    /// not. Deterministic, so the complexity ladder gates on it.
+    pub closure_placements: u64,
+    /// The write walk's caller steps (`execution_role`'s write walk, ADR
+    /// 0546): each call site of a function whose entries place a write,
+    /// evaluated or folded, and each step of a region fold. Deterministic,
+    /// so the complexity ladder gates on it.
+    pub write_walk_steps: u64,
+    /// The functions whose run the site-reach query (ADR 0458) derived, each
+    /// derivation counted, its fixed-point rounds included (ADR 0546).
+    /// Deterministic, so the complexity ladder gates on it.
+    pub reach_evaluations: u64,
+    /// ADR 0560: the most work one bounded walk did (a helper climb's
+    /// followed calls, a write walk's caller steps, a site-reach query's
+    /// depth-first derivations), and how many walks ended at their bound,
+    /// which answers nothing it found. Deterministic, so the complexity
+    /// ladder gates on them.
+    pub bounded_walk_peak: u64,
+    pub bounded_walks_exhausted: u64,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
     pub owner_reused_files: u64,

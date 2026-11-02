@@ -242,5 +242,196 @@
    "mx-store-write-outside-setter-body-object-assign-direct-closure",
    "mx-store-write-outside-setter-body-destructure-assign-direct-none"
   ]
+ },
+ {
+  "finding": "A read in the cleanup an effect apply returns (inline or a named apply) was certified clean; rc.17 warns STRICT_READ_UNTRACKED when the effect reruns (ADR 0539)",
+  "found": "VM run full-7 on 5d848b2cf (3,828 certified false cleans in effect-cleanup-rerun and render-cleanup-rerun); the named apply by review of the fix",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-cleanup-rerun-signal-direct-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-memo-direct-helper",
+   "mx-strict-read-untracked-effect-cleanup-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-named-signal-direct-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-named-signal-wrapper-helper"
+  ],
+  "rediscovered": "5d848b2cf: the five are certified clean (full-7 rows; the named ones by batch3); the ADR 0539 build: obligations"
+ },
+ {
+  "finding": "A read in an effect bundle's error member, through a closure, was proven SC1001 (the bundle's largest function was taken as the apply); rc.17 calls the error arm outside the strict-read window (ADR 0540)",
+  "found": "VM run full-7 on 5d848b2cf: 400 false positives in lg-recall effect-error-arm",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-effect-error-arm-signal-direct-closure",
+   "lg-strict-read-untracked-effect-error-arm-signal-direct-closure-helper",
+   "lg-strict-read-untracked-effect-error-arm-memo-hook-closure"
+  ],
+  "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
+ },
+ {
+  "finding": "A write in a helper or IIFE a createReaction callback runs in place was proven SC2001 (the write climb took the component body's role); the callback runs from the flush with no owner (ADR 0540)",
+  "found": "VM run full-7 on 5d848b2cf: 1,484 false positives in lg-recall reaction",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-reaction-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-reaction-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-reaction-signal-direct-module-helper"
+  ],
+  "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK in a createReaction callback, a render apply rerun and an apply's returned cleanup was certified clean (ADR 0541)",
+  "found": "VM run full-7 on 5d848b2cf (effect-window cells)",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-reaction-memo-direct-none",
+   "mx-primitive-in-effect-callback-effect-cleanup-rerun-memo-direct-none",
+   "mx-primitive-in-effect-callback-render-apply-guarded-rerun-memo-direct-none"
+  ],
+  "rediscovered": "5d848b2cf: certified false-clean (full-7 rows); the ADR 0541 build: violation in the reaction, obligations in the cleanup and the render rerun"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK in a createReaction callback, a render apply rerun and an apply's returned cleanup was certified clean (ADR 0541)",
+  "found": "VM run full-7 on 5d848b2cf (effect-window cells)",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-reaction-x-direct-none",
+   "mx-flush-in-effect-callback-effect-cleanup-rerun-x-direct-none",
+   "mx-flush-in-effect-callback-render-apply-guarded-rerun-x-direct-none"
+  ],
+  "rediscovered": "5d848b2cf: certified false-clean (full-7 rows); the ADR 0541 build: violation in the reaction, obligations in the cleanup and the render rerun"
+ },
+ {
+  "finding": "An action called in a helper or IIFE a createReaction callback runs in place was proven SC2002 (the shared write climb took the component body's role) (ADR 0540)",
+  "found": "VM run full-7 on 5d848b2cf: 550 false positives in lg-recall reaction",
+  "fixed": "t3/verify-fuzz-recall",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-reaction-x-direct-helper",
+   "lg-action-called-in-owned-scope-reaction-x-direct-iife"
+  ],
+  "rediscovered": "5d848b2cf: false-positive (full-7 rows); the ADR 0540 build: silent"
+ },
+ {
+  "finding": "A read in flush(fn) in a component also handed out as a plain function ([1].map(Row)) was proven SC1001: the undecided-component funnel carved out flush's callback (ADR 0542)",
+  "found": "review of full-7's 12 dynamic-mount STORE_WRITE_OUTSIDE_SETTER wrong-rule rows (those stay: ADR 0530 proves dynamic-only entries)",
+  "fixed": "t3/verify-fuzz-recall",
+  "outside": "no mount hands a component to plain code as a function value; fixture undecided-flush-callback holds the case (old build: violation)"
+ },
+ {
+  "finding": "An action body's read in its first synchronous slice took the deferred role: called from an effect apply or a createReaction callback (and after a plain-value yield) rc.17 warns STRICT_READ_UNTRACKED \"an effect callback\" (ADR 0547)",
+  "found": "Fable's precision report 2026-11-02 (probes R11, R13, R19), confirmed on the fast runtime",
+  "fixed": "ADR 0547",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-action-from-apply-memo-assign-callee-none",
+   "mx-strict-read-untracked-action-from-apply-memo-default-slot-iife",
+   "mx-strict-read-untracked-action-from-reaction-memo-alias-none",
+   "mx-strict-read-untracked-action-from-reaction-memo-assign-callee-none",
+   "mx-strict-read-untracked-action-plain-yield-from-apply-memo-assign-callee-iife",
+   "mx-strict-read-untracked-action-plain-yield-from-apply-memo-cond-alias-iife"
+  ],
+  "rediscovered": "f31337fa8 (release), the three cells at --grid-sample 0.2: 1,404 runtime-confirmed programs, 1,296 false-clean, 108 recall-gap; ADR 0547: 1,182 agree, 222 recall-gap, 0 false-clean"
+ },
+ {
+  "finding": "A write in an IIFE in a createReaction bundle's error member climbed to the component body: SC2001 proven where rc.17 runs the member from the flush with no owner (ADR 0548)",
+  "found": "the fuzzer's new reaction-error-arm cells (2026-11-02), from Fable's precision report section 3",
+  "fixed": "ADR 0548",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-refresh-destructured-iife",
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-refresh-wrapper-iife",
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-signal-alias-iife",
+   "lg-reactive-write-in-owned-scope-reaction-error-arm-signal-hook-iife"
+  ],
+  "rediscovered": "f31337fa8 (release), new error-arm cells at --grid-sample 0.2: 73 REACTIVE_WRITE and 25 ACTION_CALLED false positives in reaction-error-arm; ADR 0548: 92 clean, 6 uncertifiable (hand-off layers)"
+ },
+ {
+  "finding": "An action call in an IIFE in a createReaction bundle's error member: SC2002 proven where rc.17 runs the member with no owner (ADR 0548)",
+  "found": "the fuzzer's new reaction-error-arm cells (2026-11-02)",
+  "fixed": "ADR 0548",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-reaction-error-arm-x-alias-iife-m-for-signal",
+   "lg-action-called-in-owned-scope-reaction-error-arm-x-alias-iife-m-loading"
+  ],
+  "rediscovered": "see the REACTIVE_WRITE entry above (the same programs' climb)"
+ },
+ {
+  "finding": "track() of a createReaction tracker created with no owner (module scope) was silent: rc.17 creates the arm effect under the creation owner, so each track() warns NO_OWNER_EFFECT (ADR 0549)",
+  "found": "Fable's precision report 2026-11-02 (probe R09), confirmed on the fast runtime by the new reaction-track variant",
+  "fixed": "ADR 0549",
+  "grid": "mx-src",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-handler-reaction-track-alias-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-direct-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-wrapper-none-s-module",
+   "mx-no-owner-effect-timer-reaction-track-alias-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-destructured-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-hook-member-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-tuple-none-s-module",
+   "mx-no-owner-effect-handler-reaction-track-hook-none-s-module"
+  ],
+  "rediscovered": "f31337fa8 (release), mx-src NO_OWNER_EFFECT: 230 false-clean and 22 recall-gap of the 252 reaction-track programs; ADR 0549 with its value-flow folds: all 252 agree (direct, alias, wrapper, object-literal, hook, hook-member and tuple bindings)"
+ },
+ {
+  "finding": "createMemo / onCleanup in an action's first step called from an owned onSettled or a createTrackedEffect was certified clean: the leaf walk counted the action as a safe call; rc.17 throws PRIMITIVE_IN_FORBIDDEN_SCOPE / CLEANUP_IN_FORBIDDEN_SCOPE (ADR 0550)",
+  "found": "Fable's precision report 2026-11-02 (probe R12), confirmed on the fast runtime",
+  "fixed": "ADR 0550",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-action-from-settled-effect-alias-none",
+   "mx-primitive-in-forbidden-scope-action-from-settled-effect-destructured-iife",
+   "mx-primitive-in-forbidden-scope-action-from-settled-effect-ns-held-none",
+   "mx-primitive-in-forbidden-scope-action-from-settled-memo-alias-iife"
+  ],
+  "rediscovered": "f31337fa8 (release), action-from-settled/-tracked at --grid-sample 0.2: 1,316 SC3001 false cleans; ADR 0550: 609 agree, 707 recall-gap, 0 false-clean"
+ },
+ {
+  "finding": "A write in resolve(fn)'s or until(fn)'s thunk was certified clean: the thunk was a deferred callback, but rc.17 runs it as the compute of a computed under a fresh root and throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0551)",
+  "found": "Fable's precision report 2026-11-02 (row 43, probe R18), confirmed on the fast runtime by the new resolve-thunk/until-thunk cells",
+  "fixed": "ADR 0551",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-resolve-thunk-signal-direct-iife",
+   "mx-reactive-write-in-owned-scope-resolve-thunk-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-resolve-thunk-store-direct-iife",
+   "mx-reactive-write-in-owned-scope-resolve-thunk-store-direct-none"
+  ],
+  "rediscovered": "f31337fa8 (release), full resolve-thunk/until-thunk cells: 5,414 REACTIVE_WRITE and 2,010 ACTION_CALLED false cleans; ADR 0551: 5,006 and 1,854 agree, the rest recall-gap, 0 false-clean"
+ },
+ {
+  "finding": "An action call in resolve(fn)'s or until(fn)'s thunk was certified clean; rc.17 throws ACTION_CALLED_IN_OWNED_SCOPE (ADR 0551)",
+  "found": "the same cells",
+  "fixed": "ADR 0551",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-resolve-thunk-x-alias-none",
+   "mx-action-called-in-owned-scope-resolve-thunk-x-array-slot-none"
+  ],
+  "rediscovered": "see the REACTIVE_WRITE entry above"
+ },
+ {
+  "finding": "track() of a tracker a hook makes and returns, called where the hook's call has no owner, was silent; a tracker returned from a function-declared hook was not followed (ADR 0551)",
+  "found": "follow-up of ADR 0549's open-work misses",
+  "fixed": "ADR 0551",
+  "outside": "the generator's reaction-track variant takes the tracker from helpers.ts's top level or a component; no template makes it inside a hook called from a handler. Fixture reaction-creation-owner (HookCalls) holds it (f31337fa8 and 4215de157: silent; ADR 0551: a violation at the handler's track(), the hook-made creation an obligation)"
  }
 ]
