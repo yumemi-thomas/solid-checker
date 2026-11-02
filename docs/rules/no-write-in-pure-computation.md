@@ -49,6 +49,11 @@ legal. A callback the dialect runs with no owner whenever it runs (a
 bundle of either) leaves a write legal also in a layer it runs in place (an IIFE,
 a helper calling its callback; ADRs 0540, 0548).
 
+`resolve(fn)` and `until(fn)` run `fn` as the compute of a computation they
+create under a fresh root (rc.17 `dist/dev.js:2694-2770`): a write or an action
+call there, or in a layer the thunk runs in place, is a violation; past an
+`await` of an async thunk no owner is current (ADR 0551).
+
 A control-flow component's children callback (`For`'s row) runs under an
 owner, and its JSX children are render computations. A write in a function the
 row's code runs in place (an IIFE in a JSX child, a helper calling its callback,

@@ -555,6 +555,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument`, whenever it runs, runs as the
+    /// compute of a computation the call creates for it (ADR 0551): the
+    /// ambient owner is that children-capable computation, so a write guard
+    /// rejects a write or an action call there as in a memo's compute. Its
+    /// reads subscribe that computation, never the caller. The default claims
+    /// nothing.
+    fn callback_runs_as_created_computation(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the callback at `argument` runs during the call inline, and
     /// this vocabulary has not read that the call creates a root for it. Such
     /// a write's legality depends on a fact nobody measured, so it is unplaced
@@ -1584,8 +1595,10 @@ pub trait Dialect: Sync {
     /// What an invocation of the function `primitive` returns does that needs
     /// an owner, judged at the owner current where `primitive` was called
     /// (ADR 0549): the returned function runs its owner-creating work under
-    /// that captured owner, not under its own caller's. The default claims
-    /// nothing.
+    /// that captured owner, not under its own caller's. Answering it also
+    /// says that the invocation writes nothing, calls no action and reads
+    /// nothing itself (ADR 0551): what it runs is that owned work. The default
+    /// claims nothing.
     fn returned_invocation_owner_requirement_role(
         &self,
         primitive: Primitive,

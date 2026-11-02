@@ -107,6 +107,11 @@ pub(super) enum WriteRegionAdjustment {
     /// operation's [`RootBodyGuard`] decides, short of a suspension before
     /// the write.
     CreatedRoot,
+    /// ADR 0551: the write sits directly in a callback that runs as the
+    /// compute of a computation the call creates
+    /// ([`solid_dialect::Dialect::callback_runs_as_created_computation`]):
+    /// rejected as in a memo's compute, short of a suspension before it.
+    CreatedComputation,
     /// [`WriteRegionAdjustment::CreatedRoot`] for a function a helper runs in
     /// place and also hands on or keeps (ADR 0457): one run is under the root,
     /// which proves a rejection and no legal write.
@@ -167,6 +172,12 @@ pub(super) fn write_region_adjustment(
             // places it, and the write guard leaves it unplaced.
             if !direct_callback_runs(file, call.arguments[index].span, span) {
                 return None;
+            }
+            if lookup
+                .dialect
+                .callback_runs_as_created_computation(primitive, index)
+            {
+                return Some(WriteRegionAdjustment::CreatedComputation);
             }
             // The root is the owner whenever the callback runs, so its
             // timing is not asked (rc.17 `hydrate` states none).
@@ -353,6 +364,23 @@ fn detached_in_place(
                     return Some(WriteRegionAdjustment::OwnerUnknown);
                 }
                 return Some(WriteRegionAdjustment::Detached);
+            }
+            // ADR 0551: the layers run on the stack of a callback that runs
+            // as a created computation's compute (`resolve`'s thunk): the
+            // computation is the owner there too.
+            if (layered || by_name)
+                && execution.is_some()
+                && lookup
+                    .dialect
+                    .callback_runs_as_created_computation(primitive, index)
+            {
+                if suspended {
+                    return None;
+                }
+                if in_list || among_others || by_name_others {
+                    return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                return Some(WriteRegionAdjustment::CreatedComputation);
             }
             // ADR 0460: the layers run on the stack of a callback that shares
             // its call's owner on its first run (`createRenderEffect`'s apply),
@@ -1644,6 +1672,12 @@ pub(super) fn write_role_walk<'f>(
             //
             // Past an await the body runs on a later task with no owner, so
             // the root is no longer the ambient owner.
+            Some(WriteRegionAdjustment::CreatedComputation) => {
+                if let Some(role) = suspended_write_role(file, span, lookup) {
+                    return role_arm!("write_roles.created-computation-suspended", role);
+                }
+                return role_arm!("write_roles.created-computation", ExecutionRole::TrackedJsx);
+            }
             Some(
                 adjustment @ (WriteRegionAdjustment::CreatedRoot
                 | WriteRegionAdjustment::CreatedRootAmongOthers),

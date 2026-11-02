@@ -1,5 +1,5 @@
 import { createReaction, createSignal } from "solid-js";
-import { trackShared, useTracker } from "./helpers";
+import { trackShared, useMade, useTracker } from "./helpers";
 
 const [count, setCount] = createSignal(0);
 
@@ -58,6 +58,23 @@ export function ValueFlows() {
         ownedSlot(() => count());
         ownedTuple(() => count());
         viaLet = trackShared;
+      }}
+    >
+      go
+    </button>
+  );
+}
+
+// A hook that returns the tracker it makes: owned where the hook is called in
+// the body, ownerless where a handler calls it (each `track()` there warns).
+export function HookCalls() {
+  const fromBody = useMade();
+  return (
+    <button
+      onClick={() => {
+        fromBody(() => count());
+        const fromHandler = useMade();
+        fromHandler(() => count());
       }}
     >
       go

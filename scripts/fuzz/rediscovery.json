@@ -401,5 +401,37 @@
    "mx-primitive-in-forbidden-scope-action-from-settled-memo-alias-iife"
   ],
   "rediscovered": "f31337fa8 (release), action-from-settled/-tracked at --grid-sample 0.2: 1,316 SC3001 false cleans; ADR 0550: 609 agree, 707 recall-gap, 0 false-clean"
+ },
+ {
+  "finding": "A write in resolve(fn)'s or until(fn)'s thunk was certified clean: the thunk was a deferred callback, but rc.17 runs it as the compute of a computed under a fresh root and throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0551)",
+  "found": "Fable's precision report 2026-11-02 (row 43, probe R18), confirmed on the fast runtime by the new resolve-thunk/until-thunk cells",
+  "fixed": "ADR 0551",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-resolve-thunk-signal-direct-iife",
+   "mx-reactive-write-in-owned-scope-resolve-thunk-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-resolve-thunk-store-direct-iife",
+   "mx-reactive-write-in-owned-scope-resolve-thunk-store-direct-none"
+  ],
+  "rediscovered": "f31337fa8 (release), full resolve-thunk/until-thunk cells: 5,414 REACTIVE_WRITE and 2,010 ACTION_CALLED false cleans; ADR 0551: 5,006 and 1,854 agree, the rest recall-gap, 0 false-clean"
+ },
+ {
+  "finding": "An action call in resolve(fn)'s or until(fn)'s thunk was certified clean; rc.17 throws ACTION_CALLED_IN_OWNED_SCOPE (ADR 0551)",
+  "found": "the same cells",
+  "fixed": "ADR 0551",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-resolve-thunk-x-alias-none",
+   "mx-action-called-in-owned-scope-resolve-thunk-x-array-slot-none"
+  ],
+  "rediscovered": "see the REACTIVE_WRITE entry above"
+ },
+ {
+  "finding": "track() of a tracker a hook makes and returns, called where the hook's call has no owner, was silent; a tracker returned from a function-declared hook was not followed (ADR 0551)",
+  "found": "follow-up of ADR 0549's open-work misses",
+  "fixed": "ADR 0551",
+  "outside": "the generator's reaction-track variant takes the tracker from helpers.ts's top level or a component; no template makes it inside a hook called from a handler. Fixture reaction-creation-owner (HookCalls) holds it (f31337fa8 and 4215de157: silent; ADR 0551: a violation at the handler's track(), the hook-made creation an obligation)"
  }
 ]

@@ -514,16 +514,17 @@ pub(crate) fn discover_owner_file(
         // owner is current.
         if known.is_none()
             && !in_list
-            && let Some((same_file, answer)) = lookup.returned_factory_at(file, call)
+            && let Some((placed_here, answer)) = lookup.returned_factory_at(file, call)
             && answer.slot.is_none()
             && dialect.returned_invocation_owner_requirement_role(answer.primitive)
                 == Some(OwnerRequirementRole::Effect)
         {
-            let factory = answer.factory.1;
-            let placement = if same_file {
-                Some((owner_at(factory), region_chain(factory), region_of(factory)))
-            } else {
-                answer.factory_at_module_scope.then_some((None, None, None))
+            // Placed at the call whose owner created the function, in this
+            // file; another module's top level has none. Anything else is the
+            // creating call's escape obligation (`returned_function_escapes`).
+            let placement = match placed_here {
+                Some(at) => Some((owner_at(at), region_chain(at), region_of(at))),
+                None => answer.factory_at_module_scope.then_some((None, None, None)),
             };
             if let Some((owner, providing_region_chain, providing_region)) = placement {
                 requirements.push(OwnerRequirementCandidate {
@@ -830,9 +831,13 @@ pub(crate) fn find_missing_owners_incremental(
 }
 
 /// ADR 0549: whether the function `call` returns reaches code no returned-
-/// invocation walk names: the call is not the whole initializer of a single-
-/// name binding, or that binding (or a `const` copy of it) is exported, handed
-/// whole as a call's argument, or written as a JSX attribute's value.
+/// invocation walk names. Followed: a call's callee, the object of a member
+/// that is a call's callee, the initializer of a single-name binding (a copy),
+/// and a value of a closed object literal or a tuple literal that is a
+/// binding's whole initializer (that binding's names are followed in turn).
+/// Anything else escapes: the call is no binding's whole initializer, a holder
+/// is exported, or a reference is handed to a call, written as a JSX
+/// attribute's value, returned, assigned, or written in any other position.
 fn returned_function_escapes(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -852,44 +857,81 @@ fn returned_function_escapes(
     else {
         return true;
     };
+    // The binding whose whole initializer is the literal directly holding
+    // `value` (its property's value or its element), when that literal is a
+    // closed object literal or a tuple literal.
+    let literal_binding = |value: Span| {
+        let literal = ast
+            .object_get_shapes
+            .iter()
+            .filter(|shape| shape.closed && shape.span.contains(value))
+            .map(|shape| shape.span)
+            .chain(
+                ast.array_literal_elements
+                    .iter()
+                    .filter(|array| {
+                        array.elements.iter().any(|element| {
+                            element.kind == solid_facts::ast::ArrayElementKind::Value
+                                && peel(element.span) == value
+                        }) && !array.elements.iter().any(|element| {
+                            element.kind == solid_facts::ast::ArrayElementKind::Spread
+                        })
+                    })
+                    .map(|array| array.span),
+            )
+            .min_by_key(|span| span.end - span.start)?;
+        // The value must be the literal's own: a property value or element,
+        // not something nested deeper.
+        let own = ast.array_literal_at(literal).is_some()
+            || crate::execution_role::closed_literal_value_is_own(file, literal, value);
+        if !own {
+            return None;
+        }
+        ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| peel(initializer) == literal)
+        })
+    };
     let mut holders = vec![name.span];
     let mut index = 0;
     while index < holders.len() {
         let holder = holders[index];
         index += 1;
-        if index > 8 || crate::execution_role::flow_binding_exported(file, holder) {
+        if index > 16 || crate::execution_role::flow_binding_exported(file, holder) {
             return true;
         }
         for &(reference, declaration) in &ast.reference_declarations {
             if declaration != holder {
                 continue;
             }
-            let argument = ast
-                .arguments_containing(reference)
-                .any(|(inner, index)| peel(inner.arguments[index].span) == reference);
-            let attribute = ast.jsx_containing(reference).any(|element| {
-                element.attributes.iter().any(|attribute| {
-                    attribute
-                        .expression
-                        .is_some_and(|value| peel(value) == reference)
-                })
-            });
-            if argument || attribute {
-                return true;
-            }
-            if let Some(copy) = ast
-                .bindings
+            if ast
+                .calls
                 .iter()
-                .find(|binding| {
-                    binding.shape == solid_facts::ast::BindingShape::Identifier
-                        && binding.names.len() == 1
-                        && binding
-                            .initializer
-                            .is_some_and(|initializer| peel(initializer) == reference)
-                })
-                .and_then(|binding| binding.names.first())
+                .any(|inner| peel(inner.callee) == reference)
             {
-                holders.push(copy.span);
+                continue;
+            }
+            if ast.members.iter().any(|member| {
+                peel(member.object) == reference
+                    && ast
+                        .calls
+                        .iter()
+                        .any(|inner| peel(inner.callee) == member.span)
+            }) {
+                continue;
+            }
+            if let Some(copy) = ast.bindings.iter().find(|binding| {
+                binding
+                    .initializer
+                    .is_some_and(|initializer| peel(initializer) == reference)
+            }) {
+                holders.extend(copy.names.iter().map(|name| name.span));
+                continue;
+            }
+            match literal_binding(reference) {
+                Some(binding) => holders.extend(binding.names.iter().map(|name| name.span)),
+                None => return true,
             }
         }
     }

@@ -93,6 +93,10 @@ pub(crate) struct ReturnedInvocation {
     pub(crate) factory: (FileId, Span),
     pub(crate) exact: bool,
     pub(crate) factory_at_module_scope: bool,
+    /// The call whose owner the creating call ran under: the creating call
+    /// itself, or, when the walk crossed a hook whose own body makes it, that
+    /// hook's call. `None` when the walk proves neither.
+    pub(crate) placement: Option<(FileId, Span)>,
 }
 
 impl Canonical for ReturnedInvocation {}
@@ -161,6 +165,7 @@ impl Memo<BuildSchema> for ReturnedPrimitiveCalls {
                         factory: chain.factory,
                         exact: chain.exact,
                         factory_at_module_scope: chain.factory_at_module_scope,
+                        placement: chain.placement,
                     },
                 );
             }
@@ -235,6 +240,7 @@ struct InvocationChain {
     factory: (FileId, Span),
     exact: bool,
     factory_at_module_scope: bool,
+    placement: Option<(FileId, Span)>,
 }
 
 /// The slot a walk carries to the binding whose initializer holds it
@@ -275,6 +281,12 @@ fn invocation_chain(
     }
     let mut seen = BTreeSet::<Arc<str>>::new();
     let mut exact = true;
+    // The last hook the walk crossed: its call, and the function it runs.
+    // The hooks the walk crossed: each one's call and the function it runs.
+    // A creating call inside one of them ran under that hook's call; through
+    // two, the inner hook's call runs under the outer's every caller, which
+    // places no one creation.
+    let mut hooks: Vec<((FileId, Span), (FileId, Span))> = Vec::new();
     loop {
         // Callee result values do not always receive an entity fact of their
         // own (tuple slots are the motivating case). Resolve them from the
@@ -342,28 +354,45 @@ fn invocation_chain(
                     Some(Slot::Index(position)) => Some(u32_of(position)),
                     Some(Slot::Key(_)) => return Ok(None),
                 };
-                let factory_at_module_scope =
-                    crate::owners::containing_ast_function(&facts.ast, initializer).is_none();
+                let enclosing = crate::owners::containing_ast_function(&facts.ast, initializer);
+                let factory_at_module_scope = enclosing.is_none();
+                let placement = match enclosing {
+                    Some(function)
+                        if hooks.iter().any(|(_, hook)| *hook == (file, function.span)) =>
+                    {
+                        match hooks.as_slice() {
+                            [(call, _)] => Some(*call),
+                            _ => None,
+                        }
+                    }
+                    _ => Some((file, initializer)),
+                };
                 return Ok(Some(InvocationChain {
                     primitive: *primitive,
                     slot,
                     factory: (file, initializer),
                     exact,
                     factory_at_module_scope,
+                    placement,
                 }));
             }
-            // ADR 0549: a hook's slot, by its only, complete-literal return.
-            let Some(slot) = slot else {
-                return Ok(None);
-            };
+            // ADR 0549: a hook's slot, by its only, complete-literal return,
+            // or (no slot) the identifier it returns.
             let Some(call) = facts.ast.call_at(initializer) else {
                 return Ok(None);
             };
-            let Some(value) =
-                hook_slot_value(ctx, file, call.callee, &slot, resolvable, &mut exact)?
+            let Some((value, hook)) = hook_slot_value(
+                ctx,
+                file,
+                call.callee,
+                slot.as_ref(),
+                resolvable,
+                &mut exact,
+            )?
             else {
                 return Ok(None);
             };
+            hooks.push(((file, call.span), hook));
             reference = value;
             continue;
         }
@@ -426,6 +455,10 @@ fn literal_slot_value(facts: &FileFacts, literal: Span, slot: &Slot) -> Option<S
         .then_some(value)
 }
 
+/// What [`hook_slot_value`] found: the identifier the slot holds, and the
+/// hook function, each with its file.
+type HookSlot = ((FileId, Span), (FileId, Span));
+
 /// ADR 0549: the identifier the slot holds in what the function `callee` names
 /// returns: a `const` bound to a function literal whose only return (an
 /// expression body, or one straight-line `return`) is a complete object or
@@ -436,10 +469,10 @@ fn hook_slot_value(
     ctx: &Ctx<'_, '_, BuildSchema>,
     id: FileId,
     callee: Span,
-    slot: &Slot,
+    slot: Option<&Slot>,
     resolvable: &mut Resolvable,
     exact: &mut bool,
-) -> Result<Option<(FileId, Span)>, Cycle> {
+) -> Result<Option<HookSlot>, Cycle> {
     let Some((file, rank, ordinal, _)) = resolve_binding(ctx, id, callee, resolvable) else {
         return Ok(None);
     };
@@ -483,7 +516,22 @@ fn hook_slot_value(
     let Some(argument) = returned.argument else {
         return Ok(None);
     };
-    Ok(literal_slot_value(facts, argument, slot).map(|value| (file, value)))
+    let value = match slot {
+        Some(slot) => literal_slot_value(facts, argument, slot),
+        None => {
+            let argument = facts.ast.peel_ts_sugar_span(argument);
+            facts
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| {
+                    identifier.span == argument
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                })
+                .then_some(argument)
+        }
+    };
+    Ok(value.map(|value| ((file, value), (file, function.span))))
 }
 
 /// The returned-source answers of a file's binding initializers
@@ -609,7 +657,7 @@ impl<'a> SemanticLookup<'a> {
         Some((answer.primitive, answer.slot.map(|slot| slot as usize)))
     }
 
-    /// ADR 0549: the answer for `call` with whether its creating call is
+    /// ADR 0549: the answer for `call` with its placement call when that is
     /// in `file` itself. Nothing of the other file is read here: the answer
     /// carries what the owner pass needs, and the cross-file proof digest
     /// hashes it.
@@ -617,14 +665,17 @@ impl<'a> SemanticLookup<'a> {
         &self,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
-    ) -> Option<(bool, ReturnedInvocation)> {
+    ) -> Option<(Option<Span>, ReturnedInvocation)> {
         let answers = self.returned_invocations(file);
         let found = answers
             .binary_search_by_key(&(call.span, call.callee), |(key, _)| *key)
             .ok()?;
         let answer = answers[found].1;
-        let same_file = self.memos.table().path_of(answer.factory.0) == file.path.as_str();
-        Some((same_file, answer))
+        let placed_here = answer
+            .placement
+            .filter(|(placed, _)| self.memos.table().path_of(*placed) == file.path.as_str())
+            .map(|(_, at)| at);
+        Some((placed_here, answer))
     }
 
     /// The returned-source answers of `file`, by call span.

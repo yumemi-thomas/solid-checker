@@ -849,6 +849,18 @@ impl Dialect for Solid2 {
                     && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
     }
 
+    /// ADR 0551: `resolve(fn)` and `until(fn)` run `fn` as the compute of a
+    /// `computed` that `watch` creates under a fresh `createRoot`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2694-2735`, `:2756-2770`,
+    /// `:2909`), on its first pass and on every re-derivation: a signal write
+    /// there throws REACTIVE_WRITE_IN_OWNED_SCOPE (probed in both thunks,
+    /// Fable's precision report row 43). Read on rc.17 only.
+    fn callback_runs_as_created_computation(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && matches!(primitive, Primitive::Resolve | Primitive::Until)
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+    }
+
     /// ADR 0353. Off rc.13, `render`'s and `hydrate`'s `code` callback is not
     /// audited as a root body ([`Solid2::render_creates_root`]), so a write
     /// directly in it is unplaced rather than legal: a call at module scope is

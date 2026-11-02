@@ -545,12 +545,25 @@ const ACTION_STEP_PLACEMENT = {
   // The marker is cleared for the step: a memo or root in the body is legal where the apply itself reports.
   PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ACTION_WINDOWED },
 };
+/**
+ * The thunk contexts (`--recall` only; ADR 0551): `resolve(fn)` and `until(fn)` run `fn` as the compute of a `computed` under a fresh
+ * root (`@solidjs/signals` rc.17 dist/dev.js:2694-2770, :2909), measured in Fable's precision probes (row 43): a write or an action
+ * throws, a read, a root, a cleanup and an effect are legal.
+ */
+const THUNK_CONTEXTS = ["resolve-thunk", "until-thunk"];
+const THUNK_PLACEMENT = {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: THUNK_CONTEXTS },
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: THUNK_CONTEXTS },
+  STRICT_READ_UNTRACKED: { legal: THUNK_CONTEXTS },
+  NO_OWNER_CLEANUP: { legal: THUNK_CONTEXTS },
+  NO_OWNER_EFFECT: { legal: THUNK_CONTEXTS },
+};
 // With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
 for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -884,6 +897,9 @@ function recallContext(context, stmts, kit) {
       const a = kit.name("a");
       return { body: [decl(a, prim("action", fn(stmts))), expr(prim("effect", fn([expr(call(ref(a)))]), { errorArm: t.name }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
+    // ADR 0551: the site in `resolve`'s or `until`'s thunk, called in the body: the compute of a computed under a fresh root.
+    case "resolve-thunk": return { body: [expr(prim("resolve", fn([...stmts, ret(num(1))])))], view: [] };
+    case "until-thunk": return { body: [expr(prim("until", fn([...stmts, ret(num(1))])))], view: [] };
     // The site in a reaction bundle's `error` member: the tracker throws once the button sets 2.
     case "reaction-error-arm": {
       const t = trigger();

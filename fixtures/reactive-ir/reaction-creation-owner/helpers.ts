@@ -7,3 +7,10 @@ export const trackShared = createReaction(() => {});
 export function useTracker() {
   return createReaction(() => {});
 }
+
+// A hook that makes the tracker and returns it: the tracker's owner is the
+// owner where the hook is called.
+export const useMade = () => {
+  const made = createReaction(() => {});
+  return made;
+};

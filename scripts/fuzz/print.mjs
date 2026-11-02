@@ -462,6 +462,9 @@ function render(program, instrument) {
       }
       case "rootd": used.add("createRoot"); return `createRoot(${fnText(e.fn, depth, { header: "(dispose)" })})`;
       case "micro": return `queueMicrotask(${f})`;
+      // A write the thunk's computation refuses rejects the promise: caught, so no unhandled rejection follows.
+      case "resolve": used.add("resolve"); return `resolve(${f}).catch(() => {})`;
+      case "until": used.add("until"); return `until(${f}).catch(() => {})`;
       case "settled": used.add("onSettled"); return `onSettled(${f})`;
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;

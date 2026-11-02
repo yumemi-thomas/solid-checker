@@ -1,0 +1,5 @@
+# resolve-thunk-writes
+
+ADR 0551: rc.17's `resolve(fn)` and `until(fn)` run `fn` as the compute of a `computed` that `watch` creates under a fresh `createRoot` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2694-2770`, `:2909`): the owner is that computation, so a signal write or an action call there throws REACTIVE_WRITE_IN_OWNED_SCOPE / ACTION_CALLED_IN_OWNED_SCOPE (Fable's precision report 2026-11-02, row 43; the fuzzer's `resolve-thunk` and `until-thunk` cells). ThunkWrites: violations, directly and through an inline `forEach`. ThunkLegal: past the async thunk's `await` no owner is current (silent), and a read in the thunk is tracked by its computation (silent). Before, the thunk was a deferred callback and every write there was certified clean.
+
+The stub reduces the published rc.17 declarations; `@solidjs/signals` is pinned to rc.17 for the release key. The complete source also type-checks against published solid-js rc.17 with strict ES2022 settings. Package bytes are not copied here.

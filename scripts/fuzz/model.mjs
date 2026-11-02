@@ -27,7 +27,7 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -574,6 +574,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
         // onCleanup returns a Disposable in the published typings, not void.
         case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
+        // resolve(fn) / until(fn) (misuse.mjs `resolve-thunk`, `until-thunk`): printed with a `.catch`, a statement.
+        case "resolve": case "until": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "timer": case "then": fnTypeChecked(e.fn, scope, "free"); return T.void;
         default: fail(`${where}: unknown prim ${e.name}`); return null;
       }

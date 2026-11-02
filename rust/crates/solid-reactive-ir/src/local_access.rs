@@ -2457,6 +2457,24 @@ impl LocalAccessContext<'_, '_> {
         may_write_or_act: bool,
         result: &mut LocalAccessResult,
     ) {
+        // ADR 0551: a callee proven, through `const` bindings only, to be the
+        // function `createReaction` returned writes nothing, calls no action and
+        // reads nothing itself: its argument runs as its own effect's compute.
+        if self
+            .lookup
+            .returned_factory_at(file, call)
+            .is_some_and(|(_, answer)| {
+                answer.exact
+                    && answer.slot.is_none()
+                    && self
+                        .lookup
+                        .dialect
+                        .returned_invocation_owner_requirement_role(answer.primitive)
+                        .is_some()
+            })
+        {
+            return;
+        }
         let write = semantic_write_execution_role(
             file,
             call.callee,

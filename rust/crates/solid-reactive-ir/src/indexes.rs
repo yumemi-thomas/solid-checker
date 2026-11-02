@@ -1548,6 +1548,13 @@ impl<'a> SemanticLookup<'a> {
                         u8::from(answer.exact),
                         u8::from(answer.factory_at_module_scope),
                     ]);
+                    match answer.placement {
+                        Some((placed, at)) => {
+                            text(&mut hasher, self.memos.table().path_of(placed));
+                            span(&mut hasher, at);
+                        }
+                        None => hasher.update([0xfe]),
+                    }
                 }
                 hasher.update([0xff]);
             }

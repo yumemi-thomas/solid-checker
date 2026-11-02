@@ -869,6 +869,25 @@ pub(crate) fn handed_member_alias(file: &solid_facts::FileFacts, callee: Span) -
     }
 }
 
+/// ADR 0549: whether `value` is the value (or shorthand) of one of the own
+/// properties of the object literal at `literal`, not nested deeper.
+pub(crate) fn closed_literal_value_is_own(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    value: Span,
+) -> bool {
+    let ast = &file.ast;
+    ast.object_properties.iter().any(|property| {
+        literal.contains(property.span)
+            && !ast.object_properties.iter().any(|outer| {
+                outer.span != property.span
+                    && literal.contains(outer.span)
+                    && outer.span.contains(property.span)
+            })
+            && ast.peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value)) == value
+    })
+}
+
 /// ADR 0511: the value of property `key` of the object literal written at
 /// `literal`, where the literal is closed (no spread), every property of it
 /// is a plain data property with a non-computed key, and `key` appears once.

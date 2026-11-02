@@ -71,9 +71,10 @@ that call runs; one created in a body is owned there. The tracker is followed
 through `const` bindings, closed object and tuple literals, and a `const`
 hook's single literal return; through a `let` the call is an obligation. One
 created in another module is placed only when it is created at that module's
-top level. A tracker that escapes where no call is named (exported, passed to a
-call or a JSX attribute) is an obligation at its creation unless that is owned
-(ADR 0549).
+top level. A tracker a hook makes and returns is placed at the hook's call (one hook,
+same module). A tracker that escapes where no call is named (exported, passed
+to a call or a JSX attribute, returned, assigned) is an obligation at its
+creation unless that is owned (ADRs 0549, 0551).
 
 A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
