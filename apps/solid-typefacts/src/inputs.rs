@@ -14,7 +14,9 @@
 //! Digests are recomputed for the accepted program and memoized until the next
 //! program change. A text digest survives an update only when the update
 //! reused every other file's parse (`UpdateKind::Reused` replaces exactly the
-//! edited file); any rebuild re-reads every file and clears them all.
+//! edited file); any rebuild clears them all, and a file the new chain took
+//! from the project's parse cache (`file_regions::ParseCache`) gets the
+//! digest the cache keeps for that very file.
 
 use crate::gocompat::clean;
 use crate::shape::has_global_or_module_augmentation;
@@ -39,11 +41,15 @@ pub struct ProgramInputs {
     by_path: Option<HashMap<String, P<SourceFile>>>,
     ambient: Option<Digest>,
     options: Option<Digest>,
+    /// The project's parse cache, whose files' digests outlive a rebuilt
+    /// chain.
+    parse_cache: Option<std::sync::Arc<crate::file_regions::ParseCache>>,
 }
 
-fn file_input(file: P<SourceFile>) -> FileInput {
+fn file_input(file: P<SourceFile>, cache: Option<&crate::file_regions::ParseCache>) -> FileInput {
+    let digest = || Sha256::digest(file.text().as_bytes()).into();
     FileInput {
-        text: Sha256::digest(file.text().as_bytes()).into(),
+        text: cache.map_or_else(digest, |cache| cache.text_digest(file, digest)),
         ambient: contributes_to_global_scope(file),
     }
 }
@@ -63,6 +69,15 @@ pub(crate) fn contributes_to_global_scope(file: P<SourceFile>) -> bool {
 }
 
 impl ProgramInputs {
+    /// Inputs whose text digests a file of `cache` keeps across chains.
+    #[must_use]
+    pub fn with_parse_cache(cache: std::sync::Arc<crate::file_regions::ParseCache>) -> Self {
+        Self {
+            parse_cache: Some(cache),
+            ..Self::default()
+        }
+    }
+
     /// The accepted program changed. `reused_except` names the one file a
     /// parse-reusing update replaced; `None` drops every text digest.
     pub fn program_changed(&mut self, reused_except: Option<&str>) {
@@ -89,8 +104,12 @@ impl ProgramInputs {
             .collect();
         // Below a few hundred files the threads cost more than they save.
         let workers = workers.min(missing.len() / 256).max(1);
+        let cache = self.parse_cache.as_deref();
         let inputs: Vec<FileInput> = if workers <= 1 {
-            missing.iter().map(|(_, file)| file_input(*file)).collect()
+            missing
+                .iter()
+                .map(|(_, file)| file_input(*file, cache))
+                .collect()
         } else {
             // Read-only: a parsed file's text and tree are frozen. The
             // largest files go first, taken one at a time.
@@ -108,7 +127,7 @@ impl ProgramInputs {
                                 let Some(index) = order.get(at) else {
                                     break;
                                 };
-                                local.push((*index, file_input(missing[*index].1)));
+                                local.push((*index, file_input(missing[*index].1, cache)));
                             }
                             local
                         })
@@ -138,10 +157,11 @@ impl ProgramInputs {
     }
 
     fn input(&mut self, file: P<SourceFile>) -> FileInput {
+        let cache = self.parse_cache.as_deref();
         *self
             .files
             .entry(clean(file.file_name()))
-            .or_insert_with(|| file_input(file))
+            .or_insert_with(|| file_input(file, cache))
     }
 
     /// `Text(file)`.

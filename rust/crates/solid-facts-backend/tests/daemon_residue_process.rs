@@ -943,3 +943,89 @@ fn a_daemon_keeps_no_descriptor_its_client_inherited() {
     );
     slot.agree("after the descriptor check");
 }
+
+/// A role log's decision lines with each one's file (`f`) and program (`g`)
+/// in place of the process and path ids that name them, sorted: what the fold
+/// reads, whichever process wrote it. Every line is whole JSON and names a
+/// path line written before it.
+fn role_log_decisions(log: &Path) -> Vec<String> {
+    let mut paths = std::collections::HashMap::new();
+    let mut decisions = Vec::new();
+    for line in fs::read_to_string(log).unwrap().lines() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(line).unwrap_or_else(|_| panic!("a partial line: {line}"));
+        let key = format!("{}:{}", value["q"], value["p"]);
+        if value["k"] == "path" {
+            assert!(
+                value["g"].is_string(),
+                "a path line names its program: {line}"
+            );
+            paths.insert(key, (value["f"].clone(), value["g"].clone()));
+            continue;
+        }
+        if let Some((file, program)) = paths.get(&key) {
+            let object = value.as_object_mut().unwrap();
+            object.remove("q");
+            object.remove("p");
+            object.insert("f".into(), file.clone());
+            object.insert("g".into(), program.clone());
+        } else {
+            assert!(value["p"].is_null(), "a line names an unknown path: {line}");
+        }
+        decisions.push(value.to_string());
+    }
+    decisions.sort();
+    decisions
+}
+
+#[test]
+fn a_slot_daemon_logs_each_programs_role_decisions_as_a_one_shot_check_does() {
+    let Some(slot) = Slot::new("warm-role-log") else {
+        return;
+    };
+    let programs = slot_programs();
+    let warm_log = slot.sockets.join("warm.roles.jsonl");
+    let once_log = slot.sockets.join("once.roles.jsonl");
+    for (step, index) in [0, 1, 2, 3, 1, 0, 0].into_iter().enumerate() {
+        slot.write(&programs[index]);
+        let program = format!("program-{step}");
+        let run = |daemon: bool, log: &Path| {
+            let output = slot
+                .command(daemon, true)
+                .env("SOLID_CHECKER_IR_ROLE_LOG", log)
+                .env("SOLID_CHECKER_IR_ROLE_LOG_PROGRAM", &program)
+                .output()
+                .unwrap();
+            assert!(
+                matches!(output.status.code(), Some(0 | 1)),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output.stdout
+        };
+        assert_eq!(run(true, &warm_log), run(false, &once_log), "step {step}");
+        let (warm, once) = (role_log_decisions(&warm_log), role_log_decisions(&once_log));
+        assert!(
+            !once.is_empty(),
+            "step {step}: the one-shot check logged decisions"
+        );
+        assert_eq!(warm, once, "step {step}: the warm log differs");
+    }
+    // The same program twice in a row is a cached answer without the log;
+    // with it, its decisions are logged again, under its own program.
+    let decisions = role_log_decisions(&warm_log);
+    for step in [5, 6] {
+        assert!(
+            decisions
+                .iter()
+                .any(|line| line.contains(&format!("\"g\":\"program-{step}\""))),
+            "program-{step} has its own decisions"
+        );
+    }
+    // A check without the log logs nothing, though its daemon logged before.
+    let before = fs::read_to_string(&warm_log).unwrap();
+    slot.write(&programs[2]);
+    let output = slot.command(true, true).output().unwrap();
+    assert!(matches!(output.status.code(), Some(0 | 1)));
+    assert_eq!(fs::read_to_string(&warm_log).unwrap(), before);
+}

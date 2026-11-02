@@ -1539,13 +1539,20 @@ impl Session {
             packages: demand.packages,
             distinct_bare_imports: demand.distinct_bare_imports,
             omit_modules: demand.omit_modules,
+            build_inputs: demand.build_inputs,
         });
         let response = self.exchange(modules)?;
+        if demand.build_inputs && response.build_inputs.is_none() {
+            return Err(SessionError::InvalidResponse(
+                "a modules answer asked for its build inputs omitted them".into(),
+            ));
+        }
         Ok(ModuleGraph {
             modules: response.modules,
             imports: response.module_imports,
             unknown_import_paths: response.unknown_import_paths,
             unmapped_roots: response.unmapped_roots,
+            build_inputs: response.build_inputs,
         })
     }
 

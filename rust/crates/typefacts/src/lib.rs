@@ -1681,6 +1681,9 @@ pub struct ModuleGraphDemand {
     /// [`ModuleGraph::module`] finds nothing. For a caller that holds the
     /// inventory and asks only about some files' imports.
     pub omit_modules: bool,
+    /// Add [`ModuleGraph::build_inputs`]: every question the program's builds
+    /// asked of the file system.
+    pub build_inputs: bool,
 }
 
 impl ModuleGraphDemand {
@@ -1736,6 +1739,13 @@ impl ModuleGraphDemand {
         self.omit_modules = true;
         self
     }
+
+    /// Adds [`ModuleGraph::build_inputs`].
+    #[must_use]
+    pub const fn with_build_inputs(mut self) -> Self {
+        self.build_inputs = true;
+        self
+    }
 }
 
 /// One generation's resolved module graph, as the compiler holds it.
@@ -1757,6 +1767,41 @@ pub struct ModuleGraph {
     /// position; a consumer of root order fails closed rather than take
     /// path order for it (ADR 0368).
     pub unmapped_roots: Vec<Arc<str>>,
+    /// Every question the builds of the program asked of the file system
+    /// below the producer's overlay (its edited buffers are the client's
+    /// own), when the demand asked for them.
+    pub build_inputs: Option<BuildInputs>,
+}
+
+/// The file-system questions a program's builds asked (ADR 0543), by path and
+/// kind: what the program's file set, its module resolutions and its files'
+/// texts were decided from. The full build of the program's chain and every
+/// in-place update since; a new chain answers its own build's. A path
+/// outside the disk (a bundled library, `bundled:///`) is left out: its
+/// answer is fixed in the producer. A client that finds each answer as it
+/// was finds a fresh build of the program deciding from the same answers.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BuildInputs {
+    /// `file_exists`: whether the path is a file (following links).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<Arc<str>>,
+    /// `directory_exists`: whether the path is a directory (following links).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub directories: Vec<Arc<str>>,
+    /// `stat`: the kind and, for a file, its size.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stats: Vec<Arc<str>>,
+    /// `realpath`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub realpaths: Vec<Arc<str>>,
+    /// `get_accessible_entries`: a directory's files and directories by
+    /// name (a link by what it points at).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<Arc<str>>,
+    /// `read_file`: the bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reads: Vec<Arc<str>>,
 }
 
 impl ModuleGraph {

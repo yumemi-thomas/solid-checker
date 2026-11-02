@@ -195,6 +195,7 @@ fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         only_file: None,
         feedback_facts: false,
         stop: false,
+        role_log: None,
     };
     normalize_enablement(&mut repeated);
     assert_eq!(repeated.presets, ["preferences", "z"]);

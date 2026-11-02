@@ -58,3 +58,5 @@ mod rule_quality_process;
 mod sessions_process;
 #[path = "transport_process.rs"]
 mod transport_process;
+#[path = "warm_resolution_process.rs"]
+mod warm_resolution_process;

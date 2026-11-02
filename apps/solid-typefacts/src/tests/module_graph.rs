@@ -20,6 +20,7 @@ fn imports(imports: bool, packages: bool) -> ModuleGraphRequest {
         packages,
         distinct_bare_imports: false,
         omit_modules: false,
+        build_inputs: false,
     }
 }
 
@@ -208,6 +209,7 @@ fn module_graph_reports_relative_import_resolution() {
             packages: true,
             distinct_bare_imports: false,
             omit_modules: false,
+            build_inputs: false,
         },
     );
     assert_eq!(inventory.imports.len(), 1);
@@ -259,6 +261,7 @@ fn distinct_bare_imports_keep_one_row_per_resolution() {
             packages: false,
             distinct_bare_imports: true,
             omit_modules: false,
+            build_inputs: false,
         },
     );
     let of = |inventory: &ModuleInventory| {
@@ -590,6 +593,7 @@ fn unknown_import_paths_are_reported_rather_than_dropped() {
             packages: false,
             distinct_bare_imports: false,
             omit_modules: false,
+            build_inputs: false,
         },
     );
     assert!(inventory.imports.is_empty(), "{:?}", inventory.imports);
@@ -668,6 +672,7 @@ fn omit_modules_answers_the_requested_imports_alone() {
         packages: true,
         distinct_bare_imports: false,
         omit_modules,
+        build_inputs: false,
     };
     let full = graph(&mut project, &demand(false));
     let narrow = graph(&mut project, &demand(true));

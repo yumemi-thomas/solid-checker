@@ -173,6 +173,16 @@ pub struct Project {
     config_path: String,
     fs: Arc<OverlayFs>,
     pub(crate) generation: Option<Generation>,
+    /// The parsed files a rebuilt chain takes instead of parsing them again
+    /// (`file_regions::ParseCache`). After `generation`, though a chain holds
+    /// what it took either way.
+    parse_cache: Option<Arc<crate::file_regions::ParseCache>>,
+    /// The file-system questions the generation's program was built from
+    /// (`overlay::BuildQueries`): its chain's full build and each in-place
+    /// update since. A client that finds every answer unchanged finds a
+    /// fresh build deciding from the same answers (`Modules` with
+    /// `buildInputs`, ADR 0543).
+    build_queries: crate::overlay::BuildQueries,
     /// After `generation`: dropped after every configuration parsed through it.
     config_host: HostLease<ConfigHost>,
     versions: HashMap<String, u64>,
@@ -228,7 +238,23 @@ impl Project {
             },
             directory: type_script_path_dir(&config_path),
         });
-        let generation = build_program(ctx, &config_path, &fs, &config_host, trace.is_some())?;
+        let parse_cache = crate::file_regions::parse_cache_enabled()
+            .then(|| Arc::new(crate::file_regions::ParseCache::default()));
+        let lookups = fs.build_scope(trace.is_some());
+        let generation = build_program(
+            ctx,
+            &config_path,
+            &fs,
+            &config_host,
+            trace.is_some(),
+            parse_cache.as_ref(),
+        )?;
+        let (_, build_queries) = lookups.finish_with_queries();
+        let inputs = parse_cache
+            .as_ref()
+            .map_or_else(ProgramInputs::default, |cache| {
+                ProgramInputs::with_parse_cache(Arc::clone(cache))
+            });
         let mut project = Self {
             trace,
             config_path,
@@ -236,13 +262,15 @@ impl Project {
             config_host,
             versions: HashMap::new(),
             generation: Some(generation),
+            parse_cache,
+            build_queries,
             update_count: 0,
             graph: ImportGraph::default(),
             declaration_shapes: HashMap::new(),
             last_update: UpdateMetrics::default(),
             ids: Identities::new(1),
             references: ReferenceIndex::default(),
-            inputs: ProgramInputs::default(),
+            inputs,
             source_digests: None,
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
@@ -438,6 +466,7 @@ fn build_program(
     fs: &Arc<OverlayFs>,
     config_host: &HostLease<ConfigHost>,
     counting: bool,
+    parse_cache: Option<&Arc<crate::file_regions::ParseCache>>,
 ) -> Result<Generation, String> {
     if let Some(reason) = ctx.err() {
         return Err(reason.to_owned());
@@ -491,7 +520,12 @@ fn build_program(
         let _scope = config_region.enter();
         P::new(config)
     };
-    Ok(Generation::build(config_region, config, host))
+    Ok(Generation::build(
+        config_region,
+        config,
+        host,
+        parse_cache.map(Arc::clone),
+    ))
 }
 
 pub(crate) fn compiler_host(
@@ -789,6 +823,10 @@ impl ClosureBackend for Project {
         self.references.take_retention()
     }
 
+    fn parse_cache_hits(&self) -> u64 {
+        self.parse_cache.as_ref().map_or(0, |cache| cache.hits())
+    }
+
     fn tracks_content_versions(&self) -> bool {
         self.per_file_content_version("").is_some()
     }
@@ -820,7 +858,11 @@ impl ModuleGraph for Project {
     ) -> Result<ModuleInventory, BackendError> {
         check(ctx)?;
         let generation = self.live()?;
-        crate::module_graph::module_graph(ctx, generation.program(), demand)
+        let mut inventory = crate::module_graph::module_graph(ctx, generation.program(), demand)?;
+        if demand.build_inputs {
+            inventory.build_inputs = Some(self.build_queries.to_inputs());
+        }
+        Ok(inventory)
     }
 }
 
@@ -934,10 +976,11 @@ impl Project {
                 &candidate_fs,
                 &self.config_host,
                 self.trace.is_some(),
+                self.parse_cache.as_ref(),
             )
             .map_err(BackendError)?
         };
-        let lookup_stats = lookups.finish();
+        let (lookup_stats, candidate_queries) = lookups.finish_with_queries();
         let program_duration = stage.elapsed();
 
         let mut semantic_cutoff = false;
@@ -1027,6 +1070,15 @@ impl Project {
         generation.commit(candidate);
         // Only a parse-reusing update keeps every other file's text as read.
         let reused = candidate_kind == UpdateKind::Reused;
+        // A new chain was built from its own questions alone; an in-place
+        // update kept every answer the chain's program was built from, and
+        // asked the disk nothing new unless `asked_anew`.
+        let asked_anew = !candidate_queries.is_subset(&self.build_queries);
+        if reused {
+            self.build_queries.extend(candidate_queries);
+        } else {
+            self.build_queries = candidate_queries;
+        }
         self.inputs
             .program_changed(reused.then_some(incremental_path.as_str()));
         if reused {
@@ -1190,9 +1242,12 @@ impl Project {
         }
         // A rebase after the update builds the chain again from the disk as
         // it is now: nothing the earlier program resolved is kept then.
+        // A kept graph also says the update asked the disk nothing the
+        // chain's program had not asked: a client that holds the program's
+        // build inputs (`Modules` with `buildInputs`) holds them still.
         Ok(UpdateOutcome {
             affected,
-            graph_kept: reused && !rebased,
+            graph_kept: reused && !rebased && !asked_anew,
         })
     }
 
@@ -1224,7 +1279,8 @@ impl Project {
         let host = compiler_host(&type_script_path_dir(&self.config_path), &self.fs);
         let lookups = self.fs.build_scope(false);
         let fresh = generation.rebuilt(host);
-        drop(lookups);
+        let (_, queries) = lookups.finish_with_queries();
+        self.build_queries = queries;
         // The identity maps and the generation-scoped reference ids name the
         // chain about to be freed.
         self.ids.release_pointers();

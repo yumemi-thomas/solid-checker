@@ -39,7 +39,9 @@ export function armInventory(root = IR_SRC) {
 }
 
 /**
- * A log path's program and the file within it. The program is the directory a checker ran in:
+ * A log path's program and the file within it. A path line's `g` (role_log.rs: the program the check named,
+ * SOLID_CHECKER_IR_ROLE_LOG_PROGRAM) is the program when there is one: a warm slot (`--warm-checker`, ADR 0543) keeps one directory for
+ * every program it holds, `slots/<n>/program/`; a twin slot's `-run` is kept. Without it the program is the directory a checker ran in:
  * - the Rust executor's slot, `.solid-checker-fuzz/<run>/slots/<n>/<id>/` (exec/src/main.rs `SlotDir`, the id `%XX`-encoded; a twin's
  *   slot `<n>-run` gives `<id>-run`, the name the JS path gives a twin);
  * - the JS path's work directory, `.solid-checker-fuzz/<run>/<id>/`;
@@ -47,9 +49,14 @@ export function armInventory(root = IR_SRC) {
  * A log from before the slots were named (`slots/slot-<n>/`) cannot say which program a decision was: it folds as it always did, every
  * program as the one program `slots` (`legacySlot`, counted as `unattributed` by the fold).
  */
-export function programOf(path) {
+export function programOf(path, named) {
   const text = path ?? "";
   const slot = /\/\.solid-checker-fuzz\/[^/]+\/slots\/(\d+)(-run)?\/([^/]+)\/(.+)$/.exec(text);
+  if (named !== undefined && named !== null) {
+    if (slot) return { program: slot[2] ? `${named}-run` : named, file: slot[4] };
+    const { file } = programOf(path);
+    return { program: named, file };
+  }
   if (slot) {
     let id;
     try { id = decodeURIComponent(slot[3]); } catch { id = slot[3]; }
@@ -73,17 +80,17 @@ const logFiles = (path) => (statSync(path).isDirectory() ? readdirSync(path).fil
  */
 export function resolvedLine(line, paths, counter) {
   if (line.k === "path") {
-    paths.set(`${line.q}:${line.p}`, line.f);
+    paths.set(`${line.q}:${line.p}`, line.g === undefined ? { f: line.f } : { f: line.f, g: line.g });
     return null;
   }
   if (line.f !== undefined || line.p === undefined) return line;
-  const f = paths.get(`${line.q}:${line.p}`);
-  if (f === undefined) {
+  const named = paths.get(`${line.q}:${line.p}`);
+  if (named === undefined) {
     counter.malformed += 1;
     return null;
   }
   const { q, p, ...rest } = line;
-  return { ...rest, f };
+  return { ...rest, ...named };
 }
 
 /**
@@ -172,7 +179,7 @@ export function foldDecisions(lines, inventory, { perProgram = null } = {}) {
       for (const id of line.arms ?? []) slot(id).unframed += 1;
       continue;
     }
-    const { program: named, file, legacySlot } = programOf(line.f);
+    const { program: named, file, legacySlot } = programOf(line.f, line.g);
     const program = legacySlot ? null : named;
     const key = `${named}\0${line.k}\0${line.rule ?? ""}\0${file}\0${line.s}\0${line.e}`;
     const hashed = keyHash(key);

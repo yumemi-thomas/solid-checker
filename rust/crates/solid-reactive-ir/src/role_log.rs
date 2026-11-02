@@ -25,15 +25,24 @@
 //! earlier ones). Older logs carry `"f": path` on every line;
 //! `scripts/fuzz/roles.mjs` reads both.
 //!
+//! `SOLID_CHECKER_IR_ROLE_LOG_PROGRAM=<id>` names the program the decisions
+//! belong to: each path line then carries `"g": id`, which the fold takes
+//! over the program a path names. A retained checker daemon answers many
+//! programs from one directory (ADR 0543), so its paths do not say which
+//! program a decision was; the client sends both settings with each check and
+//! the daemon points the log at them ([`configure`]) for that answer alone.
+//!
 //! Write-only: nothing reads the log back, and every hook returns the value it
-//! was given, so the log changes no answer. Unset, each hook is one atomic
-//! load and a branch: no allocation, no lock. A file is appended to in
-//! whole-line writes (a fuzz grid's concurrent checkers share one); a
-//! directory gets one `roles-<pid>.jsonl` per process.
+//! was given, so the log changes no answer. Unset, each hook is two atomic
+//! loads and a branch: no allocation, no lock. A file is appended to in
+//! whole-line writes under an exclusive advisory lock (a fuzz grid's
+//! concurrent checkers and daemons share one); a directory gets one
+//! `roles-<pid>.jsonl` per process.
 
 use std::cell::RefCell;
 use std::io::Write as _;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use solid_facts::core::Span;
 
@@ -70,31 +79,92 @@ const FLUSH_AT: usize = 1 << 16;
 struct Sink {
     file: std::fs::File,
     buffer: Vec<u8>,
+    /// The program every path line names (`"g"`), if one was given.
+    program: Option<String>,
     /// The id each path got, in the order its path line was written.
     paths: std::collections::HashMap<String, u32>,
 }
 
-fn sink() -> Option<&'static Mutex<Sink>> {
-    static SINK: OnceLock<Option<Mutex<Sink>>> = OnceLock::new();
-    SINK.get_or_init(|| {
-        let path = std::path::PathBuf::from(std::env::var_os("SOLID_CHECKER_IR_ROLE_LOG")?);
-        let path = if path.is_dir() {
-            path.join(format!("roles-{}.jsonl", process_id()?))
-        } else {
-            path
-        };
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .ok()?;
-        Some(Mutex::new(Sink {
-            file,
-            buffer: Vec::new(),
-            paths: std::collections::HashMap::new(),
-        }))
+/// Where the role log goes: a file (appended to) or a directory (a file per
+/// process), and the program its decisions belong to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoleLogTarget {
+    pub path: std::path::PathBuf,
+    pub program: Option<String>,
+}
+
+impl RoleLogTarget {
+    /// `SOLID_CHECKER_IR_ROLE_LOG` and `SOLID_CHECKER_IR_ROLE_LOG_PROGRAM` of
+    /// this process; none when the first is unset or empty.
+    #[must_use]
+    pub fn from_env() -> Option<Self> {
+        let path = std::env::var_os("SOLID_CHECKER_IR_ROLE_LOG").filter(|path| !path.is_empty())?;
+        let program = std::env::var("SOLID_CHECKER_IR_ROLE_LOG_PROGRAM")
+            .ok()
+            .filter(|program| !program.is_empty());
+        Some(Self {
+            path: std::path::PathBuf::from(path),
+            program,
+        })
+    }
+}
+
+/// Whether a sink is set: read by every hook, so the log off costs a load.
+static ON: AtomicBool = AtomicBool::new(false);
+static SINK: Mutex<Option<Sink>> = Mutex::new(None);
+/// The environment is read once, before the first hook or [`configure`].
+static FROM_ENV: std::sync::Once = std::sync::Once::new();
+/// Path ids are never given twice in a process, whichever sink they went
+/// to: a reader of a file two sinks of one process wrote to never confuses
+/// two paths.
+static NEXT_PATH_ID: AtomicU32 = AtomicU32::new(0);
+
+fn open_sink(target: &RoleLogTarget) -> Option<Sink> {
+    let path = if target.path.is_dir() {
+        target.path.join(format!("roles-{}.jsonl", process_id()?))
+    } else {
+        target.path.clone()
+    };
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .ok()?;
+    Some(Sink {
+        file,
+        buffer: Vec::new(),
+        program: target.program.clone(),
+        paths: std::collections::HashMap::new(),
     })
-    .as_ref()
+}
+
+fn lock_sink() -> std::sync::MutexGuard<'static, Option<Sink>> {
+    SINK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn init_from_env() {
+    FROM_ENV.call_once(|| {
+        if let Some(sink) = RoleLogTarget::from_env().as_ref().and_then(open_sink) {
+            *lock_sink() = Some(sink);
+            ON.store(true, Ordering::Release);
+        }
+    });
+}
+
+/// Points the role log at `target` (none: off), for the analyses that run
+/// until the next call, in place of this process's environment. What the
+/// previous target buffered is written out first. A retained checker daemon
+/// calls it before each answer with the settings its client sent (ADR 0543),
+/// and with none after it.
+pub fn configure(target: Option<&RoleLogTarget>) {
+    FROM_ENV.call_once(|| {});
+    let mut sink = lock_sink();
+    if let Some(previous) = sink.as_mut() {
+        flush_locked(previous);
+    }
+    *sink = target.and_then(open_sink);
+    ON.store(sink.is_some(), Ordering::Release);
 }
 
 /// The process id a log directory's file is named by; none where the
@@ -113,7 +183,8 @@ fn process_id() -> Option<u32> {
 /// Whether the role log is on for this process.
 #[inline]
 pub(crate) fn enabled() -> bool {
-    sink().is_some()
+    init_from_env();
+    ON.load(Ordering::Acquire)
 }
 
 struct Decision {
@@ -291,30 +362,35 @@ struct PathRef {
     id: u32,
 }
 
-/// `path`'s id in this process's log, writing its path line the first time.
+/// `path`'s id in this sink, writing its path line the first time.
 fn path_ref(path: &str) -> Option<PathRef> {
-    let sink = sink()?;
-    let mut sink = sink.lock().ok()?;
+    let mut guard = lock_sink();
+    let sink = guard.as_mut()?;
     let process = process_id().unwrap_or(0);
     if let Some(id) = sink.paths.get(path) {
         return Some(PathRef { process, id: *id });
     }
-    let id = u32::try_from(sink.paths.len()).ok()?;
+    let id = NEXT_PATH_ID.fetch_add(1, Ordering::Relaxed);
     sink.paths.insert(path.to_owned(), id);
     let path_ref = PathRef { process, id };
-    push_locked(&mut sink, &path_line(path_ref, path));
+    let line = path_line(path_ref, path, sink.program.as_deref());
+    push_locked(sink, &line);
     Some(path_ref)
 }
 
-/// The line that gives `path` its id.
-fn path_line(path_ref: PathRef, path: &str) -> Vec<u8> {
-    let mut line = Vec::with_capacity(40 + path.len());
+/// The line that gives `path` its id, and names the program it belongs to.
+fn path_line(path_ref: PathRef, path: &str, program: Option<&str>) -> Vec<u8> {
+    let mut line = Vec::with_capacity(48 + path.len());
     let _ = write!(
         line,
         "{{\"k\":\"path\",\"q\":{},\"p\":{},\"f\":",
         path_ref.process, path_ref.id
     );
     push_json_str(&mut line, path);
+    if let Some(program) = program {
+        line.extend_from_slice(b",\"g\":");
+        push_json_str(&mut line, program);
+    }
     line.extend_from_slice(b"}\n");
     line
 }
@@ -421,13 +497,9 @@ fn push_json_str(line: &mut Vec<u8>, text: &str) {
 }
 
 fn append(line: &[u8]) {
-    let Some(sink) = sink() else {
-        return;
-    };
-    let Ok(mut sink) = sink.lock() else {
-        return;
-    };
-    push_locked(&mut sink, line);
+    if let Some(sink) = lock_sink().as_mut() {
+        push_locked(sink, line);
+    }
 }
 
 fn push_locked(sink: &mut Sink, line: &[u8]) {
@@ -443,18 +515,27 @@ fn push_locked(sink: &mut Sink, line: &[u8]) {
 }
 
 fn flush_locked(sink: &mut Sink) {
-    // Whole lines only: the buffer never holds a partial one.
+    if sink.buffer.is_empty() {
+        return;
+    }
+    // Whole lines only: the buffer never holds a partial one, and the write
+    // holds the file's exclusive advisory lock, so another process's lines
+    // land before or after these, never inside (an append of this size could
+    // otherwise be written in parts). Where the platform has no file locks,
+    // the append alone.
     let Sink { file, buffer, .. } = sink;
+    let locked = file.lock().is_ok();
     let _ = file.write_all(buffer);
+    if locked {
+        let _ = file.unlock();
+    }
     buffer.clear();
 }
 
 /// Writes out what is buffered (the end of each build).
 pub(crate) fn flush() {
-    if let Some(sink) = sink()
-        && let Ok(mut sink) = sink.lock()
-    {
-        flush_locked(&mut sink);
+    if let Some(sink) = lock_sink().as_mut() {
+        flush_locked(sink);
     }
 }
 
@@ -486,8 +567,12 @@ mod tests {
              \"arms\":[\"a.first\",\"a.default\"],\"default\":true,\"silent\":true}\n"
         );
         assert_eq!(
-            std::str::from_utf8(&path_line(path, &decision.path)).unwrap(),
+            std::str::from_utf8(&path_line(path, &decision.path, None)).unwrap(),
             "{\"k\":\"path\",\"q\":41,\"p\":2,\"f\":\"/p/\\\"App\\\".tsx\"}\n"
+        );
+        assert_eq!(
+            std::str::from_utf8(&path_line(path, "/p/App.tsx", Some("fuzz-7"))).unwrap(),
+            "{\"k\":\"path\",\"q\":41,\"p\":2,\"f\":\"/p/App.tsx\",\"g\":\"fuzz-7\"}\n"
         );
         let untagged = decision_line(&decision, path, ExecutionRole::Unknown);
         let untagged: serde_json::Value = serde_json::from_slice(&untagged).unwrap();

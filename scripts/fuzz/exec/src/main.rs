@@ -293,11 +293,16 @@ struct Checker {
 }
 
 impl Checker {
-    fn command(&self, dir: &str, args: &[&str], daemon: bool) -> Command {
+    fn command(&self, dir: &str, args: &[&str], daemon: bool, program: Option<&str>) -> Command {
         let mut command = Command::new(&self.bin);
         command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(args).current_dir(dir);
         for (key, value) in &self.env {
             command.env(key, value);
+        }
+        // The role log (ADR 0533) attributes the check's decisions to its program by this name, not by the directory: a warm slot's
+        // directory is the same for every program it holds (`prepare_projects`).
+        if let Some(program) = program {
+            command.env("SOLID_CHECKER_IR_ROLE_LOG_PROGRAM", program);
         }
         command.env("SOLID_CHECKER_DAEMON", if daemon { "1" } else { "0" });
         // A slot's daemon lives while the executor does (it stops them at its end, `stop_warm`); the checker's two-minute default
@@ -308,8 +313,8 @@ impl Checker {
         command
     }
 
-    /// The checker on `dir`. `slotted`: `dir` is a slot the executor rewrites per program, which a warm daemon may serve.
-    fn run(&self, dir: &str, ordinary: bool, slotted: bool) -> Value {
+    /// The checker on `dir` for `program`. `slotted`: `dir` is a slot the executor rewrites per program, which a warm daemon may serve.
+    fn run(&self, dir: &str, ordinary: bool, slotted: bool, program: Option<&str>) -> Value {
         if !Path::new(&self.bin).exists() {
             return json!({ "spawnError": format!("checker binary not found: {}", self.bin), "dir": dir });
         }
@@ -318,7 +323,7 @@ impl Checker {
             self.warmed.lock().unwrap().insert(dir.to_string());
         }
         let args = if ordinary { &ORDINARY_ARGS[..] } else { &CHECKER_ARGS[..] };
-        let ran = run_command(self.command(dir, args, warm), Duration::from_secs(180));
+        let ran = run_command(self.command(dir, args, warm, program), Duration::from_secs(180));
         // A warm check that did not answer may leave its daemon working on this program: it is stopped (after it finishes what it
         // accepted) before the slot goes to the next program.
         if warm && (ran.killed || ran.spawn_error.is_some() || !matches!(ran.status, Some(0 | 1))) {
@@ -330,7 +335,7 @@ impl Checker {
         let usage = usage_fields(&ran, warm);
         let mut answer = json!({ "status": ran.status, "stdout": ran.stdout, "stderr": ran.stderr, "wallMs": ran.wall_ms as u64, "dir": dir, "usage": usage });
         if warm && self.warm == Warm::Verify {
-            let once = run_command(self.command(dir, args, false), Duration::from_secs(180));
+            let once = run_command(self.command(dir, args, false, program), Duration::from_secs(180));
             let identical = once.spawn_error.is_none() && !once.killed && once.status == ran.status && once.stdout == ran.stdout;
             answer["warm"] = json!({ "identical": identical, "oneShotStatus": once.status, "oneShotWallMs": once.wall_ms as u64 });
         } else if warm {
@@ -344,7 +349,7 @@ impl Checker {
         let mut args = vec!["--stop-daemon"];
         args.extend(CHECKER_ARGS);
         // The stop waits for what the daemon accepted, at most `SOLID_CHECKER_DAEMON_STOP_SECS` (60 s), then ends it by its pid.
-        let ran = run_command(self.command(dir, &args, true), Duration::from_secs(120));
+        let ran = run_command(self.command(dir, &args, true, None), Duration::from_secs(120));
         if ran.killed || ran.status != Some(0) {
             eprintln!("fuzz-exec: could not stop the checker daemon of {dir}: {}", ran.stderr.trim());
         }
@@ -1178,7 +1183,10 @@ impl Executor {
         let slotted = project.is_some_and(|p| p.get("dir").is_none()) || twin_project.is_some_and(|p| p.get("dir").is_none());
         let mut slot = slotted.then(|| self.slots.take());
         // The program's id names its slot directory (`SlotDir`); a request without one (an older caller) shares the name `program`.
-        let id = request["id"].as_str().unwrap_or("program");
+        // A warm checker's slot keeps one name: its daemon is keyed by the project path, so a directory per program would start a
+        // daemon per program. The role log then names the program from the check's environment instead (`Checker::command`).
+        let program = request["id"].as_str();
+        let id = if self.checker.warm == Warm::Off { program.unwrap_or("program") } else { "program" };
         let result = (|| -> Res<Value> {
             let place = |project: &serde_json::Map<String, Value>, slot_dir: Option<&mut SlotDir>| -> Res<PathBuf> {
                 let files = project.get("files").and_then(Value::as_object).ok_or("project without files")?;
@@ -1215,7 +1223,7 @@ impl Executor {
                     let ordinary = check.get("ordinary").and_then(Value::as_bool).unwrap_or(false);
                     self.checks.acquire();
                     let slotted = project.is_some_and(|p| p.get("dir").is_none());
-                    let answer = self.checker.run(&string(dir), ordinary, slotted);
+                    let answer = self.checker.run(&string(dir), ordinary, slotted, program);
                     self.checks.release();
                     Some(answer)
                 }
@@ -1497,14 +1505,15 @@ mod tests {
         assert_eq!(resolve_lexical(Path::new("/w/a"), "../b/./App.tsx"), PathBuf::from("/w/b/App.tsx"));
     }
 
-    /// A stand-in checker: logs `<SOLID_CHECKER_DAEMON> <args>` and prints what its environment says, or exits 9 when told to.
+    /// A stand-in checker: logs `<SOLID_CHECKER_DAEMON> <args>` (and `program=<id>` when the role log's program is set) and prints
+    /// what its environment says, or exits 9 when told to.
     fn fake_checker(dir: &Path) -> (String, PathBuf) {
         let log = dir.join("calls.log");
         let bin = dir.join("fake-checker");
         std::fs::write(
             &bin,
             format!(
-                "#!/bin/sh\necho \"$SOLID_CHECKER_DAEMON $*\" >> {}\ncase \"$*\" in *--stop-daemon*) exit 0;; esac\n[ \"$FAKE_FAIL$SOLID_CHECKER_DAEMON\" = 11 ] && exit 9\nprintf '{{\"daemon\":%s,\"diverge\":%s}}' \"$SOLID_CHECKER_DAEMON\" \"${{FAKE_DIVERGE:-0}}\"\n",
+                "#!/bin/sh\necho \"$SOLID_CHECKER_DAEMON $*\" >> {0}\n[ -n \"$SOLID_CHECKER_IR_ROLE_LOG_PROGRAM\" ] && echo \"program=$SOLID_CHECKER_IR_ROLE_LOG_PROGRAM\" >> {0}\ncase \"$*\" in *--stop-daemon*) exit 0;; esac\n[ \"$FAKE_FAIL$SOLID_CHECKER_DAEMON\" = 11 ] && exit 9\nprintf '{{\"daemon\":%s,\"diverge\":%s}}' \"$SOLID_CHECKER_DAEMON\" \"${{FAKE_DIVERGE:-0}}\"\n",
                 log.display()
             ),
         )
@@ -1528,17 +1537,21 @@ mod tests {
         let slot = dir.to_string_lossy().into_owned();
 
         // Off: one-shot everywhere.
-        let answer = checker(&bin, Warm::Off, &[]).run(&slot, false, true);
+        let answer = checker(&bin, Warm::Off, &[]).run(&slot, false, true, None);
         assert_eq!(answer["stdout"], "{\"daemon\":0,\"diverge\":0}");
         assert!(answer.get("warm").is_none());
+        assert!(!calls().contains("program="));
 
         // On: a slot's feedback check goes to the daemon; an ordinary check and a project with its own directory do not.
         std::fs::remove_file(&log).unwrap();
         let warm = checker(&bin, Warm::On, &[]);
-        assert_eq!(warm.run(&slot, false, true)["stdout"], "{\"daemon\":1,\"diverge\":0}");
-        assert_eq!(warm.run(&slot, true, true)["stdout"], "{\"daemon\":0,\"diverge\":0}");
-        assert_eq!(warm.run(&slot, false, false)["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, false, true, Some("fuzz-3"))["stdout"], "{\"daemon\":1,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, true, true, None)["stdout"], "{\"daemon\":0,\"diverge\":0}");
+        assert_eq!(warm.run(&slot, false, false, None)["stdout"], "{\"daemon\":0,\"diverge\":0}");
         assert!(calls().lines().next().unwrap().starts_with("1 --project"));
+        // The role log's program goes with the check that named it, warm or not.
+        assert_eq!(calls().lines().nth(1), Some("program=fuzz-3"));
+        assert_eq!(calls().matches("program=").count(), 1);
         // The executor's end stops the daemon of each slot a warm check used, once, with the check's own mode flags.
         warm.stop_warm();
         let stops: Vec<String> = calls().lines().filter(|line| line.contains("--stop-daemon")).map(str::to_string).collect();
@@ -1550,14 +1563,16 @@ mod tests {
         // A warm check that fails stops its daemon before the slot is reused.
         std::fs::remove_file(&log).unwrap();
         let failing = checker(&bin, Warm::On, &[("FAKE_FAIL", "1")]);
-        assert_eq!(failing.run(&slot, false, true)["status"], 9);
+        assert_eq!(failing.run(&slot, false, true, None)["status"], 9);
         assert!(calls().lines().last().unwrap().contains("--stop-daemon"));
 
         // Verify: the one-shot run at the same path follows, and the two are compared.
         let verify = checker(&bin, Warm::Verify, &[]);
-        let answer = verify.run(&slot, false, true);
+        let answer = verify.run(&slot, false, true, Some("fuzz-4"));
         assert_eq!(answer["warm"]["identical"], false, "the stand-in prints its mode, so the outputs differ");
         assert_eq!(answer["warm"]["oneShotStatus"], 0);
+        // Both runs of a verified check name its program.
+        assert_eq!(calls().matches("program=fuzz-4").count(), 2);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -91,6 +91,45 @@ struct CheckRequest {
     /// accepted before this one is answered. Nothing is analyzed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     stop: bool,
+    /// The role log the client's environment names (ADR 0533:
+    /// `SOLID_CHECKER_IR_ROLE_LOG`, its path made absolute, and
+    /// `SOLID_CHECKER_IR_ROLE_LOG_PROGRAM`). The daemon's own environment is
+    /// its first client's, so the log of each answer is the one its client
+    /// asked for, and only that answer's decisions go to it. Such an answer
+    /// is analyzed afresh (no cached answer, no retained analysis), so it logs
+    /// every decision a one-shot check of the same program logs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    role_log: Option<RoleLog>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RoleLog {
+    path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    program: Option<String>,
+}
+
+impl RoleLog {
+    /// This process's role log, as a client sends it.
+    fn from_env() -> Result<Option<Self>, Box<dyn Error>> {
+        let Some(target) = solid_reactive_ir::RoleLogTarget::from_env() else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            path: std::path::absolute(&target.path)?
+                .to_string_lossy()
+                .into_owned(),
+            program: target.program,
+        }))
+    }
+
+    fn target(&self) -> solid_reactive_ir::RoleLogTarget {
+        solid_reactive_ir::RoleLogTarget {
+            path: PathBuf::from(&self.path),
+            program: self.program.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1496,6 +1535,9 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     // Nothing of the client's parent stays open in a process that outlives
     // the client (ADR 0543).
     crate::unsafe_boundary::close_inherited_descriptors();
+    // The role log is each request's (`CheckRequest::role_log`), never the
+    // environment of the client that started this daemon.
+    solid_reactive_ir::configure_role_log(None);
     let implementation = implementation_identity()?;
     let mut request = request.clone();
     request.dependency_sources = normalized_selection(&request.dependency_sources);
@@ -1848,12 +1890,23 @@ fn answer_retained(
     let Some(state) = slot.as_mut() else {
         return Err("daemon state was not opened".into());
     };
+    if check.role_log.is_some() {
+        // The role log is process-wide while this answer points it at the
+        // client's file: an idle check still unwinding from its cancellation
+        // (`begin_request`) must not log into it.
+        while idle_check.running() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
     let outcome = answer_with(state, request, check, true, None, AfterFacts::Keep);
     let Ok(mut answered) = outcome else {
         discard_state(slot, idle_check);
         return outcome;
     };
-    if !answered.cache_hit && idle_check.enabled() {
+    if check.role_log.is_some() {
+        // An idle check of this answer would log its decisions again.
+        idle_check.forget();
+    } else if !answered.cache_hit && idle_check.enabled() {
         // The test fault hook perturbs the retained answer itself, so a
         // cache hit keeps serving it until the idle check drops the state.
         if let Some(perturbed) = idle_shadow::fault(&answered.body) {
@@ -1998,6 +2051,7 @@ fn answer_with(
     // this one.
     let default_boundary = state.boundary.decide(&state.project);
     if changes.is_empty()
+        && check.role_log.is_none()
         && let Some(cached) = cached_answer(state, check, default_boundary.digest)?
     {
         return Ok(Answer {
@@ -2244,26 +2298,37 @@ fn answer_with(
         .into();
     phases.mark("package-inputs");
     checkpoint()?;
+    // A logged answer is analyzed as a one-shot check analyzes: nothing an
+    // earlier answer computed is reused, so every decision is made, and
+    // logged, again.
+    let role_log = check.role_log.as_ref().map(RoleLog::target);
+    if role_log.is_some() {
+        state.diagnostics = DiagnosticSession::new(state.dialect);
+    }
     state.diagnostics.defer_memo_end(defer);
     after.sweep = defer;
-    let (analysis, diagnostic_timings) =
-        state.diagnostics.analyze_inputs_measured_with_enablement(
-            &state.project,
-            &state.sources,
-            &facts,
-            solid_reactive_ir::AnalysisInputs {
-                boundary: &boundary,
-                hosts: hosts.as_ref(),
-            },
-            RequestedRuleEnablement {
-                presets: &check.presets,
-                rules: &check.enable_rules,
-                runtime: check.runtime.clone(),
-                feedback_facts: check.feedback_facts,
-                host_suppressions: &check.host_suppressions,
-                default_program_boundary: Some(default_boundary.boundary),
-            },
-        )?;
+    solid_reactive_ir::configure_role_log(role_log.as_ref());
+    let analyzed = state.diagnostics.analyze_inputs_measured_with_enablement(
+        &state.project,
+        &state.sources,
+        &facts,
+        solid_reactive_ir::AnalysisInputs {
+            boundary: &boundary,
+            hosts: hosts.as_ref(),
+        },
+        RequestedRuleEnablement {
+            presets: &check.presets,
+            rules: &check.enable_rules,
+            runtime: check.runtime.clone(),
+            feedback_facts: check.feedback_facts,
+            host_suppressions: &check.host_suppressions,
+            default_program_boundary: Some(default_boundary.boundary),
+        },
+    );
+    // Written out before the answer: the client's log is whole when it
+    // returns.
+    solid_reactive_ir::configure_role_log(None);
+    let (analysis, diagnostic_timings) = analyzed?;
     phases.mark("analyze");
     checkpoint()?;
     let report = crate::json_output::go_compatible_report(&analysis.snapshot)?;
@@ -2552,6 +2617,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
             .filter(|_| request.format == "json"),
         feedback_facts: request.feedback_facts,
         stop: false,
+        role_log: RoleLog::from_env()?,
     })?;
     let mut stream = stream;
     stream.write_all(&payload)?;
@@ -2668,6 +2734,7 @@ pub fn stop(request: &Request) -> Result<i32, Box<dyn Error>> {
         only_file: None,
         feedback_facts: request.feedback_facts,
         stop: true,
+        role_log: None,
     })?;
     stream.write_all(&payload)?;
     stream.write_all(b"\n")?;

@@ -87,6 +87,7 @@ fn module_graph_goldens_round_trip_identically() {
         imports: response.module_imports,
         unknown_import_paths: response.unknown_import_paths,
         unmapped_roots: response.unmapped_roots,
+        build_inputs: response.build_inputs,
     };
 
     // The inventory is path-ordered, so the typed lookup is a binary search.

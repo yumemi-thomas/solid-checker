@@ -21,7 +21,8 @@
 // `--role-log` (ADR 0533): each grid's checkers append the role log to `<grid>.roles.jsonl` (one file: a directory would take an inode
 // per program); it is folded into `<grid>/roles.json` and the run's
 // `<out>/roles.json` (roles.mjs: arms hit and never hit, yield, new arms against `--roles-against`, silent-by-default decisions).
-// `--warm-checker` (ADR 0543): each grid's slot checks go to one retained checker daemon per executor slot; not with `--role-log`.
+// `--warm-checker` (ADR 0543): each grid's slot checks go to one retained checker daemon per executor slot; with `--role-log` each
+// check names its program, which the daemon's log lines carry.
 // `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json),
 // plus `--sample` of its other programs picked anew each run (`--sample-seed` repeats a run's pick; the summary prints it).
 // `--sample-big <fraction>` (sample.mjs): while iterating, the two codes that are ~40% of a full run (STORE_WRITE_OUTSIDE_SETTER,
@@ -172,7 +173,6 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
     options.scratch ??= process.env.SOLID_CHECKER_FUZZ_SCRATCH || undefined;
     if (options.rolesAgainst && !options.roleLog) throw new Error("focus.mjs: --roles-against needs --role-log");
-    if (options.warmChecker && options.roleLog) throw new Error("focus.mjs: --warm-checker does not combine with --role-log (a slot daemon answers many programs in one checker process)");
     // A smoke manifest names one grid's programs across its codes: a per-code process would not generate them all.
     if (options.splitCodes && options.smoke) throw new Error("focus.mjs: --split-codes does not apply to --smoke (a smoke grid is small)");
     if (options.sampleBig !== undefined) {

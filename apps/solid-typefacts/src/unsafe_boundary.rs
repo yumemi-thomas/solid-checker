@@ -120,7 +120,7 @@ use tsrs_core::arena::Region;
 use tsrs_core::{P, Tristate};
 use tsrs_tsoptions::ParsedCommandLine;
 
-use crate::file_regions::{FileRegions, RegionHost};
+use crate::file_regions::{FileRegions, ParseCache, RegionHost};
 
 /// A value the configuration parser borrows for `'static` (its module resolver
 /// requires a `&'static` host), freed with its owner instead of leaked.
@@ -509,6 +509,10 @@ pub struct Generation {
     updates: u32,
     thread: ThreadId,
     kind: UpdateKind,
+    /// The project's parsed files, which this chain and the next take from
+    /// (`file_regions::ParseCache`): a chain holds the region of each file it
+    /// took, so nothing here outlives or frees what a chain reads.
+    cache: Option<Arc<ParseCache>>,
 }
 
 fn options_for(
@@ -587,10 +591,11 @@ impl Generation {
         config_region: Region,
         config: P<ParsedCommandLine>,
         host: Arc<dyn CompilerHost>,
+        cache: Option<Arc<ParseCache>>,
     ) -> Generation {
         let regions = Arc::new(ProgramRegions::default());
         let files = Arc::new(FileRegions::default());
-        let host = RegionHost::wrap(host, &files);
+        let host = RegionHost::wrap_cached(host, &files, cache.as_ref());
         let (factory, cell) = slot_factory();
         let program = new_program(options_for(config, host, &regions, &factory));
         program.bind_source_files();
@@ -605,6 +610,7 @@ impl Generation {
             updates: 0,
             thread: std::thread::current().id(),
             kind: UpdateKind::Rebuilt,
+            cache,
         }
     }
 
@@ -752,7 +758,7 @@ impl Generation {
         let (factory, cell) = slot_factory();
         let (reused, _new_file, _) = self.program.reuse_program(
             old_file.path(),
-            RegionHost::wrap(Arc::clone(&host), &self.files),
+            RegionHost::wrap_cached(Arc::clone(&host), &self.files, self.cache.as_ref()),
             Some(Arc::clone(&factory)),
             None,
         );
@@ -768,6 +774,7 @@ impl Generation {
                 updates: self.updates + 1,
                 thread: self.thread,
                 kind: UpdateKind::Reused,
+                cache: self.cache.clone(),
             };
         }
         // A fresh chain from the same parsed configuration, in regions of its
@@ -783,7 +790,7 @@ impl Generation {
         let files = Arc::new(FileRegions::default());
         let program = new_program(options_for(
             self.program.command_line(),
-            RegionHost::wrap(host, &files),
+            RegionHost::wrap_cached(host, &files, self.cache.as_ref()),
             &regions,
             &factory,
         ));
@@ -799,6 +806,7 @@ impl Generation {
             updates: 0,
             thread: self.thread,
             kind: UpdateKind::Rebuilt,
+            cache: self.cache.clone(),
         }
     }
 
@@ -818,6 +826,12 @@ impl Generation {
             // the file versions only it read.
             drop(candidate);
             self.sweep_dead_files();
+        }
+        // The cache keeps what the next chain may take: the head's files.
+        if let Some(cache) = &self.cache
+            && std::thread::current().id() == self.thread
+        {
+            cache.retain(self.program.source_files().iter().map(|file| file.addr()));
         }
     }
 

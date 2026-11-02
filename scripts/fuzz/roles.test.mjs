@@ -58,7 +58,19 @@ describe("the fold", () => {
     const legacy = foldDecisions([at("slots/slot-0", 1, "f.a"), at("slots/slot-0", 1, "f.a"), at("slots/slot-1", 1, "f.a")], null);
     expect(legacy).toMatchObject({ decisions: 2, unattributed: 2 });
     expect(legacy.arms["f.a"].programs).toBe(0);
+    // A warm slot (ADR 0543) keeps one directory for every program; each path line names its program (`g`), and the fold is the
+    // one-shot fold of the same decisions.
+    const tagged = (program, s, arm, slot = "0") => ({ ...at(`slots/${slot}/program`, s, arm), g: program });
+    const warm = foldDecisions([tagged("p1", 1, "f.a"), tagged("p2", 1, "f.a"), tagged("p1", 1, "f.a", "1")], null);
+    expect(warm).toEqual(named);
     expect(summaryLine(foldRoles({ lines: [at("slots/slot-0", 1, "f.a")], rows: [], inventory: null }))).toMatch(/1 decisions \(1 unattributed\);/);
+  });
+
+  it("takes a path line's program over the program its path names, keeping a twin slot's -run", () => {
+    expect(programOf(`${work}/slots/3/program/App.tsx`, "lg-x")).toEqual({ program: "lg-x", file: "App.tsx" });
+    expect(programOf(`${work}/slots/3-run/program/sub/a.ts`, "lg-x")).toEqual({ program: "lg-x-run", file: "sub/a.ts" });
+    expect(programOf(`${work}/p-1/App.tsx`, "lg-y")).toEqual({ program: "lg-y", file: "App.tsx" });
+    expect(programOf(`${work}/slots/3/lg-x/App.tsx`, undefined)).toEqual({ program: "lg-x", file: "App.tsx" });
   });
 
   it("counts a decision once per program and site, and the silent answers of default arms", () => {
@@ -177,6 +189,9 @@ describe("path lines", () => {
     expect(resolve({ k: "read", q: 10, p: 0, s: 2 })).toEqual({ k: "read", s: 2, f: "/c/App.tsx" });
     expect(resolve({ k: "read", q: 10, p: 1, s: 2 })).toBe(null);
     expect(counter.malformed).toBe(1);
+    // A path line that names its program (a warm daemon's) gives it to the lines that name the path.
+    expect(resolve({ ...pathLine(12, 7, "/s/0/program/App.tsx"), g: "p9" })).toBe(null);
+    expect(resolve({ k: "read", q: 12, p: 7, s: 3 })).toEqual({ k: "read", s: 3, f: "/s/0/program/App.tsx", g: "p9" });
     // An old line and an unframed line pass as they are.
     expect(resolve(old[0])).toBe(old[0]);
     expect(resolve(old[3])).toBe(old[3]);

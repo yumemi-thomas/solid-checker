@@ -29,6 +29,7 @@ fn lifecycle_modules_is_a_valid_read_only_generation_operation() {
         packages: true,
         distinct_bare_imports: false,
         omit_modules: false,
+        build_inputs: false,
     });
     let response = lifecycle(&mut session, request);
     // Valid: the failure is the backend's, not the validator's.

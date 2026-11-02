@@ -85,9 +85,8 @@ export function attachDaemon(config, options) {
     const executor = options.executor ?? (settings.pages === "reuse" && settings.clock === "virtual-time" ? "rust" : "node");
     if (executor === "rust") {
       // The Rust executor (exec.mjs): the projects, type checks, checker runs and pages off this process's thread.
-      // The role log (ADR 0533) is written by the checker process and attributed by program path; a slot daemon answers many programs
-      // in one process, so the two do not combine yet.
-      if (warmCheckerMode(options) !== "off" && process.env.SOLID_CHECKER_IR_ROLE_LOG) throw new Error("--warm-checker does not combine with the role log (SOLID_CHECKER_IR_ROLE_LOG)");
+      // The role log (ADR 0533) combines with --warm-checker: each check names its program (SOLID_CHECKER_IR_ROLE_LOG_PROGRAM), and a
+      // slot's daemon logs each answer to the log and program its client names (ADR 0543).
       if (settings.pages !== "reuse" || settings.clock !== "virtual-time") throw new Error("--executor rust runs --chrome-pages reuse on --chrome-clock virtual-time only");
       const executor = lazyExecutor({
         tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork, slotRoot: checkerWorkDir(config.install, "slots"),
