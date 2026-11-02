@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "./focus.mjs";
-import { armInventory, foldDecisions, foldGrids, foldRoles, gridLog, programOf, readRoleLog, slicesYield, summaryLine } from "./roles.mjs";
+import { armInventory, foldDecisions, foldGrids, foldRoles, gridLog, programOf, readRoleLog, resolvedLine, slicesYield, summaryLine } from "./roles.mjs";
 
 const work = "/i/.solid-checker-fuzz/run-1-ab";
 const decision = (program, s, arm, extra = {}) => ({ k: "read", f: `${work}/${program}/App.tsx`, s, e: s + 3, role: "DeferredCallback", arm, arms: [arm], default: false, silent: true, ...extra });
@@ -94,6 +94,77 @@ describe("the fold", () => {
     writeFileSync(`${grid}.roles.jsonl`, `${JSON.stringify(decision("p1", 1, "f.a"))}\n${JSON.stringify(decision("p2", 4, "f.a"))}\n`);
     expect(gridLog(grid)).toBe(`${grid}.roles.jsonl`);
     expect(foldGrids([grid], { inventory: new Map([["f.a", { default: false }]]) })).toMatchObject({ decisions: 2, malformed: 0 });
+  });
+});
+
+describe("path lines", () => {
+  const inventory = new Map([["f.a", { default: false }], ["f.d", { default: true }]]);
+  // The lines of two processes as the old format writes them: every line names its file.
+  const old = [
+    decision("p1", 1, "f.d", { arms: ["f.a", "f.d"] }),
+    decision("p2", 1, "f.d"),
+    { k: "owner", rule: "effect", f: `${work}/p1/App.tsx`, s: 5, e: 9, ctx: 0, arm: "f.d", arms: ["f.d"], default: true, silent: true },
+    { k: "unframed", role: "Unknown", arm: "f.a", arms: ["f.a"], default: false },
+    decision("p1", 7, "f.a", { k: "write", f: `${work}/p1/helpers.ts`, role: "TrackedJsx", silent: false }),
+    decision("p2", 1, "f.d"),
+  ];
+  // The same lines as role_log.rs writes them now: a path line per (process, file), then `q` and `p`.
+  const pathLine = (q, p, f) => ({ k: "path", q, p, f });
+  const named = (line, q, p) => { const { f, ...rest } = line; return { ...rest, q, p }; };
+  const current = [
+    pathLine(10, 0, `${work}/p1/App.tsx`), named(old[0], 10, 0),
+    pathLine(11, 0, `${work}/p2/App.tsx`), named(old[1], 11, 0),
+    named(old[2], 10, 0),
+    old[3],
+    pathLine(10, 1, `${work}/p1/helpers.ts`), named(old[4], 10, 1),
+    named(old[5], 11, 0),
+  ];
+  const text = (lines) => lines.map((line) => JSON.stringify(line)).join("\n") + "\n";
+
+  it("restore each line's file, so the old and the new format fold the same", () => {
+    const root = mkdtempSync(join(tmpdir(), "fuzz-roles-paths-"));
+    const grids = ["old", "new", "mixed"].map((name) => {
+      const grid = join(root, name);
+      mkdirSync(grid);
+      writeFileSync(join(grid, "programs.jsonl"), `${JSON.stringify({ id: "p1", outcome: "agree" })}\n`);
+      return grid;
+    });
+    writeFileSync(`${grids[0]}.roles.jsonl`, text(old));
+    writeFileSync(`${grids[1]}.roles.jsonl`, text(current));
+    // A file appended to by a checker of each format.
+    writeFileSync(`${grids[2]}.roles.jsonl`, text([...old.slice(0, 4), ...current.slice(6, 8), old[5]]));
+    expect(readRoleLog(`${grids[1]}.roles.jsonl`).lines).toEqual(old);
+    const [a, b, c] = grids.map((grid) => foldGrids([grid], { inventory }));
+    for (const report of [a, b, c]) delete report.sources;
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+    expect(a).toMatchObject({ decisions: 4, unframed: 1, malformed: 0 });
+  });
+
+  it("keep the processes appending to one file apart, take a reused pid's later path line, and count a line with no path line as malformed", () => {
+    const counter = { malformed: 0 };
+    const paths = new Map();
+    const resolve = (line) => resolvedLine(line, paths, counter);
+    expect(resolve(pathLine(10, 0, "/a/App.tsx"))).toBe(null);
+    expect(resolve(pathLine(11, 0, "/b/App.tsx"))).toBe(null);
+    expect(resolve({ k: "read", q: 11, p: 0, s: 1 })).toEqual({ k: "read", s: 1, f: "/b/App.tsx" });
+    expect(resolve({ k: "read", q: 10, p: 0, s: 1 })).toEqual({ k: "read", s: 1, f: "/a/App.tsx" });
+    // Process 10 exited; a later process got its pid and numbers its own paths from 0.
+    expect(resolve(pathLine(10, 0, "/c/App.tsx"))).toBe(null);
+    expect(resolve({ k: "read", q: 10, p: 0, s: 2 })).toEqual({ k: "read", s: 2, f: "/c/App.tsx" });
+    expect(resolve({ k: "read", q: 10, p: 1, s: 2 })).toBe(null);
+    expect(counter.malformed).toBe(1);
+    // An old line and an unframed line pass as they are.
+    expect(resolve(old[0])).toBe(old[0]);
+    expect(resolve(old[3])).toBe(old[3]);
+  });
+
+  it("read a directory's files each with its own table", () => {
+    const root = mkdtempSync(join(tmpdir(), "fuzz-roles-paths-"));
+    writeFileSync(join(root, "roles-10.jsonl"), text([pathLine(10, 0, `${work}/p1/App.tsx`), named(old[0], 10, 0)]));
+    // No path line in this file: process 10's table is the other file's.
+    writeFileSync(join(root, "roles-11.jsonl"), text([named(old[1], 10, 0)]));
+    expect(readRoleLog(root)).toEqual({ lines: [old[0]], malformed: 1, missing: false });
   });
 });
 

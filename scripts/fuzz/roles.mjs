@@ -1,5 +1,6 @@
 // The role-log fold (ADR 0533): which arms of the checker's role and owner classifiers a grid's programs reach, and the three
-// saturation numbers of a slice. The checker writes one JSON line per role decision when SOLID_CHECKER_IR_ROLE_LOG names a file or a
+// saturation numbers of a slice. The checker writes one JSON line per role decision (its file named once per process by a path
+// line, `resolvedLine`) when SOLID_CHECKER_IR_ROLE_LOG names a file or a
 // directory (rust/crates/solid-reactive-ir/src/role_log.rs); `focus.mjs --role-log` sets it per grid to `<grid dir>.roles.jsonl` and folds
 // each grid into `<grid dir>/roles.json` and the run into `<out>/roles.json`. By hand:
 //
@@ -47,13 +48,41 @@ export function programOf(path) {
 const logFiles = (path) => (statSync(path).isDirectory() ? readdirSync(path).filter((name) => name.endsWith(".jsonl")).sort().map((name) => join(path, name)) : [path]);
 
 /**
+ * A log file's lines as the fold reads them, each with its file path in `f`. A checker writes each path once per process, as a
+ * `{"k":"path","q":pid,"p":id,"f":path}` line ahead of the lines that name it by `"q"` and `"p"` (role_log.rs); a path line of a pid
+ * seen before (a reused pid) replaces the earlier one. A line of an older log carries `f` itself and is read as it is. A line naming a
+ * path no earlier line gave is malformed. `paths` is one file's table: processes share a file, never a table across files.
+ */
+export function resolvedLine(line, paths, counter) {
+  if (line.k === "path") {
+    paths.set(`${line.q}:${line.p}`, line.f);
+    return null;
+  }
+  if (line.f !== undefined || line.p === undefined) return line;
+  const f = paths.get(`${line.q}:${line.p}`);
+  if (f === undefined) {
+    counter.malformed += 1;
+    return null;
+  }
+  const { q, p, ...rest } = line;
+  return { ...rest, f };
+}
+
+/**
  * Every decision line of a log path, parsed, read in 8 MiB chunks: a recall grid's log passes V8's string limit (512 MiB, full-7),
- * so no file is held whole. Malformed lines are counted in `counter.malformed`, not thrown.
+ * so no file is held whole. Malformed lines are counted in `counter.malformed`, not thrown. Path lines (`resolvedLine`) are read,
+ * not yielded.
  */
 export function* roleLogLines(path, counter = { malformed: 0 }) {
   const chunk = Buffer.alloc(8 << 20);
   for (const file of logFiles(path)) {
     const fd = openSync(file, "r");
+    const paths = new Map();
+    const parsed = (text) => {
+      let line;
+      try { line = JSON.parse(text); } catch { counter.malformed += 1; return null; }
+      return resolvedLine(line, paths, counter);
+    };
     let rest = "";
     try {
       for (let read; (read = readSync(fd, chunk, 0, chunk.length, null)) > 0;) {
@@ -61,14 +90,12 @@ export function* roleLogLines(path, counter = { malformed: 0 }) {
         rest = parts.pop();
         for (const text of parts) {
           if (!text) continue;
-          let line;
-          try { line = JSON.parse(text); } catch { counter.malformed += 1; continue; }
-          yield line;
+          const line = parsed(text);
+          if (line) yield line;
         }
       }
       if (rest) {
-        let line;
-        try { line = JSON.parse(rest); } catch { counter.malformed += 1; line = null; }
+        const line = parsed(rest);
         if (line) yield line;
       }
     } finally {

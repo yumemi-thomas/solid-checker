@@ -9,13 +9,21 @@
 //! class 4: a deferred role for a function no run places, an owner context
 //! zero) so a run can count the decisions that are silent by default.
 //!
-//! One JSON line per outermost decision ([`decide`]): `{"k": kind, "f": path,
-//! "s": start, "e": end, "role", "arm", "arms", "default", "silent"}`, where
+//! One JSON line per outermost decision ([`decide`]): `{"k": kind, "q": pid,
+//! "p": path id, "s": start, "e": end, "role", "arm", "arms", "default",
+//! "silent"}`, where
 //! `arm` is the last tagged arm that returned the final role (null when an
 //! untagged path did), `arms` every tagged arm the decision passed, in order,
 //! once each. Owner lines carry `rule` (the operation) and `ctx` (the owner
 //! context) instead of `role`. An arm hit outside any decision is a `k:
 //! "unframed"` line with no site.
+//!
+//! A process writes each file path once, as `{"k": "path", "q": pid, "p": id,
+//! "f": path}` ahead of the first line that names it by `"p": id`; `q` keeps
+//! the ids of the processes appending to one file apart (a later process with
+//! the same pid writes its own path lines, which a reader takes over the
+//! earlier ones). Older logs carry `"f": path` on every line;
+//! `scripts/fuzz/roles.mjs` reads both.
 //!
 //! Write-only: nothing reads the log back, and every hook returns the value it
 //! was given, so the log changes no answer. Unset, each hook is one atomic
@@ -62,6 +70,8 @@ const FLUSH_AT: usize = 1 << 16;
 struct Sink {
     file: std::fs::File,
     buffer: Vec<u8>,
+    /// The id each path got, in the order its path line was written.
+    paths: std::collections::HashMap<String, u32>,
 }
 
 fn sink() -> Option<&'static Mutex<Sink>> {
@@ -81,6 +91,7 @@ fn sink() -> Option<&'static Mutex<Sink>> {
         Some(Mutex::new(Sink {
             file,
             buffer: Vec::new(),
+            paths: std::collections::HashMap::new(),
         }))
     })
     .as_ref()
@@ -268,19 +279,60 @@ fn silent(kind: &str, role: ExecutionRole) -> Option<bool> {
 }
 
 fn write_decision(decision: &Decision, role: ExecutionRole) {
-    append(&decision_line(decision, role));
+    if let Some(path) = path_ref(&decision.path) {
+        append(&decision_line(decision, path, role));
+    }
 }
 
-fn decision_line(decision: &Decision, role: ExecutionRole) -> Vec<u8> {
+/// The process (`q`) and the id (`p`) a line names its file by.
+#[derive(Clone, Copy)]
+struct PathRef {
+    process: u32,
+    id: u32,
+}
+
+/// `path`'s id in this process's log, writing its path line the first time.
+fn path_ref(path: &str) -> Option<PathRef> {
+    let sink = sink()?;
+    let mut sink = sink.lock().ok()?;
+    let process = process_id().unwrap_or(0);
+    if let Some(id) = sink.paths.get(path) {
+        return Some(PathRef { process, id: *id });
+    }
+    let id = u32::try_from(sink.paths.len()).ok()?;
+    sink.paths.insert(path.to_owned(), id);
+    let path_ref = PathRef { process, id };
+    push_locked(&mut sink, &path_line(path_ref, path));
+    Some(path_ref)
+}
+
+/// The line that gives `path` its id.
+fn path_line(path_ref: PathRef, path: &str) -> Vec<u8> {
+    let mut line = Vec::with_capacity(40 + path.len());
+    let _ = write!(
+        line,
+        "{{\"k\":\"path\",\"q\":{},\"p\":{},\"f\":",
+        path_ref.process, path_ref.id
+    );
+    push_json_str(&mut line, path);
+    line.extend_from_slice(b"}\n");
+    line
+}
+
+fn push_path(line: &mut Vec<u8>, path: PathRef) {
+    let _ = write!(line, ",\"q\":{},\"p\":{}", path.process, path.id);
+}
+
+fn decision_line(decision: &Decision, path: PathRef, role: ExecutionRole) -> Vec<u8> {
     let answering = decision
         .arms
         .iter()
         .rev()
         .find(|(_, answered)| *answered == role)
         .map(|(id, _)| *id);
-    let mut line = Vec::with_capacity(160 + decision.arms.len() * 32);
-    let _ = write!(line, "{{\"k\":\"{}\",\"f\":", decision.kind);
-    push_json_str(&mut line, &decision.path);
+    let mut line = Vec::with_capacity(96 + decision.arms.len() * 32);
+    let _ = write!(line, "{{\"k\":\"{}\"", decision.kind);
+    push_path(&mut line, path);
     let _ = write!(
         line,
         ",\"s\":{},\"e\":{},\"role\":\"{role:?}\",\"arm\":",
@@ -345,11 +397,13 @@ fn owner_logged(
     context: u8,
     silent: bool,
 ) {
-    let mut line = Vec::with_capacity(192);
+    let Some(path) = path_ref(path) else {
+        return;
+    };
+    let mut line = Vec::with_capacity(128);
     line.extend_from_slice(b"{\"k\":\"owner\",\"rule\":");
     push_json_str(&mut line, rule);
-    line.extend_from_slice(b",\"f\":");
-    push_json_str(&mut line, path);
+    push_path(&mut line, path);
     let _ = write!(
         line,
         ",\"s\":{},\"e\":{},\"ctx\":{context},\"arm\":",
@@ -370,23 +424,27 @@ fn append(line: &[u8]) {
     let Some(sink) = sink() else {
         return;
     };
+    let Ok(mut sink) = sink.lock() else {
+        return;
+    };
+    push_locked(&mut sink, line);
+}
+
+fn push_locked(sink: &mut Sink, line: &[u8]) {
     RECORDING.with(|recording| {
         for lines in recording.borrow_mut().iter_mut() {
             lines.extend_from_slice(line);
         }
     });
-    let Ok(mut sink) = sink.lock() else {
-        return;
-    };
     sink.buffer.extend_from_slice(line);
     if sink.buffer.len() >= FLUSH_AT {
-        flush_locked(&mut sink);
+        flush_locked(sink);
     }
 }
 
 fn flush_locked(sink: &mut Sink) {
     // Whole lines only: the buffer never holds a partial one.
-    let Sink { file, buffer } = sink;
+    let Sink { file, buffer, .. } = sink;
     let _ = file.write_all(buffer);
     buffer.clear();
 }
@@ -419,14 +477,19 @@ mod tests {
                 (arm_id!("a.first"), ExecutionRole::TrackedJsx),
             ],
         };
-        let line = decision_line(&decision, ExecutionRole::DeferredCallback);
+        let path = PathRef { process: 41, id: 2 };
+        let line = decision_line(&decision, path, ExecutionRole::DeferredCallback);
         assert_eq!(
             std::str::from_utf8(&line).unwrap(),
-            "{\"k\":\"read\",\"f\":\"/p/\\\"App\\\".tsx\",\"s\":3,\"e\":9,\
+            "{\"k\":\"read\",\"q\":41,\"p\":2,\"s\":3,\"e\":9,\
              \"role\":\"DeferredCallback\",\"arm\":\"a.default\",\
              \"arms\":[\"a.first\",\"a.default\"],\"default\":true,\"silent\":true}\n"
         );
-        let untagged = decision_line(&decision, ExecutionRole::Unknown);
+        assert_eq!(
+            std::str::from_utf8(&path_line(path, &decision.path)).unwrap(),
+            "{\"k\":\"path\",\"q\":41,\"p\":2,\"f\":\"/p/\\\"App\\\".tsx\"}\n"
+        );
+        let untagged = decision_line(&decision, path, ExecutionRole::Unknown);
         let untagged: serde_json::Value = serde_json::from_slice(&untagged).unwrap();
         assert_eq!(untagged["arm"], serde_json::Value::Null);
         assert_eq!(untagged["default"], false);
