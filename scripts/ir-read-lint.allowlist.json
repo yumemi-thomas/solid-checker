@@ -81,7 +81,7 @@
   },
   "rust/crates/solid-reactive-ir/src/execution_role/invocation_flow.rs": {
     "file_by_path": 4,
-    "hashmap-iteration": 1
+    "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
     "facts.files": 3,

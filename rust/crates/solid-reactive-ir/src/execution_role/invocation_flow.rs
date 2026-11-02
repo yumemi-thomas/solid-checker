@@ -379,6 +379,8 @@ pub(super) fn site_role_in(
     if !computing_flow_answers() {
         return site_role_computed(lookup, file, call, classifying);
     }
+    // The cache key sorts the cycle-guard set right away, so the set's iteration
+    // order never reaches the key (ir-read-lint allow-list).
     let mut context = classifying.iter().cloned().collect::<Vec<_>>();
     context.sort_unstable();
     let key = (
