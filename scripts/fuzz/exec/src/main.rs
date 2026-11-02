@@ -902,11 +902,11 @@ impl Chrome {
 /// The fixed project directories a program's step 1 borrows (a clean and a twin project): rewritten in place per program instead of
 /// created and removed, so a grid's file churn is a few rewritten files per program.
 struct Slots {
-    free: Mutex<Vec<(PathBuf, PathBuf)>>,
+    free: Mutex<Vec<(SlotDir, SlotDir)>>,
     ready: Condvar,
 }
 impl Slots {
-    fn take(&self) -> (PathBuf, PathBuf) {
+    fn take(&self) -> (SlotDir, SlotDir) {
         let mut free = self.free.lock().unwrap();
         loop {
             if let Some(pair) = free.pop() {
@@ -915,10 +915,61 @@ impl Slots {
             free = self.ready.wait(free).unwrap();
         }
     }
-    fn give(&self, pair: (PathBuf, PathBuf)) {
+    fn give(&self, pair: (SlotDir, SlotDir)) {
         self.free.lock().unwrap().push(pair);
         self.ready.notify_one();
     }
+}
+
+/// One slot directory, `<slotRoot>/<n>/<program>`: the project lives in a directory named for the program it holds, renamed (its files
+/// kept, so `sync_files` still rewrites only what changed) when the slot takes the next program. The checker's paths then name the
+/// program: the role log (roles.mjs `programOf`) keys each decision by the directory above the file, and with one fixed directory
+/// per slot every program of a grid folded as one ("slots"), so decisions of different programs deduplicated against each other.
+struct SlotDir {
+    parent: PathBuf,
+    name: Option<String>,
+}
+impl SlotDir {
+    fn new(parent: PathBuf) -> Self {
+        Self { parent, name: None }
+    }
+    /// The slot's directory for program `id`, the previous program's directory renamed to it.
+    fn place(&mut self, id: &str) -> std::io::Result<PathBuf> {
+        let name = slot_name(id);
+        let target = self.parent.join(&name);
+        match self.name.as_deref() {
+            Some(current) if current == name => {}
+            Some(current) if self.parent.join(current).is_dir() => std::fs::rename(self.parent.join(current), &target)?,
+            _ => std::fs::create_dir_all(&target)?,
+        }
+        self.name = Some(name);
+        Ok(target)
+    }
+}
+
+/// A program id as one directory name: `[A-Za-z0-9_-]` and inner dots as they are, every other byte `%XX` (roles.mjs decodes it with
+/// `decodeURIComponent`). An id that would pass 200 bytes keeps its first 160 and an FNV-1a hash of the whole: still one name per id.
+fn slot_name(id: &str) -> String {
+    let mut name = String::new();
+    for (index, byte) in id.bytes().enumerate() {
+        if byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-' || (byte == b'.' && index > 0) {
+            name.push(byte as char);
+        } else {
+            name.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    if name.is_empty() {
+        return "%00".into();
+    }
+    if name.len() > 200 {
+        let hash = id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
+        let mut cut = 160;
+        while !name.is_char_boundary(cut) || name[..cut].ends_with('%') || name[..cut.saturating_sub(1)].ends_with('%') {
+            cut -= 1;
+        }
+        name = format!("{}~{hash:016x}", &name[..cut]);
+    }
+    name
 }
 
 /// Makes `dir` hold exactly `files` (top-level names): other entries removed, a changed file rewritten in place, an equal one untouched.
@@ -983,7 +1034,7 @@ impl Executor {
         let checker = Arc::new(Checker { bin: text("checkerBin")?, env });
         let slot_root = PathBuf::from(text("slotRoot")?);
         let slots = Slots {
-            free: Mutex::new((0..concurrency * 2).map(|slot| (slot_root.join(format!("slot-{slot}")), slot_root.join(format!("slot-{slot}-run")))).collect()),
+            free: Mutex::new((0..concurrency * 2).map(|slot| (SlotDir::new(slot_root.join(format!("{slot}"))), SlotDir::new(slot_root.join(format!("{slot}-run"))))).collect()),
             ready: Condvar::new(),
         };
         let chrome_settings = request.get("chrome").cloned().unwrap_or(Value::Null);
@@ -1076,9 +1127,11 @@ impl Executor {
         // A project with a directory of its own (a program that ships a package, or `--keep-work`) is written fresh there and removed
         // after; the others borrow a slot pair.
         let slotted = project.is_some_and(|p| p.get("dir").is_none()) || twin_project.is_some_and(|p| p.get("dir").is_none());
-        let slot = slotted.then(|| self.slots.take());
+        let mut slot = slotted.then(|| self.slots.take());
+        // The program's id names its slot directory (`SlotDir`); a request without one (an older caller) shares the name `program`.
+        let id = request["id"].as_str().unwrap_or("program");
         let result = (|| -> Res<Value> {
-            let place = |project: &serde_json::Map<String, Value>, slot_dir: Option<&PathBuf>| -> Res<PathBuf> {
+            let place = |project: &serde_json::Map<String, Value>, slot_dir: Option<&mut SlotDir>| -> Res<PathBuf> {
                 let files = project.get("files").and_then(Value::as_object).ok_or("project without files")?;
                 match project.get("dir").and_then(Value::as_str) {
                     Some(dir) => {
@@ -1086,14 +1139,15 @@ impl Executor {
                         Ok(PathBuf::from(dir))
                     }
                     None => {
-                        let dir = slot_dir.ok_or("no slot")?;
-                        sync_files(dir, files).map_err(|e| format!("slot {}: {e}", dir.display()))?;
-                        Ok(dir.clone())
+                        let slot_dir = slot_dir.ok_or("no slot")?;
+                        let dir = slot_dir.place(id).map_err(|e| format!("slot {}: {e}", slot_dir.parent.display()))?;
+                        sync_files(&dir, files).map_err(|e| format!("slot {}: {e}", dir.display()))?;
+                        Ok(dir)
                     }
                 }
             };
-            let dir = project.map(|p| place(p, slot.as_ref().map(|s| &s.0))).transpose()?;
-            let twin_dir = twin_project.map(|p| place(p, slot.as_ref().map(|s| &s.1))).transpose()?;
+            let dir = project.map(|p| place(p, slot.as_mut().map(|s| &mut s.0))).transpose()?;
+            let twin_dir = twin_project.map(|p| place(p, slot.as_mut().map(|s| &mut s.1))).transpose()?;
             let string = |path: &PathBuf| path.to_string_lossy().into_owned();
             let clean = (request["clean"] == true).then(|| dir.as_ref().map(|dir| self.batcher.submit(string(dir)))).flatten();
             let twin = (request["twin"] == true).then(|| twin_dir.as_ref().map(|dir| self.batcher.submit(string(dir)))).flatten();
@@ -1328,6 +1382,40 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("App.tsx")).unwrap(), "b");
         assert_eq!(std::fs::metadata(dir.join("main.tsx")).unwrap().modified().unwrap(), main);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_slot_directory_is_named_for_its_program_and_keeps_its_files_across_programs() {
+        let root = std::env::temp_dir().join(format!("fuzz-exec-slot-name-test-{}", std::process::id()));
+        let mut slot = SlotDir::new(root.join("0"));
+        let files = |text: &str| [("App.tsx".to_string(), json!(text)), ("main.tsx".to_string(), json!("m"))].into_iter().collect::<serde_json::Map<_, _>>();
+        let first = slot.place("lg-a-closure").unwrap();
+        assert_eq!(first, root.join("0/lg-a-closure"));
+        sync_files(&first, &files("a")).unwrap();
+        let main = std::fs::metadata(first.join("main.tsx")).unwrap().modified().unwrap();
+        let second = slot.place("lg-a-closure-helper").unwrap();
+        assert_eq!(second, root.join("0/lg-a-closure-helper"));
+        assert!(!first.exists(), "the previous program's directory is renamed, not kept");
+        sync_files(&second, &files("b")).unwrap();
+        assert_eq!(std::fs::metadata(second.join("main.tsx")).unwrap().modified().unwrap(), main, "an equal file survives the rename untouched");
+        assert_eq!(slot.place("lg-a-closure-helper").unwrap(), second);
+        let names: Vec<String> = std::fs::read_dir(root.join("0")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["lg-a-closure-helper"]);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_slot_name_is_one_directory_name_per_id() {
+        assert_eq!(slot_name("mx-flush-in-effect-callback-effect-apply-direct-none-m-show"), "mx-flush-in-effect-callback-effect-apply-direct-none-m-show");
+        assert_eq!(slot_name("a/b c"), "a%2Fb%20c");
+        assert_eq!(slot_name(".."), "%2E.");
+        assert_eq!(slot_name(""), "%00");
+        let long = "x".repeat(300);
+        let name = slot_name(&long);
+        assert!(name.len() <= 200 && name.starts_with(&"x".repeat(160)), "{name}");
+        assert_ne!(name, slot_name(&format!("{long}y")));
+        let encoded = slot_name(&"/".repeat(100));
+        assert!(encoded.len() <= 200 && !encoded.split('~').next().unwrap().ends_with('%'), "{encoded}");
     }
 
     #[test]

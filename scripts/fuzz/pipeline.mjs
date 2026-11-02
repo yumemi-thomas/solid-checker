@@ -219,6 +219,7 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
   const ordinary = hasPackages(built);
   const own = ordinary || config.keepWork;
   const answer = await exec.prepare({
+    id: built.id,
     caseWrites,
     project: knownBad ? null : { files: checkerProjectFiles(built), ...(own ? { dir } : {}) },
     twinProject: twin?.fresh ? { files: checkerProjectFiles(built, { twin: true }), ...(own ? { dir: twinDir } : {}) } : null,
@@ -230,13 +231,13 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
   // A spot check whose fresh run gave no answer (killed, so nothing to compare) keeps the stored one; the checker, which the executor
   // skipped after that failed check, runs now, as the JS path runs it.
   if (!answer.checker) {
-    const again = await exec.prepare({ caseWrites: [], project: { files: checkerProjectFiles(built), ...(own ? { dir } : {}) }, twinProject: null, clean: false, twin: false, checker: { ordinary } });
+    const again = await exec.prepare({ id: built.id, caseWrites: [], project: { files: checkerProjectFiles(built), ...(own ? { dir } : {}) }, twinProject: null, clean: false, twin: false, checker: { ordinary } });
     answer.checker = again.checker;
   }
   const checker = checkerResult(answer.checker, answer.checker.dir);
   timings.checker.ms += checker.wallMs ?? 0;
   timings.checker.n += 1;
-  // A slot's directory is the executor's, not this program's: nothing removes it.
+  // A slot's directory is the executor's, not this program's (it is named for the program, main.rs `SlotDir`): nothing removes it.
   const value = { program, built, caseDir, dir: own ? dir : null, typecheck: typed, checker };
   if (instrument) value.twinTypecheck = twin.fresh ? settle(twin, answer.twinTypecheck) : twin.stored;
   return value;

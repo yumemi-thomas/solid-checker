@@ -38,10 +38,28 @@ export function armInventory(root = IR_SRC) {
   return arms;
 }
 
-/** A log path's program (the checker work directory `.solid-checker-fuzz/<run>/<id>/`) and the file within it. */
+/**
+ * A log path's program and the file within it. The program is the directory a checker ran in:
+ * - the Rust executor's slot, `.solid-checker-fuzz/<run>/slots/<n>/<id>/` (exec/src/main.rs `SlotDir`, the id `%XX`-encoded; a twin's
+ *   slot `<n>-run` gives `<id>-run`, the name the JS path gives a twin);
+ * - the JS path's work directory, `.solid-checker-fuzz/<run>/<id>/`;
+ * - Chrome's staging directory, `.solid-checker-runtime-oracle/<id>/`.
+ * A log from before the slots were named (`slots/slot-<n>/`) cannot say which program a decision was: it folds as it always did, every
+ * program as the one program `slots` (`legacySlot`, counted as `unattributed` by the fold).
+ */
 export function programOf(path) {
-  const match = /\/\.solid-checker-fuzz\/[^/]+\/([^/]+)\/(.+)$/.exec(path ?? "");
-  return match ? { program: match[1], file: match[2] } : { program: null, file: path ?? null };
+  const text = path ?? "";
+  const slot = /\/\.solid-checker-fuzz\/[^/]+\/slots\/(\d+)(-run)?\/([^/]+)\/(.+)$/.exec(text);
+  if (slot) {
+    let id;
+    try { id = decodeURIComponent(slot[3]); } catch { id = slot[3]; }
+    return { program: slot[2] ? `${id}-run` : id, file: slot[4] };
+  }
+  const work = /\/\.solid-checker-fuzz\/[^/]+\/([^/]+)\/(.+)$/.exec(text);
+  if (work) return work[1] === "slots" && /^slot-\d+(?:-run)?\//.test(work[2]) ? { program: "slots", file: work[2], legacySlot: true } : { program: work[1], file: work[2] };
+  const oracle = /\/\.solid-checker-runtime-oracle\/([^/]+)\/(.+)$/.exec(text);
+  if (oracle) return { program: oracle[1], file: oracle[2] };
+  return { program: null, file: path ?? null };
 }
 
 /** The files of a log path: the file itself, or a directory's `roles-<pid>.jsonl` files. */
@@ -130,7 +148,9 @@ export const FINDING_OUTCOMES = ["false-clean", "wrong-rule", "false-positive"];
 /**
  * Folds decision lines into per-arm counts. A decision is keyed by program, kind, file and span, so a program the checker ran twice
  * (a confirmation, a twin) counts once. `passed`: decisions that went through the arm; `answered`: decisions whose answer it gave;
- * `unframed`: hits outside any decision (a table precomputation), which count as reached.
+ * `unframed`: hits outside any decision (a table precomputation), which count as reached. `unattributed`: decisions whose path names
+ * no single program (an old log's shared slot directory, a path outside any work directory): their dedupe key is shared, so their
+ * count is a floor, and they add no program to an arm.
  * `silentByDefault`: decisions answered by a default arm (role_log.rs: a non-reporting role for want of a proof) whose answer no rule
  * reports.
  */
@@ -144,6 +164,7 @@ export function foldDecisions(lines, inventory) {
   const silentSites = new Map();
   let decisions = 0;
   let unframed = 0;
+  let unattributed = 0;
   for (const line of lines) {
     if (line.k === "unframed") {
       // An arm a table precomputation reached outside any rule's decision: reached, with no site to key it by.
@@ -151,12 +172,14 @@ export function foldDecisions(lines, inventory) {
       for (const id of line.arms ?? []) slot(id).unframed += 1;
       continue;
     }
-    const { program, file } = programOf(line.f);
-    const key = `${program}\0${line.k}\0${line.rule ?? ""}\0${file}\0${line.s}\0${line.e}`;
+    const { program: named, file, legacySlot } = programOf(line.f);
+    const program = legacySlot ? null : named;
+    const key = `${named}\0${line.k}\0${line.rule ?? ""}\0${file}\0${line.s}\0${line.e}`;
     const hashed = keyHash(key);
     if (seen.has(hashed)) continue;
     seen.add(hashed);
     decisions += 1;
+    if (!program) unattributed += 1;
     for (const id of line.arms ?? []) {
       const arm = slot(id);
       arm.passed += 1;
@@ -180,7 +203,7 @@ export function foldDecisions(lines, inventory) {
   }
   const hit = Object.keys(byArm).filter((id) => byArm[id].passed > 0 || byArm[id].answered > 0 || byArm[id].unframed > 0);
   return {
-    decisions, unframed, arms: byArm, hit,
+    decisions, unframed, unattributed, arms: byArm, hit,
     neverHit: inventory ? [...inventory.keys()].filter((id) => !hit.includes(id)).sort() : [],
     notInInventory: inventory ? hit.filter((id) => !inventory.has(id)) : [],
     silentByDefault: { decisions: [...silentSites.values()].reduce((a, b) => a + b, 0), byArm: Object.fromEntries([...silentSites].sort()) },
@@ -210,6 +233,7 @@ export function foldRoles({ lines, rows, inventory, against = null, malformed = 
     armsHit: folded.hit.length,
     decisions: folded.decisions,
     unframed: folded.unframed,
+    unattributed: folded.unattributed,
     malformed,
     saturation: {
       yield: slicesYield(rows),
@@ -261,7 +285,7 @@ export function foldGrids(dirs, { logs = [], inventory = armInventory(), against
 export function mergeGridReports(dirs, { inventory = armInventory(), against = null } = {}) {
   const arms = {};
   const rows = [];
-  let decisions = 0, unframed = 0, malformed = 0;
+  let decisions = 0, unframed = 0, unattributed = 0, malformed = 0;
   const silent = {};
   const sources = [];
   for (const dir of dirs) {
@@ -269,6 +293,7 @@ export function mergeGridReports(dirs, { inventory = armInventory(), against = n
     for (const row of readRows(dir)) rows.push(row);
     decisions += report.decisions ?? 0;
     unframed += report.unframed ?? 0;
+    unattributed += report.unattributed ?? 0;
     malformed += report.malformed ?? 0;
     sources.push(...(report.sources ?? []));
     for (const [id, count] of Object.entries(report.silentByDefault ?? {})) silent[id] = (silent[id] ?? 0) + count;
@@ -294,6 +319,7 @@ export function mergeGridReports(dirs, { inventory = armInventory(), against = n
     armsHit: hit.length,
     decisions,
     unframed,
+    unattributed,
     malformed,
     saturation: {
       yield: slicesYield(rows),
@@ -311,7 +337,7 @@ export function mergeGridReports(dirs, { inventory = armInventory(), against = n
 /** One line for a person: the three numbers and the arm coverage. */
 export function summaryLine(report) {
   const { yield: y, growth, silentByDefault } = report.saturation;
-  return `roles: ${report.armsHit}/${report.armsKnown ?? "?"} arms hit (${report.neverHit.length} never), ${report.decisions} decisions; yield ${y.confirmedPerThousand} confirmed / ${y.candidatesPerThousand} candidates per 1,000 of ${y.programs} programs; new arms ${growth.newArms ?? "n/a (no --against)"}; silent by default ${silentByDefault}`;
+  return `roles: ${report.armsHit}/${report.armsKnown ?? "?"} arms hit (${report.neverHit.length} never), ${report.decisions} decisions${report.unattributed ? ` (${report.unattributed} unattributed)` : ""}; yield ${y.confirmedPerThousand} confirmed / ${y.candidatesPerThousand} candidates per 1,000 of ${y.programs} programs; new arms ${growth.newArms ?? "n/a (no --against)"}; silent by default ${silentByDefault}`;
 }
 
 function main(argv) {

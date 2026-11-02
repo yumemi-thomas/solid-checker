@@ -38,6 +38,29 @@ describe("the fold", () => {
     expect(programOf("/elsewhere/App.tsx")).toEqual({ program: null, file: "/elsewhere/App.tsx" });
   });
 
+  it("maps the Rust executor's slot to the program it holds, a twin's slot to `<id>-run`, Chrome's staging to its case", () => {
+    expect(programOf(`${work}/slots/3/lg-x-closure/App.tsx`)).toEqual({ program: "lg-x-closure", file: "App.tsx" });
+    expect(programOf(`${work}/slots/3-run/lg-x-closure/App.tsx`)).toEqual({ program: "lg-x-closure-run", file: "App.tsx" });
+    expect(programOf(`${work}/slots/12/a%2Fb%20c/sub/helpers.ts`)).toEqual({ program: "a/b c", file: "sub/helpers.ts" });
+    expect(programOf("/i/.solid-checker-runtime-oracle/lg-x-iife/App.tsx")).toEqual({ program: "lg-x-iife", file: "App.tsx" });
+    // A log from before the slots were named: one shared program, kept foldable as it was, and marked.
+    expect(programOf(`${work}/slots/slot-3/App.tsx`)).toEqual({ program: "slots", file: "slot-3/App.tsx", legacySlot: true });
+    expect(programOf(`${work}/slots/slot-3-run/App.tsx`)).toMatchObject({ legacySlot: true });
+  });
+
+  it("keeps two programs that shared a slot apart, and counts an old log's shared slot as unattributed", () => {
+    const at = (dir, s, arm) => ({ k: "read", f: `${work}/${dir}/App.tsx`, s, e: s + 3, role: "Unknown", arm, arms: [arm] });
+    // Two programs ran on slot 0 one after the other, with a decision at the same span: two decisions, two programs.
+    const named = foldDecisions([at("slots/0/p1", 1, "f.a"), at("slots/0/p2", 1, "f.a"), at("slots/1/p1", 1, "f.a")], null);
+    expect(named).toMatchObject({ decisions: 2, unattributed: 0 });
+    expect(named.arms["f.a"].programs).toBe(2);
+    // The same programs logged by the old executor: one slot directory, so the decisions fold as one and name no program.
+    const legacy = foldDecisions([at("slots/slot-0", 1, "f.a"), at("slots/slot-0", 1, "f.a"), at("slots/slot-1", 1, "f.a")], null);
+    expect(legacy).toMatchObject({ decisions: 2, unattributed: 2 });
+    expect(legacy.arms["f.a"].programs).toBe(0);
+    expect(summaryLine(foldRoles({ lines: [at("slots/slot-0", 1, "f.a")], rows: [], inventory: null }))).toMatch(/1 decisions \(1 unattributed\);/);
+  });
+
   it("counts a decision once per program and site, and the silent answers of default arms", () => {
     const inventory = new Map([["f.a", { default: false }], ["f.d", { default: true }], ["f.never", { default: false }]]);
     const lines = [
