@@ -36,6 +36,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
         .cloned()
         .collect::<HashSet<_>>();
     let setter_symbols = ctx.setters.keys().cloned().collect::<HashSet<_>>();
+    let action_symbols = ctx.actions.keys().cloned().collect::<HashSet<_>>();
     let source_call_targets = &draft.source_call_targets;
     draft.leaf_operations.extend(
         parallel_file_results(&ctx.facts.files, |file| {
@@ -44,6 +45,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                 ctx.symbol_names,
                 &safe_call_symbols,
                 &setter_symbols,
+                &action_symbols,
                 ctx.semantic_lookup,
                 source_call_targets,
             )
@@ -58,6 +60,7 @@ pub(super) fn leaf_owner_operations_for_file(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     safe_call_symbols: &HashSet<SymbolId>,
     setter_symbols: &HashSet<SymbolId>,
+    action_symbols: &HashSet<SymbolId>,
     lookup: &SemanticLookup<'_>,
     source_call_targets: &HashMap<
         typefacts::Location,
@@ -75,6 +78,7 @@ pub(super) fn leaf_owner_operations_for_file(
         symbol_names,
         safe_call_symbols,
         setter_symbols,
+        action_symbols,
         completions: &completions,
         source_call_targets,
     };
@@ -700,6 +704,8 @@ struct LeafScopeResolution<'a, 'lookup> {
     safe_call_symbols: &'a HashSet<SymbolId>,
     /// The setters among them, whose function argument runs (ADR 0210).
     setter_symbols: &'a HashSet<SymbolId>,
+    /// ADR 0550: the actions among them, whose first step runs in the scope.
+    action_symbols: &'a HashSet<SymbolId>,
     /// ADR 0275: per function, the calls it runs on every normal completion.
     completions: &'a RefCell<HashMap<(String, Span), Vec<Span>>>,
 }
@@ -733,6 +739,11 @@ enum Entry<'v> {
         guaranteed: bool,
         values: &'v [solid_facts::ast::ParameterValue],
     },
+    /// ADR 0550: an action's stepped generator, entered by a call of the
+    /// action from the leaf scope: its first step runs there, on the caller's
+    /// stack and under its owner (`@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev.js:1573-1600`).
+    ActionStep { guaranteed: bool },
 }
 
 /// Whether `inner`, written directly in `function`, runs on every call that
@@ -749,7 +760,29 @@ fn reached_on_every_call(
         Entry::Called { guaranteed: false }
         | Entry::CalledWith {
             guaranteed: false, ..
-        } => false,
+        }
+        | Entry::ActionStep { guaranteed: false } => false,
+        // ADR 0550: the calls the first step runs on every completion before
+        // the generator's first `yield`.
+        Entry::ActionStep { guaranteed: true } => {
+            resolution
+                .completions
+                .borrow_mut()
+                .entry((format!("{}#first-step", file.path.as_str()), function.span))
+                .or_insert_with(|| {
+                    solid_facts::ast::first_step_unconditional_calls(
+                        std::path::Path::new(file.path.as_str()),
+                        &file.source,
+                        function.span,
+                        &[],
+                    )
+                    .unwrap_or_default()
+                })
+                .contains(&inner)
+                && !resolution
+                    .lookup
+                    .never_returning_call_before(file, function, inner)
+        }
         Entry::Called { guaranteed: true }
         | Entry::CalledWith {
             guaranteed: true, ..
@@ -890,6 +923,32 @@ fn helper_forbidden_operations(
     if depth == 0 {
         return false;
     }
+    // ADR 0550: a call of an action a `const` holds runs the generator's first
+    // step here, under this scope's owner. `flush` there throws
+    // FLUSH_IN_ACTION first (SC2006's claim), so that kind is not this walk's.
+    if !call.construct
+        && let Some(generator) =
+            crate::owners::named_action_generator(call_file, call.callee, lookup)
+                .and_then(|span| call_file.ast.function_at(span))
+    {
+        let mut step = Vec::new();
+        let complete = function_forbidden_operations(
+            resolution,
+            call_file,
+            generator,
+            &mut step,
+            visited,
+            depth,
+            None,
+            Entry::ActionStep { guaranteed },
+        );
+        for (kind, guaranteed) in step {
+            if kind != crate::LeafOwnerOperationKind::Flush {
+                record(kinds, kind, guaranteed);
+            }
+        }
+        return complete;
+    }
     // An immediate literal call selects its implementation without a symbol
     // or a transported binding. Use the ordinary helper walk so parameter
     // defaults, conditional completion and the async synchronous prefix keep
@@ -963,7 +1022,9 @@ fn helper_forbidden_operations(
         Some(crate::interproc::accessor_provenance::Callable::Accessor(symbol))
             if safe_call_symbols.contains(symbol) =>
         {
-            return true;
+            // ADR 0550: an action whose generator no `const` names runs a
+            // step nothing here walks.
+            return !resolution.action_symbols.contains(symbol);
         }
         _ => {}
     }
@@ -1022,7 +1083,8 @@ fn helper_forbidden_operations(
         );
     }
     if safe_call_symbols.contains(symbol) {
-        return true;
+        // ADR 0550: as above, an unwalked action step is open.
+        return !resolution.action_symbols.contains(symbol);
     }
     let Some((helper_file, helper)) = lookup
         .function_for_symbol(symbol)
@@ -1534,8 +1596,10 @@ fn function_forbidden_operations(
                 })
         })
         .peekable();
-    // Calling a generator runs none of its body, only its parameter list.
-    if helper.generator {
+    // Calling a generator runs none of its body, only its parameter list;
+    // stepping an action runs its first step too (ADR 0550).
+    let action_step = matches!(entry, Entry::ActionStep { .. });
+    if helper.generator && !action_step {
         return parameter_calls.peek().is_none();
     }
     let mut complete = true;
@@ -1617,26 +1681,36 @@ fn function_forbidden_operations(
         {
             continue;
         }
-        let guaranteed = match standings
-            .as_ref()
-            .and_then(|standings| standings.get(&inner.span))
-        {
-            // Not on this call: nothing to report, nothing left open.
-            Some(solid_facts::ast::SiteStanding::Unreachable) => continue,
-            Some(solid_facts::ast::SiteStanding::Guaranteed) => {
-                // The walk read this body's `never`/`asserts` calls as exits,
-                // and skipped the ones in arms the arguments rule out.
-                matches!(
-                    entry,
-                    Entry::CalledWith {
-                        guaranteed: true,
-                        ..
-                    }
-                )
-            }
-            Some(solid_facts::ast::SiteStanding::Possible) => false,
-            None => reached_on_every_call(resolution, helper_file, helper, inner.span, entry),
-        };
+        // ADR 0550: a site a yielded promise's continuation runs has left the
+        // scope (no owner: SC4001's claim); one that may follow a thenable
+        // `yield` may run there or not.
+        let resumption = action_step
+            .then(|| crate::owners::action_step_resumption(helper_file, inner.span, lookup))
+            .flatten();
+        if resumption == Some(crate::owners::StepResumption::Proven) {
+            continue;
+        }
+        let guaranteed = resumption.is_none()
+            && match standings
+                .as_ref()
+                .and_then(|standings| standings.get(&inner.span))
+            {
+                // Not on this call: nothing to report, nothing left open.
+                Some(solid_facts::ast::SiteStanding::Unreachable) => continue,
+                Some(solid_facts::ast::SiteStanding::Guaranteed) => {
+                    // The walk read this body's `never`/`asserts` calls as exits,
+                    // and skipped the ones in arms the arguments rule out.
+                    matches!(
+                        entry,
+                        Entry::CalledWith {
+                            guaranteed: true,
+                            ..
+                        }
+                    )
+                }
+                Some(solid_facts::ast::SiteStanding::Possible) => false,
+                None => reached_on_every_call(resolution, helper_file, helper, inner.span, entry),
+            };
         let primitive = crate::call_primitive_name_cached(
             lookup,
             helper_file,

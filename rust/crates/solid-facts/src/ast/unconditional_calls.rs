@@ -36,7 +36,7 @@ pub fn unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, false)
+    calls_on_every_completion(path, source, function, folds, false, false)
 }
 
 /// The calls a call of the function at `function` runs before it returns, on
@@ -53,7 +53,23 @@ pub fn synchronously_unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, true)
+    calls_on_every_completion(path, source, function, folds, true, false)
+}
+
+/// ADR 0550: the calls the first `next()` of the generator at `function`
+/// runs on every completion its caller can continue from: those no `yield`
+/// (and, in an async generator, no `await`, `for await` or `await using`) of
+/// its own precedes or contains, with an earlier `throw` a way out as for
+/// [`synchronously_unconditional_calls`]. `None` when the source does not
+/// parse, no function node has that span, or the function is no generator.
+#[must_use]
+pub fn first_step_unconditional_calls(
+    path: &Path,
+    source: &str,
+    function: Span,
+    folds: &[HostConstantFold],
+) -> Option<Vec<Span>> {
+    calls_on_every_completion(path, source, function, folds, true, true)
 }
 
 fn calls_on_every_completion(
@@ -62,6 +78,7 @@ fn calls_on_every_completion(
     function: Span,
     folds: &[HostConstantFold],
     synchronous_prefix: bool,
+    generator_first_step: bool,
 ) -> Option<Vec<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
@@ -92,7 +109,10 @@ fn calls_on_every_completion(
         AstKind::ArrowFunctionExpression(arrow) => (arrow.r#async, false),
         _ => return Some(Vec::new()),
     };
-    if generator || (asynchronous && !synchronous_prefix) {
+    if generator_first_step && !generator {
+        return None;
+    }
+    if (generator && !generator_first_step) || (asynchronous && !synchronous_prefix) {
         return Some(Vec::new());
     }
     // Where this function's own first suspension point starts: an `await`,
@@ -100,9 +120,10 @@ fn calls_on_every_completion(
     // another function.
     let first_suspension = nodes
         .iter()
-        .filter(|_| asynchronous)
+        .filter(|_| asynchronous || generator_first_step)
         .filter(|node| match node.kind() {
-            AstKind::AwaitExpression(_) => true,
+            AstKind::YieldExpression(_) => generator_first_step,
+            AstKind::AwaitExpression(_) => asynchronous,
             AstKind::ForOfStatement(statement) => statement.r#await,
             AstKind::VariableDeclaration(declaration) => {
                 declaration.kind == oxc_ast::ast::VariableDeclarationKind::AwaitUsing

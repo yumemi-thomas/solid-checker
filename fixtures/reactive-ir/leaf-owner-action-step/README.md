@@ -1,0 +1,5 @@
+# leaf-owner-action-step
+
+ADR 0550: an action's first step runs on the stack of whoever calls the action, under that caller's owner (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1573-1600`; ADR 0520). Called from an owned `onSettled` or a `createTrackedEffect`, a memo in the step throws PRIMITIVE_IN_FORBIDDEN_SCOPE and `onCleanup` CLEANUP_IN_FORBIDDEN_SCOPE (Fable's precision report 2026-11-02, probe R12): FromLeaf's two calls are SC3001 violations of both kinds, at the call. LegalSteps stays silent: a write and a read are legal in a leaf, and past a yielded promise the step runs with no owner (a root is legal there). Unproven: after a plain `yield` (the next step runs on the same stack, but rc.17 flushes between steps), on one branch, or in an action another module holds, the operation is possible: obligations.
+
+The stub reduces the published rc.17 declarations; `@solidjs/signals` is pinned to rc.17 for the release key. The complete source also type-checks against published solid-js rc.17 with strict ES2022 settings. Package bytes are not copied here.

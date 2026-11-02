@@ -383,5 +383,19 @@
    "mx-no-owner-effect-timer-reaction-track-alias-none-s-module"
   ],
   "rediscovered": "f31337fa8 (release), mx-src NO_OWNER_EFFECT: 230 false-clean and 22 recall-gap of the 252 reaction-track programs; ADR 0549: 108 agree (direct, alias, wrapper bindings), 122 false-clean remain (object-literal, hook, hook-member and tuple bindings: open-work)"
+ },
+ {
+  "finding": "createMemo / onCleanup in an action's first step called from an owned onSettled or a createTrackedEffect was certified clean: the leaf walk counted the action as a safe call; rc.17 throws PRIMITIVE_IN_FORBIDDEN_SCOPE / CLEANUP_IN_FORBIDDEN_SCOPE (ADR 0550)",
+  "found": "Fable's precision report 2026-11-02 (probe R12), confirmed on the fast runtime",
+  "fixed": "ADR 0550",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-action-from-settled-effect-alias-none",
+   "mx-primitive-in-forbidden-scope-action-from-settled-effect-destructured-iife",
+   "mx-primitive-in-forbidden-scope-action-from-settled-effect-ns-held-none",
+   "mx-primitive-in-forbidden-scope-action-from-settled-memo-alias-iife"
+  ],
+  "rediscovered": "f31337fa8 (release), action-from-settled/-tracked at --grid-sample 0.2: 1,316 SC3001 false cleans; ADR 0550: 609 agree, 707 recall-gap, 0 false-clean"
  }
 ]

@@ -100,7 +100,9 @@ pub use literal_array::{literal_array_element, this_expression_spans};
 pub use module_requests::static_module_requests;
 pub use primitive_completion::primitive_completion_by_syntax;
 pub use proxy_get_forward::proxy_get_forward_target;
-pub use unconditional_calls::{synchronously_unconditional_calls, unconditional_calls};
+pub use unconditional_calls::{
+    first_step_unconditional_calls, synchronously_unconditional_calls, unconditional_calls,
+};
 
 pub use emission::{
     EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, has_export_assignment,

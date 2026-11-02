@@ -35,6 +35,13 @@ where it is written (ADR 0492). A helper that defers, stores or hands on its
 callback is not followed. A tagged template's tag (``f`x` ``) is followed as
 a call of `f`, resolved through its declaration (ADR 0538).
 
+An action called in that extent runs its generator's first step there, under
+the leaf owner (ADR 0520): a `const`-held action's body is followed as a
+helper's is, up to its first `yield`. A site after a yielded promise runs with
+no owner (`missing-owner`'s claim); one after a plain `yield`, on a branch, or
+in an action no `const` here holds is an obligation; `flush` in the step throws
+`FLUSH_IN_ACTION` first (`flush-in-action`'s claim) (ADR 0550).
+
 A standard-library call in that extent is judged by its exact declaration,
 optional (`el?.scrollIntoView()`) or not (ADR 0439). One that dispatches an
 event synchronously (`focus`, `click`, `dispatchEvent`, dialog and popover

@@ -249,3 +249,46 @@ function onElementConnect(el, fn) {
         assert!(!cleanup(&calls(LIFECYCLE, "onElementConnect", &folds)));
     }
 }
+
+/// ADR 0550: a generator's first step runs its calls before its first
+/// `yield` (or, async, its first `await`); calling a plain function asks
+/// nothing of this census.
+#[test]
+fn a_generator_first_step_states_its_calls_before_its_first_yield() {
+    let source = "function* plain(cb) {\n  createMemo(cb);\n  if (cb) onCleanup(cb);\n  yield 1;\n  onCleanup(cb);\n}\n\
+async function* awaited(cb) {\n  createMemo(cb);\n  await load();\n  onCleanup(cb);\n}\n\
+function* operand(cb) {\n  yield createMemo(cb);\n}\n\
+function notGenerator(cb) {\n  createMemo(cb);\n}\n";
+    let first_step = |name: &str| {
+        let start = source.find(&format!("{name}(cb)")).expect("the function");
+        let start = source[..start].rfind("function").expect("the keyword");
+        let start = if source[..start].ends_with("async ") {
+            start - "async ".len()
+        } else {
+            start
+        };
+        let end = source[start..]
+            .find("\n}")
+            .map(|offset| start + offset + 2)
+            .expect("the end");
+        first_step_unconditional_calls(
+            Path::new("test.js"),
+            source,
+            Span::new(start as u32, end as u32),
+            &[],
+        )
+        .map(|spans| {
+            spans
+                .into_iter()
+                .map(|span| source[span.start as usize..span.end as usize].to_owned())
+                .collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(first_step("plain"), Some(vec!["createMemo(cb)".to_owned()]));
+    assert_eq!(
+        first_step("awaited"),
+        Some(vec!["createMemo(cb)".to_owned()])
+    );
+    assert_eq!(first_step("operand"), Some(Vec::new()));
+    assert_eq!(first_step("notGenerator"), None);
+}
