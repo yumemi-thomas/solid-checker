@@ -38,6 +38,7 @@ import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
+import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
 export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
@@ -142,6 +143,13 @@ export async function runLegal(options) {
     }
     // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
     if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+    // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; legal.json records it.
+    const sampling = gridSampleOptions(options);
+    let gridSample = null;
+    if (sampling) {
+      ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
+      console.error(`legal: ${sampleLine(gridSample)}`);
+    }
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();
@@ -223,7 +231,7 @@ export async function runLegal(options) {
       cell[row.outcome] += 1;
       cell.verdicts[String(row.seed)] = row.outcome;
     }
-    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
+    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(gridSample ? { gridSample } : {}), ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
       falsePositives: candidates.map(({ id, code, context, variant, binding, layer, detail, chrome }) => ({ id, code, context, variant, binding, layer, rules: detail.rules, chrome })),
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -252,7 +260,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

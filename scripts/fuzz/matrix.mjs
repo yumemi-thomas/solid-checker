@@ -44,6 +44,7 @@ import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
+import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
@@ -488,6 +489,8 @@ export function gate(baseline, current) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
   }
+  // A sampled grid (`--grid-sample`) is for iterating, never a gate: the gate compares whole grids.
+  for (const [side, matrix] of [["baseline", baseline], ["current", current]]) if (matrix.gridSample) return { ok: false, refused: `the ${side} matrix is a sample (--grid-sample ${matrix.gridSample.fraction}): the gate compares whole grids`, ...empty };
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
   const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
@@ -624,6 +627,13 @@ async function sweep(options, config, out) {
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
   if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+  // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; matrix.json records it.
+  const sampling = gridSampleOptions(options);
+  let gridSample = null;
+  if (sampling) {
+    ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
+    console.error(`matrix: ${sampleLine(gridSample)}`);
+  }
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();
@@ -744,7 +754,7 @@ async function sweep(options, config, out) {
   }
 
   const header = { label: options.checkerLabel ?? null, bin: options.checkerBin ? "release build" : null };
-  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values) };
+  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values), ...(gridSample ? { gridSample } : {}) };
   const statuses = codeStatuses(matrix);
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
@@ -766,7 +776,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

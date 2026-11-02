@@ -69,6 +69,15 @@ for one code, under a minute when the cache holds its programs. The full grids, 
 `--prune-cases`: each grid's `cases/` deleted once its rows are read; `--grid-timeout <minutes>`, default 120, kills and reports a
 grid process that hangs; `--heap-mb`, default 12000 for the recall grids; each grid's output streams to `<grid>.log` as it runs).
 
+**Sampling the big codes while iterating.** STORE_WRITE_OUTSIDE_SETTER and REACTIVE_WRITE_IN_OWNED_SCOPE are about 40% of a full
+run. `focus.mjs --sample-big <fraction>` passes `--grid-sample` to every grid (`matrix.mjs`, `legal.mjs`; sample.mjs): each (code,
+context, layer, variant) stratum of those codes keeps that fraction of its programs, at least `--sample-big-min` (1), the ones whose
+`fnv(<seed>:<id>)` is smallest (`--sample-big-seed`, default 1), so the pick is reproducible and does not depend on the grid's order;
+`--sample-codes A,B` names other codes; every other code stays whole. Each sampled grid records `gridSample` (settings, kept of how
+many, strata) in matrix.json or legal.json, the focus summary prints it and ends with `sampled (...), not a full run`, and the matrix
+gate refuses a sampled matrix on either side. A run without the flag is complete: the full run before a PR (above) never takes it.
+Measured on the VM (2026-11-02, `--sample-big 0.1 --runtime-diff 0`, runtime cache cold): STORE_WRITE_OUTSIDE_SETTER's mx-recall kept 33,216 of 254,112 programs (15,438 strata, so the floor of one each lifts 10% to 13%) in 393 s; REACTIVE_WRITE_IN_OWNED_SCOPE's mx-recall 12,756 of 110,712 (4,068 strata) in 162 s and its lg-recall 9,240 of 79,746 (3,060 strata) in 142 s. On lg-recall FLUSH_IN_EFFECT_CALLBACK (`--sample-codes`), a sampled run's 672 rows each equal the full run's, two sampled runs pick the same 672, and the run without the flag keeps all 5,034, equal to the run before the option existed.
+
 Rediscovery (AGENTS.md): a defect found any way is closed when the grids generate its shape and the build that had it fails `make
 fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
 generator cannot express it); the smoke set always holds them, and `rediscovery.test.mjs` fails when a grid stops generating one.
@@ -426,6 +435,7 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 | `mounts.mjs` | the recall mounts: a parent's lines for each, the later mount's button |
 | `mutation.mjs` | mutation mode: each misuse shape against its legal twin, the checker alone |
 | `twins.mjs` | the twin consistency check: a grid program's in-place layer twins, the checker alone |
+| `sample.mjs` | the stratified sample of the big codes (`--grid-sample`, `focus.mjs --sample-big`) |
 | `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
 | `rewrite.mjs`, `equivalence.mjs` | equivalence mode: runtime-identical rewrites of a program, the per-site comparison across them, the buckets and the Chrome judgement |
