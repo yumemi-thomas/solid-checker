@@ -10,7 +10,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mapPoolSettled } from "../lib/pool.mjs";
-import { StaleCacheError, cacheableRecord, cacheableTypecheck, caseKey, recordDigest, typecheckDigest } from "./cache.mjs";
+import { StaleCacheError, cacheableRecord, cacheableTypecheck, caseKey, recordDigest, typecheckDigest, typecheckKey } from "./cache.mjs";
 import { checkerProjectFiles, checkerResult, checkerWorkDir, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { classify, runtimeEvents } from "./classify.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -26,6 +26,14 @@ import { judgeUnexecuted, lexicallyDeadHits } from "./unexecuted.mjs";
 /** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
 export const hasPackages = (built) => Object.keys(built.packages ?? {}).length > 0;
 
+/** A program's type-check key (cache.mjs `typecheckKey`): the bytes of its clean project (`part` `typecheck`) or its twin's (`typecheck-twin`). */
+const typecheckKeys = new WeakMap();
+export function typecheckKeyOf(built, part) {
+  let keys = typecheckKeys.get(built);
+  if (!keys) typecheckKeys.set(built, (keys = {}));
+  return (keys[part] ??= typecheckKey(checkerProjectFiles(built, { twin: part === "typecheck-twin" })));
+}
+
 const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reason], items: [{ kind: "inconclusive", reason, why }] });
 
 /**
@@ -35,8 +43,9 @@ const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reas
  *   instrument (default true; false runs the clean text and classifies as before the hit ledger: the baseline of the neutrality regression),
  *   control (also run the clean twin and the checker on the twin's text, and compare),
  *   (`deadSite` is the strict confirmation of unexecuted candidates, read by run.mjs; it changes no verdict here),
- *   runtimeCache (an `EntryCache` of cache.mjs under `runtimeEnvironmentKey`: the type checks and the fast-path records are taken from it
- *   when the case's files match, and stored in it otherwise; only the checker runs again. Absent, every step runs, as before it existed) }
+ *   runtimeCache (an `EntryCache` of cache.mjs under `runtimeEnvironmentKey`: the fast-path records are taken from it when the case's
+ *   files match, and stored in it otherwise; only the checker runs again. Absent, every step runs, as before it existed),
+ *   typecheckCache (an `EntryCache` under `typecheckEnvironmentKey`: the type checks, by the bytes of the project they compile) }
  * @returns {Promise<Map<string, object>>} id -> { program, built, typecheck, checker, runtime, classification, verdicts, control }
  */
 export async function evaluate(entries, config, deps = {}) {
@@ -74,11 +83,11 @@ export async function prepareEntries(entries, config, deps = {}) {
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
   const control = instrument && Boolean(config.control);
-  const cache = config.runtimeCache ?? null;
-  // A type check (or a fast record) from the cache when the case's files match, else the real one, stored when it says something about the program.
+  const cache = config.typecheckCache ?? null;
+  // A type check from the cache when its project's files match, else the real one, stored when it says something about the program.
   const remembered = async (built, part, compute, keep) => {
     if (!cache) return compute();
-    const key = caseKey(built.files, part);
+    const key = typecheckKeyOf(built, part);
     const stored = cache.get(key);
     if (stored !== undefined) {
       // The first hits of a process are also run fresh: a cause the key does not cover shows here, and stops the run.
@@ -86,7 +95,7 @@ export async function prepareEntries(entries, config, deps = {}) {
         const fresh = await compute();
         if (cacheableTypecheck(fresh) && typecheckDigest(fresh) !== typecheckDigest(stored)) {
           cache.spotMismatches.push(built.id);
-          throw new StaleCacheError(`the runtime cache's ${part} of ${built.id} differs from a fresh one (${typecheckDigest(stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
+          throw new StaleCacheError(`the type-check cache's ${part} of ${built.id} differs from a fresh one (${typecheckDigest(stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
         }
       }
       return stored;
@@ -101,7 +110,7 @@ export async function prepareEntries(entries, config, deps = {}) {
   // type-checks and checks them on its own threads. The checker control on the twin stays on this path.
   if (config.exec && !control && !deps.typecheck && !deps.runChecker) {
     const exec = await config.exec;
-    const prepared = await mapPoolSettled(entries, (entry) => prepareViaExecutor(entry, { config, cache, exec, instrument }), { concurrency: Math.max(1, entries.length) });
+    const prepared = await mapPoolSettled(entries, (entry) => prepareViaExecutor(entry, { config, exec, instrument }), { concurrency: Math.max(1, entries.length) });
     return settlePrepared(entries, prepared, config, instrument);
   }
 
@@ -119,8 +128,8 @@ export async function prepareEntries(entries, config, deps = {}) {
         dir: timed("materialize", () => materializeForChecker(built, install, built.id)),
         twinDir: null,
       };
-      if (!cache?.has(caseKey(built.files, "typecheck"))) pending.push(stage.dir);
-      if (instrument && !cache?.has(caseKey(built.files, "typecheck-twin"))) {
+      if (!cache?.has(typecheckKeyOf(built, "typecheck"))) pending.push(stage.dir);
+      if (instrument && !cache?.has(typecheckKeyOf(built, "typecheck-twin"))) {
         stage.twinDir = timed("materialize", () => materializeForChecker(built, install, `${built.id}-run`, { twin: true }));
         pending.push(stage.twinDir);
       }
@@ -187,7 +196,8 @@ function settlePrepared(entries, prepared, config, instrument) {
  * One program's step 1 through the Rust executor: the same files, type checks (cached ones answered from the cache, the cache's spot
  * checks run fresh), checker run and value as the JS path's.
  */
-async function prepareViaExecutor({ program, built }, { config, cache, exec, instrument }) {
+async function prepareViaExecutor({ program, built }, { config, exec, instrument }) {
+  const cache = config.typecheckCache ?? null;
   const { install, casesDir } = config;
   const caseDir = join(casesDir, built.id);
   const dir = checkerWorkDir(install, built.id);
@@ -196,7 +206,7 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
   // A type check from the cache, or run fresh (no entry, or a spot check of one); `settle` stores or compares as `remembered` does.
   const cached = (part) => {
     if (!cache) return { stored: undefined, fresh: true };
-    const stored = cache.get(caseKey(built.files, part));
+    const stored = cache.get(typecheckKeyOf(built, part));
     return { part, stored, fresh: stored === undefined || cache.takeSpot("typecheck") };
   };
   const settle = (slot, fresh) => {
@@ -204,11 +214,11 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
     if (slot.stored !== undefined) {
       if (cacheableTypecheck(fresh) && typecheckDigest(fresh) !== typecheckDigest(slot.stored)) {
         cache.spotMismatches.push(built.id);
-        throw new StaleCacheError(`the runtime cache's ${slot.part} of ${built.id} differs from a fresh one (${typecheckDigest(slot.stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
+        throw new StaleCacheError(`the type-check cache's ${slot.part} of ${built.id} differs from a fresh one (${typecheckDigest(slot.stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
       }
       return slot.stored;
     }
-    if (cacheableTypecheck(fresh)) cache.set(caseKey(built.files, slot.part), fresh);
+    if (cacheableTypecheck(fresh)) cache.set(typecheckKeyOf(built, slot.part), fresh);
     return fresh;
   };
   const clean = cached("typecheck");
@@ -294,12 +304,13 @@ export async function finishEntries({ results, live }, config, deps = {}) {
  */
 export function runtimeCached(entries, config) {
   const cache = config.runtimeCache;
-  if (!cache) return false;
+  const types = config.typecheckCache;
+  if (!cache || !types) return false;
   const instrument = config.instrument !== false;
   const control = instrument && Boolean(config.control);
   const variant = instrument ? "run" : "clean";
-  return entries.every(({ built }) => cache.has(caseKey(built.files, "typecheck"))
-    && (!instrument || cache.has(caseKey(built.files, "typecheck-twin")))
+  return entries.every(({ built }) => types.has(typecheckKeyOf(built, "typecheck"))
+    && (!instrument || types.has(typecheckKeyOf(built, "typecheck-twin")))
     && cache.has(caseKey(built.files, `fast-${variant}|${built.id}`))
     && (!control || cache.has(caseKey(built.files, `fast-clean|${built.id}-clean`))));
 }

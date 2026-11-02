@@ -28,7 +28,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { assertFindingsMapped, checkerEnv, checkerWorkDir, keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
-import { fileHash, treeStat, withRuntimeCache } from "./cache.mjs";
+import { fileHash, treeStat, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
@@ -311,10 +311,10 @@ async function sweep(options, config, out) {
     knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.map(({ code, coarseKey, ref }) => ({ code, coarseKey, ref })), recallGaps: falseClean.recallGaps,
   };
   writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-"), falseClean: falseCleanReport, unexecuted: unexecutedReport }, null, 2)}\n`);
-  if (config.runtimeCache) {
+  if (config.runtimeCache || config.typecheckCache) {
     // Beside the run's files, not in them: a cached run's results are the uncached run's.
-    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
-    console.error(`runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
+    console.error(`runtime cache ${JSON.stringify(cacheStats(config))}`);
   }
   const certifiedFalseCleans = rows.flatMap((row) => row.items).filter((item) => item.kind === "candidate-false-clean" && item.certified).length;
   writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, certifiedFalseCleans, candidates: candidates.length, confirmed, groups: groups.length,

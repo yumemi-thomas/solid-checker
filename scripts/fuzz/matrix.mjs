@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
+import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { codeOfThrown, codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
@@ -749,10 +749,10 @@ async function sweep(options, config, out) {
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
   writeFileSync(join(out, "matrix.md"), markdown(matrix, statuses));
-  if (config.runtimeCache) {
+  if (config.runtimeCache || config.typecheckCache) {
     // Beside the matrix, not in it: a cached run's matrix.json is the uncached run's, byte for byte.
-    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
-    console.error(`matrix: runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
+    console.error(`matrix: runtime cache ${JSON.stringify(cacheStats(config))}`);
   }
   console.error(`matrix: wrote ${join(out, "matrix.md")}`);
   if (options.baseline) return reportGate(gate(JSON.parse(readFileSync(resolve(options.baseline), "utf8")), JSON.parse(JSON.stringify(matrix))));

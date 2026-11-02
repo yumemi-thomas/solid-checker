@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BaselineCache, EntryCache, RECORD_SOURCES, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, oracleRecordHash, programKey, runtimeEnvironmentKey, treeHash } from "./cache.mjs";
+import { BaselineCache, EntryCache, RECORD_SOURCES, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, oracleRecordHash, programKey, runtimeEnvironmentKey, treeHash, TYPECHECK_SOURCES, cacheStats, typecheckEnvironmentKey, typecheckKey, withRuntimeCache } from "./cache.mjs";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "fuzz-cache-"));
 const config = (dir, text = "checker") => {
@@ -130,6 +130,51 @@ describe("the runtime and Chrome keys", () => {
     writeFileSync(join(config.install, "package-lock.json"), '{"b":1}');
     expect(key()).not.toBe(fast);                                       // the oracle install's lockfile
     expect(dir).toBeTruthy();
+  });
+
+  it("the type-check key moves with tsrs, the rc.17 install and the type-check harness, and not with the checker, the runtime or the clock", () => {
+    const { config } = setup();
+    mkdirSync(join(config.install, "node_modules/solid-js"), { recursive: true });
+    writeFileSync(join(config.install, "node_modules/solid-js/package.json"), '{"version":"2.0.0-rc.17"}');
+    const key = (over = {}, parts = {}) => typecheckEnvironmentKey({ ...config, ...over }, { code: "h1", ...parts });
+    const base = key();
+    expect(key()).toBe(base);
+    expect(key({}, { code: "h2" })).not.toBe(base);                     // the harness (typecheck.mjs, exec/src/typecheck.rs)
+    expect(TYPECHECK_SOURCES()).toMatch(/^[0-9a-f]{64}$/);
+    expect(key({ virtualClock: false })).toBe(base);                    // not the clock
+    expect(key({ fastHostKey: "another host" })).toBe(base);            // not the fast host
+    writeFileSync(config.bin, "a rebuilt checker");
+    expect(key()).toBe(base);                                           // not the checker
+    writeFileSync(join(config.fastInstall, "package-lock.json"), '{"a":1}');
+    expect(key()).toBe(base);                                           // not the fast install
+    writeFileSync(config.tsc, "another tsrs");
+    const tsc = key();
+    expect(tsc).not.toBe(base);                                         // the type checker binary
+    writeFileSync(join(config.install, "package-lock.json"), '{"b":1}');
+    const lock = key();
+    expect(lock).not.toBe(tsc);                                         // the rc.17 install's lockfile
+    writeFileSync(join(config.install, "node_modules/solid-js/package.json"), '{"version":"2.0.0-rc.18"}');
+    expect(key()).not.toBe(lock);                                       // what that install holds
+  });
+
+  it("a type check's program key is its project's bytes, by path", () => {
+    const files = { "App.tsx": "a", "main.tsx": "m", "tsconfig.json": "{}" };
+    expect(typecheckKey(files)).toBe(typecheckKey({ "tsconfig.json": "{}", "main.tsx": "m", "App.tsx": "a" }));
+    expect(typecheckKey({ ...files, "App.tsx": "b" })).not.toBe(typecheckKey(files));
+    expect(typecheckKey({ ...files, "helpers.ts": "" })).not.toBe(typecheckKey(files));
+  });
+
+  it("a run takes a type-check cache unless --no-cache, on either clock, and reports both caches", () => {
+    const { dir, config } = setup();
+    const virtual = withRuntimeCache({ ...config, virtualClock: true }, { cacheDir: dir });
+    expect(virtual.runtimeCache.root).toMatch(/runtime-/);
+    expect(virtual.typecheckCache.root).toMatch(/typecheck-/);
+    const real = withRuntimeCache({ ...config, virtualClock: false }, { cacheDir: dir });
+    expect(real.runtimeCache).toBeUndefined();
+    expect(real.typecheckCache.root).toBe(virtual.typecheckCache.root);
+    expect(withRuntimeCache(config, { cacheDir: dir, noCache: true }).typecheckCache).toBeUndefined();
+    expect(cacheStats(virtual)).toMatchObject({ hits: 0, typecheck: { hits: 0, misses: 0 } });
+    expect(cacheStats(real)).toEqual({ typecheck: expect.objectContaining({ hits: 0 }) });
   });
 
   it("the Chrome key moves with the judging sources, the oracle and its product scripts, the browser and the oracle lockfile, and not with the checker", () => {

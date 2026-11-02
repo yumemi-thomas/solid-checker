@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
+import { browserExecutionCache, cacheStats, withRuntimeCache } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
@@ -228,6 +228,11 @@ export async function runLegal(options) {
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync(join(out, "programs.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    if (config.runtimeCache || config.typecheckCache) {
+      // Beside the grid's files, as matrix.mjs writes it: a cached run's rows are the uncached run's.
+      writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
+      console.error(`legal: caches ${JSON.stringify(cacheStats(config))}`);
+    }
     console.error(`legal: ${JSON.stringify(report.total)}${chrome ? `; Chrome ${JSON.stringify(chrome)}` : ""}`);
     for (const d of differs) console.error(`legal: Chrome differs ${d.id}: fast ${d.fast}, Chrome ${d.chrome}`);
     for (const fp of report.falsePositives) console.error(`legal: candidate false positive ${fp.id} [${fp.rules.join(", ")}]${fp.chrome ? ` chrome ${fp.chrome.status}` : ""}`);
