@@ -201,7 +201,10 @@ const KEEPS_WORDING = new Set([
   "reactive-ir/context-read-owner",
   "reactive-ir/context-read-package",
   // ADR 0352: the SC4002 wording names the ContextNotFoundError throw, the claim.
-  "reactive-ir/context-provider-closed"
+  "reactive-ir/context-provider-closed",
+  // ADR 0534 amendment: which owner clause an exported helper's obligation
+  // names (its unseen callers, or an unplaced callback) is the claim.
+  "reactive-ir/owner-exported-seed-cause"
 ]);
 
 /**

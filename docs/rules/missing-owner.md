@@ -209,7 +209,9 @@ violation (ADR 0345).
 A callback with no proven run under its lexical owner (a wrapper callback,
 stored member, class member or getter) is uncertifiable (ADR 0534). Dormant
 exports remain silent; unnamed namespace escapes remain uncertain. JSX
-boundaries retain the region's answer.
+boundaries retain the region's answer. An operation in an exported helper's
+own body names its unseen callers instead: the open-world seed is its edge
+(fixture `owner-exported-seed-cause`).
 
 An invoked function literal is an owner edge (ADR 0347): the call runs its body
 under the owner of the code around the call, so a plain IIFE at module scope or

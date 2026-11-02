@@ -774,6 +774,8 @@ packages/wasm/owned/
 
 !fixtures/reactive-ir/owner-region-no-edge/node_modules/
 !fixtures/reactive-ir/owner-region-no-edge/node_modules/**
+!fixtures/reactive-ir/owner-exported-seed-cause/node_modules/
+!fixtures/reactive-ir/owner-exported-seed-cause/node_modules/**
 !fixtures/reactive-ir/phase-handed-by-name/node_modules/
 !fixtures/reactive-ir/phase-handed-by-name/node_modules/**
 !fixtures/reactive-ir/effect-cleanup-rerun-read/node_modules/

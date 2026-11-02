@@ -188,6 +188,17 @@ pub(super) fn emit_file(
                         unreached,
                     )
             });
+        // The operation's own function is an export holding the unknown-caller
+        // seed (its open-world seed, or ADR 0347's namespace hand-out): that
+        // seed is its owner edge, a caller this build cannot see, so its
+        // unowned bit is the exported-caller cause below, not ADR 0534's
+        // unplaced callback. The verdict is the same obligation either way.
+        let exported_seed = owner.is_some_and(|(node, node_context)| {
+            node.exported
+                && node_context & OWNER_CONTEXT_UNOWNED != 0
+                && !node.component
+                && !node.component_uncertain
+        });
         // ADR 0534: context zero is no proof for a function that may run
         // either: nothing calls it from syntax, so whoever runs it (a wrapper
         // it was handed to, the holder of a member it was assigned to, a
@@ -202,6 +213,7 @@ pub(super) fn emit_file(
             && !returned_unplaced
             && candidate.allow_uncertain
             && !region_answers
+            && !exported_seed
             && candidate.owner.is_some_and(|span| !unreached(&span));
         if unplaced_callback {
             // The caller nothing follows may supply no owner, as for an
@@ -430,13 +442,8 @@ pub(super) fn emit_file(
         let caller_uncertain = candidate.allow_uncertain
             && !proven_unowned
             && !unplaced_callback
-            && owner.is_some_and(|(node, node_context)| {
-                (node.exported
-                    && node_context & OWNER_CONTEXT_UNOWNED != 0
-                    && !node.component
-                    && !node.component_uncertain)
-                    || open_world_unowned_only(context, node)
-            });
+            && (exported_seed
+                || owner.is_some_and(|(node, _)| open_world_unowned_only(context, node)));
         let cleanup_return_uncertain = candidate.operation == "settled-cleanup"
             && cleanup_proof.is_none_or(|proof| {
                 matches!(

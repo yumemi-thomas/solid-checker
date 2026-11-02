@@ -7541,16 +7541,17 @@
     "src/r-array-actions.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/object-member:array-element:returned"
+    "SC1001/unplaced-read/object-member:array-element:returned"
    ],
    "expect": [
     {
      "rule": "SC1001",
-     "family": "callback-to-unproven-consumer",
+     "family": "unplaced-read",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/object-member:array-element:returned"
+     "cause": "SC1001/unplaced-read/object-member:array-element:returned"
     }
    ],
+   "note": "ADR 0536: was callback-to-unproven-consumer. The helper call in printTree is placed as a read written in printTree is (ADR 0531): printTree is handed by name into an object slot nothing follows, so the read is unplaced, as its direct-read twin's; an inline literal in the slot keeps callback-to-unproven-consumer. Still uncertifiable.",
    "source": {
     "app": "app-game",
     "path": "apps/browser-atlas/src/App.tsx",

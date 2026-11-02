@@ -1248,7 +1248,7 @@ A named reader previously contributed only at direct calls or primitive callback
 
 <a id="adr-0534"></a>
 ## ADR 0534 — Owner regions require a proven run
-Context zero or possible-unowned-only proves no run under the lexical owner. Such owner requirements become obligations, including unresolved assigned-member dispatch (B5). ADR 0347's dormant exports stay silent; unnamed namespace escapes stay uncertain. Fixture `owner-region-no-edge` pins 13 rc.17 warnings and legal controls. Never-read object members remain obligations; JSX boundaries keep their existing treatment.
+Context zero or possible-unowned-only proves no run under the lexical owner. Such owner requirements become obligations, including unresolved assigned-member dispatch (B5). ADR 0347's dormant exports stay silent; unnamed namespace escapes stay uncertain. Fixture `owner-region-no-edge` pins 13 rc.17 warnings and legal controls. Never-read object members remain obligations; JSX boundaries keep their existing treatment. Amendment: an operation in an exported helper's own body keeps the exported-caller cause, since its open-world or namespace seed is its owner edge (`exported_seed`; fixture `owner-exported-seed-cause`, repro cases `exported-lazy-route`, `open-program-boundary`, `exported-function-reached-by-dynamic-import`). Verdicts unchanged.
 
 <a id="adr-0533"></a>
 ## ADR 0533 — The role log: which classifier arm answered, folded per grid into saturation numbers
