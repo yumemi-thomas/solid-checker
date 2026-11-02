@@ -654,9 +654,7 @@ pub fn project_findings(
             }),
     );
     findings.extend(
-        program
-            .writes
-            .iter()
+        distinct_runs(&program.writes)
             .filter(|write| write_reported(write, capabilities))
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
@@ -751,9 +749,7 @@ pub fn project_findings(
     }
     if capabilities.actions {
         findings.extend(
-            program
-                .actions
-                .iter()
+            distinct_runs(&program.actions)
                 .filter(|action| action_reported(action))
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
@@ -765,6 +761,20 @@ pub fn project_findings(
         }
     }
     finish_findings(findings, total_started, construction_started)
+}
+
+/// `rows` without the rows equal to the one before them. A write or an
+/// action is listed once per reachable path to its call
+/// (`reachability::accumulate_function`), and nested in-place layers reach a
+/// call by millions; the copies are adjacent and equal, so they project to
+/// adjacent equal findings, which [`finish_findings`]'s stable sort keeps
+/// adjacent and its `dedup` drops. Projecting one of them leaves the same
+/// findings.
+fn distinct_runs<T: PartialEq>(rows: &[T]) -> impl Iterator<Item = &T> {
+    rows.iter()
+        .enumerate()
+        .filter(|(index, row)| *index == 0 || rows[index - 1] != **row)
+        .map(|(_, row)| row)
 }
 
 fn read_reported(read: &crate::ReactiveRead, capabilities: CatalogCapabilities) -> bool {

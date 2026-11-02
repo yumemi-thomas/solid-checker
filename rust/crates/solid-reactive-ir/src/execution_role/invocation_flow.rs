@@ -343,8 +343,75 @@ pub(super) fn absent_member_inert_in(lookup: &SemanticLookup<'_>, key: &str) -> 
         && !lookup.property_may_be_defined_reflectively_as(key)
 }
 
-/// [`FlowWorld::site_role`] over the lookup.
+/// A [`site_role_in`] answer: the role, the context the query left, and
+/// what the role log recorded while it ran.
+type SiteRoleAnswer = (
+    Option<ExecutionRole>,
+    HashSet<(String, Span)>,
+    Option<crate::role_log::Recorded>,
+);
+
+/// [`site_role_in`]'s key: the call, the walk's context (sorted, as
+/// [`super::flow_memos::FlowSiteRole`] keys it), whether a write-flow answer
+/// is being computed, and whether a role-log decision is open.
+type SiteRoleKey = (String, Span, Vec<(String, Span)>, bool, bool);
+
+thread_local! {
+    /// The site roles [`site_role_in`] answered while this thread computes a
+    /// flow answer ([`computing_flow`]); cleared when the outermost one ends.
+    /// A walk asks a call's role once per path to it, and nested in-place
+    /// layers double the paths at every layer.
+    static SITE_ROLES: std::cell::RefCell<HashMap<SiteRoleKey, SiteRoleAnswer>> =
+        std::cell::RefCell::new(HashMap::default());
+}
+
+/// [`FlowWorld::site_role`] over the lookup. While a flow answer is computed,
+/// an answer is kept by its exact key, which is everything it reads besides
+/// the build's lookup ([`super::flow_memos::FlowSiteRole`] memoises the same
+/// question by the same key), and a repeat replays what the role log
+/// recorded the first time.
 pub(super) fn site_role_in(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: Span,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    if !computing_flow_answers() {
+        return site_role_computed(lookup, file, call, classifying);
+    }
+    let mut context = classifying.iter().cloned().collect::<Vec<_>>();
+    context.sort_unstable();
+    let key = (
+        file.path.to_string(),
+        call,
+        context,
+        COMPUTING_WRITE_FLOW.with(std::cell::Cell::get),
+        crate::role_log::frame_open(),
+    );
+    let cached = SITE_ROLES.with(|cache| {
+        cache
+            .borrow()
+            .get(&key)
+            .map(|(role, after, recorded)| (*role, after.clone(), recorded.clone()))
+    });
+    if let Some((role, after, recorded)) = cached {
+        if let Some(recorded) = &recorded {
+            crate::role_log::replay(recorded);
+        }
+        *classifying = after;
+        return role;
+    }
+    let (role, recorded) =
+        crate::role_log::record(|| site_role_computed(lookup, file, call, classifying));
+    SITE_ROLES.with(|cache| {
+        cache
+            .borrow_mut()
+            .insert(key, (role, classifying.clone(), recorded));
+    });
+    role
+}
+
+fn site_role_computed(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     call: Span,
@@ -457,6 +524,9 @@ pub(super) fn computing_flow<R>(f: impl FnOnce() -> R) -> R {
     let outer = COMPUTING_FLOW_ANSWERS.with(|computing| computing.replace(true));
     let result = f();
     COMPUTING_FLOW_ANSWERS.with(|computing| computing.set(outer));
+    if !outer {
+        SITE_ROLES.with(|cache| cache.borrow_mut().clear());
+    }
     result
 }
 

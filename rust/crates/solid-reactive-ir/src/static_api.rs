@@ -536,8 +536,9 @@ impl StaticApiContext<'_> {
                         ),
                     );
                     if role.reports_disallowed_write() || role.reports_unplaced() {
-                        for _ in 0..multiplicity {
-                            result.writes.push(ReactiveWrite {
+                        // One record per reachable path, the same on each.
+                        if multiplicity > 0 {
+                            let write = ReactiveWrite {
                                 setter: format!(
                                     "refresh({})",
                                     file.source_text(target.span).unwrap_or("…")
@@ -558,7 +559,10 @@ impl StaticApiContext<'_> {
                                     self.lookup,
                                 )
                                 .into(),
-                            });
+                            };
+                            result
+                                .writes
+                                .extend(std::iter::repeat_n(write, multiplicity));
                         }
                     }
                 }
@@ -614,24 +618,36 @@ impl StaticApiContext<'_> {
             let Some((name, declaration)) = self.accessors.get(symbol) else {
                 continue;
             };
-            for _ in 0..multiplicity {
-                result.writes.push(ReactiveWrite {
-                    setter: format!("refresh({name})").into(),
-                    operation: crate::ReactiveWriteOperation::Refresh,
-                    source_kind: kind,
-                    location: location(
-                        file.path.as_str(),
-                        Span::new(
-                            call.span.start,
-                            call.arguments
-                                .last()
-                                .map_or(call.span.end, |argument| argument.span.end),
-                        ),
+            if multiplicity == 0 {
+                continue;
+            }
+            // One record per reachable path, the same on each: its role is
+            // decided once.
+            let write = ReactiveWrite {
+                setter: format!("refresh({name})").into(),
+                operation: crate::ReactiveWriteOperation::Refresh,
+                source_kind: kind,
+                location: location(
+                    file.path.as_str(),
+                    Span::new(
+                        call.span.start,
+                        call.arguments
+                            .last()
+                            .map_or(call.span.end, |argument| argument.span.end),
                     ),
-                    declaration: declaration.clone(),
-                    // `refresh`'s guard has no root exemption on any release
-                    // (probed rc.0-rc.9, dev).
-                    execution: crate::local_access::handed_write_execution(
+                ),
+                declaration: declaration.clone(),
+                // `refresh`'s guard has no root exemption on any release
+                // (probed rc.0-rc.9, dev).
+                execution: crate::local_access::handed_write_execution(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::RejectsOutsideDisposal,
+                    semantic_write_execution_role(
                         file,
                         call.callee,
                         &allowed,
@@ -639,32 +655,26 @@ impl StaticApiContext<'_> {
                         self.symbol_names,
                         self.lookup,
                         RootBodyGuard::RejectsOutsideDisposal,
-                        semantic_write_execution_role(
-                            file,
-                            call.callee,
-                            &allowed,
-                            self.entities,
-                            self.symbol_names,
-                            self.lookup,
-                            RootBodyGuard::RejectsOutsideDisposal,
-                        ),
                     ),
-                    owned_write: self
-                        .source_owned_write
-                        .get(symbol)
-                        .copied()
-                        .unwrap_or_default(),
-                    context: analysis_context(
-                        file,
-                        call.span,
-                        self.entities,
-                        self.symbol_names,
-                        dialect,
-                        self.lookup,
-                    )
-                    .into(),
-                });
-            }
+                ),
+                owned_write: self
+                    .source_owned_write
+                    .get(symbol)
+                    .copied()
+                    .unwrap_or_default(),
+                context: analysis_context(
+                    file,
+                    call.span,
+                    self.entities,
+                    self.symbol_names,
+                    dialect,
+                    self.lookup,
+                )
+                .into(),
+            };
+            result
+                .writes
+                .extend(std::iter::repeat_n(write, multiplicity));
         }
         result
     }

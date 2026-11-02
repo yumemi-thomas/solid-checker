@@ -114,6 +114,60 @@ struct Decision {
 
 thread_local! {
     static CURRENT: RefCell<Option<Decision>> = const { RefCell::new(None) };
+    /// The lines this thread appends, for each [`record`] running on it.
+    static RECORDING: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// What the log recorded on this thread while a computation ran
+/// ([`record`]): the arms it noted into the open decision and the lines it
+/// appended. [`replay`] makes the log as the computation run again would.
+#[derive(Clone)]
+pub(crate) struct Recorded {
+    arms: Vec<((&'static str, bool), ExecutionRole)>,
+    lines: Vec<u8>,
+}
+
+/// Whether a decision is open on this thread: what an arm hit is logged as.
+pub(crate) fn frame_open() -> bool {
+    enabled() && CURRENT.with(|current| current.borrow().is_some())
+}
+
+/// Runs `f`; with the log on, also returns what the log recorded while it
+/// ran on this thread. A decision open at the start is still open at the
+/// end (decisions nest by thread, and `f` returns normally).
+pub(crate) fn record<R>(f: impl FnOnce() -> R) -> (R, Option<Recorded>) {
+    if !enabled() {
+        return (f(), None);
+    }
+    let arms_before = CURRENT.with(|current| current.borrow().as_ref().map(|d| d.arms.len()));
+    RECORDING.with(|recording| recording.borrow_mut().push(Vec::new()));
+    let result = f();
+    let lines = RECORDING
+        .with(|recording| recording.borrow_mut().pop())
+        .unwrap_or_default();
+    let arms = CURRENT.with(|current| match (current.borrow().as_ref(), arms_before) {
+        (Some(decision), Some(before)) => decision.arms[before..].to_vec(),
+        _ => Vec::new(),
+    });
+    (result, Some(Recorded { arms, lines }))
+}
+
+/// Logs again what `recorded` holds: its arms into the open decision, its
+/// lines appended.
+pub(crate) fn replay(recorded: &Recorded) {
+    if !enabled() {
+        return;
+    }
+    if !recorded.arms.is_empty() {
+        CURRENT.with(|current| {
+            if let Some(decision) = current.borrow_mut().as_mut() {
+                decision.arms.extend_from_slice(&recorded.arms);
+            }
+        });
+    }
+    if !recorded.lines.is_empty() {
+        append(&recorded.lines);
+    }
 }
 
 /// A tagged arm answered `role`; returns it unchanged.
@@ -316,6 +370,11 @@ fn append(line: &[u8]) {
     let Some(sink) = sink() else {
         return;
     };
+    RECORDING.with(|recording| {
+        for lines in recording.borrow_mut().iter_mut() {
+            lines.extend_from_slice(line);
+        }
+    });
     let Ok(mut sink) = sink.lock() else {
         return;
     };

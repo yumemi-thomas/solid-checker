@@ -2721,8 +2721,9 @@ impl LocalAccessContext<'_, '_> {
                     ExecutionRole::Unknown
                 };
             }
-            for _ in 0..multiplicity {
-                result.writes.push(Arc::new(ReactiveWrite {
+            // One record per reachable path, shared.
+            if multiplicity > 0 {
+                let record = Arc::new(ReactiveWrite {
                     setter: name.to_string().into(),
                     operation: crate::ReactiveWriteOperation::Setter,
                     source_kind: *source_kind,
@@ -2739,7 +2740,10 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                     .into(),
-                }));
+                });
+                result
+                    .writes
+                    .extend(std::iter::repeat_n(record, multiplicity));
             }
         }
     }
@@ -2788,8 +2792,9 @@ impl LocalAccessContext<'_, '_> {
                     role,
                 )
             };
-            for _ in 0..multiplicity {
-                result.action_invocations.push(Arc::new(ActionInvocation {
+            // One record per reachable path, shared.
+            if multiplicity > 0 {
+                let record = Arc::new(ActionInvocation {
                     action: name.to_string().into(),
                     location: location(file.path.shared(), call.span),
                     declaration: declaration.clone(),
@@ -2803,7 +2808,10 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                     .into(),
-                }));
+                });
+                result
+                    .action_invocations
+                    .extend(std::iter::repeat_n(record, multiplicity));
             }
         }
     }
