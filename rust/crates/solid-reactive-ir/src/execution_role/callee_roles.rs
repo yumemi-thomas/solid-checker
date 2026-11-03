@@ -325,7 +325,7 @@ pub(super) fn semantic_role_before_awaits(
         {
             let entry = lookup.named_callback_roles(file).get(callback.span);
             if !(entry.tracked || entry.effect_compute) {
-                return role_arm!("callee_roles.named-callback", role);
+                return role_arm!("callee_roles.named-callback-untracked", role);
             }
             // A closure whose binding only inline carriers in the callback's
             // body (or in closures they carry) take (`[1].forEach(hf)`,
