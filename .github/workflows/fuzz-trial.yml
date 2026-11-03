@@ -1,47 +1,30 @@
 name: Fuzz trial
 
-# A trial of the differential fuzzer on a GitHub-hosted runner: one focus run
-# (scripts/fuzz/focus.mjs) for the codes and grids below, to see whether the
-# harness works on Linux outside the Colima VM and how fast a runner goes.
-# Provisioning mirrors scripts/fuzz/vm.sh setup and sync.
+# A trial of the differential fuzzer on GitHub-hosted runners: the binaries are
+# built once, then one focus run (scripts/fuzz/focus.mjs) per matrix entry runs
+# in parallel, to measure scaling and a recall grid's memory on a 4-vCPU,
+# 16 GB runner. Provisioning mirrors scripts/fuzz/vm.sh setup and sync.
 
 on:
   push:
     branches: [claude/gha-fuzz-trial]
-  workflow_dispatch:
-    inputs:
-      codes:
-        description: Codes for focus.mjs --codes
-        default: NO_OWNER_CLEANUP
-      grids:
-        description: Grids for focus.mjs --grids
-        default: mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo
 
 permissions:
   contents: read
 
 jobs:
-  focus:
+  build:
     # ubuntu-22.04 x64 so the release dependency cache main's rust-package job
     # writes (shared-key release-ubuntu-22.04-x64) restores here.
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
-    env:
-      CODES: ${{ inputs.codes || 'NO_OWNER_CLEANUP' }}
-      GRIDS: ${{ inputs.grids || 'mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo' }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 26.13.0
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
       - uses: dtolnay/rust-toolchain@1.99.1
-      - name: Machine
-        run: |
-          nproc; free -g; df -h . /tmp; df -i . | tail -1
-          echo "TSRS_REV=$(sed -n 's/^tsrs_core = .*rev = "\([0-9a-f]*\)".*/\1/p' apps/solid-typefacts/Cargo.toml)" >> "$GITHUB_ENV"
+      - run: echo "TSRS_REV=$(sed -n 's/^tsrs_core = .*rev = "\([0-9a-f]*\)".*/\1/p' apps/solid-typefacts/Cargo.toml)" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -63,29 +46,70 @@ jobs:
           (cd "$RUNNER_TEMP/tsrs" && cargo +1.99.1 build --release -q -p tsrs_cli)
           mkdir -p ~/tsrs-bin && cp "$RUNNER_TEMP/tsrs/target/release/tsrs" ~/tsrs-bin/
       - name: Build the release checker
+        run: cargo +1.99.1 build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
+      - name: Collect binaries
         run: |
-          start=$(date +%s)
-          cargo +1.99.1 build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
-          echo "checker build: $(( $(date +%s) - start )) s"
+          mkdir -p "$RUNNER_TEMP/bins"
+          cp rust/target/release/solid-checker-rust bin/solid-typefacts ~/tsrs-bin/tsrs "$RUNNER_TEMP/bins/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-binaries
+          path: ${{ runner.temp }}/bins
+          retention-days: 3
+
+  focus:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: strict-read, codes: STRICT_READ_UNTRACKED, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
+          - { name: no-owner-context, codes: NO_OWNER_CONTEXT, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
+          - { name: pending-untracked, codes: PENDING_ASYNC_UNTRACKED_READ, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
+          - { name: flush-in-action, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
+          - { name: context-not-found, codes: CONTEXT_NOT_FOUND, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
+          - { name: recall-no-owner-context, codes: NO_OWNER_CONTEXT, grids: "mx-recall" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.13.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fuzz-binaries
+          path: ${{ runner.temp }}/bins
       - name: Installs and Chrome
         run: |
+          chmod +x "$RUNNER_TEMP"/bins/*
           (cd scripts/fuzz/install && npm ci --silent)
           (cd scripts/runtime-oracle-install && npm ci --silent)
           (cd packages/cli && bun install --frozen-lockfile --silent)
           (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
       - name: Focus run
         env:
-          SOLID_CHECKER_TSRS_BIN: /home/runner/tsrs-bin/tsrs
+          SOLID_CHECKER_TSRS_BIN: ${{ runner.temp }}/bins/tsrs
         run: |
+          bins="$RUNNER_TEMP/bins"
+          # Peak memory of the whole machine, sampled every 10 s.
+          ( peak=0; while sleep 10; do used=$(free -m | awk '/^Mem:/{print $3}'); [ "$used" -gt "$peak" ] && peak=$used && echo "$peak" > "$RUNNER_TEMP/mem-peak"; done ) &
           start=$(date +%s)
-          node scripts/fuzz/focus.mjs --codes "$CODES" --grids "$GRIDS" --prune-cases \
-            --out "$RUNNER_TEMP/fuzz-out" \
-            --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts"
-          echo "focus run: $(( $(date +%s) - start )) s"
+          status=0
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" node scripts/fuzz/focus.mjs --codes "${{ matrix.codes }}" --grids "${{ matrix.grids }}" \
+            --split-codes --prune-cases --grid-timeout 290 --out "$RUNNER_TEMP/fuzz-out" \
+            --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" || status=$?
+          echo "focus run: $(( $(date +%s) - start )) s, exit $status"
+          grep -E "Maximum resident|Elapsed" "$RUNNER_TEMP/time.txt"
+          echo "machine memory peak: $(cat "$RUNNER_TEMP/mem-peak" 2>/dev/null) MiB used"
+          exit $status
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fuzz-out
+          name: fuzz-out-${{ matrix.name }}
           path: |
             ${{ runner.temp }}/fuzz-out/**/*.json
             ${{ runner.temp }}/fuzz-out/**/*.log
