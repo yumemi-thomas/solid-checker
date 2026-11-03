@@ -989,17 +989,21 @@ impl<S: Schema> Store<S> {
         }
         let mut graph = self.synced_graph();
         graph.flush();
-        let mut dirty = BTreeSet::new();
-        for query in &found {
-            if let Some(node) = graph.node(query) {
-                dirty.extend(node.readers.iter().copied());
-            }
-        }
-        for query in &dirty {
+        // The dirty entries in a sorted list, walked in that order as the
+        // ordered set was; hash sets answer membership only.
+        let mut direct = found
+            .iter()
+            .filter_map(|query| graph.node(query))
+            .flat_map(|node| node.readers.iter().copied())
+            .collect::<Vec<_>>();
+        direct.sort_unstable();
+        direct.dedup();
+        let dirty = direct.iter().copied().collect::<HashSet<QueryId>>();
+        for query in &direct {
             self.raise(&graph, *query, DIRTY);
         }
-        let mut maybe = BTreeSet::new();
-        let mut queue = dirty.iter().copied().collect::<Vec<_>>();
+        let mut maybe = HashSet::<QueryId>::default();
+        let mut queue = direct;
         while let Some(query) = queue.pop() {
             let Some(node) = graph.node(&query) else {
                 continue;

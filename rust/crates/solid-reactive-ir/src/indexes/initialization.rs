@@ -206,9 +206,7 @@ impl<'a> SemanticLookup<'a> {
             // `A.helper()`, `ns.helper()`: the mention is the member's
             // property, though the call's callee is the whole member.
             file.ast
-                .members
-                .iter()
-                .find(|member| member.span == peeled)
+                .member_at(peeled)
                 .is_some_and(|member| spans.contains(&member.property))
         })
     }
@@ -269,7 +267,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// Every withheld mention, by path. Bound into the cross-file proof
     /// digest: another module's imports decide a mention here.
-    fn uninitialized_references(&self) -> &Withheld {
+    pub(super) fn uninitialized_references(&self) -> &Withheld {
         self.initialization.rejected.get_or_init(|| {
             self.whole_program_answer::<super::project_memos::UninitializedReferences>()
                 .into_iter()
@@ -295,6 +293,10 @@ impl<'a> SemanticLookup<'a> {
             // the binding is pattern-declared and whether the defaults of the
             // function it names may throw ahead of the mention.
             let mut mentions = Vec::<(&str, usize, usize, usize, Span, bool, bool)>::new();
+            // Whether a binding's mentions are decided here: a function of
+            // the declaring file and binding alone, asked once per binding
+            // rather than once per mention.
+            let mut eligible = HashMap::<(usize, usize), bool>::default();
             for (path, references) in self.bindings_by_reference() {
                 let Some(caller) = self.files_by_path_index(path) else {
                     continue;
@@ -304,9 +306,13 @@ impl<'a> SemanticLookup<'a> {
                     let binding = &declaring.ast.bindings[resolution.binding];
                     // ADR 0459's namespace primitive slots are pattern
                     // bindings, so `decided` holds them already.
-                    if !decided(binding)
-                        && !self.names_namespace_primitive(declaring, binding)
-                        && !names_local_alias(declaring, binding)
+                    if !*eligible
+                        .entry((resolution.file, resolution.binding))
+                        .or_insert_with(|| {
+                            decided(binding)
+                                || self.names_namespace_primitive(declaring, binding)
+                                || names_local_alias(declaring, binding)
+                        })
                     {
                         continue;
                     }

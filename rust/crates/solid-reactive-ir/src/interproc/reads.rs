@@ -798,11 +798,17 @@ pub(super) fn interprocedural_reads(
     // does not establish an unconditional read, so keep the new row undecided.
     // The climb decides summary rows only, so its reads join the graph
     // chunks' as the direct references' do.
+    // Each node's rows read only the summaries as they stand before any is
+    // inserted, so the nodes are climbed on the workers and their rows kept
+    // in node order.
     let (layered, layered_reads) = crate::base::reads::record_detached(|| {
-        let mut layered = Vec::new();
-        for (owner, node) in nodes.iter().enumerate() {
+        let owners = (0..nodes.len()).collect::<Vec<_>>();
+        let summaries = &*summaries;
+        parallel_slice_results(&owners, |&owner| {
+            let node = &nodes[owner];
+            let mut layered = Vec::new();
             let Some(file) = lookup.file_by_path(&node.path) else {
-                continue;
+                return layered;
             };
             for layer in
                 in_place_layer_owners(context, nodes, nodes_by_path, file, node.body, owner)
@@ -821,8 +827,11 @@ pub(super) fn interprocedural_reads(
                     layered.push((layer.owner, hops, read));
                 }
             }
-        }
-        layered
+            layered
+        })
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
     });
     chunk_reads.push(layered_reads);
     for (owner, hops, read) in layered {

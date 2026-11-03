@@ -867,17 +867,25 @@ impl LocalAccessContext<'_, '_> {
             cache
                 .files
                 .retain(|path, _| current_paths.contains(path.as_str()));
+            // Each kept chunk's proof is checked on the workers: a check
+            // reads only its own entry and this build's lookup, and one at a
+            // time it was most of the stage on a large project.
+            let kept = &cache.files;
+            let files = &self.facts.files;
+            let reusable = parallel_slice_results(files, |file| {
+                exact_typescript_delta
+                    && kept.get(file.path.as_str()).is_some_and(|cached| {
+                        self.cached_matches(
+                            file,
+                            cached,
+                            unchanged_paths.contains(file.path.as_str()),
+                            &changed_dependencies,
+                        )
+                    })
+            });
             let mut recompute = Vec::new();
-            for file in &self.facts.files {
-                if let Some(cached) = cache.files.get(file.path.as_str())
-                    && exact_typescript_delta
-                    && self.cached_matches(
-                        file,
-                        cached,
-                        unchanged_paths.contains(file.path.as_str()),
-                        &changed_dependencies,
-                    )
-                {
+            for (file, reusable) in files.iter().zip(reusable) {
+                if reusable {
                     reused_files += 1;
                     continue;
                 }

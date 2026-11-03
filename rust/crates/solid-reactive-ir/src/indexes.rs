@@ -1935,6 +1935,13 @@ impl<'a> SemanticLookup<'a> {
                         let _ = self.object_member_targets();
                     })
                 });
+                // ADR 0339's whole-program initialization order: one serial
+                // pass every build's prepass asks first, overlapped here.
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.uninitialized_references();
+                    })
+                });
                 // The components lane is the last to finish once the others
                 // are done, so it takes the whole pool, not its share of lanes.
                 let _whole_pool = crate::pipeline::AnalysisWorkerLimit::enter(
@@ -2423,14 +2430,20 @@ impl<'a> SemanticLookup<'a> {
             .map(|candidate| candidate.declarations())
     }
 
-    pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
+    /// TypeScript's references to `symbol`, `None` when it has no list: a
+    /// view of the table's own rows, read where they are.
+    pub(super) fn symbol_references_if_present(
+        &self,
+        symbol: &str,
+    ) -> Option<SymbolReferenceList<'a>> {
         // Every file's references of the symbol (`hand_outs`).
         self.note_probe_read(crate::base::memo::probes::Probe::SymbolReferences, || {
             Self::symbol_key(symbol)
         });
         self.symbols_by_id()
             .get(symbol)
-            .map(|candidate| candidate.references().cloned().collect())
+            .copied()
+            .map(SymbolReferenceList)
     }
 
     /// ADR 0324: whether the router-parameters premise applies to this
@@ -2620,3 +2633,32 @@ fn file_names_commonjs_exports(file: &FileFacts) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// A symbol's TypeScript references ([`SemanticLookup::symbol_references_if_present`]),
+/// in table order, borrowed from the table.
+#[derive(Clone, Copy)]
+pub(crate) struct SymbolReferenceList<'a>(solid_facts::TypeScriptSymbol<'a>);
+
+impl<'a> SymbolReferenceList<'a> {
+    pub(crate) fn iter(self) -> impl Iterator<Item = &'a Location> + 'a {
+        self.0.references()
+    }
+}
+
+impl<'a> IntoIterator for SymbolReferenceList<'a> {
+    type Item = &'a Location;
+    type IntoIter = Box<dyn Iterator<Item = &'a Location> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.iter())
+    }
+}
+
+impl<'a> IntoIterator for &SymbolReferenceList<'a> {
+    type Item = &'a Location;
+    type IntoIter = Box<dyn Iterator<Item = &'a Location> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.iter())
+    }
+}
