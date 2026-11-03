@@ -1,0 +1,248 @@
+#!/usr/bin/env node
+// The full fuzz run, split across machines (.github/workflows/fuzz-audit.yml; scripts/fuzz/README.md, "The audit on CI"). The same
+// programs and the same oracle sample as one `focus.mjs --codes all` run of the eight grids, in three phases:
+//
+//   node scripts/fuzz/audit.mjs shard  --shard i/N --out <dir> --checker-bin <bin> --typefacts <bin> [--grid-timeout <min>] [-- <grid args>]
+//       focus.mjs on every code and grid restricted to shard i of N (shard.mjs), without the runtime differential: each grid writes
+//       the programs the differential would take from its rows (`oracle-candidates.jsonl`, matrix.mjs `writeOracleCandidates`).
+//   node scripts/fuzz/audit.mjs pick   --shards <dir> --out <dir>
+//       one `--ids` manifest per grid (`<grid>.json`): the oracle sample of the whole grid, from every shard's candidates.
+//   node scripts/fuzz/audit.mjs oracle --grid <grid> --manifest <file> --out <dir> --checker-bin <bin> --typefacts <bin> [-- <grid args>]
+//       the grid on the manifest's programs with the differential on every one of them (Chrome against the fast path).
+//   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>]
+//       the run's verdict: every shard present and whole, what needs a look (focus.mjs PROBLEMS, oracle behaviour differences, an
+//       inconclusive or missing oracle program, an outcome that differs between a shard and its oracle grid), and the programs whose
+//       outcome moved from `--against` (an earlier report's `rows/`). Writes audit.json, audit.md and rows/<grid>.jsonl.gz; exit 1
+//       when something needs a look.
+//
+// The oracle sample of a whole grid takes, per stratum, the rows with a fast record in the order of `fnv(id)` (runtime-diff.mjs
+// `sampleStrata`); a shard's candidates are the same over its own rows, so the N smallest of all shards' candidates of a stratum are the
+// whole grid's N (`pickOracle`). The Chrome work then runs once, on the programs a whole run compares, not once per shard.
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { gunzipSync, gzipSync } from "node:zlib";
+import { GRIDS, PROBLEMS, hostArgs, parse as parseFocus } from "./focus.mjs";
+import { GENERATOR_VERSION } from "./generate.mjs";
+import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
+import { NODE } from "../lib/node-runtime.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+/** The full run's grids, in focus.mjs's order. */
+export const AUDIT_GRIDS = Object.keys(GRIDS);
+/** The oracle sample a focus run takes (focus.mjs defaults): per stratum, and the stratum's axes. */
+const FOCUS_DEFAULTS = parseFocus(["--codes", "all"]);
+export const ORACLE_PER_STRATUM = FOCUS_DEFAULTS.runtimeDiff;
+export const ORACLE_AXES = FOCUS_DEFAULTS.oracleAxes;
+const SEED = FOCUS_DEFAULTS.seed;
+
+const readJsonl = (path) => (existsSync(path) ? readFileSync(path, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null);
+/** A grid directory's report (matrix.json or legal.json). */
+const gridReport = (dir) => readJson(join(dir, "matrix.json")) ?? readJson(join(dir, "legal.json"));
+const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
+
+/**
+ * The whole grid's oracle sample from the shards' candidate lists: per stratum the `perStratum` candidates of smallest `(rank, id)`.
+ * @param {Array<Array<{ id: string, stratum: string, rank: number }>>} lists one list per shard
+ * @returns {string[]} the picked ids, in the order the differential takes them
+ */
+export function pickOracle(lists, perStratum) {
+  const byStratum = new Map();
+  for (const candidate of lists.flat()) {
+    if (!byStratum.has(candidate.stratum)) byStratum.set(candidate.stratum, []);
+    byStratum.get(candidate.stratum).push(candidate);
+  }
+  const picked = [];
+  for (const candidates of byStratum.values()) picked.push(...candidates.sort(byRank).slice(0, perStratum));
+  return picked.sort(byRank).map((candidate) => candidate.id);
+}
+const byRank = (a, b) => a.rank - b.rank || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** The shards of a run directory (one directory per shard, each with a directory per grid), checked whole: `{ count, shards, attention }`. */
+export function readShards(dir) {
+  const attention = [];
+  const shards = subdirs(dir).map((name) => ({ name, dir: join(dir, name) }));
+  let count = null;
+  const seen = new Map();
+  for (const shard of shards) {
+    for (const grid of AUDIT_GRIDS) {
+      const report = gridReport(join(shard.dir, grid));
+      if (!report) { attention.push(`${shard.name}: no report for ${grid}`); continue; }
+      const part = report.gridShard;
+      if (!part) { attention.push(`${shard.name}/${grid}: not a shard`); continue; }
+      count ??= part.count;
+      if (part.count !== count) attention.push(`${shard.name}/${grid}: shard of ${part.count}, the run's are of ${count}`);
+      const key = `${grid}#${part.index}`;
+      if (seen.has(key)) attention.push(`${shard.name}/${grid}: shard ${part.index} also in ${seen.get(key)}`);
+      seen.set(key, shard.name);
+    }
+  }
+  if (count !== null) for (const grid of AUDIT_GRIDS) for (let index = 0; index < count; index += 1) if (!seen.has(`${grid}#${index}`)) attention.push(`${grid}: shard ${index}/${count} missing`);
+  if (!shards.length) attention.push(`no shard in ${dir}`);
+  return { count, shards, attention };
+}
+
+function pick(options) {
+  const { shards, attention } = readShards(resolve(options.shards));
+  if (attention.length) throw new Error(`audit pick: the shards are not a whole run:\n  ${attention.join("\n  ")}`);
+  const out = resolve(options.out);
+  mkdirSync(out, { recursive: true });
+  const perStratum = parsePerStratum(ORACLE_PER_STRATUM);
+  for (const grid of AUDIT_GRIDS) {
+    const lists = shards.map((shard) => readJsonl(join(shard.dir, grid, "oracle-candidates.jsonl")));
+    const ids = pickOracle(lists, perStratum);
+    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, ids }, null, 2)}\n`);
+    console.log(`${grid}: ${ids.length} oracle programs from ${lists.reduce((sum, list) => sum + list.length, 0)} candidates of ${shards.length} shards`);
+  }
+}
+
+function shard(options, extra) {
+  const tools = ["--checker-bin", options.checkerBin, "--typefacts", options.typefacts];
+  const args = [join(here, "focus.mjs"), "--codes", "all", "--grids", AUDIT_GRIDS.join(","), "--shard", options.shard, "--runtime-diff", "0", "--prune-cases",
+    "--out", resolve(options.out), ...tools, ...(options.gridTimeout ? ["--grid-timeout", options.gridTimeout] : []),
+    "--", "--oracle-candidates", ORACLE_PER_STRATUM, "--runtime-diff-axes", ORACLE_AXES, ...extra];
+  return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
+}
+
+function oracle(options, extra) {
+  const manifest = readJson(resolve(options.manifest));
+  if (!manifest) throw new Error(`audit oracle: no manifest ${options.manifest}`);
+  if (manifest.grid !== options.grid) throw new Error(`audit oracle: ${options.manifest} is ${manifest.grid}'s, not ${options.grid}'s`);
+  const out = resolve(options.out);
+  if (!manifest.ids.length) { mkdirSync(out, { recursive: true }); console.log(`${options.grid}: no oracle program`); return 0; }
+  const [script, ...shape] = GRIDS[options.grid];
+  const heap = options.grid.endsWith("-recall") ? ["--max-old-space-size=12000"] : [];
+  const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, "--ids", resolve(options.manifest), "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
+    "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs(), ...extra];
+  console.log(`${options.grid}: the runtime differential on ${manifest.ids.length} programs`);
+  return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
+}
+
+/**
+ * The run's verdict from its shard and oracle directories, and the moves from an earlier report's rows.
+ * @returns {{ attention: string[], grids: object, moves: object, rows: Map<string, Map<string, string>> }}
+ */
+export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
+  const { shards, count, attention } = readShards(shardsDir);
+  const grids = {};
+  const rows = new Map();
+  for (const grid of AUDIT_GRIDS) {
+    const outcomes = new Map();
+    const tally = {};
+    let planned = null;
+    for (const shard of shards) {
+      const dir = join(shard.dir, grid);
+      const report = gridReport(dir);
+      if (!report?.gridShard) continue;
+      planned ??= report.gridShard.of;
+      if (report.gridShard.of !== planned) attention.push(`${shard.name}/${grid}: a grid of ${report.gridShard.of} programs, the other shards' of ${planned}`);
+      const shardRows = readJsonl(join(dir, "programs.jsonl"));
+      if (shardRows.length !== report.gridShard.kept) attention.push(`${shard.name}/${grid}: ${shardRows.length} rows for ${report.gridShard.kept} programs`);
+      for (const row of shardRows) {
+        if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
+        outcomes.set(row.id, row.outcome);
+        tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
+        if (PROBLEMS.includes(row.outcome)) attention.push(`${grid}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
+      }
+    }
+    if (planned !== null && outcomes.size !== planned) attention.push(`${grid}: ${outcomes.size} programs judged of ${planned}`);
+    if (planned !== null && planned > 0 && outcomes.size === 0) attention.push(`${grid}: no program judged`);
+    // The oracle grid: its sample compared in Chrome, every program of the manifest, each with the outcome its shard gave it.
+    const manifest = readJson(join(oracleDir, "manifests", `${grid}.json`));
+    const diff = readJson(join(oracleDir, grid, "runtime-diff.json"));
+    const oracleRows = readJsonl(join(oracleDir, grid, "runtime-diff.jsonl"));
+    let oracle = null;
+    if (!manifest) attention.push(`${grid}: no oracle manifest`);
+    else if (manifest.ids.length && !diff) attention.push(`${grid}: no oracle result for ${manifest.ids.length} programs`);
+    else if (diff) {
+      const compared = new Set(oracleRows.map((result) => result.id));
+      const missing = manifest.ids.filter((id) => !compared.has(id));
+      if (missing.length) attention.push(`${grid}: ${missing.length} oracle programs not compared (${missing.slice(0, 3).join(", ")})`);
+      for (const result of oracleRows) if (result.inconclusive) attention.push(`${grid}: oracle inconclusive ${result.id}: ${String(result.inconclusive).slice(0, 160)}`);
+      for (const result of diff.differing ?? []) if (result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind))) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
+      for (const row of readJsonl(join(oracleDir, grid, "programs.jsonl"))) {
+        if (outcomes.has(row.id) && outcomes.get(row.id) !== row.outcome) attention.push(`${grid}: ${row.id} is ${outcomes.get(row.id)} in its shard, ${row.outcome} in the oracle grid`);
+      }
+      oracle = { ...diff.summary, programs: manifest.ids.length };
+    }
+    grids[grid] = { programs: outcomes.size, planned, outcomes: tally, oracle };
+    rows.set(grid, outcomes);
+  }
+  const moves = { against: against ?? null, moved: 0, kinds: {}, examples: [] };
+  if (against) {
+    for (const [grid, outcomes] of rows) {
+      const path = join(against, `${grid}.jsonl.gz`);
+      if (!existsSync(path)) { moves.kinds[`${grid}: no earlier rows`] = 1; continue; }
+      const before = new Map(gunzipSync(readFileSync(path)).toString("utf8").split("\n").filter(Boolean).map((line) => { const row = JSON.parse(line); return [row.id, row.outcome]; }));
+      for (const [id, outcome] of outcomes) {
+        const was = before.get(id) ?? "new";
+        if (was === outcome) continue;
+        moves.moved += 1;
+        const kind = `${grid}: ${was} -> ${outcome}`;
+        moves.kinds[kind] = (moves.kinds[kind] ?? 0) + 1;
+        if (moves.examples.length < 30) moves.examples.push(`${grid} ${id}: ${was} -> ${outcome}`);
+      }
+      for (const id of before.keys()) if (!outcomes.has(id)) { moves.moved += 1; moves.kinds[`${grid}: gone`] = (moves.kinds[`${grid}: gone`] ?? 0) + 1; }
+    }
+  }
+  return { count, attention, grids, moves, rows };
+}
+
+/** The report as Markdown (the workflow's step summary). */
+export function markdown({ count, attention, grids, moves }) {
+  const lines = [`# Fuzz audit`, "", `${count ?? "?"} shards; ${Object.values(grids).reduce((sum, grid) => sum + grid.programs, 0)} programs judged.`, ""];
+  lines.push("| grid | programs | outcomes | oracle compared | behaviour | inconclusive |", "|---|---|---|---|---|---|");
+  for (const [grid, g] of Object.entries(grids)) lines.push(`| ${grid} | ${g.programs} | ${Object.entries(g.outcomes).map(([k, v]) => `${k} ${v}`).join(", ")} | ${g.oracle?.compared ?? "-"} | ${g.oracle?.behaviour ?? "-"} | ${g.oracle?.inconclusive ?? "-"} |`);
+  lines.push("", attention.length ? `## Needs a look (${attention.length})` : "Nothing needs a look.");
+  for (const item of attention.slice(0, 100)) lines.push(`- ${item}`);
+  if (attention.length > 100) lines.push(`- ... ${attention.length - 100} more (audit.json)`);
+  if (moves.against) {
+    lines.push("", `## Moved from the earlier run: ${moves.moved}`);
+    for (const [kind, n] of Object.entries(moves.kinds).sort((a, b) => b[1] - a[1]).slice(0, 40)) lines.push(`- ${kind}: ${n}`);
+    for (const example of moves.examples) lines.push(`  - ${example}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function report(options) {
+  const out = resolve(options.out);
+  mkdirSync(join(out, "rows"), { recursive: true });
+  const result = judge({ shards: resolve(options.shards), oracle: resolve(options.oracle), against: options.against ? resolve(options.against) : undefined });
+  for (const [grid, outcomes] of result.rows) {
+    const text = [...outcomes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, outcome]) => JSON.stringify({ id, outcome })).join("\n");
+    writeFileSync(join(out, "rows", `${grid}.jsonl.gz`), gzipSync(`${text}\n`));
+  }
+  const { rows, ...summary } = result;
+  writeFileSync(join(out, "audit.json"), `${JSON.stringify(summary, null, 2)}\n`);
+  const md = markdown(result);
+  writeFileSync(join(out, "audit.md"), md);
+  console.log(md);
+  return result.attention.length ? 1 : 0;
+}
+
+/** `audit.mjs <phase> --key value ... [-- <grid args>]`. */
+export function parseArgs(argv) {
+  const [phase, ...rest] = argv;
+  const split = rest.indexOf("--");
+  const own = split < 0 ? rest : rest.slice(0, split);
+  const extra = split < 0 ? [] : rest.slice(split + 1);
+  const options = {};
+  for (let index = 0; index < own.length; index += 2) {
+    const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    if (own[index + 1] === undefined) throw new Error(`audit.mjs: ${own[index]} needs a value`);
+    options[key] = own[index + 1];
+  }
+  const need = { shard: ["shard", "out", "checkerBin", "typefacts"], pick: ["shards", "out"], oracle: ["grid", "manifest", "out", "checkerBin", "typefacts"], report: ["shards", "oracle", "out"] }[phase];
+  if (!need) throw new Error("audit.mjs shard|pick|oracle|report (see the file comment)");
+  for (const key of need) if (!options[key]) throw new Error(`audit.mjs ${phase}: --${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} is required`);
+  if (phase === "oracle" && !GRIDS[options.grid]) throw new Error(`audit.mjs oracle: no grid ${options.grid}`);
+  return { phase, options, extra };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const { phase, options, extra } = parseArgs(process.argv.slice(2));
+  if (phase === "pick") pick(options);
+  else process.exitCode = { shard, oracle, report: (o) => report(o) }[phase](options, extra);
+}

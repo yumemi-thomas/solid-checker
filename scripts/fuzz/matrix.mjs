@@ -45,7 +45,7 @@ import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
-import { keepIds } from "./smoke.mjs";
+import { idFilter, keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
@@ -579,6 +579,19 @@ export async function runtimeDifferential(rows, values, perStratum, config, opti
   return summary;
 }
 
+/**
+ * `--oracle-candidates <N|all>` (audit.mjs): the programs the runtime differential would take from these rows (up to N per stratum of
+ * `--runtime-diff-axes`, the rows with a fast record, in the order of `fnv(id)`), written to `oracle-candidates.jsonl` instead of run.
+ * A shard's sample of a stratum is the N smallest of its own rows, so the N smallest of every shard's candidates are the whole grid's
+ * sample (audit.mjs `pickOracle`): the Chrome work runs once, on the programs a whole run would compare.
+ */
+export function writeOracleCandidates(rows, values, perStratum, options, out) {
+  const axes = parseAxes(options.runtimeDiffAxes);
+  const picked = sampleStrata(rows, perStratum, (row) => Boolean(values.get(row.id)?.runtime), axes);
+  writeFileSync(join(out, "oracle-candidates.jsonl"), picked.map((row) => JSON.stringify({ id: row.id, stratum: stratumOf(row, axes), rank: fnv(String(row.id)) })).join("\n") + (picked.length ? "\n" : ""));
+  return picked.length;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Main
 
@@ -651,16 +664,19 @@ async function sweep(options, config, out) {
   const sharding = gridShardOptions(options);
   const sampling = gridSampleOptions(options);
   const early = sharding && options.grid && !options.ids && !sampling ? sharding : null;
+  // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them; on a grid, picked by id before generation.
+  const ids = options.ids && options.grid ? idFilter(options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
   let planned = 0;
   if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => {
     if (!layerKept(shape)) return;
     planned += 1;
     if (early && shardOf(shapeId(cell, shape), early.count) !== early.index) return;
+    if (ids && !ids.keep(shapeId(cell, shape))) return;
     entries.push({ cell, ...generateShape(options, cell, shape, index) });
   });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
-  // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-  if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+  if (ids) ids.check(entries);
+  else if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
   // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; matrix.json records it.
   let gridSample = null;
   if (sampling) {
@@ -759,6 +775,7 @@ async function sweep(options, config, out) {
   if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
   const perStratum = parsePerStratum(options.runtimeDiff);
   if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "matrix"));
+  if (options.oracleCandidates !== undefined) console.error(`matrix: ${writeOracleCandidates(rows, values, parsePerStratum(options.oracleCandidates), options, out)} oracle candidates`);
   const shrinkPhase = performance.now();
 
   // Shrink one representative per false-clean cell (the smallest program that Chrome did not refute).
@@ -825,7 +842,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

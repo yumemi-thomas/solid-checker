@@ -91,6 +91,17 @@ is flagged unless its process finished and `selected` is 0: a code with no shape
 or a shard that got none is printed as `no programs`, not as a problem; with `--split-codes` a code that no grid of the run judged a
 program of still needs a look, and so does a run that judged none.
 
+**The audit on CI.** `.github/workflows/fuzz-audit.yml` runs the full run nightly (01:00 JST) and on demand (Actions, Run workflow, any
+branch) on free GitHub-hosted runners, through `audit.mjs`: 40 shards (`--shard i/40`, every code and grid, no oracle; each grid writes
+`oracle-candidates.jsonl`, the programs its runtime differential would take), then `audit.mjs pick` builds each grid's oracle sample
+from every shard's candidates (per stratum the smallest `fnv(id)` with a fast record, as `sampleStrata` picks over a whole grid, so
+the sample is a local full run's), one runner per grid runs the differential on it (`--ids`, picked by id before generation), and
+`audit.mjs report` judges the run: every shard present and whole, PROBLEMS rows, oracle behaviour differences and inconclusive or
+missing programs, outcomes a shard and its oracle grid disagree on, and the moves from the last audit (its `audit-report` artifact).
+The report fails the workflow when something needs a look and is the run's step summary. Each shard carries its warm state to the
+next run (the runtime and type-check caches, and the installs and browser their keys hash by mtime, in a pax tar); measured on one
+shard of 6,540 programs, every lookup hit and the shard ran 1.8x faster (11.4 programs/s against 6.4 cold on a 4-vCPU runner).
+
 Rediscovery (AGENTS.md): a defect found any way is closed when the grids generate its shape and the build that had it fails `make
 fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
 generator cannot express it); the smoke set always holds them, and `rediscovery.test.mjs` fails when a grid stops generating one.

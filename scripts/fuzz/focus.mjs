@@ -160,6 +160,9 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     return `perf: ${report.programs} programs in ${Math.round(report.wallMs / 1000)}s = ${report.programsPerSecond ?? "-"}/s over ${report.units.length} units; ${machine}`;
   }
 
+  /** The grids' host: every core, the Chrome fast host on the Rust executor (audit.mjs runs its oracle grids on the same). */
+  export const hostArgs = (options = {}) => ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
+
   export function parse(argv) {
     const split = argv.indexOf("--");
     const own = split < 0 ? argv : argv.slice(0, split);
@@ -197,7 +200,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     mkdirSync(out, { recursive: true });
     const tools = [...(options.checkerBin ? ["--checker-bin", options.checkerBin] : []), ...(options.typefacts ? ["--typefacts", options.typefacts] : [])];
     const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
-    const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : []), ...oracle];
+    const host = [...hostArgs(options), ...oracle];
     // `--sample-big`: the grids' stratified sample of the big codes (sample.mjs); the others stay whole.
     const sampleCodes = options.sampleCodes ? options.sampleCodes.split(",") : BIG_CODES;
     const sampled = options.sampleBig === undefined ? [] : ["--grid-sample", options.sampleBig, "--grid-sample-codes", sampleCodes.join(","), "--grid-sample-seed", options.sampleBigSeed ?? "1", "--grid-sample-min", options.sampleBigMin ?? "1"];

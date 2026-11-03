@@ -27,7 +27,7 @@ import { codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.m
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
-import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf } from "./matrix.mjs";
+import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf, writeOracleCandidates } from "./matrix.mjs";
 import { budgetOf } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
@@ -39,7 +39,7 @@ import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
-import { keepIds } from "./smoke.mjs";
+import { idFilter, keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { gridShardOptions, shardEntries, shardLine, shardOf } from "./shard.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
@@ -149,18 +149,21 @@ export async function runLegal(options) {
     const sharding = gridShardOptions(options);
     const sampling = gridSampleOptions(options);
     const early = sharding && options.grid && !options.ids && !sampling ? sharding : null;
+    // `--ids <manifest>` (smoke.mjs): on a grid, the programs it names picked by id before generation.
+    const ids = options.ids && options.grid ? idFilter(options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
     let planned = 0;
     for (const cell of cells) {
       const shapes = options.recall ? recallLegalShapes(cell.code, cell.context) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
       if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => {
         planned += 1;
         if (early && shardOf(legalId(cell, { shape }), early.count) !== early.index) return;
+        if (ids && !ids.keep(legalId(cell, { shape }))) return;
         entries.push({ cell, index, ...generateLegal(options, cell, { shape }) });
       });
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
-    // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-    if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+    if (ids) ids.check(entries);
+    else if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
     // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; legal.json records it.
     let gridSample = null;
     if (sampling) {
@@ -249,6 +252,7 @@ export async function runLegal(options) {
     if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
     const perStratum = parsePerStratum(options.runtimeDiff);
     if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "legal"));
+    if (options.oracleCandidates !== undefined) console.error(`legal: ${writeOracleCandidates(rows, values, parsePerStratum(options.oracleCandidates), options, out)} oracle candidates`);
     const writePhase = performance.now();
     const checked = rows.filter((row) => row.chrome);
     const chrome = checked.length ? Object.fromEntries(["confirmed", "not-confirmed", "same", "differs", "chrome-inconclusive"].map((status) => [status, checked.filter((row) => row.chrome.status === status).length])) : null;
@@ -291,7 +295,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
