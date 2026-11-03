@@ -16,6 +16,8 @@ name: Fuzz audit
 # cold. Artifacts carry it, not actions/cache: the repository's 10 GB Actions cache belongs to CI.
 
 on:
+  push:
+    branches: [claude/fuzz-audit-run]
   schedule:
     - cron: "0 16 * * *" # 01:00 JST
   workflow_dispatch:
