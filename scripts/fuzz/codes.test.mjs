@@ -40,6 +40,9 @@ describe("tables copied from scripts/runtime-oracle.mjs", () => {
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const distDir = join(repo, "scripts/runtime-oracle-install/node_modules/@solidjs/signals/dist");
+// A real skip, not a `return` that passes: scripts/fuzz/test-lane.mjs fails a skipped test (these installs are provisioned there).
+const haveOracleInstall = existsSync(distDir);
+const haveFastInstall = existsSync(join(repo, "scripts/fuzz/install/node_modules/@solidjs/signals/package.json"));
 
 describe("every claimed code and rule is real", () => {
   it("each rule a code names has a rule page (docs/rules/<rule>.md)", () => {
@@ -47,8 +50,7 @@ describe("every claimed code and rule is real", () => {
       for (const rule of rules) expect(existsSync(join(repo, "docs/rules", `${rule}.md`)), `${code} -> ${rule}`).toBe(true);
     }
   });
-  it("each code is one the pinned dev build emits (skipped without the oracle install)", () => {
-    if (!existsSync(distDir)) return;
+  it.skipIf(!haveOracleInstall)("each code is one the pinned dev build emits (skipped without the oracle install)", () => {
     const dist = readdirSync(distDir).filter((name) => name.endsWith(".js")).map((name) => readFileSync(join(distDir, name), "utf8")).join("\n");
     // The codes the dev dist emits (`code: "X"`) or throws with a text `thrownCodes` names.
     const thrown = new Set(thrownCodes.map(([, code]) => code));
@@ -140,8 +142,7 @@ describe("the policy table", () => {
   it("names every thrown code", () => {
     for (const [, code] of thrownCodes) expect(codePolicy[code], code).toBeDefined();
   });
-  it("classifies every code the pinned rc.17 dev dists emit, with the severity they emit (skipped without the fast install)", () => {
-    if (!existsSync(join(fastModules, "@solidjs/signals/package.json"))) return;
+  it.skipIf(!haveFastInstall)("classifies every code the pinned rc.17 dev dists emit, with the severity they emit (skipped without the fast install)", () => {
     for (const pkg of ["@solidjs/signals", "@solidjs/web", "solid-js"]) {
       const { version } = JSON.parse(readFileSync(join(fastModules, pkg, "package.json"), "utf8"));
       expect(version, pkg).toMatch(/^2\.0\.0-rc\.17$/);
@@ -154,8 +155,7 @@ describe("the policy table", () => {
       if (severities.size) expect([...severities], `${code}: severity in the dist`).toContain(codePolicy[code].severity);
     }
   });
-  it("lists no code that nothing emits (a stale entry), apart from the thrown ones", () => {
-    if (!existsSync(join(fastModules, "@solidjs/signals/package.json"))) return;
+  it.skipIf(!haveFastInstall)("lists no code that nothing emits (a stale entry), apart from the thrown ones", () => {
     const emitted = emittedCodes();
     const thrown = new Set(thrownCodes.map(([, code]) => code));
     const dist = ["@solidjs/signals", "@solidjs/web", "solid-js"].flatMap((pkg) => distFiles(join(fastModules, pkg, "dist"))).map((file) => readFileSync(file, "utf8")).join("\n");
