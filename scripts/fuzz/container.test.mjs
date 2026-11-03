@@ -5,7 +5,7 @@ import { generateProgram } from "./generate.mjs";
 import { stripInstrumentation } from "./hits.mjs";
 import { CONTAINER_KINDS, validate, walk } from "./model.mjs";
 import { printProgram } from "./print.mjs";
-import { createRng } from "./rng.mjs";
+import { createRng, programSeed } from "./rng.mjs";
 
 const seeds = Array.from({ length: 400 }, (_, i) => i + 1);
 const containers = (seed) => generateProgram(seed, { profile: "containers" });
@@ -150,5 +150,11 @@ describe("one container around a cleanup handle's call", () => {
     const ctx = { counters: {} };
     applyContainers(ctx, program.components[0], { rng, count: [[1, 0]] });
     expect(validate(program)).toEqual([]);
+  });
+});
+
+describe("an action's body under the containers dimension", () => {
+  it("stays its generator literal, never a hoisted name (it crashed the printer on 4 of 300 misuse seeds)", () => {
+    for (const index of [43, 118, 164, 238]) expect(buildCase(generateProgram(programSeed(1, index), { profile: "misuse", containers: true })).text).toContain("action(function* ");
   });
 });
