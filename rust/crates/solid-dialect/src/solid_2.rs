@@ -849,6 +849,28 @@ impl Dialect for Solid2 {
                     && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
     }
 
+    /// ADR 0613: `createEffect`'s apply (every run), `createRenderEffect`'s
+    /// apply (every run after the first, and every run when deferred) and
+    /// `createReaction`'s callback (run as its effect's apply) are run by the
+    /// queue's drain. rc.17's `flush()` (`@solidjs/signals`
+    /// `dist/dev-shared.js:2646-2721`) drains with `globalQueue.flush()` on
+    /// its caller's stack and sets no owner, and `runEffect`
+    /// (`dist/dev.js:1968-2033`) sets only the strict-read window and the
+    /// effect-callback marker, so the apply runs under the caller's
+    /// `context`. Probed on the fast runtime: a `flush()` written in a
+    /// component body, a `createMemo` compute or a `createRoot` body after a
+    /// `createEffect` drains its first apply under that owner (a
+    /// `createEffect` there raised nothing; a setter there threw
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE`); one in an event handler drains with
+    /// no owner (`onCleanup` there raised `NO_OWNER_CLEANUP`).
+    fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+                | (Primitive::CreateReaction, 0)
+        )
+    }
+
     /// ADR 0551: `resolve(fn)` and `until(fn)` run `fn` as the compute of a
     /// `computed` that `watch` creates under a fresh `createRoot`
     /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2694-2735`, `:2756-2770`,
@@ -1317,8 +1339,11 @@ impl Dialect for Solid2 {
                 &[(0, CallbackOwner::Creates), (1, CallbackOwner::Creates)]
             }
             // `createEffect` queues its apply (`effect()` enqueues every
-            // `EFFECT_USER` run), so the apply always runs from the flush,
-            // where no owner is current.
+            // `EFFECT_USER` run), so the apply always runs from the flush. A
+            // drain the runtime schedules has no owner current; one a
+            // synchronous `flush()` makes runs under that call's owner, which
+            // the analyzer's flush census decides
+            // (`callback_runs_drained_by_flush`, ADR 0613).
             Primitive::CreateEffect => &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)],
             // `createRenderEffect` does not. `effect()` ends
             // `recompute(node, true); !options?.defer && (… || options?.schedule
@@ -1334,7 +1359,8 @@ impl Dialect for Solid2 {
             // component.
             // Every later run comes from the flush, where `getOwner()` is
             // `null` and a render effect created there raises
-            // `NO_OWNER_EFFECT`.
+            // `NO_OWNER_EFFECT`, unless a synchronous `flush()` under an
+            // owner drains it (ADR 0613).
             Primitive::CreateRenderEffect => &[
                 (0, CallbackOwner::Creates),
                 (1, CallbackOwner::InheritsFirstRun),

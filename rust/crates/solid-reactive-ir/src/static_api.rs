@@ -431,7 +431,11 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
-                    uncertain: earlier_call || origin.mixed,
+                    // ADR 0613: the effect phase is the queue's drain, which
+                    // a synchronous `flush()` runs under its caller's owner.
+                    uncertain: earlier_call
+                        || origin.mixed
+                        || self.lookup.flush_drains_under_owner(),
                 });
             }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {

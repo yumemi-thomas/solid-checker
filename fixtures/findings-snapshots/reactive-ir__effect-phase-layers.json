@@ -54,7 +54,7 @@
     {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 1216,

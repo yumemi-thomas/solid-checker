@@ -687,8 +687,17 @@ const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) 
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
 export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS];
 
-/** The lazy-memo and deferred-apply contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
-export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun"];
+/**
+ * ADR 0613: the site in an effect apply, with a synchronous `flush()` the program calls after the effect is created: in the body
+ * (`-body`), a memo compute (`-memo`) or a root body holding both (`-root`), where rc.17 drains the apply under that owner, and in a
+ * handler (`-handler`), where the drain has no owner (the apply's own first run is the mount's, before the click). Base shapes only.
+ * `FLUSH_RERUN_CONTEXTS`: what only a rerun runs (an apply's returned cleanup, a render effect's later apply, an `error` arm, a
+ * reaction's callback, a deferred apply), the button writing the trigger and draining it in a `createRoot` body.
+ */
+export const FLUSH_RERUN_CONTEXTS = ["effect-cleanup-flush-rerun", "render-cleanup-flush-rerun", "render-apply-flush-rerun", "effect-error-arm-flush-rerun", "reaction-flush-rerun", "effect-apply-defer-flush-rerun"];
+export const FLUSH_DRAIN_CONTEXTS = ["effect-apply-flush-body", "effect-apply-flush-memo", "effect-apply-flush-root", "effect-apply-flush-handler", ...FLUSH_RERUN_CONTEXTS];
+/** The lazy-memo, deferred-apply and flush-drain contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
+export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun", ...FLUSH_DRAIN_CONTEXTS];
 /**
  * Measured on rc.17's fast runtime (2026-11-03, 162 probes, every variant of each code): a site in a lazy memo nobody reads, or in a
  * deferred apply with no rerun, never runs (legal for every code: a violation there is an unexecuted one, ADR 0458). A lazy memo read
@@ -729,12 +738,45 @@ const API_CONTEXT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code)
   misuse: [...(LAZY_HANDLER_MISUSE.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_MISUSE.includes(code) ? ["effect-apply-defer-rerun"] : [])],
   legal: ["memo-lazy-unread", "effect-apply-defer", ...(LAZY_HANDLER_LEGAL.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_LEGAL.includes(code) ? ["effect-apply-defer-rerun"] : [])],
 }]));
+/**
+ * ADR 0613, measured on rc.17's fast runtime (2026-11-04, 340 probes, every variant of each code; a cell where the variants disagree,
+ * a disturbed run or another defect gets none): with the flush in the body, a memo or a root (or, for what a rerun runs, a root body in
+ * the handler) the callback runs under that owner, so a write or an action call reports and the owner codes (NO_OWNER_*,
+ * PRIMITIVE_IN_EFFECT_CALLBACK, SETTLED_CLEANUP_UNOWNED) are silent; with it in a handler the apply runs as any apply does.
+ */
+const FLUSH_DRAIN_MEASURED = {
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["handler"] },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  CONTEXT_NOT_FOUND: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  DYNAMIC_STATIC_PROMISE: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "handler", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  FLUSH_IN_ACTION: { misuse: [], legal: ["effect-error-arm"] },
+  FLUSH_IN_EFFECT_CALLBACK: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "handler", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["effect-error-arm"] },
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { misuse: [], legal: ["effect-error-arm"] },
+  NO_OWNER_BOUNDARY: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  NO_OWNER_CLEANUP: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  NO_OWNER_CONTEXT: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  NO_OWNER_EFFECT: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { misuse: [], legal: ["effect-error-arm"] },
+  PENDING_ASYNC_UNTRACKED_READ: { misuse: ["body", "handler", "memo", "root"], legal: ["effect-error-arm"] },
+  PRIMITIVE_IN_EFFECT_CALLBACK: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["handler"] },
+  RESOLVE_IN_REACTIVE_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"] },
+  SETTLED_CLEANUP_UNOWNED: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "handler", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  STRICT_READ_UNTRACKED: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "handler", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["effect-error-arm"] },
+  SYNC_NODE_RECEIVED_ASYNC: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  UNTIL_IN_REACTIVE_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"] },
+  UNTRACKED_READ_AFTER_AWAIT: { misuse: [], legal: ["effect-error-arm"] },
+};
+const flushDrainContext = (at) => (["body", "memo", "root", "handler"].includes(at) ? `effect-apply-flush-${at}` : `${at}-flush-rerun`);
+const FLUSH_DRAIN_PLACEMENT = Object.fromEntries(Object.entries(FLUSH_DRAIN_MEASURED).map(([code, { misuse, legal }]) => [code, { misuse: misuse.map(flushDrainContext), legal: legal.map(flushDrainContext) }]));
 // With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
 for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -980,6 +1022,8 @@ function inContext(context, stmts, kit) {
 function recallContext(context, stmts, kit) {
   const awaited = { loop: "loop-await", "for-await": "for-await", finally: "finally-await" };
   const trigger = () => signal(kit.name("t"), 1, "src");
+  // ADR 0613: the handler that makes a rerun and drains it under a root.
+  const drainRerun = (t) => [expr(write(t.name, 2)), expr(prim("root", fn([expr(flush())])))];
   const after = /^(memo-async|effect-async|async|handler-async)-(loop|for-await|finally)$/.exec(context);
   if (after) {
     const body = [ctl(awaited[after[2]], stmts)];
@@ -1103,6 +1147,35 @@ function recallContext(context, stmts, kit) {
     case "effect-apply-defer-rerun": {
       const t = trigger();
       return { body: [expr({ ...prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }), defer: true })], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // FLUSH_DRAIN_CONTEXTS (ADR 0613): the apply holds the site; the flush after its effect drains it on the flush's stack.
+    case "effect-apply-flush-body": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), expr(flush())], view: [] };
+    case "effect-apply-flush-memo": {
+      const m = kit.name("m");
+      return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), decl(m, prim("memo", fn([expr(flush()), ret(num(1))])))], view: [child(kit.name("v"), call(ref(m)))] };
+    }
+    case "effect-apply-flush-root": return { body: [expr(prim("root", fn([expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), expr(flush())])))], view: [] };
+    case "effect-apply-flush-handler": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }))], view: [button(kit.name("b"), [expr(flush())])] };
+    case "effect-cleanup-flush-rerun": case "render-cleanup-flush-rerun": {
+      const t = trigger();
+      return { body: [expr(prim(context.startsWith("effect") ? "effect" : "render", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "render-apply-flush-rerun": {
+      const t = trigger();
+      return { body: [expr(prim("render", fn([ret(read(t.name))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "effect-error-arm-flush-rerun": {
+      const t = trigger();
+      return { body: [expr(prim("effect", fn(stmts), { errorArm: t.name }))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "reaction-flush-rerun": {
+      const t = trigger();
+      const track = kit.name("track");
+      return { body: [decl(track, prim("reaction", fn(stmts))), expr(call(ref(track), [fn([expr(read(t.name))])]))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "effect-apply-defer-flush-rerun": {
+      const t = trigger();
+      return { body: [expr({ ...prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }), defer: true })], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
     }
     // FIRE_CONTEXTS: the site's function is written in the body and run elsewhere, later: handed to a project helper that defers it
     // (a timer, a microtask, a promise callback), kept in the object a helper returns and fired from a handler, the body or a timer,

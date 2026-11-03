@@ -321,7 +321,8 @@ pub(crate) fn discover_owner_file(
             let kind = callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
             // ADR 0548: an exact effect bundle names its members: the `effect`
             // member runs as the slot's callback, the `error` member from the
-            // flush's error branch with no owner.
+            // flush's error branch with no owner. ADR 0613: a drain a
+            // synchronous `flush()` makes runs it under that call's owner.
             let bundle_targets = || {
                 let primitive = known_primitive(&call_primitives[call_index])?;
                 let error = crate::execution_role::bundle_error_member(
@@ -330,6 +331,12 @@ pub(crate) fn discover_owner_file(
                     call,
                     edge.argument,
                 )?;
+                let error_kind = drained_callback_owner_edge_kind(
+                    lookup,
+                    primitive,
+                    edge.argument,
+                    solid_dialect::CallbackOwner::None,
+                );
                 let effect = crate::execution_role::effect_apply_span(call, edge.argument)
                     .filter(|effect| *effect != call.arguments[edge.argument].span);
                 Some(
@@ -337,10 +344,7 @@ pub(crate) fn discover_owner_file(
                         .and_then(|effect| callback_target(effect, false))
                         .map(|target| (target, kind))
                         .into_iter()
-                        .chain(
-                            callback_target(error, false)
-                                .map(|target| (target, OwnerEdgeKind::Unowned)),
-                        )
+                        .chain(callback_target(error, false).map(|target| (target, error_kind)))
                         .collect::<Vec<_>>(),
                 )
             };

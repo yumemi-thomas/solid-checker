@@ -2354,6 +2354,67 @@
    "mx-store-write-outside-setter-effect-async-nested-assign-direct-for",
    "mx-store-write-outside-setter-effect-async-nested-assign-direct-while"
   ],
-  "rediscovered": "locally: secondary false-clean-certified before ADR 0612, gone on the fix"
+  "rediscovered": "locally: secondary false-clean-certified before ADR 0612, gone on the fix",
+  "finding": "missing-owner (SC4001) and primitive-in-effect-callback (SC6002) proven for a primitive or cleanup in a createEffect apply that a synchronous flush() in a component body, a memo compute or a root body drains: rc.17 runs the apply under that owner and raises nothing (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "lg-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "lg-primitive-in-effect-callback-effect-apply-flush-body-effect-direct-none",
+   "lg-primitive-in-effect-callback-effect-apply-flush-memo-effect-direct-none",
+   "lg-primitive-in-effect-callback-effect-apply-flush-root-effect-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "missing-owner (SC4001) proven for onCleanup in a createEffect apply a synchronous flush() under an owner drains (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "lg-no-owner-cleanup-effect-apply-flush-body-x-direct-none",
+   "lg-no-owner-cleanup-effect-apply-flush-memo-x-direct-none",
+   "lg-no-owner-cleanup-effect-apply-flush-root-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "a write in a createEffect apply certified legal (SC2001 silent) while a synchronous flush() in a body, a memo compute or a root body drains the apply under that owner, where rc.17 throws REACTIVE_WRITE_IN_OWNED_SCOPE: a certified false clean (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-effect-apply-flush-body-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-apply-flush-memo-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-apply-flush-root-signal-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "missing-owner (SC4001) proven for useContext in a createEffect apply a synchronous flush() under an owner drains, where rc.17 reports CONTEXT_NOT_FOUND: a wrong rule (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-effect-apply-flush-body-x-direct-none",
+   "mx-context-not-found-effect-apply-flush-root-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "a write certified legal in what a rerun runs from the queue's drain, with a flush() in a root body in the handler: the cleanup an apply returns, and a layer in a bundle's `error` arm, where rc.17 throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0613)",
+  "found": "ADR 0613's own check before commit: a probe of the returned cleanup; the error-arm layers from FLUSH_RERUN_CONTEXTS' first run (130 false cleans)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-effect-cleanup-flush-rerun-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-error-arm-flush-rerun-signal-direct-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
  }
 ]

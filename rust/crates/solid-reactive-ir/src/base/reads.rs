@@ -85,10 +85,12 @@ pub(crate) enum Section {
     /// The dialect primitives the project names anywhere, which decide the
     /// project-wide callback capability flags and their early exits.
     ProjectPrimitives,
+    /// The classified flush veto (ADR 0613), read through its one answer.
+    FlushVeto,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 16] = [
+    pub(crate) const ALL: [Self; 17] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -105,6 +107,7 @@ impl Section {
         Self::RouteComponents,
         Self::ContextSymbols,
         Self::ProjectPrimitives,
+        Self::FlushVeto,
     ];
 
     const fn bit(self) -> u32 {

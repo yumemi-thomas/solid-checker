@@ -368,7 +368,7 @@ impl SemanticLookup<'_> {
     /// written alone: no event proof, no owner graph (they depend on this).
     /// A call in a function nothing places keeps the veto: unresolved is not
     /// evidence.
-    fn dispatch_caller(
+    pub(super) fn dispatch_caller(
         &self,
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,

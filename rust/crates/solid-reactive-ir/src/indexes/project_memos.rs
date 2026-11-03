@@ -84,6 +84,7 @@ project_tables! {
     46 dispatch_veto: DispatchVetoAnswer,
     47 write_flow_answers: WriteFlowAnswer,
     48 module_scope: ModuleScopeRuns,
+    49 flush_veto: FlushVetoAnswer,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -413,6 +414,17 @@ whole_program! {
     cycle: (true, true),
     direct: |lookup| lookup.dispatch_veto(),
     |ctx| Ok(ctx.project(|lookup| lookup.dispatch_veto()))
+}
+
+whole_program! {
+    /// ADR 0613: the classified flush veto, as the dispatch veto's memo keeps
+    /// that one (ADR 0450): the census reads the whole program, a reader of
+    /// the veto records this answer and reruns only when it moves. Fail
+    /// closed on a cycle: the proofs withheld.
+    FlushVetoAnswer, 49, flush_veto, "flush_veto", bool,
+    cycle: true,
+    direct: |lookup| lookup.flush_veto(),
+    |ctx| Ok(ctx.project(|lookup| lookup.flush_veto()))
 }
 
 /// ADR 0442, per function and guard (ADR 0450): the write-flow answer of the

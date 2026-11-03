@@ -138,6 +138,14 @@ pub(super) enum WriteRegionAdjustment {
     /// an owner-keeping callback or a created root, so neither a placement
     /// nor the lexical role is proven: the write is unplaced.
     ClimbExhausted,
+    /// ADR 0613: the write runs in a callback the queue's drain runs
+    /// ([`solid_dialect::Dialect::callback_runs_drained_by_flush`]: a
+    /// `createEffect` apply), or in a function it runs in place, while a
+    /// `flush()` of the program may drain the queue under an owner
+    /// ([`SemanticLookup::flush_drains_under_owner`]). A scheduled drain runs
+    /// it with no owner (legal), a synchronous one under its caller's owner
+    /// (rejected): unplaced, whatever the function's other callers.
+    DrainedByFlush,
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -204,6 +212,13 @@ pub(super) fn write_region_adjustment(
                 Some(solid_dialect::CallbackOwner::InheritsFirstRun) => {
                     return Some(WriteRegionAdjustment::FirstRunAtCallSite(call.span));
                 }
+                // ADR 0613: the apply's "no owner" is the drain's, which a
+                // synchronous flush runs under its caller's owner.
+                Some(solid_dialect::CallbackOwner::None)
+                    if drained_under_owner(primitive, index, lookup) =>
+                {
+                    return Some(WriteRegionAdjustment::DrainedByFlush);
+                }
                 // ADR 0502: a render-effect apply whose first run a `schedule`
                 // (or unreadable options) may keep on the call: no placement.
                 Some(solid_dialect::CallbackOwner::Conditional)
@@ -218,8 +233,71 @@ pub(super) fn write_region_adjustment(
             }
             None
         })
+        .or_else(|| drained_returned_cleanup(file, span, lookup))
+        .or_else(|| drained_bundle_member(file, span, lookup))
         .or_else(|| detached_in_place(file, span, lookup))
         .or_else(|| nested_in_leaf_scope(file, span, lookup))
+}
+
+/// ADR 0613: the cleanup an effect's apply returns runs on a rerun from
+/// `runEffect`, in the queue's drain, so its "no owner" is the drain's too
+/// (rc.17 `dist/dev.js:2003`, probed: under a `flush()` in a root body a
+/// setter there throws `REACTIVE_WRITE_IN_OWNED_SCOPE`).
+fn drained_returned_cleanup(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    (inside_rerun_effect_cleanup(file, span, lookup) && lookup.flush_drains_under_owner())
+        .then_some(WriteRegionAdjustment::DrainedByFlush)
+}
+
+/// ADR 0613: whether the ownerless answer of the callback at `index` of
+/// `primitive` is the queue's drain's and some `flush()` of the program may
+/// drain under an owner. The veto is read only for such a callback.
+fn drained_under_owner(primitive: Primitive, index: usize, lookup: &SemanticLookup<'_>) -> bool {
+    lookup
+        .dialect
+        .callback_runs_drained_by_flush(primitive, index)
+        && lookup.flush_drains_under_owner()
+}
+
+/// ADR 0613: a write in the `error` or `effect` member of an exact effect
+/// bundle, or in a function that member runs in place. The member is no
+/// argument the in-place climb stops at, and both run from the queue's drain
+/// (`runEffect`, ADR 0548): probed, under a `flush()` in a root body a setter
+/// in an `error` arm throws `REACTIVE_WRITE_IN_OWNED_SCOPE`.
+fn drained_bundle_member(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    let at = in_place_run_site(file, span, lookup).map_or(span, |(climb, _)| climb.at);
+    let function = crate::owners::containing_ast_function(&file.ast, at)?;
+    let is_member = |member: Option<Span>| {
+        member.is_some_and(|member| file.ast.peel_ts_sugar_span(member) == function.span)
+    };
+    let held = file
+        .ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| {
+            let whole = file.ast.peel_ts_sugar_span(call.arguments[index].span);
+            whole != function.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_runs_drained_by_flush(primitive, index)
+                            && (is_member(super::bundle_error_member(
+                                lookup.dialect,
+                                primitive,
+                                call,
+                                index,
+                            )) || is_member(super::effect_apply_span(call, index)))
+                    })
+        });
+    (held && lookup.flush_drains_under_owner()).then_some(WriteRegionAdjustment::DrainedByFlush)
 }
 
 /// What the owner of the callback that runs `span` says about the write, when
@@ -362,6 +440,10 @@ fn detached_in_place(
                 }
                 if among_others {
                     return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                // ADR 0613: a synchronous flush may drain it under an owner.
+                if drained_under_owner(primitive, index, lookup) {
+                    return Some(WriteRegionAdjustment::DrainedByFlush);
                 }
                 return Some(WriteRegionAdjustment::Detached);
             }
@@ -1555,6 +1637,25 @@ pub(super) fn write_role_fallback(
     root_body: RootBodyGuard,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
+    let role = write_role_fallback_unvetoed(file, span, role, decided, root_body, lookup);
+    // ADR 0613: an apply role is legal for a write because the queue's drain
+    // runs it with no owner; a synchronous flush may run it under one. Every
+    // apply role (`createEffect`, `createRenderEffect`, `createReaction`) is
+    // the drain's.
+    if role == ExecutionRole::EffectApply && lookup.flush_drains_under_owner() {
+        return role_arm!("write_roles.effect-apply-drained", ExecutionRole::Unknown);
+    }
+    role
+}
+
+fn write_role_fallback_unvetoed(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    decided: bool,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
     if role != ExecutionRole::Unknown || decided || file.compiler.withheld() {
         return role;
     }
@@ -1778,6 +1879,13 @@ pub(super) fn write_role_walk<'f>(
                     ExecutionRole::Unknown
                 );
             }
+            Some(WriteRegionAdjustment::DrainedByFlush) => {
+                *decided = true;
+                return role_arm!(
+                    "write_roles.write_role_walk.drained-by-flush",
+                    ExecutionRole::Unknown
+                );
+            }
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -1816,6 +1924,23 @@ pub(super) fn write_role_walk<'f>(
                         } else {
                             role_arm!("write_roles.first-run-unproven", ExecutionRole::Unknown)
                         };
+                    }
+                    // ADR 0613: a later run is the drain's, which a
+                    // synchronous flush runs under its caller's owner.
+                    _ if file.ast.call_at(call).is_some_and(|at| {
+                        lookup
+                            .primitive_at_call(file, at.span)
+                            .is_some_and(|primitive| {
+                                (0..at.arguments.len())
+                                    .any(|index| drained_under_owner(primitive, index, lookup))
+                            })
+                    }) =>
+                    {
+                        *decided = true;
+                        return role_arm!(
+                            "write_roles.first-run-later-drained",
+                            ExecutionRole::Unknown
+                        );
                     }
                     _ => break,
                 }

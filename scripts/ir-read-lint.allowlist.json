@@ -139,6 +139,9 @@
   "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
     "file_by_path": 4
   },
+  "rust/crates/solid-reactive-ir/src/indexes/flush_census.rs": {
+    "files()": 1
+  },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
     "facts.files": 6,
     "file_by_path": 3,

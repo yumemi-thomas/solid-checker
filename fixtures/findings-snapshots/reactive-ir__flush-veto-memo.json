@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-memo/App.tsx",
+      "start": 307,
+      "end": 319,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-memo/App.tsx",
+      "start": 307,
+      "end": 319,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-memo/App.tsx",
+      "start": 728,
+      "end": 738,
+      "fixes": 0
+    }
+  ]
+}

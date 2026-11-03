@@ -36,6 +36,7 @@ mod components;
 pub(crate) use components::unproven_component_status;
 mod compound;
 mod event_delivery;
+mod flush_census;
 mod hand_outs;
 pub(crate) use hand_outs::{
     HAND_OUT_TABLES, HAND_OUT_TABLES_END, HAND_OUT_TABLES_FROM, HandOutTables,
@@ -65,8 +66,8 @@ mod project_memos;
 mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
-    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables,
-    RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
+    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer, PROJECT_TABLES_FROM,
+    ProjectTables, RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
 };
 pub(crate) use test_runner::TestRunnerCallback;
 
@@ -822,6 +823,9 @@ pub(super) struct SemanticLookup<'a> {
     /// What the backend read of the installed router (ADR 0324). Set by the
     /// pipeline from the runtime environment; empty otherwise.
     router_install: crate::router_params::RouterInstallEvidence,
+    /// ADR 0613: the `solid-js` copy each file loads, for the flush census's
+    /// effect-phase exemption ([`crate::effect_phase`]).
+    package_instances: crate::PackageInstanceEvidence,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
@@ -858,6 +862,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0437: [`Self::placed_event_dispatch`] with the sites in an
     /// event-only function. The veto reads this one.
     synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
+    /// ADR 0613: every reference to the flush primitive, classified.
+    synchronous_flush: OnceLock<Vec<flush_census::FlushSite>>,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
@@ -1050,6 +1056,16 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// The runtime package identities; see [`Self::package_instances`].
+    #[must_use]
+    pub(super) fn with_package_instances(
+        mut self,
+        instances: crate::PackageInstanceEvidence,
+    ) -> Self {
+        self.package_instances = instances;
+        self
+    }
+
     pub(crate) fn memo_store(&self) -> &crate::base::memo::build::MemoStore {
         self.memos.store()
     }
@@ -1207,6 +1223,7 @@ impl<'a> SemanticLookup<'a> {
             dialect,
             program_closed,
             router_install: crate::router_params::RouterInstallEvidence::default(),
+            package_instances: crate::PackageInstanceEvidence::default(),
             ast_indexes,
             entities,
             symbol_names,
@@ -1224,6 +1241,7 @@ impl<'a> SemanticLookup<'a> {
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
+            synchronous_flush: OnceLock::new(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
@@ -1800,6 +1818,9 @@ impl<'a> SemanticLookup<'a> {
                 )]);
                 let (owner, read) = self.dispatch_veto();
                 hasher.update([u8::from(owner), u8::from(read)]);
+            }
+            Section::FlushVeto => {
+                hasher.update([u8::from(self.flush_veto())]);
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);

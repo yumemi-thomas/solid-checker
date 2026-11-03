@@ -659,6 +659,15 @@ pub(crate) enum OwnerEdgeKind {
     /// runs with no owner whatever the enclosing leaf's owner: it is proven
     /// unowned. Any other leaf callback takes [`OwnerEdgeKind::Leaf`].
     QueuedLeaf,
+    /// ADR 0613: a callback the queue's drain runs
+    /// ([`solid_dialect::Dialect::callback_runs_drained_by_flush`]: a
+    /// `createEffect` apply) while some `flush()` of the program may drain the
+    /// queue under an owner. A scheduled drain runs it with no owner, a
+    /// synchronous flush under its caller's owner, whatever the creating
+    /// call's owner: owned or not, never proven unowned, and outside any
+    /// region written around the call ([`OWNER_CONTEXT_LATER_RUN_UNOWNED`],
+    /// which leaves the region, as a render effect's later run does).
+    DrainedByFlush,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

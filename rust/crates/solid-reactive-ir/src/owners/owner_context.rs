@@ -280,6 +280,11 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
             }
         }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        // ADR 0613: the drain's caller decides, not the creating call's
+        // owner: possibly owned, possibly not, never proven.
+        OwnerEdgeKind::DrainedByFlush => {
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+        }
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
         OwnerEdgeKind::MayRun => source & !OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::OwnerGuarded => source & !OWNER_CONTEXT_UNOWNED_PART,
@@ -728,7 +733,7 @@ pub(crate) fn owner_callback_edges(
         let Some(owner) = callback_owner_at_call(file, call, primitive, argument, lookup) else {
             continue;
         };
-        let kind = callback_owner_edge_kind_at(lookup, primitive, owner);
+        let kind = drained_callback_owner_edge_kind(lookup, primitive, argument, owner);
         if lookup
             .dialect
             .callback_semantics_at(primitive, argument, call.arguments.len())
@@ -1455,6 +1460,31 @@ pub(crate) fn callback_owner_edge_kind_at(
             OwnerEdgeKind::QueuedLeaf
         }
         kind => kind,
+    }
+}
+
+/// ADR 0613: [`callback_owner_edge_kind_at`] for the callback at `argument`
+/// of `primitive`, where an ownerless answer the queue's drain gives
+/// ([`solid_dialect::Dialect::callback_runs_drained_by_flush`]) holds only
+/// while no `flush()` of the program may drain under an owner
+/// ([`SemanticLookup::flush_drains_under_owner`]); otherwise it is
+/// [`OwnerEdgeKind::DrainedByFlush`]. The veto is read only for such a
+/// callback.
+pub(crate) fn drained_callback_owner_edge_kind(
+    lookup: &SemanticLookup<'_>,
+    primitive: Primitive,
+    argument: usize,
+    owner: solid_dialect::CallbackOwner,
+) -> OwnerEdgeKind {
+    if owner == solid_dialect::CallbackOwner::None
+        && lookup
+            .dialect
+            .callback_runs_drained_by_flush(primitive, argument)
+        && lookup.flush_drains_under_owner()
+    {
+        OwnerEdgeKind::DrainedByFlush
+    } else {
+        callback_owner_edge_kind_at(lookup, primitive, owner)
     }
 }
 

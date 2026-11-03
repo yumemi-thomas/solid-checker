@@ -47,7 +47,11 @@ writes are legal (an event handler, module scope) leaves every run of its apply
 legal. A callback the dialect runs with no owner whenever it runs (a
 `createReaction` callback, a `createEffect` apply, the `error` member of an exact
 bundle of either) leaves a write legal also in a layer it runs in place (an IIFE,
-a helper calling its callback; ADRs 0540, 0548).
+a helper calling its callback; ADRs 0540, 0548). Those callbacks, a render effect's
+later runs and the cleanup an apply returns (on a rerun) have no owner only when the queue's drain is the runtime's:
+a `flush()` of the program that may run under an owner drains them under it, and
+the write there throws. Such a write is then uncertifiable program-wide (ADR
+0599; the flush veto of `primitive-in-effect-callback`).
 
 `resolve(fn)` and `until(fn)` run `fn` as the compute of a computation they
 create under a fresh root (rc.17 `dist/dev.js:2694-2770`): a write or an action
