@@ -244,6 +244,8 @@ The gate compares the baseline's programs: a program only the current run has (a
 - `disturbed`: the program threw or halted;
 - otherwise `uncertifiable` or `clean`.
 
+A legal program whose JSX reads a pending value renders its view under `<Loading fallback={0}>` (misuse.mjs `legalLoading`: PENDING_ASYNC_UNTRACKED_READ's `memo` cell, STRICT_READ_UNTRACKED's `latest`/`is-pending` in `memo` and `jsx`). Without it rc.17 reports ASYNC_OUTSIDE_LOADING_BOUNDARY, advisory but placeless, which `disturbances` counts, so a program with a violation at its site was `disturbed` instead of judged (60 lg-recall programs of the 644bd1a81 run, the `cb-*` forms of PENDING_ASYNC_UNTRACKED_READ `memo`). The fix moved lg-base 168, lg-src 264, lg-combo 524 and mx-combo 920 programs (the combinations that draw that cell as an extra) and 1,410 of lg-recall; `latest`/`is-pending` take no `render-compute` cell (a render effect in the body, which no JSX boundary covers; 48 programs).
+
 Chrome rejudges the candidates on the twin with its ledger, and a confirmed one exits 3 (stop and report); it also rejudges up to `--chrome-sample` (2) programs per cell of each other outcome (`clean`, `uncertifiable`, `unexecuted`, `not-legal`) and lists the ones it judges otherwise (`chromeDiffers`: a clean program Chrome reports the code for is a template that is not legal). Codes whose legal form needs more than a context (a provider, a settled async value, a non-sync option) have no `legal` list.
 
 ## The recall axes

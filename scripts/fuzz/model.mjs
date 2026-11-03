@@ -158,7 +158,7 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
 export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
-/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD). */
+/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`. */
 export const loadingView = (on, children) => ({ k: "loading", on, children });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
@@ -385,7 +385,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           if (type && type.t !== "fn") fail(`${where}: a callback prop must be a function, not ${type.t}`);
           break;
         }
-        case "loading": sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
+        case "loading": if (item.on !== null) sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
         default: fail(`${where}: unknown view kind ${item.k}`);
       }
     }

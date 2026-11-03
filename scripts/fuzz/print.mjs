@@ -543,7 +543,7 @@ function render(program, instrument) {
       }
       case "loading": {
         used.add("Loading");
-        return [`${ind(depth)}<Loading fallback={0} on={${item.on}()}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
+        return [`${ind(depth)}<Loading fallback={0}${item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
       }
       default: throw new Error(`cannot print view ${item.k}`);
     }

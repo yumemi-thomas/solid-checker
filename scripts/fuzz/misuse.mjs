@@ -127,7 +127,7 @@ const OWNED_PURE = ["body", "memo", "effect-compute", "render-compute", "render-
 /** The leaf scopes that forbid child owners. */
 const LEAF = ["settled", "tracked"];
 /** STRICT_READ_UNTRACKED's misuse and legal contexts, where its `latest`/`is-pending` variants go. */
-const SRU_PENDING_READS = ["body", "effect-apply", "root", "render-apply", "memo", "effect-compute", "render-compute", "jsx", "untrack"];
+const SRU_PENDING_READS = ["body", "effect-apply", "root", "render-apply", "memo", "effect-compute", "jsx", "untrack"];
 /** STORE_WRITE_OUTSIDE_SETTER's base contexts. */
 const SW_CONTEXTS = [...OWNED_PURE.filter((c) => !["show", "for"].includes(c)), "effect-apply", "handler", "timer", "then", "async"];
 
@@ -318,6 +318,9 @@ export const SPEC = {
     variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
       latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"] },
     legalVariantContexts: { latest: LEAF, "is-pending": LEAF },
+    // A pending read in JSX or a memo the JSX reads is under `<Loading>` (`legalLoading`, see PENDING_ASYNC_UNTRACKED_READ); in a render
+    // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
+    legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
     variantSources: { settled: ["module-hook-shared"] },
     setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
     call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : pendingRead(node, sigs)),
@@ -374,7 +377,10 @@ export const SPEC = {
   // A module-scope async memo is created with no owner and is still pending when a `-guarded-rerun` apply runs again (Chrome reports
   // the read there): those two legal contexts do not take the `module` source, nor the recall source that re-exports it through a
   // barrel (`module-barrel`; 84 legal programs Chrome reported, 2026-10-30).
-  PENDING_ASYNC_UNTRACKED_READ: { sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+  // `legalLoading`: a legal program whose JSX reads the pending value (the `memo` cell's `{m1()}`) sits under `<Loading>`: without
+  // one rc.17 reports ASYNC_OUTSIDE_LOADING_BOUNDARY, advisory but placeless, which made the legal judge call a program with a violation
+  // at its site `disturbed` instead of judging it (60 lg-recall programs on the 644bd1a81 run, the `cb-*` forms of `memo`).
+  PENDING_ASYNC_UNTRACKED_READ: { legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     recallVariants: ["deferred"], variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"] },
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : asyncSignal(name("a"))], call: (node, sigs) => pendingRead(node, sigs),
@@ -1267,7 +1273,10 @@ function buildOne(kit, plan = {}) {
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
   const sourced = source === "local" ? {} : { source, sourced: sigs.map((sig) => sig.name) };
   // LOADING_ON_OUTSIDE_HOLD's boundary: `<Loading on={t()}>` around a read of the async memo, and the button that writes the trigger.
-  const view = placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])] : placed.view;
+  const loadingFor = plan.legal ? spec.legalLoading?.[context] : undefined;
+  const underLoading = loadingFor === true || (Array.isArray(loadingFor) && loadingFor.includes(variant));
+  const view = placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])]
+    : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
     sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view,
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
