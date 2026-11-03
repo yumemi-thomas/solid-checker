@@ -1119,6 +1119,20 @@
   "rediscovered": "pending (VM); locally the 210 regenerated programs (seed 1) are each SC4002 violations on the fix build"
  },
  {
+  "finding": "a violation in a `createMemo(fn, { lazy: true })` nobody reads, which never runs: SC2001, SC2002 and SC4002 reported there (ADR 0458 class; ADR 0576)",
+  "found": "fuzz-pattern-coverage (2026-11-03): lg-recall `memo-lazy-unread`, 16/16 sampled unexecuted, 3 confirmed in Chrome; 30 CONTEXT_NOT_FOUND programs in the VM run",
+  "fixed": "ADR 0576",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-memo-lazy-unread-x-direct-none",
+   "lg-context-not-found-memo-lazy-unread-x-direct-helper",
+   "lg-context-not-found-memo-lazy-unread-x-wrapper-none"
+  ],
+  "outside": "the generating shapes (the `memo-lazy-unread` context) are claude/fuzz-pattern-coverage's; at the merge fold this entry into that branch's entry for the finding (set `fixed`, drop this `outside`) so its ids are checked against the grid",
+  "rediscovered": "pending (VM); locally the 30 regenerated programs are uncertifiable on the fix build"
+ },
+ {
   "finding": "missing-owner reported a handler's NoOwnerError at a context read whose body run throws ContextNotFoundError first, before the button exists (wrong rule; ADR 0577)",
   "found": "fuzz-pattern-coverage (2026-11-03): mx-recall `handler-mixed`, 30 wrong-rule programs, Chrome halts before the click",
   "fixed": "ADR 0577",
@@ -1130,5 +1144,20 @@
   ],
   "outside": "the generating shapes (the `handler-mixed` CONTEXT_NOT_FOUND cell) are claude/fuzz-pattern-coverage's; at the merge fold this entry into that branch's entry for the finding (set `fixed`, drop this `outside`) so its ids are checked against the grid",
   "rediscovered": "pending (VM); locally the 30 regenerated programs are SC4002 violations with an SC4001 obligation"
+ },
+ {
+  "finding": "SC4002 proven in an unexported module-scope wrapper called only from dead code (`if (false)`, after `return`, `false &&`, a component never rendered); ADR 0458 took every module-scope function to run (ADR 0578)",
+  "found": "fuzz-pattern-coverage (2026-11-03): lg-recall `dead-*` x `wrapper`, 24 unexecuted programs, 10/10 sampled confirmed in Chrome",
+  "fixed": "ADR 0578",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-dead-if-x-wrapper-none",
+   "lg-context-not-found-dead-after-return-x-wrapper-none",
+   "lg-context-not-found-dead-and-false-x-wrapper-none",
+   "lg-context-not-found-dead-comp-never-x-wrapper-none"
+  ],
+  "outside": "the generating shapes (the `dead-*` contexts) are claude/fuzz-pattern-coverage's; at the merge fold this entry into that branch's entry for the finding (set `fixed`, drop this `outside`) so its ids are checked against the grid",
+  "rediscovered": "pending (VM); locally the 24 regenerated programs are uncertifiable on the fix build"
  }
 ]

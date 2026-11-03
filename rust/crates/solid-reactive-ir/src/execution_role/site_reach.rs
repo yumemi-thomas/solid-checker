@@ -29,6 +29,14 @@
 //! once created. The answer is a least fixed point: a function entered only
 //! from itself never runs.
 //!
+//! ADR 0576: a lazy computation (`createMemo(fn, { lazy: true })`) runs at
+//! the first read of its accessor, not at its creation. The report query
+//! ([`unreached_report_sites`]) asks a second question beside the first:
+//! whether the site runs only in such a computation and no read of it is
+//! proven (a direct call of its `const` accessor at a site that may run).
+//! That answer is no proof the site never runs (a handed accessor may be
+//! read), so no other consumer asks it; a violation there is not proven.
+//!
 //! ADR 0475: an entry the runtime refuses enters nothing. A creation (a
 //! primitive the leaf-owner rules forbid, or a component render, which creates
 //! a root first) written in the own extent of an effect apply or a leaf
@@ -93,6 +101,8 @@ pub(crate) struct SiteReach<'l, 'a> {
     /// proven to run by the least fixed point derives depth first.
     derivations: Cell<u64>,
     limited: Cell<bool>,
+    /// ADR 0576: a lazy computation runs only where a read of it is proven.
+    lazy_reads: bool,
 }
 
 impl Drop for SiteReach<'_, '_> {
@@ -132,7 +142,17 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             fixes: !super::every_path_asked(),
             derivations: Cell::new(0),
             limited: Cell::new(false),
+            lazy_reads: false,
         }
+    }
+
+    /// ADR 0576: the query in which a lazy computation runs only where a
+    /// direct read of its accessor may run. Its `Unreached` is "not proven to
+    /// run", for the report sites alone.
+    fn proving_lazy_reads(lookup: &'l SemanticLookup<'a>) -> Self {
+        let mut query = Self::new(lookup);
+        query.lazy_reads = true;
+        query
     }
 
     /// The query without ADR 0475's refusals: what tells a report why a site
@@ -415,9 +435,23 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
             // Module scope: entered by modules and hosts this does not follow,
             // unless it is entered only through refused creations (ADR 0475).
+            // ADR 0578: a function bound to a name a module does not export
+            // (a script's top level is global) is entered only by what names
+            // it, as one written in a function is.
+            if function_declaration_span(file, function)
+                .is_some_and(|declaration| self.binding_unreached(file, function, declaration))
+            {
+                return false;
+            }
             return !self.entered_only_through_refusals(file, function);
         };
         if !self.runs(file, outer) || self.refused(file, function.span) {
+            return false;
+        }
+        if self.lazy_reads
+            && let Some(call) = lazy_creation(file, function.span, self.lookup)
+            && !self.lazy_read_proven(file, call)
+        {
             return false;
         }
         match function_declaration_span(file, function) {
@@ -483,6 +517,9 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                     .iter()
                     .any(|query| query.contains(reference.span))
                     || returned_by_discarded_iife(file, reference.span)
+                    || (self.lazy_reads
+                        && lazy_creation(file, reference.span, self.lookup)
+                            .is_some_and(|call| !self.lazy_read_proven(file, call)))
                     || !self.reached(file, reference.span)
                     || self.refused(file, reference.span)
             })
@@ -660,6 +697,75 @@ pub(crate) fn inside_class_member(
     })
 }
 
+impl SiteReach<'_, '_> {
+    /// ADR 0576: whether a read of the lazy computation `call` creates is
+    /// proven: its result is bound to a `const` (the identifier, or the first
+    /// slot of an array pattern) that a direct call reads at a site that may
+    /// run. A handed, exported or otherwise read accessor proves no read.
+    fn lazy_read_proven(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        use solid_facts::ast::BindingShape;
+        let Some(binding) = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.call_initializer == Some(call.span) && binding.immutable)
+        else {
+            return false;
+        };
+        let accessor = match binding.shape {
+            BindingShape::Identifier => binding.names.first(),
+            BindingShape::Array => binding.array_slots.first().and_then(Option::as_ref),
+            _ => None,
+        };
+        let Some(accessor) = accessor else {
+            return false;
+        };
+        file.ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(accessor.span)
+                && file.ast.calls.iter().any(|read| {
+                    !read.construct && file.ast.peel_ts_sugar_span(read.callee) == identifier.span
+                })
+                && self.reached(file, identifier.span)
+        })
+    }
+}
+
+/// ADR 0576: the call that creates a lazy computation whose callback is the
+/// value at `value`: its first argument (no spread) of a primitive whose
+/// [`solid_dialect::Dialect::lazy_option_argument`] is not proven absent or
+/// `false` (an unknown option may be lazy).
+fn lazy_creation<'f>(
+    file: &'f solid_facts::FileFacts,
+    value: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::CallFact> {
+    use solid_dialect::OptionLiteral;
+    file.ast
+        .arguments_containing(value)
+        .filter(|(call, index)| {
+            *index == 0
+                && !call.arguments[0].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[0].span) == value
+        })
+        .map(|(call, _)| call)
+        .find(|call| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .and_then(|primitive| lookup.dialect.lazy_option_argument(primitive))
+                .is_some_and(|options| {
+                    !matches!(
+                        crate::call_option_literal(file, call, options, "lazy"),
+                        OptionLiteral::Absent | OptionLiteral::False
+                    )
+                })
+        })
+}
+
 /// The class whose constructor, method or accessor `function` is.
 fn class_of_member<'f>(
     file: &'f solid_facts::FileFacts,
@@ -740,6 +846,7 @@ pub(crate) fn unreached_report_sites(
 ) -> Vec<crate::UnreachedSite> {
     let query = SiteReach::new(lookup);
     let plain = SiteReach::without_refusals(lookup);
+    let lazy = SiteReach::proving_lazy_reads(lookup);
     let mut sites = crate::projection::reported_locations(program)
         .into_iter()
         .filter_map(|location| {
@@ -755,6 +862,7 @@ pub(crate) fn unreached_report_sites(
                 location: location.clone(),
                 dead_code: false,
                 refused_creation: false,
+                lazy_unread: false,
                 undecided: true,
             };
             match query.site(file, site) {
@@ -766,11 +874,23 @@ pub(crate) fn unreached_report_sites(
                         location: location.clone(),
                         dead_code: reason == UnreachedReason::DeadCode,
                         refused_creation: plain == Reach::MayRun,
+                        lazy_unread: false,
                         undecided: false,
                     }),
                 },
                 Reach::Undecided => Some(undecided),
-                Reach::MayRun => None,
+                // ADR 0576: a site only an unread lazy computation runs.
+                Reach::MayRun => match lazy.site(file, site) {
+                    Reach::Unreached(_) => Some(crate::UnreachedSite {
+                        location: location.clone(),
+                        dead_code: false,
+                        refused_creation: false,
+                        lazy_unread: true,
+                        undecided: false,
+                    }),
+                    Reach::Undecided => Some(undecided),
+                    Reach::MayRun => None,
+                },
             }
         })
         .collect::<Vec<_>>();

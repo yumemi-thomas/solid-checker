@@ -49,7 +49,8 @@ to a project wrapper and called later stays SC4001's obligation. A read with no 
 is uncertain is SC4001's uncertifiable result. A read in a function that runs
 both under an owner and with none (called in the body and handed to `onClick`)
 is reported here, since the owned run throws first, and SC4001's claim there is
-an obligation (ADR 0577).
+an obligation (ADR 0577). A read in a lazy memo nothing proves is read
+(ADR 0576), or in code no execution reaches (ADRs 0458, 0578), is uncertifiable.
 
 A default makes the read a value rather than a throw. A context with a provider
 above the reader is silent, since the provider is what the rule looks for.

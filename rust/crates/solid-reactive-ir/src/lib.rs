@@ -1464,6 +1464,10 @@ pub struct UnreachedSite {
     /// callback (ADR 0475).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refused_creation: bool,
+    /// ADR 0576: not proven to run: the site runs only in a lazy computation
+    /// (`createMemo(fn, { lazy: true })`) that no proven read computes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lazy_unread: bool,
     /// ADR 0560: the query stopped at its depth limit or work bound before
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -2619,7 +2623,7 @@ pub(crate) fn owned_write_option(
 /// What `call`'s syntax proves about the boolean option `key` in its
 /// `argument`-th argument. See [`solid_dialect::OptionLiteral`] for the four
 /// answers; everything not proven is `Unknown`.
-fn call_option_literal(
+pub(crate) fn call_option_literal(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     argument: usize,
