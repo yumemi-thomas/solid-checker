@@ -680,7 +680,7 @@ export const LANES = {
   "ir-edit-fuzz": "gates",
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
-  // Builds nothing and needs no checker; ~2.7 minutes, so a preflight-lane neighbour would delay the gates: its own lane.
+  // Builds nothing and needs no checker; ~3 minutes, so a preflight-lane neighbour would delay the gates: its own lane.
   "fuzz-tests": "fuzz",
   // The CLI launcher falls back to `make build-rust` when it finds no
   // checker, so the suite queues with the other `rust/target` users.

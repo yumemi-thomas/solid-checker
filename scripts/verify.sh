@@ -317,13 +317,19 @@ oracle_provision_lane() {
   bun scripts/tsc-oracle.mjs provision --dialect all
 }
 
-# What the fuzzer's own tests (scripts/fuzz/*.test.mjs) need beyond packages/cli: its two pinned installs and the pinned Playwright
-# headless shell. Provisioned here, in the first step, the way the tsc oracle is: idempotent (a machine that has them spends
-# milliseconds), `npm ci` from the lockfiles on one that does not, and a failure here is a failure of the run in its first seconds,
-# naming the command, never a test that skipped. See scripts/fuzz/provision.mjs.
-fuzz_provision_lane() {
+# The differential fuzzer's own unit tests (scripts/fuzz/*.test.mjs, ~700 tests), which `scripts/*.test.mjs` does not match. They
+# were outside verify and CI, and a duplicate role-log arm id (roles.test.mjs fails it) reached main. They need the fuzzer's two
+# pinned installs and the pinned Playwright headless shell: provisioned first, like the tsc oracle (scripts/fuzz/provision.mjs:
+# idempotent, milliseconds on a provisioned machine, `npm ci` from the lockfiles on one that is not; a failure names the command).
+# test-lane.mjs then fails on a skipped test (only the three tsrs-only files may skip, named in the output, when no tsrs binary
+# exists). The tests build nothing and need no checker, so the lane runs in the first step, beside the builds: ~3.5 minutes there
+# against a step bound by the WASM package build (~7 minutes), where it was the longest lane of the gates step (+~2 minutes) when
+# it ran beside the gates.
+fuzz_tests_lane() {
   lane_step fuzz-provision
   bun scripts/fuzz/provision.mjs
+  lane_step fuzz-tests
+  bun scripts/fuzz/test-lane.mjs
 }
 
 step builds-and-suites
@@ -334,7 +340,7 @@ if [ "$run_wasm" = 1 ]; then
   lane wasm-build wasm_build_lane
 fi
 lane oracle-provision oracle_provision_lane
-lane fuzz-provision fuzz_provision_lane
+lane fuzz-tests fuzz_tests_lane
 lanes_wait
 
 # ---------------------------------------------------------------------------
@@ -409,15 +415,6 @@ ir_fuzz_lane() {
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ir-edit-fuzz.mjs --fixtures --family retype --steps 4
 }
 
-# The differential fuzzer's own unit tests (scripts/fuzz/*.test.mjs, ~700 tests), which `scripts/*.test.mjs` does not match. They
-# were outside verify and CI, and a duplicate role-log arm id (roles.test.mjs fails it) reached main. It builds nothing and runs
-# beside the gates; the lane fails on a skipped test (only the three tsrs-only files may skip, named in the output, when no tsrs
-# binary exists) and on an unprovisioned install, naming the command. ~2.7 minutes, rediscovery.test.mjs alone ~2.5 of them.
-fuzz_tests_lane() {
-  lane_step fuzz-tests
-  bun scripts/fuzz/test-lane.mjs
-}
-
 js_lane() {
   # The checker this run built: without it the CLI launcher falls back to
   # `make build-rust`, a second Cargo in `rust/target`.
@@ -439,7 +436,6 @@ if [ "$run_wasm" = 1 ]; then
 fi
 lane js js_lane
 lane ir-fuzz ir_fuzz_lane
-lane fuzz-tests fuzz_tests_lane
 lanes_wait
 
 # Absolute wall-time thresholds: this step must have the machine to itself, so
