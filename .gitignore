@@ -119,6 +119,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/local-alias-member-reads/node_modules/**
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/**
+!fixtures/reactive-ir/primitive-in-effect-callback-tag/node_modules/
+!fixtures/reactive-ir/primitive-in-effect-callback-tag/node_modules/**
 !fixtures/reactive-ir/render-apply-first-run/node_modules/
 !fixtures/reactive-ir/render-apply-first-run/node_modules/**
 !fixtures/reactive-ir/effect-apply-first-run/node_modules/
@@ -742,6 +744,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/loading-on-outside-hold/node_modules/**
 !fixtures/reactive-ir/named-inheriting-callback/node_modules/
 !fixtures/reactive-ir/named-inheriting-callback/node_modules/**
+!fixtures/reactive-ir/resolve-named-closure-unplaced/node_modules/
+!fixtures/reactive-ir/resolve-named-closure-unplaced/node_modules/**
 !fixtures/reactive-ir/store-write-chain-links/node_modules/
 !fixtures/reactive-ir/store-write-chain-links/node_modules/**
 !fixtures/reactive-ir/store-write-chain-links-loose/node_modules/

@@ -258,8 +258,22 @@ impl<'l, 'a> Walk<'l, 'a> {
                 && from.is_none_or(|inner| !inner.contains(at))
                 && (at.end <= span.start || (span.contains(at) && !nested_in_path(at)))
         };
+        // ADR 0586: the tag of the template the path is (`hf` in ``hf`x` ``,
+        // ADR 0538's inline carrier) is the call that runs the path, not one
+        // before it, as a plain call's callee is not; a tag in its
+        // substitutions still runs first.
+        let own_tag = |tag: Span| {
+            file.ast
+                .tagged_templates
+                .iter()
+                .any(|template| template.span == span && template.tag == tag)
+        };
         self.earlier |= file.ast.calls.iter().any(|other| before(other.span))
-            || file.ast.tagged_template_tags.iter().any(|tag| before(*tag))
+            || file
+                .ast
+                .tagged_template_tags
+                .iter()
+                .any(|tag| before(*tag) && !own_tag(*tag))
             || file
                 .ast
                 .jsx_elements
