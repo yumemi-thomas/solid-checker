@@ -1357,6 +1357,16 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-purity/App.tsx",
+      "start": 26309,
+      "end": 26314,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-purity/App.tsx",
       "start": 26384,
       "end": 26389,
       "fixes": 0

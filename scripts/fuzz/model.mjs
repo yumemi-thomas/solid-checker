@@ -25,7 +25,7 @@ import { EXPORT_FORMS, BEHAVIOURS, isPackageForm, behaviourOf, resultOf } from "
 export const VERSION = 1;
 
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
-export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
+export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb", "microCb", "thenCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
 export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until"];
 
@@ -140,6 +140,8 @@ export const forEach = (children) => ({ k: "for", children });
 export const refEl = (id, e, form = "inline") => ({ k: "ref", id, e, form });
 /** `<p onClick={(e, () => {})}>`: the handler expression, which the element's setup evaluates (`e` runs once there, in the body). */
 export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
+/** `<button data-act={id} onClick={e}>`: a handler passed by name (`e` a reference); `tuple` writes Solid's `[e, 1]` bound form. */
+export const namedButton = (id, e, { tuple = false } = {}) => ({ k: "hbutton", id, e, tuple });
 /** The flow components whose function child the `flow` item writes a body for (`FLOW_FORMS`, misuse.mjs `FLOW_CONTEXTS`). */
 export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
 /** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
@@ -152,10 +154,11 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
  * (CBP_FORMS) is how `run` reaches it: written inline or named by C1 (`e` a function or a name), forwarded by `FwdN`
  * (`<KidN run={props.run} />`), destructured by `KidN` (`({ run })`), or spread by `FwdN` (`<KidN {...props} />`).
  */
-export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never"];
+// `attached`: the child hands `props.run` itself to an intrinsic's `onClick` (no arrow of its own), the member-handler form.
+export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
-/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD). */
+/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`. */
 export const loadingView = (on, children) => ({ k: "loading", on, children });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
@@ -175,7 +178,17 @@ export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"),
 export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-nested" });
 /** `createStore({ v, items: [1, 2] })`: an array an order-changing mutator (`sort`, `reverse`, `copyWithin`) does change. */
 export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-list" });
+/** `createStore<{ v: number; a?: { v: number } }>({ v })`: an optional link (`s.a.v = 7` is TS18048: the typed-away templates);
+ * `leaf`: `a?: { b?: number }`, open-work.md's form (`s.a.b = 1`). */
+export const storeLinkSignal = (name, init, leaf = false) => ({ ...signal(name, init, "probe"), kind: leaf ? "store-link-leaf" : "store-link" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+/**
+ * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),
+ * `createOptimistic(init)` (`optimistic`), a writable memo `createSignal(() => init)` (`writable-memo`), `createOptimisticStore`
+ * (`optimistic-store`), a projection `createProjection((draft) => { draft.v = init; }, { v: init })` (no setter, `projection`), and
+ * `createDeferred(async () => 1)` (`deferred`, an async source like `async`).
+ */
+export const apiSignal = (name, init, kind, role = "probe") => ({ ...signal(name, init, role), kind });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 /** A `createReaction` tracker (`const track1 = createReaction(() => {})`); misuse.mjs NO_OWNER_EFFECT's `reaction-track` variants call it. */
 export const reactionSignal = (name) => ({ ...signal(name, 0, "src"), kind: "reaction" });
@@ -248,7 +261,7 @@ function helperResult(form, supplied, arg) {
     }
   }
   switch (form) {
-    case "call": case "timerCb": return T.num;
+    case "call": case "timerCb": case "microCb": case "thenCb": return T.num;
     case "returnClosure": return T.fn(T.unknown);
     case "returnCb": return T.fn(T.unknown);
     case "storeCb": return T.obj({ cb: T.fn(T.unknown) });
@@ -345,6 +358,13 @@ export function validate(program, { maxNodes = 400 } = {}) {
         }
         case "for": for (const c of item.children) checkView(c, scope); break;
         case "handler-expr": typeOf(item.e, scope); break;
+        case "hbutton": {
+          if (buttons.has(item.id)) fail(`${where}: duplicate button ${item.id}`);
+          buttons.add(item.id);
+          const type = typeOf(item.e, scope);
+          if (type && type.t !== "fn") fail(`${where}: a handler must be a function, not ${type.t}`);
+          break;
+        }
         case "flow": {
           if (!FLOW_FORMS.includes(item.flow)) fail(`${where}: unknown flow ${item.flow}`);
           if (item.on !== undefined) {
@@ -365,7 +385,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           if (type && type.t !== "fn") fail(`${where}: a callback prop must be a function, not ${type.t}`);
           break;
         }
-        case "loading": sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
+        case "loading": if (item.on !== null) sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
         default: fail(`${where}: unknown view kind ${item.k}`);
       }
     }

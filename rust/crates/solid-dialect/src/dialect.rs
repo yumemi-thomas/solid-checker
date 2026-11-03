@@ -439,6 +439,16 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0576: the options argument of `primitive` whose truthy `lazy`
+    /// property defers its first argument's computation from the call to the
+    /// first read of the accessor the call returns. With such an option a
+    /// computation nothing reads never runs. `None`: the schedule takes no
+    /// such option.
+    fn lazy_option_argument(&self, primitive: Primitive) -> Option<usize> {
+        let _ = primitive;
+        None
+    }
+
     /// Whether this dialect's children-forbidden leaf callbacks
     /// ([`CallbackOwner::Leaf`]) are legal write/action regions.
     ///

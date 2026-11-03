@@ -26,7 +26,24 @@ user(); }`), whose binding is never written, is read where a call of that
 function runs, through up to four such functions. A call in the component
 body's strict-read window, at module scope, or in a leaf owner is reported at
 the call, as a direct read there is (ADR 0490); a call in an event handler or
-one that never runs is not.
+one that never runs is not. A named function no named-callback role places is
+climbed out of, never given its lexical role, and its inline carriers
+(`[1].forEach(f)`, `f.call(null)`, `` f`x` ``) are followed: the finding sits at
+the carrier (ADR 0564).
+
+A read in a callback a standard-library carrier runs is proven only where the
+carrier provably runs it: `.call`/`.apply`, `Reflect.apply`, the `Promise`
+executor, a tagged template, a non-empty array literal receiver (two elements
+for `sort`, two or an initial value for `reduce`), `Array.from` of one. An
+empty or unknown-length receiver (`[].forEach(f)`, `props.xs.map(f)`, a `Set`)
+may run it zero times: uncertifiable (ADR 0563).
+
+A read in a named function its binding hands to such carriers is under the
+leaf owner of the carrier that runs it, not of the read's own position: the
+named callback of `onSettled(cb)` or `createTrackedEffect(cb)` runs `hf` under
+that owner through `[1].forEach(hf)`, and an `onSettled` literal around
+`[].forEach(hf)` proves nothing, since the carrier may never run `hf`
+(ADR 0580).
 
 A pending read in a callback a host API retains (an `addEventListener`
 listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation
@@ -46,6 +63,14 @@ during the call, the checker cannot prove the callback runs in the lexical
 scope or leaves pending values unhandled. Such results are uncertifiable and
 their wording identifies the open callback context. Exact cross-file and
 namespace helpers that invoke the parameter directly retain the violation.
+
+A source the read's own run did not create (a parent's memo handed by prop
+or context, a module-scope memo) is proven pending only where the reader
+mounts in the pass that created it: on its creator's stack, through intrinsic
+parents, a provider, `<Show when={true}>`, a literal `<For>` row or `<Loading>`
+fallback, or a module-scope `render`. A reader `<Show when={on()}>`, `<Switch>`,
+a non-literal `<For>` or a project component mounts later meets it settled
+(rc.17 warns only `STRICT_READ_UNTRACKED`): uncertifiable (ADR 0570).
 
 Where a project module awaits at its top level (or a load is unseen), a read
 outside an effect apply's first run is uncertifiable: the await may let the

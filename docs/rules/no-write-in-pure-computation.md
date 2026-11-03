@@ -295,8 +295,11 @@ a release whose `onCleanup` was not read (ADR 0456,
 `fixtures/reactive-ir/write-cleanup-handle-call`).
 
 A write no execution reaches (`false && setV(1)`, after a `return`, in a
-closure only an unreferenced child calls) is uncertifiable (ADR 0458,
-`fixtures/reactive-ir/dead-code-sites`).
+closure only an unreferenced child calls, an unexported module-scope helper
+only dead code calls: ADR 0578) is uncertifiable (ADR 0458,
+`fixtures/reactive-ir/dead-code-sites`). So is a write in a lazy memo
+(`createMemo(fn, { lazy: true })`) no proven read of its accessor computes
+(ADR 0576, `fixtures/reactive-ir/lazy-memo-unread`).
 So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,

@@ -298,13 +298,11 @@ impl<'a> SemanticLookup<'a> {
     fn undecided_region(&self, path: &str, span: Span) -> Option<crate::UndecidedRegion> {
         let file = self.file_by_path(path)?;
         let function = file.ast.function_at(span)?;
-        Some(crate::UndecidedRegion {
-            body: crate::location(path, function.body),
-            placed_callbacks: file
-                .ast
-                .functions_within(function.body)
-                .filter(|inner| {
-                    (crate::execution_role::function_placed_by_dialect(file, inner.span, self)
+        let placed = file
+            .ast
+            .functions_within(function.body)
+            .filter(|inner| {
+                (crate::execution_role::function_placed_by_dialect(file, inner.span, self)
                         && !crate::execution_role::function_runs_inline(file, inner.span, self)
                         // ADR 0542: `flush(fn)` runs its callback where the
                         // body is, however the body is entered, unless ADR
@@ -322,10 +320,83 @@ impl<'a> SemanticLookup<'a> {
                                 .component_statuses_of(path)
                                 .1
                                 .contains(&(path, inner.span)))
-                })
-                .map(|inner| crate::location(path, inner.span))
+            })
+            .map(|inner| inner.span)
+            .collect::<Vec<_>>();
+        // ADR 0571: a local closure the body declares whose every reference
+        // is a plain call written inside a carved callback runs only there
+        // (`const wrapUse = () => { … }; flush(() => { wrapUse(); });`).
+        let closures = file
+            .ast
+            .functions_within(function.body)
+            .filter(|inner| {
+                !placed.iter().any(|carved| carved.contains(inner.span))
+                    && self.closure_called_only_within(file, inner, &placed)
+            })
+            .map(|inner| inner.span)
+            .collect::<Vec<_>>();
+        Some(crate::UndecidedRegion {
+            body: crate::location(path, function.body),
+            placed_callbacks: placed
+                .into_iter()
+                .chain(closures)
+                .map(|inner| crate::location(path, inner))
                 .collect(),
         })
+    }
+
+    /// ADR 0571: `inner` is bound to a name nothing writes, and every
+    /// reference to it is a plain call (no tag, alias, argument or member)
+    /// written inside one of `within`'s spans of the same file.
+    fn closure_called_only_within(
+        &self,
+        file: &FileFacts,
+        inner: &solid_facts::ast::FunctionFact,
+        within: &[Span],
+    ) -> bool {
+        let path = file.path.as_str();
+        let Some(name) = crate::owners::function_binding_name(file, inner) else {
+            return false;
+        };
+        if within.is_empty() || !self.function_value_is_current(file, inner) {
+            return false;
+        }
+        let Some(symbol) = self.entities().at(path, name.span) else {
+            return false;
+        };
+        let Some(references) = self.symbol_references_if_present(symbol.as_str()) else {
+            return false;
+        };
+        let sites = self.function_call_site_references(path, inner.span);
+        let calls = sites
+            .iter()
+            .filter(|(caller, callee)| {
+                caller.path == file.path
+                    && !caller
+                        .ast
+                        .jsx_elements
+                        .iter()
+                        .any(|element| element.name.span == *callee)
+                    && caller.ast.calls.iter().any(|call| {
+                        !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == *callee
+                    })
+                    && within.iter().any(|carved| carved.contains(*callee))
+            })
+            .map(|(_, callee)| *callee)
+            .collect::<Vec<_>>();
+        !calls.is_empty()
+            && calls.len() == sites.len()
+            && references.iter().all(|reference| {
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(reference.start_byte),
+                    u32::try_from(reference.end_byte),
+                ) else {
+                    return false;
+                };
+                reference.path.as_ref() == path
+                    && ((start == name.span.start && end == name.span.end)
+                        || calls.contains(&Span::new(start, end)))
+            })
     }
 
     /// Whether `span` lies in one of [`Self::undecided_component_regions`]:

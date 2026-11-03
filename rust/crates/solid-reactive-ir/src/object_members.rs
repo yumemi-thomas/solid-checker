@@ -721,10 +721,21 @@ fn enclosing_function(file: &FileFacts, span: Span) -> Option<Span> {
         .map(|function| function.span)
 }
 
+/// Whether calling `function` without its receiver behaves as calling it
+/// through the member. An arrow binds no `this`, `arguments` or `super` of
+/// its own (ECMAScript `OrdinaryCallBindThis` skips a lexical-this function),
+/// so those spellings in it, a nested class's `this.m = …` among them, name
+/// the enclosing scope's and are the same either way (ADR 0581); `eval` and
+/// an escape stay refused for every function.
 pub(crate) fn receiver_inert(file: &FileFacts, function: &ast::FunctionFact) -> bool {
+    let receiver_spellings: &[&str] = if function.kind == ast::FunctionKind::Arrow {
+        &["eval", "\\"]
+    } else {
+        &["this", "arguments", "eval", "super", "\\"]
+    };
     !function.generator
         && file.source_text(function.span).is_some_and(|text| {
-            !["this", "arguments", "eval", "super", "\\"]
+            !receiver_spellings
                 .iter()
                 .any(|spelling| text.contains(spelling))
         })

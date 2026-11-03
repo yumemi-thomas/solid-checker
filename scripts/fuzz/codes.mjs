@@ -19,7 +19,10 @@
 //   out-of-scope      SSR and server-only, browser-host or typed-away (invariant 1) codes
 export const DISPOSITIONS = ["defect-claimed", "defect-unclaimed", "consequence", "advisory", "out-of-scope"];
 
-const claimed = (rules, severity) => ({ rules, disposition: "defect-claimed", severity });
+// `declining`: rules whose *uncertifiable* finding at the site is the checker declining this code without claiming it (a violation of
+// one is still a wrong rule): SC4001's obligation on a `useContext` read is SC4002's provider question left unasked, since the provider
+// proof is gated on an owner proof (docs/rules/missing-context-provider.md).
+const claimed = (rules, severity, { declining } = {}) => ({ rules, disposition: "defect-claimed", severity, ...(declining ? { declining } : {}) });
 const unclaimed = (severity, note) => ({ rules: [], disposition: "defect-unclaimed", severity, note });
 const consequence = (severity) => ({ rules: [], disposition: "consequence", severity });
 const advisory = (severity, rules = [], note) => ({ rules, disposition: "advisory", severity, ...(note ? { note } : {}) });
@@ -32,7 +35,7 @@ export const codePolicy = {
   NO_OWNER_EFFECT: claimed(["missing-owner", "primitive-in-directive-application"], "warn"),
   NO_OWNER_BOUNDARY: claimed(["missing-owner"], "warn"),
   NO_OWNER_CONTEXT: claimed(["missing-owner"], "error"),
-  CONTEXT_NOT_FOUND: claimed(["missing-context-provider"], "error"),
+  CONTEXT_NOT_FOUND: claimed(["missing-context-provider"], "error", { declining: ["missing-owner"] }),
   SETTLED_CLEANUP_UNOWNED: claimed(["missing-owner"], "error"),
   REACTIVE_WRITE_IN_OWNED_SCOPE: claimed(["no-write-in-pure-computation"], "error"),
   // A write through a store's read proxy is ignored with this warning (`warnWriteOutsideSetter`); SC2003.
@@ -162,6 +165,15 @@ export const isPlacelessCode = (code) => placelessCodes.includes(code);
 
 /** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */
 export const withholdingRules = ["reactive-dispatch-unresolved"];
+/** The flat code -> declining rules table (the policy's `declining`), mirrored as `decliningRules` in scripts/runtime-oracle.mjs. */
+export const decliningRules = Object.fromEntries(Object.entries(codePolicy).filter(([, policy]) => policy.declining?.length).map(([code, policy]) => [code, policy.declining]));
+/**
+ * Whether `finding` covers a diagnostic of `code`: a finding of a rule that claims it, a withholding, or an uncertifiable finding of a
+ * rule that declines it. Only a claiming rule's violation answers the code; this is the "the checker said something" test.
+ */
+export const coversCode = (code, finding) => (codeRules[code] ?? []).includes(finding.rule) || withholdingRules.includes(finding.rule) || declinesCode(code, finding);
+/** Whether `finding` is an uncertifiable finding of a rule that declines `code` (the policy's `declining`). */
+export const declinesCode = (code, finding) => finding.kind === "uncertifiable" && (decliningRules[code] ?? []).includes(finding.rule);
 /** Violations the oracle never holds against the runtime (style rules with no dev diagnostic). */
 export const ignoredRules = ["prefer-show", "prefer-for"];
 

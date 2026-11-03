@@ -238,6 +238,42 @@ pub(crate) fn discover_owner_file(
                 });
             }
         }
+        // ADR 0561: a function a reviewed standard-library carrier runs before
+        // it returns (`[1].forEach(hf)`, `Reflect.apply(hf, …)`) runs on the
+        // call's stack, under the owner of the code around it, as a direct
+        // call of it would. A generator runs none of its body there, and a
+        // placement that runs under another owner (an instance field, the
+        // owner's own JSX) gets no edge, as for an invoked literal.
+        if known_primitive(&call_primitives[call_index]).is_none()
+            && invocation_runs_under_owner(file, call.span, owner)
+        {
+            // ADR 0563: a carrier that may run its callback zero times (an
+            // empty or unknown-length receiver) proves no run: the possible
+            // unowned bit alone, so what the callback does stays an
+            // obligation, never a violation.
+            let runs = crate::carrier_runs::carrier_provably_runs(file, call.span, lookup);
+            for index in inline_carrier_arguments(file, call, lookup) {
+                let argument = call.arguments[index].span;
+                if crate::owners::argument_may_be_generator(file, argument, lookup) {
+                    continue;
+                }
+                let Some(target) = callback_target(argument, false) else {
+                    continue;
+                };
+                let (source, kind) = if !runs {
+                    (None, OwnerEdgeKind::MayBeUnowned)
+                } else if unproven_handed_function(file, &target, argument, lookup) {
+                    may_run()
+                } else {
+                    (source.clone(), kind)
+                };
+                edges.push(SymbolicOwnerEdge {
+                    source,
+                    target,
+                    kind,
+                });
+            }
+        }
         // ADR 0516: a generator called in place whose iterator is stepped at
         // the call runs its body there, up to a `yield`, under the owner of
         // the code around it: it may run, never a proof that it does.
@@ -574,6 +610,98 @@ pub(crate) fn discover_owner_file(
             });
         }
     }
+    // ADR 0562: an arrow written as a prop of a same-file project component
+    // that only ever calls the prop (ADR 0538's proof,
+    // `component_prop_invocations`) runs at each such call, under the owner
+    // of the component's body, as a direct call there would. Only a call
+    // written in the component's own body or its JSX: one in a nested
+    // function (a handler, an `onSettled` callback) runs under that
+    // function's owner, which this does not follow. A forwarded, spread,
+    // defaulted or copied prop is not followed, and a component in another
+    // file is not either (the edge would rest on another file's facts).
+    for literal in &file.ast.functions {
+        if literal.kind != solid_facts::ast::FunctionKind::Arrow {
+            continue;
+        }
+        let Some((element, _)) = crate::execution_role::component_prop_literal(file, literal.span)
+        else {
+            continue;
+        };
+        let Some((callee_file, calls)) =
+            crate::execution_role::component_prop_invocations(file, literal, lookup)
+        else {
+            continue;
+        };
+        let Some((_, component)) = lookup.function_called_at(file.path.as_str(), element.name.span)
+        else {
+            continue;
+        };
+        if callee_file.path != file.path {
+            continue;
+        }
+        for at in calls {
+            let Some(call) = file.ast.call_at(at) else {
+                continue;
+            };
+            if owner_at(call.span) != Some(component.span) {
+                continue;
+            }
+            let in_list = list_site(call.span);
+            let source = owner_at(call.span)
+                .filter(|_| !in_list)
+                .map(|span| OwnerSource {
+                    path: file.path.to_string(),
+                    span,
+                });
+            let kind = if in_list {
+                OwnerEdgeKind::MayBeUnowned
+            } else {
+                call_owner_edge(file, call.callee, lookup)
+            };
+            edges.push(SymbolicOwnerEdge {
+                source,
+                target: OwnerTarget::LocalSpan(literal.span),
+                kind,
+            });
+        }
+    }
+    // ADR 0561: a tagged template calls its tag in place, on the caller's
+    // stack, as a direct call does.
+    for template in &file.ast.tagged_templates {
+        let owner = owner_at(template.span);
+        if !invocation_runs_under_owner(file, template.span, owner)
+            || crate::owners::argument_may_be_generator(file, template.tag, lookup)
+        {
+            continue;
+        }
+        let Some(target) = callback_target(template.tag, false) else {
+            continue;
+        };
+        let in_list = list_site(template.span);
+        let kind = if in_list {
+            OwnerEdgeKind::MayBeUnowned
+        } else {
+            call_owner_edge(file, template.span, lookup)
+        };
+        let source = owner.filter(|_| !in_list).map(|span| OwnerSource {
+            path: file.path.to_string(),
+            span,
+        });
+        let (source, kind) = if unproven_handed_function(file, &target, template.tag, lookup) {
+            if kind == OwnerEdgeKind::Preserve {
+                (source, OwnerEdgeKind::MayRun)
+            } else {
+                (None, OwnerEdgeKind::MayBeUnowned)
+            }
+        } else {
+            (source, kind)
+        };
+        edges.push(SymbolicOwnerEdge {
+            source,
+            target,
+            kind,
+        });
+    }
     for callback in &file.compiler.callback_roles {
         if matches!(
             callback.role,
@@ -670,6 +798,25 @@ pub(crate) fn discover_owner_file(
         edges,
         requirements,
     }
+}
+
+/// ADR 0561: whether a handed function named through a binding may not be the
+/// function that binding was declared with when the carrier runs it: a
+/// mention that may precede the declarator, or a binding written anywhere
+/// (ADR 0468's `unproven_callee`, for a direct call). An exact target (a
+/// literal, a `const` holding one, an object slot) is already proven.
+fn unproven_handed_function(
+    file: &solid_facts::FileFacts,
+    target: &OwnerTarget,
+    mention: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    matches!(target, OwnerTarget::Symbol(_))
+        && (lookup.may_precede_initialization(file.path.as_str(), mention)
+            || file
+                .ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(mention))
+                .is_none_or(|declaration| crate::indexes::binding_written(file, declaration)))
 }
 
 /// What the owner stage keeps between builds: the graph with its fragments

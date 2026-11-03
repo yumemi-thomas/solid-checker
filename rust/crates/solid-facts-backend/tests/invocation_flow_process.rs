@@ -1951,8 +1951,9 @@ fn use_site_write_role_edits_match_cold() {
 /// Two named functions that are each other's one call (ADR 0479's sole call):
 /// placing a write in either through `write_flow_role` climbed from one to the
 /// other round the cycle forever (`layers_run_inline` never reached the
-/// component), so the build never ended. It ends, and the writes stay
-/// unplaced: nothing runs either function.
+/// component), so the build never ended. It ends, and nothing runs either
+/// function, so the write is withheld (ADR 0590: a function only never-run
+/// code calls never runs).
 #[test]
 fn sole_calls_of_each_other_end_the_in_place_climb() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
@@ -1987,5 +1988,5 @@ export function App() {
     let writes = receiver
         .recv_timeout(std::time::Duration::from_secs(120))
         .expect("the build ends");
-    assert_eq!(writes, 1);
+    assert_eq!(writes, 0);
 }

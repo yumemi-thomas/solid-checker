@@ -55,6 +55,13 @@ describe("judge", () => {
     // A claiming finding elsewhere in the file still makes it a gap.
     expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable"), finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
   });
+  it("a declining rule's uncertifiable finding is a recall gap; its violation stays a wrong rule (codes.mjs `declining`)", () => {
+    const ctx = (findings) => judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([event("CONTEXT_NOT_FOUND", 10)]) });
+    expect(ctx([finding("missing-owner", "uncertifiable")]).outcome).toBe("recall-gap");
+    expect(ctx([finding("missing-owner", "violation")]).outcome).toBe("wrong-rule");
+    // Only for the code that lists it: SC4001's obligation does not decline a flush code.
+    expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "uncertifiable")] } }).outcome).toBe("false-clean");
+  });
   it("marks a false clean certified when the file has no uncertifiable finding at all (a fail-closed break)", () => {
     expect(verdict({}).detail.certified).toBe(true);
     expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "violation", 30)] } }).detail.certified).toBe(true);
@@ -125,7 +132,7 @@ describe("buildMatrix", () => {
   it("classifies each code: proven, gaps, no-recall, untriggered, typed-away", () => {
     const m = matrixOf([row("FLUSH_IN_ACTION", "action", 1, "agree"), row("NO_OWNER_CLEANUP", "timer", 1, "agree"), row("NO_OWNER_CLEANUP", "timer", 2, "false-clean"), row("NO_OWNER_EFFECT", "timer", 1, "false-clean"), row("NO_OWNER_CONTEXT", "timer", 1, "not-fired")]);
     const by = Object.fromEntries(codeStatuses(m).map((s) => [s.code, s.status]));
-    expect(by).toMatchObject({ FLUSH_IN_ACTION: "proven", NO_OWNER_CLEANUP: "gaps", NO_OWNER_EFFECT: "no-recall", NO_OWNER_CONTEXT: "untriggered", MISSING_EFFECT_FN: "typed-away", DYNAMIC_STATIC_PROMISE: "not-run" });
+    expect(by).toMatchObject({ FLUSH_IN_ACTION: "proven", NO_OWNER_CLEANUP: "gaps", NO_OWNER_EFFECT: "no-recall", NO_OWNER_CONTEXT: "untriggered", ASYNC_STORE_SETTER: "typed-away", DYNAMIC_STATIC_PROMISE: "not-run" });
   });
 });
 

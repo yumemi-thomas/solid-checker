@@ -661,6 +661,8 @@ pub(crate) fn push_owner_requirement(
             component_uncertain: status.component_uncertain,
             unplaced_callback: status.unplaced_callback,
             provider_open: status.provider_open,
+            default_unproven: status.default_unproven,
+            owned_run_throws: status.owned_run_throws,
             after_await: status.after_await,
             after_yield: status.after_yield,
             missing_jsx_census,
@@ -1351,6 +1353,45 @@ pub(crate) fn fresh_stack_scheduler_edges(
             source_path: file.path.to_string(),
             source: call.span,
         })
+        .collect()
+}
+
+/// ADR 0561: the arguments of `call` a reviewed standard-library carrier runs
+/// before it returns, on the caller's stack: `runtime_semantics`'s audited
+/// [`InlineCallback`](crate::runtime_semantics::RuntimeArgumentBehavior)
+/// rows (`forEach`, `map`, `sort`, `Array.from`'s map function,
+/// `Reflect.apply`'s target, ...), the table ADR 0531's `HandOff::Inline`
+/// reads. The carrier is the compiler-selected standard-library declaration,
+/// never a spelling: a local or project `forEach` resolves elsewhere and is
+/// not one. A spread argument is not the callback, and a primitive's call is
+/// its callback table's.
+///
+/// A synchronous call keeps the current owner (`getOwner()` reads a module
+/// global no standard-library call swaps), the fact a direct call's
+/// [`OwnerEdgeKind::Preserve`] edge already rests on, so no dialect question
+/// is asked: the carrier's run is the direct call's.
+pub(crate) fn inline_carrier_arguments(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<usize> {
+    if lookup.primitive_at_call(file, call.span).is_some() {
+        return Vec::new();
+    }
+    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+        return Vec::new();
+    };
+    call.arguments
+        .iter()
+        .enumerate()
+        .filter(|(_, argument)| !argument.spread)
+        .filter(|(index, argument)| {
+            let callability = lookup
+                .entity_at(file.path.as_str(), argument.span)
+                .and_then(|entity| entity.callability);
+            crate::runtime_semantics::is_inline_standard_callback(resolved, callability, *index)
+        })
+        .map(|(index, _)| index)
         .collect()
 }
 

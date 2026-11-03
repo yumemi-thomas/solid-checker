@@ -93,6 +93,9 @@ struct Walk<'m> {
     visited: HashSet<Span>,
     /// Function literals queued as members, which own their obligations.
     queued: HashSet<(String, Span)>,
+    /// Functions whose prefix the walk has reported as run on the
+    /// continuation (ADR 0565): the unplaced-function pass skips them.
+    placed: HashSet<(String, Span)>,
     /// How the promise chain being followed reaches the flight.
     carried: Carried,
     /// The chain being followed runs inside `untrack`: a helper it reaches
@@ -692,6 +695,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             reported: HashSet::default(),
             visited: HashSet::default(),
             queued: HashSet::default(),
+            placed: HashSet::default(),
             carried: Carried::Held,
             untracked: false,
             unproven: false,
@@ -970,6 +974,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 }
             }
             self.after_implicit_suspension(draft, &mut walk, mark, file, ast_function);
+            self.report_unplaced_functions(draft, &mut walk, file, ast_function);
         }
         if member.conditional {
             mark_uncertain(draft, mark);
@@ -1179,6 +1184,51 @@ impl<'f, 'a> Reach<'f, 'a> {
                 in_place = true;
             }
         }
+        // ADR 0565: a function named whole at an argument that an exact
+        // same-file project function, called by its plain name, calls on every
+        // completion of its own synchronous body (`run(hf)` over `const run =
+        // (g) => { g(); }`) runs on this call's stack, as a literal there does
+        // (ADR 0485). A wrapper in another module or reached through a member,
+        // or one that calls it on some paths only, is ADR 0565's obligation.
+        if file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))
+            .is_none()
+        {
+            for (index, argument) in call.arguments.iter().enumerate() {
+                if argument.spread || argument.value != ArgumentValueKind::Identifier {
+                    continue;
+                }
+                let Some((function_file, function)) = self.named_function(file, argument.span)
+                else {
+                    continue;
+                };
+                if function.generator {
+                    continue;
+                }
+                let same_file_wrapper = crate::execution_role::project_callee_at_parameter(
+                    file,
+                    call,
+                    index,
+                    ctx.semantic_lookup,
+                )
+                .is_some_and(|(callee_file, callee, exact)| {
+                    exact && callee_file.path == file.path && callee.method_name.is_none()
+                });
+                if same_file_wrapper
+                    && crate::execution_role::helper_argument_run(
+                        file,
+                        call,
+                        index,
+                        ctx.semantic_lookup,
+                    )
+                    .is_some_and(|run| run.every_completion)
+                {
+                    self.report_prefix(draft, walk, function_file, function, depth);
+                    in_place = true;
+                }
+            }
+        }
         if in_place {
             return;
         }
@@ -1254,6 +1304,20 @@ impl<'f, 'a> Reach<'f, 'a> {
                             ))) =>
                 {
                     self.report_conditional_region(draft, walk, file, callback, depth);
+                }
+                // ADR 0566 (ADR 0563's predicate): an inline row is a timing
+                // claim, not a count. Where the carrier may run the callback
+                // zero times (`[].forEach(hf)`, `props.xs.forEach(hf)`, a
+                // `Set`), a read in it is an obligation, never a violation.
+                Some((callback_file, callback))
+                    if !callback.generator
+                        && !crate::carrier_runs::carrier_provably_runs(
+                            file,
+                            call.span,
+                            ctx.semantic_lookup,
+                        ) =>
+                {
+                    self.report_conditional_region(draft, walk, callback_file, callback, depth);
                 }
                 Some((file, callback)) if !callback.generator => {
                     self.report_prefix(draft, walk, file, callback, depth);
@@ -1368,9 +1432,122 @@ impl<'f, 'a> Reach<'f, 'a> {
         function: &'f FunctionFact,
         depth: usize,
     ) {
+        walk.placed.insert((file.path.to_string(), function.span));
         let mut prefix = function.clone();
         prefix.body = synchronous_prefix(file, function);
         self.report_region(draft, walk, file, &prefix, depth);
+    }
+
+    /// ADR 0565: a function the walk did not place (an argument it follows,
+    /// a carrier, a helper call) and that is handed where nothing here follows
+    /// it -- a project or unresolved call's whole argument, a member's value,
+    /// an object literal's slot, a method, a copy (`run(hf)`, `ho.m = () =>
+    /// …`, `{ m: hf }`) -- may run synchronously on the continuation. It may run there
+    /// when it is written in the member after one of its suspensions (it exists
+    /// only on the continuation), when a reference hands it on after one, or,
+    /// as a member's value, a slot or a method, when a suspension follows it. Its reads
+    /// are then proof obligations, never a silent clean. A function only
+    /// called directly, scheduled on a fresh stack, kept by a host, returned
+    /// by the member or never referenced is left to the arms that place it.
+    /// Outer functions go first, so a function an obligated one runs is placed
+    /// through it.
+    fn report_unplaced_functions(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) {
+        use crate::local_access::HandOff;
+        let lookup = self.ctx.semantic_lookup;
+        let ast = &file.ast;
+        let loop_start = loop_suspension_start(file, function);
+        let suspensions = ast
+            .awaits
+            .iter()
+            .chain(ast.implicit_suspensions.iter())
+            .filter(|suspension| written_directly_in(ast, function, **suspension))
+            .copied()
+            .collect::<Vec<_>>();
+        if suspensions.is_empty() && loop_start.is_none() {
+            return;
+        }
+        let suspended_before = |at: u32| {
+            loop_start.is_some_and(|start| at >= start)
+                || suspensions.iter().any(|suspension| suspension.end <= at)
+        };
+        let suspends_after = |at: u32| {
+            loop_start.is_some() || suspensions.iter().any(|suspension| suspension.end > at)
+        };
+        // A binding the member returns (`return later`) resolves the
+        // computation: it runs, if ever, after the continuation has ended.
+        let returned = |at: Span| {
+            ast.returns.iter().any(|returned| {
+                returned
+                    .argument
+                    .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == at)
+                    && written_directly_in(ast, function, returned.span)
+            })
+        };
+        let mut nested = ast
+            .functions_within(function.body)
+            .filter(|nested| nested.span != function.span)
+            .collect::<Vec<_>>();
+        nested.sort_by_key(|nested| (nested.span.start, std::cmp::Reverse(nested.span.end)));
+        for candidate in nested {
+            let key = (file.path.to_string(), candidate.span);
+            if walk.placed.contains(&key) || walk.queued.contains(&key) {
+                continue;
+            }
+            // The tail of an `async` function (or a generator's body) between
+            // the member and the candidate runs off this continuation: the
+            // promise-flight walk owns it.
+            if ast.functions_within(function.body).any(|outer| {
+                outer.span != function.span
+                    && outer.span != candidate.span
+                    && outer.span.contains(candidate.span)
+                    && (outer.r#async || outer.generator)
+            }) {
+                continue;
+            }
+            let created_after = suspended_before(candidate.span.start);
+            // A method (a class's, an object literal's, an accessor, a
+            // constructor) runs wherever its member is reached, as a member's
+            // value does.
+            let unplaced = if candidate.method_name.is_some()
+                || crate::local_access::member_assigned(file, candidate)
+                || crate::local_access::object_slot_value(file, candidate)
+            {
+                created_after || suspends_after(candidate.span.end)
+            } else if let Some(references) =
+                crate::local_access::function_reference_hand_offs(file, candidate, lookup)
+            {
+                // A copy or a whole argument of a call nothing follows.
+                references.into_iter().any(|(at, hand_off)| {
+                    hand_off == HandOff::Unfollowed
+                        && !returned(at)
+                        && (created_after || suspended_before(at.start))
+                })
+            } else {
+                // A literal that is the whole argument of such a call. A
+                // primitive's callback is the primitive's (its own owner and
+                // tracking).
+                created_after
+                    && ast
+                        .arguments_containing(candidate.span)
+                        .any(|(call, index)| {
+                            !call.arguments[index].spread
+                                && ast.peel_ts_sugar_span(call.arguments[index].span)
+                                    == candidate.span
+                                && lookup.primitive_at_call(file, call.span).is_none()
+                        })
+                    && crate::local_access::hand_off_at(file, candidate.span, lookup)
+                        == HandOff::Unfollowed
+            };
+            if unplaced {
+                self.report_conditional_region(draft, walk, file, candidate, 0);
+            }
+        }
     }
 
     /// A function literal's body as part of the continuation: its member
@@ -1829,9 +2006,13 @@ impl<'f, 'a> Reach<'f, 'a> {
         let Some(argument) = mapped.arguments.first().filter(|argument| !argument.spread) else {
             return;
         };
+        // ADR 0566: a receiver that may be empty runs no helper, so the members
+        // `map` adds are conditional (their reads are obligations).
+        let unproven_run =
+            !crate::carrier_runs::carrier_provably_runs(file, mapped.span, ctx.semantic_lookup);
         if let Some(callback) = callback_argument_literal(file, argument.span) {
             if callback.r#async && !callback.generator {
-                self.enqueue(walk, queue, file, callback, false);
+                self.enqueue(walk, queue, file, callback, unproven_run);
             }
         } else if let Some((helper_file, helper)) = ctx.semantic_lookup.function_called_at(
             file.path.as_str(),
@@ -1843,7 +2024,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .semantic_lookup
                 .function_value_is_current(helper_file, helper)
         {
-            self.enqueue(walk, queue, helper_file, helper, false);
+            self.enqueue(walk, queue, helper_file, helper, unproven_run);
         }
     }
 

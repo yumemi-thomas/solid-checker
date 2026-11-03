@@ -353,6 +353,24 @@ createRoot(() => {
   };
   createEffect(value, applyBox.apply);
 
+  // Uncertifiable (ADR 0581): an arrow slot holding a nested class whose
+  // constructor writes `this.m` resolves (the `this` is the class's); the
+  // assigned member's run is ADR 0565's hand-off, an obligation.
+  const classBox = {
+    apply: (): void => {
+      class Holder {
+        m?: () => void;
+        constructor() {
+          this.m = () => {
+            flush();
+          };
+        }
+      }
+      new Holder().m?.();
+    },
+  };
+  createEffect(value, classBox.apply);
+
   // Uncertifiable (ADR 0516): the copy and the slot also run outside the
   // effect phase (called from the root body), so the claim is not universal.
   const sharedApply = (): void => {

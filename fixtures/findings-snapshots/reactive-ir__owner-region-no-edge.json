@@ -114,8 +114,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
       "start": 3625,
       "end": 3634,

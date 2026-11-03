@@ -26,8 +26,16 @@ A read written directly in a named local function (`const wrapUse = () =>
 { user(); }`) is rendered where a call of that function sits in rendered JSX,
 through up to four such functions. The finding sits at that call and is
 uncertifiable, never proven: nothing shows the read runs pending while the
-call renders (ADR 0462). An exact `const` alias of the accessor (`const read =
+call renders (ADR 0462). A call in a named function no named-callback role
+places (a closure in a `<For>` child handed to a timer, or never called) is not
+rendered by the JSX around it (ADR 0564). A read in a callback a
+standard-library carrier may run zero times (`{[].map(() => user())}`, an
+unknown-length receiver) is uncertifiable (ADR 0563). An exact `const` alias of the accessor (`const read =
 user`, `const { read } = { read: user }`) is the accessor (ADR 0463).
+
+A parent's or module-scope memo read by a component not proven to mount in
+the pass that created it (a later `<Show>`, `<Switch>` or non-literal `<For>`)
+may be settled at the read: uncertifiable (ADR 0570).
 
 Where a project module awaits at its top level (or a load the analysis cannot
 see may), the finding is **uncertifiable**: the await's checkpoint may settle

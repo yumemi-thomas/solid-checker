@@ -180,6 +180,11 @@ defect and stays consistent across the two dialects. It does not mean the
 write is speculative: every finding is a proven mutation that bypasses the
 reactive setter.
 
+A write in a component also handed out as a plain function is uncertifiable
+(ADR 0328), except in a `flush(fn)` callback of a body entered only through an
+exact dynamic factory (ADR 0542), and in a local closure every reference of
+which is a plain call there (ADR 0571).
+
 ## Why is this bad?
 
 Solid updates the graph only through setters: the setter is what notifies

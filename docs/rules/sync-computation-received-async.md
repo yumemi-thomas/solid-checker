@@ -13,6 +13,8 @@ options include `sync: true` while the computation's callback is async or
 statically returns a Promise/AsyncIterable. Options the syntax cannot read
 (`createMemo(fn, opts)`, a spread, a non-literal `sync:` value) beside an async
 computation are **uncertifiable**: they may set `sync: true`.
+A site that provably never runs is silent, such as a function only a
+`defer: true` apply with no compute source calls (ADR 0590).
 
 The store-family constructors (`createStore(fn, …)`, `createProjection`,
 `createOptimisticStore`) are deliberately not checked: the runtime rebuilds

@@ -29,10 +29,10 @@ import { fileURLToPath } from "node:url";
 import { EntryCache, cacheDirectory, cacheableTypecheck, typecheckDigest, typecheckEnvironmentKey } from "./cache.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
 import { assertFindingsMapped, materializeForChecker, runChecker } from "./checker.mjs";
-import { codeRules, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
+import { codeRules, declinesCode, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { generateLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
 import { axesKey, cellList, generateShape, gridShapes, recallShapes } from "./matrix.mjs";
-import { CONTROL_LAYERS, FILE_LAYERS, LAYERS, RECALL_LAYERS } from "./misuse.mjs";
+import { CONTROL_LAYERS, FILE_LAYERS, LAYERS, PAIR_LAYERS, RECALL_LAYERS } from "./misuse.mjs";
 import { DEPTH_FORMS, HANDOFF_FORMS } from "./model.mjs";
 import { typecheckKeyOf } from "./pipeline.mjs";
 import { fnv } from "./rng.mjs";
@@ -57,6 +57,8 @@ export const TWIN_LAYERS = {
   "try-finally": "`try {} finally { … }`", label: "`outer: { …; break outer; }`", generator: "`(function* () { …; yield 1; })().next()`: the body runs up to the yield at `.next()`",
   ...Object.fromEntries(HANDOFF_FORMS.map((layer) => [layer, "a function handed on by name and called once at once (forEach, Array.from, sort of two, call, apply, Reflect.apply, a tag, a wrapper, a member, an assigned member, a declaration)"])),
   ...Object.fromEntries(DEPTH_FORMS.map((layer) => [layer, "N arrows, each called where it is written"])),
+  // The pair grids' composites (misuse.mjs PAIR_LAYERS): both parts run their body once, in place.
+  ...Object.fromEntries(PAIR_LAYERS.map((layer) => [layer, "a hand-off form inside the module helper's callback: each calls its body once, at once"])),
 };
 
 /** A grid layer's twin class, or a thrown error for a layer nobody classified. */
@@ -65,7 +67,7 @@ export function twinLayer(layer) {
   throw new Error(`twins.mjs: the layer ${layer} is not classified (TWIN_LAYERS): say whether its body runs once, in place, before its twins are compared`);
 }
 // Every layer the grids draw is classified (the module fails to load otherwise).
-for (const layer of [...LAYERS, ...RECALL_LAYERS, ...CONTROL_LAYERS]) twinLayer(layer);
+for (const layer of [...LAYERS, ...RECALL_LAYERS, ...CONTROL_LAYERS, ...PAIR_LAYERS]) twinLayer(layer);
 
 /**
  * Differences the execution model justifies, each with its reason: `{ kind?, cell?, context?, code?, layers, reason }` (`cell` the
@@ -79,8 +81,8 @@ export const ALLOWED = [];
 export const TWIN_CODES = Object.keys(codeRules).filter((code) => policyOf(code)?.disposition?.startsWith("defect")).sort();
 
 /**
- * A program's answer per code: a violation of a rule that claims it anywhere in the file, else a declining finding of such a rule or
- * of a withholding rule (codes.mjs `withholdingRules`: the checker withheld an answer, which covers any code, as the grids count it),
+ * A program's answer per code: a violation of a rule that claims it anywhere in the file, else a declining finding of such a rule, an
+ * uncertifiable finding of a rule that declines the code (codes.mjs `decliningRules`), or a finding of a withholding rule (codes.mjs `withholdingRules`: the checker withheld an answer, which covers any code, as the grids count it),
  * else none.
  */
 export function answersOf(findings) {
@@ -88,7 +90,7 @@ export function answersOf(findings) {
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const withheld = relevant.some((finding) => withholdingRules.includes(finding.rule));
   for (const code of TWIN_CODES) {
-    const mine = relevant.filter((finding) => codeRules[code].includes(finding.rule));
+    const mine = relevant.filter((finding) => codeRules[code].includes(finding.rule) || declinesCode(code, finding));
     out[code] = mine.some((finding) => finding.kind === "violation") ? "violation" : mine.length || withheld ? "uncertifiable" : "none";
   }
   return out;

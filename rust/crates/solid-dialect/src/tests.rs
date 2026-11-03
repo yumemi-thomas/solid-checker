@@ -154,6 +154,25 @@ fn tracked_schedule_names(
 /// is the fail-closed arm, and silently promoting a member out of it is how
 /// a guessed schedule would ship.
 #[test]
+fn the_lazy_option_defers_exactly_the_rc17_computed_callers() {
+    // ADR 0576: rc.17 `computed` skips its first run under a truthy `lazy`;
+    // `createMemo` and the function forms of `createSignal`/`createOptimistic`
+    // hand it their second argument unchanged.
+    let two = &Solid2 as &dyn Dialect;
+    let mut lazy = dialect_names(two)
+        .into_iter()
+        .filter(|name| {
+            two.primitive(name)
+                .is_some_and(|primitive| two.lazy_option_argument(primitive) == Some(1))
+        })
+        .collect::<Vec<_>>();
+    lazy.sort_unstable();
+    lazy.dedup();
+    assert_eq!(lazy, vec!["createMemo", "createOptimistic", "createSignal"]);
+    assert_eq!(Silent.lazy_option_argument(Primitive::CreateMemo), None);
+}
+
+#[test]
 fn the_tracked_callback_schedule_partitions_each_dialect() {
     let two = &Solid2 as &dyn Dialect;
 

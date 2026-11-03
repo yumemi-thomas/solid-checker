@@ -309,6 +309,63 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.named-callback-write", role);
         }
     } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
+        // ADR 0585: a closure nested in a named tracked callback that is
+        // handed on to a call not proven to invoke it there, stored, or
+        // written as an attribute value runs when something calls it, which
+        // may be the callback's own tracking pass (`[1].forEach(hf)`, an
+        // unknown `run(hf)`): unplaced, as the inline callback's nested
+        // closure is (`tracked-callback-unrun-closure` below), never a proven
+        // deferral. One the in-place layers run at a call written in the
+        // callback's own body (`const run = (g) => g(); run(hf)`) runs in the
+        // callback's pass, if at all: the callback's tracked role, as the
+        // inline callback's (`tracked-callback` below).
+        if role == ExecutionRole::DeferredCallback
+            && let Some(callback) =
+                super::named_callbacks::named_callback_containing(file, span, lookup)
+        {
+            let entry = lookup.named_callback_roles(file).get(callback.span);
+            if !(entry.tracked || entry.effect_compute) {
+                return role_arm!("callee_roles.named-callback-untracked", role);
+            }
+            // A closure whose binding only inline carriers in the callback's
+            // body (or in closures they carry) take (`[1].forEach(hf)`,
+            // `` hf`x` ``) runs there, in the callback's pass, if at all:
+            // the tracked role, which ADR 0580's carried leaf owner then
+            // reads for an async row.
+            if entry.tracked
+                && !callback.r#async
+                && carried_into_callback(file, span, callback.span, lookup, 4)
+            {
+                return role_arm!(
+                    "callee_roles.named-callback-carried",
+                    ExecutionRole::TrackedJsx
+                );
+            }
+            if attribute_function_within(file, callback.span, span, lookup)
+                || unrun_closure_within(file, callback.span, span, entities, symbol_names, lookup)
+            {
+                return role_arm!(
+                    "callee_roles.named-callback-unrun-closure",
+                    ExecutionRole::Unknown
+                );
+            }
+            if entry.tracked
+                && super::write_roles::climb_in_place_layers(file, span, lookup).is_some_and(
+                    |climb| {
+                        !climb.exhausted
+                            && climb.suspended.is_none()
+                            && !climb.in_list
+                            && crate::owners::owning_function(&file.ast, climb.at)
+                                .is_some_and(|function| function.span == callback.span)
+                    },
+                )
+            {
+                return role_arm!(
+                    "callee_roles.named-callback-in-place",
+                    ExecutionRole::TrackedJsx
+                );
+            }
+        }
         return role_arm!("callee_roles.named-callback", role);
     }
     if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
@@ -2288,5 +2345,33 @@ fn action_step_timing_unproven(
             crate::effect_execution::at_span(file, call.span, lookup)
                 != crate::effect_execution::ApplyExecution::Proven
                 || callee_callback_timing_within(file, call.span, execution, lookup, following)
+        })
+}
+
+/// ADR 0585 (merge with ADR 0580): whether the closure around `span` runs
+/// only at inline carriers written in the named callback at `callback`'s own
+/// body, directly or through closures that run only at such carriers
+/// themselves (at most `depth` closures out).
+fn carried_into_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    callback: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if function.span == callback {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    let carriers = crate::local_access::only_inline_carriers(file, function, lookup);
+    !carriers.is_empty()
+        && carriers.iter().all(|carrier| {
+            !function.span.contains(*carrier)
+                && carried_into_callback(file, *carrier, callback, lookup, depth - 1)
         })
 }

@@ -293,6 +293,72 @@ pub(crate) fn static_child_tag<'a>(
     None
 }
 
+/// ADR 0570: where the component tag at `tag` (its name span) is created
+/// while the code around it runs, synchronously: the outermost element of
+/// the chain from the tag up through holders that build their children when
+/// they are created, each holding the next as a direct child (no expression
+/// container, attribute value or fragment between): intrinsic elements (the
+/// compiler creates a child component as `insert`'s argument), ADR 0508's
+/// `<Show when={true}>` and literal `<For>` row, ADR 0511's literal-fallback
+/// `<Loading>`, and a context provider (ADR 0510; any value, which is read
+/// by a getter). The answer is evaluated where the code holding it runs (the
+/// innermost function whose body holds it, or module scope): an answer
+/// inside a callback (`<Show when={on()}>{() => <C />}</Show>`, a row of a
+/// non-literal `<For>`) runs when that callback does. `None` for any other
+/// holder (`<Show when={on()}>`, `<Switch>`, a project component's children)
+/// or a tag inside a class body.
+pub(crate) fn synchronous_tag_position(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    tag: Span,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let element = ast
+        .jsx_elements
+        .iter()
+        .find(|element| element.name.span == tag)?;
+    let mut at = element.span;
+    let mut owner = crate::owners::containing_ast_function(ast, element.span);
+    if let Some(row_function) = owner
+        && let Some((_, list)) = for_row(lookup, file, row_function, element.span)
+    {
+        at = list.span;
+        owner = crate::owners::containing_ast_function(ast, list.span);
+    }
+    let owner = owner.map(|function| function.span);
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(ast, span).map(|function| function.span) == owner
+    };
+    for _ in 0..64 {
+        let Some(holder) = ast
+            .jsx_elements
+            .iter()
+            .filter(|candidate| candidate.span != at && candidate.span.contains(at))
+            .min_by_key(|candidate| candidate.span.end - candidate.span.start)
+        else {
+            break;
+        };
+        if !own(holder.span) {
+            break;
+        }
+        if !holder.children.contains(&at)
+            || !(intrinsic_element(file, holder)
+                || shown_child(lookup, file, holder, at)
+                || loading_child(lookup, file, holder, at)
+                || (holder.member_object.is_none()
+                    && holder.spreads.is_empty()
+                    && context_declaration(lookup, file, holder.name.span).is_some()))
+        {
+            return None;
+        }
+        at = holder.span;
+    }
+    let inside = |span: Span| span != at && span.contains(at) && own(span);
+    (!ast.jsx_fragments.iter().any(|fragment| inside(*fragment))
+        && !ast.classes.iter().any(|class| class.span.contains(at)))
+    .then_some(at)
+}
+
 /// A lowercase, non-member tag of letters and digits.
 fn intrinsic_element(
     file: &solid_facts::FileFacts,
@@ -853,7 +919,7 @@ pub(crate) fn tag_provided(
 }
 
 /// The module-scope renders that mount `component` itself (ADR 0503).
-fn direct_render_sites<'a>(
+pub(super) fn direct_render_sites<'a>(
     lookup: &SemanticLookup<'a>,
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,

@@ -39,8 +39,12 @@ there, and the reads in it are then reported with the same two proofs:
   `try` around the await is enough). An `async` callback or IIFE runs its
   prefix the same way: the code up to its first own suspension (its operand
   included) is on the caller's stack, and its tail belongs to the
-  promise-flight walk. An empty receiver never invokes its
-  callback: the read is reported as where the callback would run. A `sort`
+  promise-flight walk. The carrier must provably run the callback (ADR
+  0566, ADR 0563's predicate): an array literal receiver with an element
+  (`[1].forEach(cb)`), `Array.from` of one, `.call`/`.apply`, `Reflect.apply`,
+  the `Promise` executor and a tagged template do; a receiver that may be
+  empty (an awaited or prop array, `[]`, a `Set` or `Map`, a `NodeList`) may
+  run it zero times, so a read in it is **uncertifiable**. A `sort`
   comparator, a `reduce`/`reduceRight` reducer with no initial value (not
   called under two elements) and a `replace`/`replaceAll` replacer are the
   exception: whether they run depends on the contents or on a match, so a read
@@ -114,6 +118,20 @@ there, and the reads in it are then reported with the same two proofs:
   the literal's function. It is followed as the named helpers above are (ADR
   0351).
 
+**A hand-off the walk does not follow is an obligation (ADR 0565).** A
+function the walk above does not place, handed whole to a project or
+unresolved call (`run(hf)`), copied, or written as a member's value, an
+object literal's slot or a method (`ho.m = () => …`, `{ m: hf }`), may run on the
+continuation's stack where that code calls it: its reads are
+**uncertifiable** when it is written after the await, handed on after it, or
+(a member's value, a slot or a method) outlives a later await. A function the
+computation returns, schedules on a fresh stack or never mentions stays
+silent. A same-file wrapper called by its plain name that calls the function
+(its parameter) on every completion of its own synchronous body runs it on
+this stack (`run(hf)` over `const run = (g) => { g(); }`), so its reads are
+reported as a literal's are (ADR 0485); a member wrapper (`api.run(hf)`) or
+one in another module stays uncertifiable.
+
 Each of these keeps it from applying:
 
 - a method that does not resolve to the built-in or standard declaration: a
@@ -134,8 +152,9 @@ Each of these keeps it from applying:
 **The feasible-path premise.** A read is reported where the code is written to
 run it, not where one input makes it dead: a `catch` that only an await
 rejecting would reach (`try { await rejecting(); return value() } catch {}`), a
-branch on a condition the analysis cannot decide (`if (tick() > 100)`), an empty
-receiver of `map`. The runtime stays silent on a run that does not take the
+branch on a condition the analysis cannot decide (`if (tick() > 100)`). A
+callback a carrier may run zero times is not on such a path: it is an
+obligation (ADR 0566). The runtime stays silent on a run that does not take the
 path; the rule does not.
 
 **A source already tracked is exempt** (ADR 0195). A read after the await of
@@ -259,7 +278,8 @@ Examples of **incorrect** code for this rule:
 const profile = createMemo(async () => {
   const posts = await fetchPosts();
   // Tracking ended at the await: changing userId() never re-runs this memo.
-  return posts.filter((post) => post.author === userId());
+  const id = userId();
+  return posts.filter((post) => post.author === id);
 });
 ```
 
@@ -297,4 +317,4 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — consuming async computations
 
-The async computation may be named exactly (a named function expression's binding, an object literal's member), and a comma, conditional, logical or assignment callee after an await (`(slot = r)()`) is a read when it always yields one accessor, else an obligation (ADR 0517).
+The async computation may be named exactly (a named function expression's binding, an object literal's member), and a comma, conditional, logical or assignment callee after an await (`(slot = r)()`) is a read when it always yields one accessor, else an obligation (ADR 0517). An object literal's arrow member names its function even when its text spells `this` (a nested class's `this.m = …`): an arrow binds no `this` of its own (ADR 0581).

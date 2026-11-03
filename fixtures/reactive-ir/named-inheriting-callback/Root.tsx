@@ -81,9 +81,9 @@ export function RootAfterAwait() {
   return <div></div>;
 }
 
-// Review cases. Clean: JSX a layer returns. Uncertifiable: a library callback
-// that may run zero times on the way, and a function named at its own
-// `createRoot` (no placement, never a crash).
+// Review cases. Clean: JSX a layer returns, and a function named only at its
+// own `createRoot` (never runs, ADR 0590; never a crash). Uncertifiable: a
+// library callback that may run zero times on the way.
 export function RootLayerJsx() {
   const [s] = createSignal(0);
   const init = () => { const view = () => <p>{s()}</p>; return view(); };

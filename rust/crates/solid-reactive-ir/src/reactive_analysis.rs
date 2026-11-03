@@ -437,12 +437,41 @@ pub(crate) fn collect_project<'facts>(
             mount_unresolved: false,
             settle_unproven: false,
             call_attributed: false,
+            creation_pass_unproven: false,
+            carrier_run_unproven: false,
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(synthesized);
+    // ADR 0570: a read not proven to run in the pass that created its source
+    // (a later mount of a handed or module-scope memo) may meet it settled.
+    for read in &mut draft.async_reads {
+        if read.apply_first_run_pending {
+            continue;
+        }
+        let Some(file) = ctx
+            .semantic_lookup
+            .file_by_path(read.location.path.as_ref())
+        else {
+            read.creation_pass_unproven = true;
+            continue;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(read.location.start_byte),
+            u32::try_from(read.location.end_byte),
+        ) else {
+            read.creation_pass_unproven = true;
+            continue;
+        };
+        read.creation_pass_unproven = !crate::owners::read_in_creation_pass(
+            ctx.semantic_lookup,
+            file,
+            solid_facts::core::Span::new(start, end),
+            &read.declaration,
+        );
+    }
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.

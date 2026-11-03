@@ -1315,8 +1315,8 @@ fn refused_when_optional(qualified_name: &str) -> bool {
 /// standard-library trust here.
 ///
 /// An inline callback inherits `guaranteed` from the call that hands it over,
-/// as ADR 0210 reads it; ADR 0275 changes only what a body's own control flow
-/// decides.
+/// as ADR 0210 reads it, where the carrier provably runs it (ADR 0563); ADR
+/// 0275 changes only what a body's own control flow decides.
 #[allow(clippy::too_many_arguments)]
 fn standard_library_argument_operations(
     resolution: LeafScopeResolution<'_, '_>,
@@ -1386,6 +1386,9 @@ fn standard_library_argument_operations(
         let listener_slot =
             crate::runtime_semantics::runs_on_invoker_stack(resolved, callability, index);
         match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
+            // ADR 0563: a carrier that may run its callback zero times (an
+            // empty or unknown-length receiver) makes what it reaches
+            // possible, never guaranteed.
             Some(RuntimeArgumentBehavior::InlineCallback) => {
                 complete &= argument_body_operations(
                     resolution,
@@ -1394,7 +1397,8 @@ fn standard_library_argument_operations(
                     kinds,
                     visited,
                     depth,
-                    guaranteed,
+                    guaranteed
+                        && crate::carrier_runs::carrier_provably_runs(file, call.span, lookup),
                 );
             }
             Some(

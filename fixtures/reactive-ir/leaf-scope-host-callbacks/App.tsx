@@ -8,8 +8,8 @@ function each(list: number[]) {
   list.forEach(() => register());
 }
 
-// Violation: `forEach` runs `register` before it returns, inside the leaf
-// scope.
+// Uncertifiable (ADR 0563): `forEach` runs `register` before it returns, inside
+// the leaf scope, once per element of a list whose length is not read here.
 export function InlineIdentifier() {
   const [items] = createSignal([1, 2]);
   onSettled(() => {
@@ -18,7 +18,7 @@ export function InlineIdentifier() {
   return <div />;
 }
 
-// Violation: the same through a function literal.
+// Uncertifiable (ADR 0563): the same through a function literal.
 export function InlineLiteral() {
   const [items] = createSignal([1, 2]);
   onSettled(() => {
@@ -27,7 +27,7 @@ export function InlineLiteral() {
   return <div />;
 }
 
-// Violation: the same one helper down.
+// Uncertifiable (ADR 0563): the same one helper down.
 export function InlineInHelper() {
   const [items] = createSignal([1, 2]);
   onSettled(() => {

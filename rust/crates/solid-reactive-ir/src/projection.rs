@@ -1212,6 +1212,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0563: every async-read finding is a claim about a read that
+            // happens; a carrier that may run the read's callback zero times
+            // (an empty or unknown-length receiver) proves none.
+            if read.carrier_run_unproven {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the standard-library call that runs this read's callback may run it zero times (its receiver may be empty), so whether this read runs is not proven; if it does: {}",
+                    finding.message
+                );
+            }
             // A missing boundary is proven only for a function whose every
             // render chain was followed to a mount root. Where a chain ends at
             // a function the project never renders, the boundary above it may
@@ -1220,6 +1230,22 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 finding.kind = "uncertifiable".into();
                 finding.message = format!(
                     "the component rendering this read is never traced to a render or hydrate root in this project, so whether a Loading boundary is above it (for example in a router layout or around a lazy route) cannot be proven; if none is: {}",
+                    finding.message
+                );
+            }
+            // ADR 0570: a read not proven to run in the pass that created
+            // its source may run after it settled (a component a `<Show>`
+            // mounts on a click); the same exemptions as ADR 0518's.
+            if read.creation_pass_unproven
+                && !read.apply_first_run_pending
+                && ((finding.id == "SC5003"
+                    && !read.ssr_client_hole
+                    && !read.server_rendering_unresolved)
+                    || finding.id == "SC5001")
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the component holding this read is not proven to run in the same pass that created the source (it may mount later, from a <Show> or a click), and a settled read neither throws nor needs a boundary; if it is still pending: {}",
                     finding.message
                 );
             }
