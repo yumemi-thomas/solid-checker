@@ -416,6 +416,52 @@ fn invalidation_is_complete_on_random_graphs() {
     assert!(reused > computed / 4, "{reused} reused of {computed}");
 }
 
+#[test]
+fn shard_work_answers_alike_inline_and_on_workers() {
+    let items = (0..u32::try_from(TABLE_SHARDS).unwrap()).collect::<Vec<_>>();
+    let work = |n: u32| (n, n * 3 + 1);
+    let expected = items.iter().map(|&n| work(n)).collect::<Vec<_>>();
+    assert_eq!(each_shard(items.clone(), 0, work), expected);
+    assert_eq!(each_shard(items, SHARD_THREADS_MIN_WORK, work), expected);
+}
+
+/// ADR 0593: a graph whose flushes cross `SHARD_THREADS_MIN_WORK`, so the
+/// shard workers run, against a fresh store at every step.
+#[test]
+fn invalidation_is_complete_on_a_graph_large_enough_for_shard_workers() {
+    for seed in 1..=2 {
+        let mut random = Random(seed);
+        let nodes = 6000;
+        let cells = 40;
+        let mut world = random_world(&mut random, nodes, cells);
+        let retained = store();
+        retained.begin(&[]);
+        for step in 0..4 {
+            let check = store();
+            check.begin(&[]);
+            for node in 0..nodes {
+                assert_eq!(
+                    retained.answer::<Node>(&world, &node),
+                    check.answer::<Node>(&world, &node),
+                    "seed {seed} step {step} node {node}"
+                );
+            }
+            retained.end();
+            let mut next = ToyWorld {
+                cells: world.cells.clone(),
+                dag: world.dag.clone(),
+                computed: Mutex::default(),
+            };
+            for _ in 0..=random.below(3) {
+                next.cells
+                    .insert(random.below(cells), i64::from(random.below(4)));
+            }
+            retained.begin(&changed(&world, &next));
+            world = next;
+        }
+    }
+}
+
 // A native-only test of concurrent readers; it never runs on wasm32-wasip1.
 #[test]
 #[allow(clippy::disallowed_methods)]

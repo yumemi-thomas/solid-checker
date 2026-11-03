@@ -38,6 +38,7 @@ export function incomparable(older, newer) {
     if (!other) continue;
     differs(`${unit.label} programs`, unit.programs, other.programs);
     differs(`${unit.label} sample`, unit.gridSample, other.gridSample);
+    differs(`${unit.label} shard`, unit.gridShard ?? null, other.gridShard ?? null);
     differs(`${unit.label} cache`, unit.cache, other.cache);
   }
   return reasons;

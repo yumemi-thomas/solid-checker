@@ -37,6 +37,7 @@ describe("the throughput comparison", () => {
     expect(incomparable(base, run([unit("u", { cache: "runtime cold, typecheck cold" })]))).toEqual(['u cache: "runtime warm, typecheck warm" vs "runtime cold, typecheck cold"']);
     expect(incomparable(base, run([unit("u", { programs: 999 })]))).toEqual(["u programs: 1000 vs 999"]);
     expect(incomparable(base, run([unit("u", { gridSample: { fraction: 0.1 } })]))[0]).toMatch(/^u sample/);
+    expect(incomparable(base, run([unit("u", { gridShard: { index: 0, count: 4 } })]))[0]).toMatch(/^u shard/);
     expect(incomparable(base, run([unit("u")], { codes: "A" }))[0]).toMatch(/^codes/);
     expect(incomparable(base, run([unit("u")], { mode: { warmChecker: true, roleLog: false } }))[0]).toMatch(/^checker mode/);
     expect(incomparable(base, run([unit("v")]))[0]).toMatch(/^units/);

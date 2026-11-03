@@ -340,14 +340,97 @@ fn implementation_identity() -> Result<&'static str, Box<dyn Error>> {
 #[cfg(target_os = "linux")]
 fn loaded_implementation_identity() -> Result<String, String> {
     // /proc/self/exe opens the executing inode even after unlink/replacement.
-    let digest = hash_file(Path::new("/proc/self/exe")).map_err(|error| error.to_string())?;
-    Ok(format!(
-        "sha256:{}",
-        digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>()
-    ))
+    let image = Path::new("/proc/self/exe");
+    // ADR 0591: the linker-issued GNU build id that image carries names it,
+    // as LC_UUID names a Mach-O image, for a few header reads where the
+    // digest below reads and hashes the whole executable on every check.
+    // An image without exactly one usable build id keeps the digest.
+    if let Some(id) = fs::File::open(image)
+        .ok()
+        .and_then(|mut file| elf_build_id(&mut file))
+    {
+        return Ok(format!("gnu-build-id:{}", hex(&id)));
+    }
+    let digest = hash_file(image).map_err(|error| error.to_string())?;
+    Ok(format!("sha256:{}", hex(&digest)))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// The one `NT_GNU_BUILD_ID` note of a little-endian ELF64 image's `PT_NOTE`
+/// segments (ADR 0591), read through its program headers. `None` for any
+/// other image, a malformed or oversized header or note, no build id, more
+/// than one, or one shorter than 16 bytes (an 8-byte `--build-id=fast` hash
+/// is too short to name an implementation): the caller then hashes the whole
+/// image.
+#[cfg(any(target_os = "linux", test))]
+fn elf_build_id(image: &mut (impl io::Read + io::Seek)) -> Option<Vec<u8>> {
+    use io::SeekFrom;
+    const PT_NOTE: u32 = 4;
+    const NT_GNU_BUILD_ID: u32 = 3;
+    let u16_at =
+        |bytes: &[u8], at: usize| Some(u16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?));
+    let u32_at =
+        |bytes: &[u8], at: usize| Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?));
+    let u64_at =
+        |bytes: &[u8], at: usize| Some(u64::from_le_bytes(bytes.get(at..at + 8)?.try_into().ok()?));
+    let mut header = [0_u8; 64];
+    image.seek(SeekFrom::Start(0)).ok()?;
+    image.read_exact(&mut header).ok()?;
+    // ELF magic, ELFCLASS64, ELFDATA2LSB, EV_CURRENT.
+    if header[..4] != *b"\x7fELF" || header[4] != 2 || header[5] != 1 || header[6] != 1 {
+        return None;
+    }
+    let table = u64_at(&header, 0x20)?;
+    let entry = usize::from(u16_at(&header, 0x36)?);
+    let count = usize::from(u16_at(&header, 0x38)?);
+    // PN_XNUM (0xffff) keeps the real count elsewhere: not followed.
+    if entry < 56 || count == 0 || count >= 0xffff {
+        return None;
+    }
+    let mut headers = vec![0_u8; entry.checked_mul(count)?];
+    image.seek(SeekFrom::Start(table)).ok()?;
+    image.read_exact(&mut headers).ok()?;
+    let mut found = Vec::new();
+    for program in headers.chunks_exact(entry) {
+        if u32_at(program, 0)? != PT_NOTE {
+            continue;
+        }
+        let offset = u64_at(program, 8)?;
+        let size = usize::try_from(u64_at(program, 32)?).ok()?;
+        let align = if u64_at(program, 48)? == 8 { 8 } else { 4 };
+        if size > 1 << 20 {
+            return None;
+        }
+        let mut notes = vec![0_u8; size];
+        image.seek(SeekFrom::Start(offset)).ok()?;
+        image.read_exact(&mut notes).ok()?;
+        let padded = |length: usize| length.checked_add(align - 1).map(|end| end / align * align);
+        let mut at = 0;
+        while at < notes.len() {
+            let name_size = usize::try_from(u32_at(&notes, at)?).ok()?;
+            let desc_size = usize::try_from(u32_at(&notes, at + 4)?).ok()?;
+            let kind = u32_at(&notes, at + 8)?;
+            // Offsets within the segment, which starts aligned: the
+            // descriptor and the next note start at the alignment.
+            let name_start = at + 12;
+            let desc_start = padded(name_start.checked_add(name_size)?)?;
+            let next = padded(desc_start.checked_add(desc_size)?)?;
+            let name = notes.get(name_start..name_start.checked_add(name_size)?)?;
+            let desc = notes.get(desc_start..desc_start.checked_add(desc_size)?)?;
+            if kind == NT_GNU_BUILD_ID && name == b"GNU\0" {
+                found.push(desc.to_vec());
+            }
+            at = next;
+        }
+    }
+    match found.as_slice() {
+        [id] if (16..=64).contains(&id.len()) => found.pop(),
+        _ => None,
+    }
 }
 
 #[cfg(target_os = "macos")]

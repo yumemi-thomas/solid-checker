@@ -902,7 +902,11 @@ fn emit_memo_report(report: &crate::base::memo::build::MemoReport, emit_timings:
 /// one; it changes timing only, never an answer.
 fn analysis_parallelism() -> usize {
     static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
-    let available = std::thread::available_parallelism().map_or(1, usize::from);
+    // Read once (ADR 0593): on Linux each call reads the cgroup quota files,
+    // and a check asks for every fan-out.
+    static AVAILABLE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    let available =
+        *AVAILABLE.get_or_init(|| std::thread::available_parallelism().map_or(1, usize::from));
     let cap = CAP.get_or_init(|| {
         std::env::var("SOLID_CHECKER_IR_WORKERS")
             .ok()

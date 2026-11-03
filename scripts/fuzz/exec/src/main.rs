@@ -292,10 +292,21 @@ struct Checker {
     warmed: Mutex<std::collections::BTreeSet<String>>,
 }
 
+/// One worker for each of a check's own fan-outs (ADR 0594): the reactive IR's, the Type Facts producer's per-file passes and the
+/// tsrs pool the producer parses on. The executor already runs a check per core, so a check that spreads over the cores only adds
+/// thread starts and wake-ups (a third of a warm check's CPU). Answers do not depend on the worker counts. A value the executor's
+/// caller set is kept; the executor's own type checks are not the checker's and keep theirs.
+const CHECK_WORKERS: [(&str, &str); 3] = [("SOLID_CHECKER_IR_WORKERS", "1"), ("SOLID_TYPEFACTS_PER_FILE_WORKERS", "1"), ("RAYON_NUM_THREADS", "1")];
+
 impl Checker {
     fn command(&self, dir: &str, args: &[&str], daemon: bool, program: Option<&str>) -> Command {
         let mut command = Command::new(&self.bin);
         command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(args).current_dir(dir);
+        for (key, value) in CHECK_WORKERS {
+            if std::env::var_os(key).is_none() && !self.env.iter().any(|(given, _)| given == key) {
+                command.env(key, value);
+            }
+        }
         for (key, value) in &self.env {
             command.env(key, value);
         }
@@ -963,10 +974,13 @@ struct Slots {
     ready: Condvar,
 }
 impl Slots {
-    fn take(&self) -> (SlotDir, SlotDir) {
+    /// A free pair, preferring one whose clean slot last held a project of the same `shape` (`project_shape`): a warm checker's
+    /// daemon updates the files of such a project in place, and reopens its whole program for any other (ADR 0592).
+    fn take(&self, shape: Option<&str>) -> (SlotDir, SlotDir) {
         let mut free = self.free.lock().unwrap();
         loop {
-            if let Some(pair) = free.pop() {
+            let same = shape.and_then(|shape| free.iter().rposition(|(slot, _)| slot.shape.as_deref() == Some(shape)));
+            if let Some(pair) = same.map(|at| free.remove(at)).or_else(|| free.pop()) {
                 return pair;
             }
             free = self.ready.wait(free).unwrap();
@@ -975,6 +989,10 @@ impl Slots {
     fn give(&self, pair: (SlotDir, SlotDir)) {
         self.free.lock().unwrap().push(pair);
         self.ready.notify_one();
+    }
+    /// The shapes the free slots hold, the last freed first.
+    fn free_shapes(&self) -> Vec<String> {
+        self.free.lock().unwrap().iter().rev().filter_map(|(slot, _)| slot.shape.clone()).collect()
     }
 }
 
@@ -985,10 +1003,12 @@ impl Slots {
 struct SlotDir {
     parent: PathBuf,
     name: Option<String>,
+    /// The `project_shape` of the project the slot holds.
+    shape: Option<String>,
 }
 impl SlotDir {
     fn new(parent: PathBuf) -> Self {
-        Self { parent, name: None }
+        Self { parent, name: None, shape: None }
     }
     /// The slot's directory for program `id`, the previous program's directory renamed to it.
     fn place(&mut self, id: &str) -> std::io::Result<PathBuf> {
@@ -1001,6 +1021,69 @@ impl SlotDir {
         }
         self.name = Some(name);
         Ok(target)
+    }
+}
+
+/// What decides whether a retained checker daemon reopens its program when a slot takes a project (ADR 0592): its file names and
+/// its tsconfig.json. The daemon rebuilds on a changed tsconfig or a changed directory listing, and updates the files of the program
+/// it holds otherwise. Only the order in which slots are handed out reads it, never an answer.
+fn project_shape(files: &serde_json::Map<String, Value>) -> String {
+    let mut names = files.keys().map(String::as_str).collect::<Vec<_>>();
+    names.sort_unstable();
+    let tsconfig = files.get("tsconfig.json").and_then(Value::as_str).unwrap_or_default();
+    format!("{}\0{tsconfig}", names.join("\0"))
+}
+
+/// The `project_shape` of a request's project when it borrows a slot (not one with a directory of its own).
+fn slot_shape(request: &Value) -> Option<String> {
+    let project = request["project"].as_object().filter(|project| project.get("dir").is_none())?;
+    project.get("files").and_then(Value::as_object).map(project_shape)
+}
+
+/// Step-1 requests waiting for a worker (ADR 0592). A worker takes the oldest of the first `JOB_WINDOW` whose project has the shape a
+/// free slot last held, so the slot's warm daemon updates its program instead of reopening it; else the oldest. Each request is passed
+/// over at most `limit` times, so none waits for ever behind a run of others. The order in which programs are prepared changes no
+/// answer: each is its own request, answered by its own `seq`.
+struct Jobs {
+    state: Mutex<(std::collections::VecDeque<(Value, Option<String>, usize)>, bool)>,
+    ready: Condvar,
+    limit: usize,
+}
+const JOB_WINDOW: usize = 64;
+impl Jobs {
+    fn new(limit: usize) -> Self {
+        Self { state: Mutex::new((Default::default(), false)), ready: Condvar::new(), limit }
+    }
+    fn push(&self, request: Value) {
+        let shape = slot_shape(&request);
+        self.state.lock().unwrap().0.push_back((request, shape, 0));
+        self.ready.notify_one();
+    }
+    /// No more requests: the workers end once the queue is empty.
+    fn close(&self) {
+        self.state.lock().unwrap().1 = true;
+        self.ready.notify_all();
+    }
+    /// The next request for a worker, `free` naming the shapes of the free slots; `None` once closed and empty.
+    fn next(&self, free: impl Fn() -> Vec<String>) -> Option<Value> {
+        let mut state = self.state.lock().unwrap();
+        loop {
+            if !state.0.is_empty() {
+                let free = free();
+                let queue = &mut state.0;
+                let window = queue.len().min(JOB_WINDOW);
+                let wanted = (0..window).find(|&at| queue[at].1.as_ref().is_some_and(|shape| free.contains(shape))).unwrap_or(0);
+                let at = (0..wanted).find(|&at| queue[at].2 >= self.limit).unwrap_or(wanted);
+                for passed in queue.iter_mut().take(at) {
+                    passed.2 += 1;
+                }
+                return queue.remove(at).map(|(request, _, _)| request);
+            }
+            if state.1 {
+                return None;
+            }
+            state = self.ready.wait(state).unwrap();
+        }
     }
 }
 
@@ -1190,7 +1273,8 @@ impl Executor {
         // A project with a directory of its own (a program that ships a package, or `--keep-work`) is written fresh there and removed
         // after; the others borrow a slot pair.
         let slotted = project.is_some_and(|p| p.get("dir").is_none()) || twin_project.is_some_and(|p| p.get("dir").is_none());
-        let mut slot = slotted.then(|| self.slots.take());
+        let shape = slot_shape(request);
+        let mut slot = slotted.then(|| self.slots.take(shape.as_deref()));
         // The program's id names its slot directory (`SlotDir`); a request without one (an older caller) shares the name `program`.
         // A warm checker's slot keeps one name: its daemon is keyed by the project path, so a directory per program would start a
         // daemon per program. The role log then names the program from the check's environment instead (`Checker::command`).
@@ -1207,7 +1291,10 @@ impl Executor {
                     None => {
                         let slot_dir = slot_dir.ok_or("no slot")?;
                         let dir = slot_dir.place(id).map_err(|e| format!("slot {}: {e}", slot_dir.parent.display()))?;
+                        // Unknown until the files are written: a failed write leaves a slot whose project nothing describes.
+                        slot_dir.shape = None;
                         sync_files(&dir, files).map_err(|e| format!("slot {}: {e}", dir.display()))?;
+                        slot_dir.shape = Some(project_shape(files));
                         Ok(dir)
                     }
                 }
@@ -1276,26 +1363,23 @@ fn main() {
         _ => return,
     };
     // Step-1 work runs on a pool twice the concurrency (a program waiting for its batch holds no checker), Chrome runs on their own.
-    let (jobs, queue) = channel::<Value>();
-    let queue = Arc::new(Mutex::new(queue));
     let workers = executor.checks.capacity() * 2;
+    let jobs = Arc::new(Jobs::new(workers * 4));
     for _ in 0..workers {
         let executor = Arc::clone(&executor);
-        let queue = Arc::clone(&queue);
-        thread::spawn(move || loop {
-            let job = { queue.lock().unwrap().recv() };
-            let Ok(job) = job else { break };
-            let answer = executor.prepare(&job);
-            executor.out.emit(&answer);
+        let jobs = Arc::clone(&jobs);
+        thread::spawn(move || {
+            while let Some(job) = jobs.next(|| executor.slots.free_shapes()) {
+                let answer = executor.prepare(&job);
+                executor.out.emit(&answer);
+            }
         });
     }
     for line in lines {
         let Ok(line) = line else { break };
         let Ok(request) = serde_json::from_str::<Value>(&line) else { continue };
         match request["op"].as_str() {
-            Some("prepare") => {
-                let _ = jobs.send(request);
-            }
+            Some("prepare") => jobs.push(request),
             // A new number of concurrent checker runs (matrix.mjs: with every runtime cached, the idle Chrome share goes to the
             // checker). Capped at the step-1 pool, which is twice the starting concurrency.
             Some("checks") => {
@@ -1317,8 +1401,9 @@ fn main() {
             _ => {}
         }
     }
-    // stdin closed: the run is over. The browser and the Vite helper are killed and waited on, and every slot's checker daemon is
-    // stopped.
+    // stdin closed: the run is over (as the request channel's end did before: the workers end on an empty queue). The browser and the
+    // Vite helper are killed and waited on, and every slot's checker daemon is stopped.
+    jobs.close();
     if let Some(chrome) = executor.current_chrome() {
         chrome.stop();
     }
@@ -1480,6 +1565,73 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("App.tsx")).unwrap(), "b");
         assert_eq!(std::fs::metadata(dir.join("main.tsx")).unwrap().modified().unwrap(), main);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_check_runs_its_own_fan_outs_on_one_worker_unless_told_otherwise() {
+        let env_of = |checker: &Checker| {
+            let command = checker.command("/tmp/x", &[], true, None);
+            command.get_envs().map(|(key, value)| (key.to_string_lossy().into_owned(), value.map(|v| v.to_string_lossy().into_owned()))).collect::<HashMap<_, _>>()
+        };
+        let set = |pairs: &[(&str, &str)]| Checker { bin: "checker".into(), env: pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), warm: Warm::On, warmed: Mutex::new(Default::default()) };
+        let env = env_of(&set(&[]));
+        for (key, value) in CHECK_WORKERS {
+            if std::env::var_os(key).is_none() {
+                assert_eq!(env.get(key), Some(&Some(value.to_string())), "{key}");
+            }
+        }
+        let env = env_of(&set(&[("RAYON_NUM_THREADS", "4")]));
+        assert_eq!(env.get("RAYON_NUM_THREADS"), Some(&Some("4".to_string())));
+    }
+
+    #[test]
+    fn a_project_takes_a_free_slot_that_held_its_shape_first() {
+        let files = |names: &[&str], tsconfig: &str| {
+            names.iter().map(|name| (name.to_string(), json!(if *name == "tsconfig.json" { tsconfig } else { "x" }))).collect::<serde_json::Map<_, _>>()
+        };
+        let plain = project_shape(&files(&["App.tsx", "main.tsx", "tsconfig.json"], "a"));
+        let helper = project_shape(&files(&["App.tsx", "helpers.ts", "main.tsx", "tsconfig.json"], "b"));
+        // Contents other than the tsconfig do not move the shape; names and the tsconfig do.
+        let mut edited = files(&["App.tsx", "main.tsx", "tsconfig.json"], "a");
+        edited.insert("App.tsx".into(), json!("y"));
+        assert_eq!(project_shape(&edited), plain);
+        assert_ne!(project_shape(&files(&["App.tsx", "main.tsx", "tsconfig.json"], "c")), plain);
+        assert_ne!(helper, plain);
+        let slot = |n: &str, shape: Option<&str>| {
+            let mut dir = SlotDir::new(PathBuf::from(n));
+            dir.shape = shape.map(str::to_owned);
+            (dir, SlotDir::new(PathBuf::from(format!("{n}-run"))))
+        };
+        let slots = Slots { free: Mutex::new(vec![slot("0", Some(&plain)), slot("1", Some(&helper)), slot("2", None)]), ready: Condvar::new() };
+        assert_eq!(slots.take(Some(&plain)).0.parent, PathBuf::from("0"));
+        // No free slot of the shape: the last freed one, as before.
+        assert_eq!(slots.take(Some(&plain)).0.parent, PathBuf::from("2"));
+        assert_eq!(slots.take(None).0.parent, PathBuf::from("1"));
+    }
+
+    #[test]
+    fn a_worker_takes_the_request_a_free_slot_has_the_shape_of_and_passes_none_over_for_ever() {
+        let request = |id: u64, shape: &str| json!({ "seq": id, "project": { "files": { "App.tsx": "x", shape: "y", "tsconfig.json": "t" } } });
+        let shape = |name: &str| slot_shape(&request(0, name)).unwrap();
+        let seq = |job: Option<Value>| job.unwrap()["seq"].as_u64().unwrap();
+        let jobs = Jobs::new(2);
+        for (id, name) in [(1, "a.ts"), (2, "b.ts"), (3, "b.ts"), (4, "b.ts"), (5, "a.ts")] {
+            jobs.push(request(id, name));
+        }
+        // A project with a directory of its own takes no slot and has no shape.
+        assert_eq!(slot_shape(&json!({ "project": { "dir": "/x", "files": { "App.tsx": "x" } } })), None);
+        assert_eq!(seq(jobs.next(|| vec![shape("b.ts")])), 2);
+        assert_eq!(seq(jobs.next(|| vec![])), 1);
+        // 5 is taken past 3 and 4 while their bound lasts; then the oldest goes first whatever the slots hold.
+        assert_eq!(seq(jobs.next(|| vec![shape("a.ts")])), 5);
+        jobs.push(request(6, "a.ts"));
+        jobs.push(request(7, "a.ts"));
+        assert_eq!(seq(jobs.next(|| vec![shape("a.ts")])), 6);
+        assert_eq!(seq(jobs.next(|| vec![shape("a.ts")])), 3);
+        assert_eq!(seq(jobs.next(|| vec![shape("a.ts")])), 4);
+        assert_eq!(seq(jobs.next(|| vec![shape("a.ts")])), 7);
+        jobs.close();
+        assert!(jobs.next(Vec::new).is_none());
     }
 
     #[test]

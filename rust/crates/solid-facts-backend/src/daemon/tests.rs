@@ -9,11 +9,11 @@ use std::{
 
 use super::{
     CheckHeader, CheckRequest, FileRefresh, ProcessMemory, Request, cache_retention_from,
-    default_memory_limit_bytes, eligible, enabled_from, fingerprint_file, hash_file,
-    inference_inputs_current, macho_build_identity, normalize_enablement, parse_meminfo_available,
-    parse_process_memory, parse_vm_stat_available, process_tree_resident_bytes_from,
-    refresh_file_with, retained_format, serve, socket_path, socket_path_in_domain, timing_value,
-    verify_implementation,
+    default_memory_limit_bytes, elf_build_id, eligible, enabled_from, fingerprint_file, hash_file,
+    hex, inference_inputs_current, macho_build_identity, normalize_enablement,
+    parse_meminfo_available, parse_process_memory, parse_vm_stat_available,
+    process_tree_resident_bytes_from, refresh_file_with, retained_format, serve, socket_path,
+    socket_path_in_domain, timing_value, verify_implementation,
 };
 use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
@@ -259,18 +259,109 @@ fn the_feedback_facts_mode_is_its_own_daemon() {
 #[test]
 fn the_running_executable_has_a_loaded_identity() {
     let identity = super::loaded_implementation_identity().unwrap();
-    let digest = identity
-        .strip_prefix(if cfg!(target_os = "macos") {
-            "macho-uuid:"
-        } else {
-            "sha256:"
-        })
-        .unwrap();
+    let (digest, lengths) = if cfg!(target_os = "macos") {
+        (identity.strip_prefix("macho-uuid:"), 32..=32)
+    } else if let Some(id) = identity.strip_prefix("gnu-build-id:") {
+        (Some(id), 32..=128)
+    } else {
+        (identity.strip_prefix("sha256:"), 64..=64)
+    };
+    let digest = digest.unwrap();
     assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(lengths.contains(&digest.len()), "{identity}");
+    if cfg!(target_os = "linux") {
+        // ADR 0591: the build id whenever the image has one.
+        let named = elf_build_id(&mut fs::File::open("/proc/self/exe").unwrap()).is_some();
+        assert_eq!(identity.starts_with("gnu-build-id:"), named, "{identity}");
+    }
+}
+
+/// A little-endian ELF64 image whose one `PT_NOTE` segment (alignment
+/// `align`) holds `notes`, each `(name, type, desc)`.
+fn elf_with_notes(notes: &[(&[u8], u32, &[u8])], align: u64) -> Vec<u8> {
+    let pad = |bytes: &mut Vec<u8>| {
+        while !bytes
+            .len()
+            .is_multiple_of(usize::try_from(align.max(4)).unwrap())
+        {
+            bytes.push(0);
+        }
+    };
+    let mut segment = Vec::new();
+    for (name, kind, desc) in notes {
+        segment.extend(u32::try_from(name.len()).unwrap().to_le_bytes());
+        segment.extend(u32::try_from(desc.len()).unwrap().to_le_bytes());
+        segment.extend(kind.to_le_bytes());
+        segment.extend(*name);
+        pad(&mut segment);
+        segment.extend(*desc);
+        pad(&mut segment);
+    }
+    let mut image = vec![0_u8; 64];
+    image[..7].copy_from_slice(b"\x7fELF\x02\x01\x01");
+    image[0x20..0x28].copy_from_slice(&64_u64.to_le_bytes());
+    image[0x36..0x38].copy_from_slice(&56_u16.to_le_bytes());
+    image[0x38..0x3a].copy_from_slice(&2_u16.to_le_bytes());
+    // A PT_LOAD first, then the PT_NOTE.
+    let mut load = vec![0_u8; 56];
+    load[..4].copy_from_slice(&1_u32.to_le_bytes());
+    image.extend(load);
+    let mut note = vec![0_u8; 56];
+    note[..4].copy_from_slice(&4_u32.to_le_bytes());
+    note[8..16].copy_from_slice(&(64_u64 + 112).to_le_bytes());
+    note[32..40].copy_from_slice(&u64::try_from(segment.len()).unwrap().to_le_bytes());
+    note[48..56].copy_from_slice(&align.to_le_bytes());
+    image.extend(note);
+    image.extend(segment);
+    image
+}
+
+#[test]
+fn an_elf_image_is_named_by_its_one_gnu_build_id() {
+    let id = [0xab_u8; 20];
+    let read = |image: Vec<u8>| elf_build_id(&mut std::io::Cursor::new(image));
+    for align in [4, 8] {
+        assert_eq!(
+            read(elf_with_notes(&[(b"GNU\0", 3, &id)], align)),
+            Some(id.to_vec())
+        );
+        // Other notes beside it are skipped, whatever their padding.
+        assert_eq!(
+            read(elf_with_notes(
+                &[(b"GNU\0", 1, &[1, 2, 3, 4, 5]), (b"GNU\0", 3, &id)],
+                align
+            )),
+            Some(id.to_vec())
+        );
+    }
+    assert_eq!(hex(&id[..2]), "abab");
+    // No build id, two, one too short to name an implementation, another
+    // owner's note of the same type: the whole image is hashed instead.
+    assert_eq!(read(elf_with_notes(&[(b"GNU\0", 1, &id)], 4)), None);
     assert_eq!(
-        digest.len(),
-        if cfg!(target_os = "macos") { 32 } else { 64 }
+        read(elf_with_notes(
+            &[(b"GNU\0", 3, &id), (b"GNU\0", 3, &[1; 20])],
+            4
+        )),
+        None
     );
+    assert_eq!(read(elf_with_notes(&[(b"GNU\0", 3, &[1; 8])], 4)), None);
+    assert_eq!(read(elf_with_notes(&[(b"Go\0\0", 3, &id)], 4)), None);
+    // A truncated note, a truncated image, another class or byte order.
+    let mut truncated = elf_with_notes(&[(b"GNU\0", 3, &id)], 4);
+    truncated.truncate(truncated.len() - 4);
+    assert_eq!(read(truncated), None);
+    assert_eq!(
+        read(elf_with_notes(&[(b"GNU\0", 3, &id)], 4)[..100].to_vec()),
+        None
+    );
+    let mut elf32 = elf_with_notes(&[(b"GNU\0", 3, &id)], 4);
+    elf32[4] = 1;
+    assert_eq!(read(elf32), None);
+    let mut big = elf_with_notes(&[(b"GNU\0", 3, &id)], 4);
+    big[5] = 2;
+    assert_eq!(read(big), None);
+    assert_eq!(read(b"not an image".to_vec()), None);
 }
 
 #[test]

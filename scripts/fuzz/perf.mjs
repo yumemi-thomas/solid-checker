@@ -135,7 +135,7 @@ export function machineWindow(samples, options = {}) {
  * One grid unit's perf record (focus.mjs): its programs and wall time, throughput, the grid's phases (`profile.json`), the checker
  * cost summary (`cost.json`), the machine window, and the fold and prune times. `perf.json` beside the unit's results is this.
  */
-export function unitPerf({ label, dir, startedAt, endedAt, programs, machine, fold = null, cache = null, gridSample = null }) {
+export function unitPerf({ label, dir, startedAt, endedAt, programs, machine, fold = null, cache = null, gridSample = null, gridShard = null }) {
   const read = (name) => (existsSync(join(dir, name)) ? JSON.parse(readFileSync(join(dir, name), "utf8")) : null);
   const profile = read("profile.json");
   const cost = read("cost.json");
@@ -149,7 +149,7 @@ export function unitPerf({ label, dir, startedAt, endedAt, programs, machine, fo
     checker: cost ? { p50: cost.checkerMs.p50, p90: cost.checkerMs.p90, p99: cost.checkerMs.p99, max: cost.checkerMs.max, maxRssMb: cost.maxRssMb.max, overBudget: cost.overBudget.length, budget: cost.budget, decisions: cost.decisions } : null,
     machine: machine ?? { why: samplerUnavailable() ?? "not sampled" },
     diskMiBPerProgram: machine?.diskMiB != null && programs ? Math.round((machine.diskMiB / programs) * 1000) / 1000 : null,
-    cache, gridSample,
+    cache, gridSample, gridShard,
   };
 }
 
