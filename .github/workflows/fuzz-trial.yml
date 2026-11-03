@@ -86,6 +86,9 @@ jobs:
           (cd scripts/runtime-oracle-install && npm ci --silent)
           (cd packages/cli && bun install --frozen-lockfile --silent)
           (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
+      - name: Cache key inputs
+        run: |
+          node -e 'import("./scripts/fuzz/cache.mjs").then((c) => { const install = "scripts/runtime-oracle-install", fast = "scripts/fuzz/install"; console.log("keys:", JSON.stringify({ installed: c.installedKey({ install, fastInstall: fast }).slice(0, 12), fastTree: c.treeStat(fast + "/node_modules").slice(0, 12), oracleTree: c.treeStat(install + "/node_modules").slice(0, 12), browser: c.browserKey().slice(0, 80) })); })'
       - name: Focus run (cold)
         env:
           SOLID_CHECKER_TSRS_BIN: ${{ runner.temp }}/bins/tsrs
@@ -94,7 +97,7 @@ jobs:
         run: |
           du -sh ~/fuzz-cache ~/fuzz-cache/* scripts/fuzz/install/node_modules scripts/runtime-oracle-install/node_modules packages/cli/node_modules ~/.cache/ms-playwright 2>/dev/null
           find ~/fuzz-cache -type f | wc -l
-          tar --zstd -cf "$RUNNER_TEMP/warm-state.tar.zst" -C / \
+          tar --format=posix --zstd -cf "$RUNNER_TEMP/warm-state.tar.zst" -C / \
             "${HOME#/}/fuzz-cache" "${HOME#/}/.cache/ms-playwright" \
             "${PWD#/}/scripts/fuzz/install/node_modules" "${PWD#/}/scripts/runtime-oracle-install/node_modules" "${PWD#/}/packages/cli/node_modules"
           ls -lh "$RUNNER_TEMP/warm-state.tar.zst"
@@ -137,6 +140,9 @@ jobs:
           echo "restore: $(( $(date +%s) - start )) s"
           # The browser's system libraries only (the browser itself is restored).
           (cd scripts/runtime-oracle-install && sudo env PATH=$PATH ./node_modules/.bin/playwright install-deps chromium-headless-shell >/dev/null)
+      - name: Cache key inputs
+        run: |
+          node -e 'import("./scripts/fuzz/cache.mjs").then((c) => { const install = "scripts/runtime-oracle-install", fast = "scripts/fuzz/install"; console.log("keys:", JSON.stringify({ installed: c.installedKey({ install, fastInstall: fast }).slice(0, 12), fastTree: c.treeStat(fast + "/node_modules").slice(0, 12), oracleTree: c.treeStat(install + "/node_modules").slice(0, 12), browser: c.browserKey().slice(0, 80) })); })'
       - name: Focus run (warm)
         env:
           SOLID_CHECKER_TSRS_BIN: ${{ runner.temp }}/bins/tsrs
