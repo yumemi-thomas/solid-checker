@@ -65,12 +65,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: strict-read, codes: STRICT_READ_UNTRACKED, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
-          - { name: no-owner-context, codes: NO_OWNER_CONTEXT, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
-          - { name: pending-untracked, codes: PENDING_ASYNC_UNTRACKED_READ, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
-          - { name: flush-in-action, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
-          - { name: context-not-found, codes: CONTEXT_NOT_FOUND, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo" }
-          - { name: recall-no-owner-context, codes: NO_OWNER_CONTEXT, grids: "mx-recall" }
+          - { name: flush-whole, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo", shard: "" }
+          - { name: flush-shard-0, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo", shard: "0/2" }
+          - { name: flush-shard-1, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo", shard: "1/2" }
+          - { name: store-recall-shard, codes: STORE_WRITE_OUTSIDE_SETTER, grids: "mx-recall", shard: "0/20" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -99,7 +97,9 @@ jobs:
           ( peak=0; while sleep 10; do used=$(free -m | awk '/^Mem:/{print $3}'); [ "$used" -gt "$peak" ] && peak=$used && echo "$peak" > "$RUNNER_TEMP/mem-peak"; done ) &
           start=$(date +%s)
           status=0
-          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" node scripts/fuzz/focus.mjs --codes "${{ matrix.codes }}" --grids "${{ matrix.grids }}" \
+          shard=()
+          [ -n "${{ matrix.shard }}" ] && shard=(--shard "${{ matrix.shard }}")
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" node scripts/fuzz/focus.mjs --codes "${{ matrix.codes }}" --grids "${{ matrix.grids }}" "${shard[@]}" \
             --split-codes --prune-cases --grid-timeout 290 --out "$RUNNER_TEMP/fuzz-out" \
             --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" || status=$?
           echo "focus run: $(( $(date +%s) - start )) s, exit $status"
@@ -112,5 +112,49 @@ jobs:
           name: fuzz-out-${{ matrix.name }}
           path: |
             ${{ runner.temp }}/fuzz-out/**/*.json
+            ${{ runner.temp }}/fuzz-out/**/*.jsonl
             ${{ runner.temp }}/fuzz-out/**/*.log
           if-no-files-found: warn
+
+  # The two shards of FLUSH_IN_ACTION are the whole run: the same programs (no overlap, none missing) with the same outcomes.
+  shard-union:
+    needs: focus
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: fuzz-out-flush-whole, path: whole }
+      - uses: actions/download-artifact@v4
+        with: { name: fuzz-out-flush-shard-0, path: s0 }
+      - uses: actions/download-artifact@v4
+        with: { name: fuzz-out-flush-shard-1, path: s1 }
+      - name: Compare
+        run: |
+          cat > union.mjs <<'JS'
+          import { readdirSync, readFileSync } from "node:fs";
+          import { join, relative } from "node:path";
+          const rows = (root) => {
+            const out = new Map();
+            const walk = (dir) => { for (const e of readdirSync(dir, { withFileTypes: true })) {
+              const p = join(dir, e.name);
+              if (e.isDirectory()) walk(p);
+              else if (e.name === "programs.jsonl") for (const line of readFileSync(p, "utf8").split("\n").filter(Boolean)) {
+                const row = JSON.parse(line); const key = `${relative(root, dir)}|${row.id}`;
+                if (out.has(key)) throw new Error(`duplicate ${key}`);
+                out.set(key, row.outcome);
+              }
+            } };
+            walk(root); return out;
+          };
+          const whole = rows("whole"), s0 = rows("s0"), s1 = rows("s1");
+          const overlap = [...s0.keys()].filter((k) => s1.has(k));
+          const union = new Map([...s0, ...s1]);
+          const missing = [...whole.keys()].filter((k) => !union.has(k));
+          const extra = [...union.keys()].filter((k) => !whole.has(k));
+          const moved = [...whole].filter(([k, o]) => union.has(k) && union.get(k) !== o);
+          console.log(`whole ${whole.size}, shard 0 ${s0.size}, shard 1 ${s1.size}; overlap ${overlap.length}, missing ${missing.length}, extra ${extra.length}, outcome differs ${moved.length}`);
+          for (const k of [...overlap, ...missing, ...extra].slice(0, 10)) console.log(`  ${k}`);
+          for (const [k, o] of moved.slice(0, 10)) console.log(`  ${k}: whole ${o}, shard ${union.get(k)}`);
+          if (!whole.size || overlap.length || missing.length || extra.length || moved.length) process.exit(1);
+          JS
+          node union.mjs
