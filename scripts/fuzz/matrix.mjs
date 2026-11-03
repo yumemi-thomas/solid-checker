@@ -177,13 +177,16 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  * legal grid's `legalShapes`); `variants` its variants.
  */
 /**
- * `--recall-lean` (off by default; Fable's report 2026-11-03, R0.3, a proposal until a full run's `redundancy.mjs` table shows every
- * program of each value answering as its twin): the recall mounts and callback forms whose counts matched their twins' on the
- * 644bd1a81 run, left out of the recall grids. 12 mounts x 38,370 + 4 forms x 8,688 programs (about 1.5 VM hours).
+ * `--recall-lean` (off by default; Fable's report 2026-11-03, R0.3): the recall mounts and callback forms whose every program answered
+ * as a kept one's on the 644bd1a81 full run (`redundancy.mjs`, 2026-11-03): ten mounts as `show-signal`'s program of the same shape
+ * (`--against show-signal`; show-keyed's two legal differences were harness rows, a Chrome call with no response), `loading` as the
+ * root program, `function` and `let` as `const` (`--against-callback const`). Kept: `show-signal` and `const` (each differs from the
+ * base program: 240 and 824 misuse programs), `named` (310 differ from `const`), `for-item` (4), `dynamic`, `show-later`. That run had
+ * no role log, so whether a demoted value adds an arm is unmeasured: the flag stays off by default.
  */
 export const LEAN_DEMOTED = {
-  mounts: ["show-signal", "show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
-  callbacks: ["const", "function", "named", "let"],
+  mounts: ["show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
+  callbacks: ["function", "let"],
 };
 export function recallAxes(code, context, base, variants, { legal = false, lean = false } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
