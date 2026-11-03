@@ -2,9 +2,11 @@
 // The full fuzz run, split across machines (.github/workflows/fuzz-audit.yml; scripts/fuzz/README.md, "The audit on CI"). The same
 // programs and the same oracle sample as one `focus.mjs --codes all` run of the eight grids, in three phases:
 //
-//   node scripts/fuzz/audit.mjs shard  --shard i/N --out <dir> --checker-bin <bin> --typefacts <bin> [--grid-timeout <min>] [-- <grid args>]
+//   node scripts/fuzz/audit.mjs shard  --shard i/N --out <dir> --checker-bin <bin> --typefacts <bin> [--recall lean|full] [--grid-timeout <min>] [-- <grid args>]
 //       focus.mjs on every code and grid restricted to shard i of N (shard.mjs), without the runtime differential: each grid writes
 //       the programs the differential would take from its rows (`oracle-candidates.jsonl`, matrix.mjs `writeOracleCandidates`).
+//       The recall grids are lean (matrix.mjs LEAN_DEMOTED) unless `--recall full` (the weekly full audit). `pick` writes the run's
+//       mode into each manifest, `oracle` runs the manifest's mode, and `report` records it in audit.json (`recall`).
 //   node scripts/fuzz/audit.mjs pick   --shards <dir> --out <dir>
 //       one `--ids` manifest per grid (`<grid>.json`): the oracle sample of the whole grid, from every shard's candidates.
 //   node scripts/fuzz/audit.mjs oracle --grid <grid> --manifest <file> --out <dir> --checker-bin <bin> --typefacts <bin> [-- <grid args>]
@@ -12,7 +14,7 @@
 //   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>]
 //       the run's verdict: every shard present and whole, what needs a look (focus.mjs PROBLEMS, oracle behaviour differences, an
 //       inconclusive or missing oracle program, an outcome that differs between a shard and its oracle grid), and the programs whose
-//       outcome moved from `--against` (an earlier report's `rows/`). Writes audit.json, audit.md and rows/<grid>.jsonl.gz; exit 1
+//       outcome moved from `--against` (an earlier report's `rows/`; its recall grids only against an earlier audit of the same mode). Writes audit.json, audit.md and rows/<grid>.jsonl.gz; exit 1
 //       when something needs a look.
 //
 // The oracle sample of a whole grid takes, per stratum, the rows with a fast record in the order of `fnv(id)` (runtime-diff.mjs
@@ -42,6 +44,22 @@ const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "ut
 /** A grid directory's report (matrix.json or legal.json). */
 const gridReport = (dir) => readJson(join(dir, "matrix.json")) ?? readJson(join(dir, "legal.json"));
 const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
+
+/** The grids whose programs a recall mode changes. */
+const RECALL_GRIDS = AUDIT_GRIDS.filter((grid) => grid.endsWith("-recall"));
+
+/**
+ * The recall mode of a run's shards, from the recall grids' reports (`recallLean`; a report without it is from before the lean default,
+ * so full): `lean`, `full`, or `mixed` when the shards or the two recall grids disagree.
+ */
+export function recallModeOf(shards) {
+  const modes = new Set();
+  for (const shard of shards) for (const grid of RECALL_GRIDS) {
+    const report = gridReport(join(shard.dir, grid));
+    if (report) modes.add(report.recallLean === true ? "lean" : "full");
+  }
+  return modes.size > 1 ? "mixed" : [...modes][0] ?? "full";
+}
 
 /**
  * The whole grid's oracle sample from the shards' candidate lists: per stratum the `perStratum` candidates of smallest `(rank, id)`.
@@ -87,13 +105,15 @@ export function readShards(dir) {
 function pick(options) {
   const { shards, attention } = readShards(resolve(options.shards));
   if (attention.length) throw new Error(`audit pick: the shards are not a whole run:\n  ${attention.join("\n  ")}`);
+  const recall = recallModeOf(shards);
+  if (recall === "mixed") throw new Error("audit pick: the shards are of both lean and full recall grids (--recall)");
   const out = resolve(options.out);
   mkdirSync(out, { recursive: true });
   const perStratum = parsePerStratum(ORACLE_PER_STRATUM);
   for (const grid of AUDIT_GRIDS) {
     const lists = shards.map((shard) => readJsonl(join(shard.dir, grid, "oracle-candidates.jsonl")));
     const ids = pickOracle(lists, perStratum);
-    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, ids }, null, 2)}\n`);
+    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, ids }, null, 2)}\n`);
     console.log(`${grid}: ${ids.length} oracle programs from ${lists.reduce((sum, list) => sum + list.length, 0)} candidates of ${shards.length} shards`);
   }
 }
@@ -101,7 +121,7 @@ function pick(options) {
 function shard(options, extra) {
   const tools = ["--checker-bin", options.checkerBin, "--typefacts", options.typefacts];
   const args = [join(here, "focus.mjs"), "--codes", "all", "--grids", AUDIT_GRIDS.join(","), "--shard", options.shard, "--runtime-diff", "0", "--prune-cases",
-    "--out", resolve(options.out), ...tools, ...(options.gridTimeout ? ["--grid-timeout", options.gridTimeout] : []),
+    "--out", resolve(options.out), ...tools, ...(options.recall === "full" ? ["--recall-full"] : []), ...(options.gridTimeout ? ["--grid-timeout", options.gridTimeout] : []),
     "--", "--oracle-candidates", ORACLE_PER_STRATUM, "--runtime-diff-axes", ORACLE_AXES, ...extra];
   return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
 }
@@ -114,7 +134,9 @@ function oracle(options, extra) {
   if (!manifest.ids.length) { mkdirSync(out, { recursive: true }); console.log(`${options.grid}: no oracle program`); return 0; }
   const [script, ...shape] = GRIDS[options.grid];
   const heap = options.grid.endsWith("-recall") ? ["--max-old-space-size=12000"] : [];
-  const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, "--ids", resolve(options.manifest), "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
+  // The manifest's ids name the programs of the shards' mode: a recall grid regenerates them in it (a manifest from before `recall` is full).
+  const recall = options.grid.endsWith("-recall") && manifest.recall !== "lean" ? ["--recall-full"] : [];
+  const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, ...recall, "--ids", resolve(options.manifest), "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
     "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs(), ...extra];
   console.log(`${options.grid}: the runtime differential on ${manifest.ids.length} programs`);
   return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
@@ -126,6 +148,8 @@ function oracle(options, extra) {
  */
 export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
   const { shards, count, attention } = readShards(shardsDir);
+  const recall = recallModeOf(shards);
+  if (recall === "mixed") attention.push("the shards' recall grids are of both lean and full modes");
   const grids = {};
   const rows = new Map();
   for (const grid of AUDIT_GRIDS) {
@@ -172,7 +196,12 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
   }
   const moves = { against: against ?? null, moved: 0, kinds: {}, examples: [] };
   if (against) {
+    // Like with like: the recall grids hold other programs lean than full (matrix.mjs LEAN_DEMOTED), so a lean audit is compared with an
+    // earlier lean one, a full one with a full one; the six base grids hold the same programs in both. An earlier audit with no
+    // audit.json beside its rows, or with no `recall`, is from before the lean default: full.
+    const earlier = readJson(join(dirname(against), "audit.json"))?.recall ?? "full";
     for (const [grid, outcomes] of rows) {
+      if (RECALL_GRIDS.includes(grid) && earlier !== recall) { moves.kinds[`${grid}: not compared (the earlier audit was ${earlier}, this one is ${recall})`] = 1; continue; }
       const path = join(against, `${grid}.jsonl.gz`);
       if (!existsSync(path)) { moves.kinds[`${grid}: no earlier rows`] = 1; continue; }
       const before = new Map(gunzipSync(readFileSync(path)).toString("utf8").split("\n").filter(Boolean).map((line) => { const row = JSON.parse(line); return [row.id, row.outcome]; }));
@@ -187,12 +216,12 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       for (const id of before.keys()) if (!outcomes.has(id)) { moves.moved += 1; moves.kinds[`${grid}: gone`] = (moves.kinds[`${grid}: gone`] ?? 0) + 1; }
     }
   }
-  return { count, attention, grids, moves, rows };
+  return { count, recall, attention, grids, moves, rows };
 }
 
 /** The report as Markdown (the workflow's step summary). */
-export function markdown({ count, attention, grids, moves }) {
-  const lines = [`# Fuzz audit`, "", `${count ?? "?"} shards; ${Object.values(grids).reduce((sum, grid) => sum + grid.programs, 0)} programs judged.`, ""];
+export function markdown({ count, recall, attention, grids, moves }) {
+  const lines = [`# Fuzz audit`, "", `${count ?? "?"} shards; ${recall ?? "full"} recall grids; ${Object.values(grids).reduce((sum, grid) => sum + grid.programs, 0)} programs judged.`, ""];
   lines.push("| grid | programs | outcomes | oracle compared | behaviour | inconclusive |", "|---|---|---|---|---|---|");
   for (const [grid, g] of Object.entries(grids)) lines.push(`| ${grid} | ${g.programs} | ${Object.entries(g.outcomes).map(([k, v]) => `${k} ${v}`).join(", ")} | ${g.oracle?.compared ?? "-"} | ${g.oracle?.behaviour ?? "-"} | ${g.oracle?.inconclusive ?? "-"} |`);
   lines.push("", attention.length ? `## Needs a look (${attention.length})` : "Nothing needs a look.");
@@ -237,6 +266,7 @@ export function parseArgs(argv) {
   const need = { shard: ["shard", "out", "checkerBin", "typefacts"], pick: ["shards", "out"], oracle: ["grid", "manifest", "out", "checkerBin", "typefacts"], report: ["shards", "oracle", "out"] }[phase];
   if (!need) throw new Error("audit.mjs shard|pick|oracle|report (see the file comment)");
   for (const key of need) if (!options[key]) throw new Error(`audit.mjs ${phase}: --${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} is required`);
+  if (options.recall !== undefined && !["lean", "full"].includes(options.recall)) throw new Error(`audit.mjs: --recall is lean or full, not ${options.recall}`);
   if (phase === "oracle" && !GRIDS[options.grid]) throw new Error(`audit.mjs oracle: no grid ${options.grid}`);
   return { phase, options, extra };
 }
