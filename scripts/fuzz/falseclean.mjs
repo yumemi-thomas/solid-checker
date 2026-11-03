@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeEvents } from "./classify.mjs";
-import { codeRules, isDefectCode, policyOf, severityRank, withholdingRules } from "./codes.mjs";
+import { coversCode, isDefectCode, policyOf, severityRank } from "./codes.mjs";
 import { clone, getAt, isSite, isValid, num, slotsOf, walk } from "./model.mjs";
 import { nodesAtLine } from "./print.mjs";
 
@@ -226,8 +226,7 @@ export function confirmFalseClean({ item, judged, record }) {
   if (line !== null && placed.some((candidate) => candidate.diagnostic.line === line)) return { status: "confirmed", placed: true };
   if (placed.length) return { status: "line-differs", chromeLines: placed.map((candidate) => candidate.diagnostic.line) };
   // Solid spoke but Chrome could not place it: with no finding anywhere that could claim it, the checker was silent.
-  const rules = codeRules[code] ?? [];
-  const claimed = (record.checker.findings ?? []).some((finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule));
+  const claimed = (record.checker.findings ?? []).some((finding) => coversCode(code, finding));
   const unplaced = chromeItems.some((candidate) => candidate.kind === "candidate-false-clean" && candidate.diagnostic.line === null)
     || ((record.runtime.unattributed ?? []).map(String).includes(code) && !events.some((event) => event.positions.length) && !claimed);
   if (unplaced) return { status: "confirmed-unplaced", placed: false };

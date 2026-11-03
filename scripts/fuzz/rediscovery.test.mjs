@@ -38,6 +38,7 @@ describe("rediscovery.json", () => {
   it("lists programs the grids still generate, and the smoke set holds them", () => {
     // One grid build per (grid, code): several entries share one (five name mx-recall STRICT_READ_UNTRACKED), and each build is a
     // whole recall grid's ids, which took this test past its limit on a loaded machine.
+    // 141 s under a full fuzzer run's load (2026-11-03): 300 s.
     const built = new Map();
     const idsOf = (grid, code) => {
       const key = `${grid}\0${code}`;
@@ -53,5 +54,5 @@ describe("rediscovery.json", () => {
         expect(entry.ids.filter((id) => !held.has(id))).toEqual([]);
       }
     }
-  }, 120000);
+  }, 300000);
 });
