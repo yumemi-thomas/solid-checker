@@ -57,6 +57,14 @@ scope or leaves pending values unhandled. Such results are uncertifiable and
 their wording identifies the open callback context. Exact cross-file and
 namespace helpers that invoke the parameter directly retain the violation.
 
+A source the read's own run did not create (a parent's memo handed by prop
+or context, a module-scope memo) is proven pending only where the reader
+mounts in the pass that created it: on its creator's stack, through intrinsic
+parents, a provider, `<Show when={true}>`, a literal `<For>` row or `<Loading>`
+fallback, or a module-scope `render`. A reader `<Show when={on()}>`, `<Switch>`,
+a non-literal `<For>` or a project component mounts later meets it settled
+(rc.17 warns only `STRICT_READ_UNTRACKED`): uncertifiable (ADR 0570).
+
 Where a project module awaits at its top level (or a load is unseen), a read
 outside an effect apply's first run is uncertifiable: the await may let the
 source settle first (a root read it), and a settled read does not throw

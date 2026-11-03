@@ -33,6 +33,10 @@ standard-library carrier may run zero times (`{[].map(() => user())}`, an
 unknown-length receiver) is uncertifiable (ADR 0563). An exact `const` alias of the accessor (`const read =
 user`, `const { read } = { read: user }`) is the accessor (ADR 0463).
 
+A parent's or module-scope memo read by a component not proven to mount in
+the pass that created it (a later `<Show>`, `<Switch>` or non-literal `<For>`)
+may be settled at the read: uncertifiable (ADR 0570).
+
 Where a project module awaits at its top level (or a load the analysis cannot
 see may), the finding is **uncertifiable**: the await's checkpoint may settle
 the source (a module-scope memo, a hook's instance created at module scope)
