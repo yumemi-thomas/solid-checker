@@ -458,5 +458,18 @@
    "lg-context-not-found-memo-lazy-unread-x-direct-none",
    "lg-context-not-found-memo-lazy-unread-x-direct-helper"
   ]
+ },
+ {
+  "finding": "SC5001 (pending-async-unsuspendable-read) proves a pending read of a parent's async memo handed by prop or by context to a component the parent mounts later (`<Show when={on()}>`, on() set by a button): the memo settled before the mount, rc.17 reports no pending code (a strict read in a body)",
+  "found": "fuzz-pattern-coverage (2026-11-03): the lg-pairs mount-source set, show-later x async-prop/async-context; 9 of 24 sampled legal programs false-positive, all 9 confirmed in Chrome (the ADR 0518 settled-before-mount family on a later mount)",
+  "fixed": null,
+  "open": "checker: the read's pending premise does not see the later mount (ADR 0504/0505/0510 'static first mount')",
+  "grid": "lg-pairs",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "lg-pending-async-untracked-read-body-x-direct-none-m-show-later-s-async-prop",
+   "lg-pending-async-untracked-read-body-x-direct-none-m-show-later-s-async-context",
+   "lg-pending-async-untracked-read-root-x-direct-none-m-show-later-s-async-prop"
+  ]
  }
 ]

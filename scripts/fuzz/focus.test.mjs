@@ -24,9 +24,9 @@ describe("readGrid", () => {
     expect(readGrid(out).gridSample).toEqual({ fraction: 0.1, kept: 5, of: 50 });
   });
 
-  it("runs the six grids of the full run by default, the recall grids by name", () => {
+  it("runs the six grids of the full run by default, the recall and pair grids by name", () => {
     expect(DEFAULT_GRIDS).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo"]);
-    expect(Object.keys(GRIDS)).toEqual([...DEFAULT_GRIDS, "mx-recall", "lg-recall"]);
+    expect(Object.keys(GRIDS)).toEqual([...DEFAULT_GRIDS, "mx-recall", "lg-recall", "mx-pairs", "lg-pairs"]);
   });
 });
 

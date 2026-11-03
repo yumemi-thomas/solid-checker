@@ -33,11 +33,11 @@ import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, 
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
-  BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
+  BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, legalVariantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
 } from "./misuse.mjs";
-import { RECALL_MOUNTS } from "./mounts.mjs";
-import { isSite, walk } from "./model.mjs";
+import { LATER_MOUNTS, RECALL_MOUNTS } from "./mounts.mjs";
+import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
@@ -211,6 +211,49 @@ export function recallAxes(code, context, base, variants, { legal = false } = {}
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
+
+/**
+ * `--pairs <sets>` (misuse.mjs PAIR_SETS, default all): the pair grid's shapes of a base cell (a code's base context, or a legal one),
+ * each pair of axis values crossed with the base variants, bindings and layers the cell takes (the layer is the pair's own in
+ * `handoff-file`). A pair a shape cannot take is left out, as the recall grids leave it: a source the (code, variant, binding) does not
+ * take (`sourcesOf`), `dynamic` but for a module hook (it passes no props) and for a body read rc.17 never labels (`BODY_LABEL`), a
+ * `try-catch`-free code's hand-off is every one. Recall-only contexts take no pairs.
+ */
+export function pairShapes(code, context, { legal = false, sets = PAIR_SETS } = {}) {
+  const spec = SPEC[code];
+  // A later mount of an async source (`show-later` × `async-*`): the parent's async memo settles before the button mounts the
+  // component, so its first read is no pending read (measured on the fast runtime, 2026-11-03: rc.17 reports STRICT_READ_UNTRACKED
+  // there, never the pending code). Such a pair of an async template is a legal program in the code's misuse contexts.
+  const settled = (mount, source) => LATER_MOUNTS.includes(mount) && source.startsWith("async-") && spec.setup(null, (prefix) => `${prefix}1`).some((sig) => sig.kind === "async");
+  const misuseContext = spec.contexts.includes(context);
+  if (!(legal ? [...(spec.legal ?? []), ...spec.contexts] : spec.contexts).includes(context)) return [];
+  const onlySettled = legal && misuseContext && !(spec.legal ?? []).includes(context);
+  const variants = (legal ? legalVariantsOf(code) : gridVariantsOf(code)).filter(variantFits(code, context)).filter((variant) => !spec.variantSources?.[variant]);
+  const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
+  const shapes = [];
+  for (const variant of variants) for (const binding of gridBindingsOf(code, variant)) {
+    if (sets.includes("mount-source")) {
+      const takes = sourcesOf(code, variant, binding, context);
+      for (const source of PAIR_SOURCES.filter((one) => takes.includes(one))) for (const mount of PAIR_MOUNTS) {
+        if (mount === "dynamic" && (source !== "module-hook" || bodyLabelled)) continue;
+        // A settled pair is no misuse: the legal grid takes it, in the code's misuse contexts (`onlySettled`).
+        if (!legal && settled(mount, source)) continue;
+        if (onlySettled && !settled(mount, source)) continue;
+        for (const layer of LAYERS) shapes.push({ variant, binding, layer, mount, source });
+      }
+    }
+    if (onlySettled) continue;
+    if (sets.includes("handoff-file")) for (const layer of PAIR_LAYERS) shapes.push({ variant, binding, layer });
+    if (sets.includes("callback-handoff") && CALLBACK_CONTEXTS.includes(context)) for (const callback of PAIR_CALLBACKS) for (const layer of HANDOFF_FORMS) shapes.push({ variant, binding, layer, callback });
+  }
+  return shapes;
+}
+/** `--pairs a,b` or `--pairs all`. */
+export function pairsOption(value) {
+  const sets = !value || value === true || value === "all" ? PAIR_SETS : String(value).split(",");
+  for (const set of sets) if (!PAIR_SETS.includes(set)) throw new Error(`--pairs: unknown pair set ${set} (${PAIR_SETS.join(", ")}, all)`);
+  return sets;
+}
 const THROWN = new Set(thrownCodes.map(([, code]) => code));
 const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
@@ -381,7 +424,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
-    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), checker: header, total,
+    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
     byFeature: featureTable(rows), typedAway, cells: out,
@@ -495,6 +538,8 @@ const UNJUDGED = new Set(["typed-away", "harness"]);
  */
 export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
+  // A pair grid (`--pairs`) holds other programs than the grid it sits beside: compared only with a pair grid of the same sets.
+  if (JSON.stringify(baseline.pairs ?? null) !== JSON.stringify(current.pairs ?? null)) return { ok: false, refused: `the matrices differ in pairs (${baseline.pairs ?? "none"} vs ${current.pairs ?? "none"})`, ...empty };
   for (const field of ["seed", "perCell", "generator", "sampling"]) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
@@ -650,8 +695,9 @@ async function sweep(options, config, out) {
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
   const mounts = mountsOption(options.mounts);
   const sources = sourcesOption(options.sources);
-  // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs.
-  const shapesOf = (cell) => (options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context, mounts, sources));
+  // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs. `--pairs` (pairShapes): the pair grid's.
+  const pairs = options.pairs ? pairsOption(options.pairs) : null;
+  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context, mounts, sources));
   if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
@@ -818,7 +864,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

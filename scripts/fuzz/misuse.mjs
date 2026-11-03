@@ -173,6 +173,22 @@ export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "m
 // 16-layer climb bound (DEPTH_FORMS), with the fixes they exposed (ADRs 0531, 0532, 0534).
 export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS];
 /**
+ * The pair grids (`--pairs`, matrix.mjs `pairShapes`; Fable's report R7 and R10, Astra's proposal 1): two axes the recall grids cross
+ * only with the base grid, crossed with each other as enumerated pairs, on the base contexts:
+ *   mount-source      a parent that creates the values and mounts the component later or under a row (`show-later`, `for-item`,
+ *                     `for-signal`, `loading-on`, and `dynamic` for a module hook: `dynamic()` passes no props) × a prop, a spread, a
+ *                     destructured context, a module hook, an async prop or context: the two confirmed false-positive families of
+ *                     ADR 0506 (mounts) and ADRs 0511/0518 (sources) behind it
+ *   handoff-file      a hand-off form (HANDOFF_FORMS) inside the module helper's callback in each import form (FILE_LAYERS): one
+ *                     composite layer `handoff-X+module-Y`, every base binding
+ *   callback-handoff  the callback forms `bundle`, `alias`, `shared` × a hand-off form, on the contexts whose site is a callback
+ */
+export const PAIR_MOUNTS = ["show-later", "for-item", "for-signal", "loading-on", "dynamic"];
+export const PAIR_SOURCES = ["prop", "prop-spread", "context-destructured", "module-hook", "async-prop", "async-context"];
+export const PAIR_LAYERS = HANDOFF_FORMS.flatMap((handoff) => FILE_LAYERS.map((file) => `${handoff}+${file}`));
+export const PAIR_CALLBACKS = ["bundle", "alias", "shared"];
+export const PAIR_SETS = ["mount-source", "handoff-file", "callback-handoff"];
+/**
  * The recall bindings. Of an API: destructurings of the namespace other than the base `const { flush: flushD } = S` (nested, with a
  * default, with a rest, `let`, exported, through another `const` holding the namespace), a `const` member alias, and Solid re-exported
  * by a project module (`solid-api.ts`, by name or as a namespace). Of a value (a setter, an accessor, an action, a store): a `let` or
@@ -1223,7 +1239,9 @@ function buildOne(kit, plan = {}) {
   const contexts = plan.legal ? spec.legal ?? [] : spec.contexts;
   const context = plan.context ?? rng.pick(contexts);
   const recall = plan.legal ? recallLegalOf(code) : recallContextsOf(code);
-  if (!contexts.includes(context) && !recall.includes(context)) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
+  // A legal pair (matrix.mjs pairShapes, a later mount of a settled async source) sits in a misuse context of its code.
+  const legalPair = plan.legal && plan.source?.startsWith("async-") && plan.mount !== undefined && spec.contexts.includes(context);
+  if (!contexts.includes(context) && !recall.includes(context) && !legalPair) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
   // A variant one source carries (`variantSources`) is the grid's, never drawn: every random draw sees the variants it saw before.
   const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick((plan.legal ? legalVariantsOf(code) : variantsOf(code)).filter((v) => !spec.variantSources?.[v]));
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
@@ -1241,8 +1259,10 @@ function buildOne(kit, plan = {}) {
   // grids' shapes, and drawing them moved the combination grids' programs. Nor a grid-only one (`GRID_ONLY_SOURCES`).
   const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context).filter((s) => !SOURCE_AXES.files.includes(s) && !GRID_ONLY_SOURCES.includes(s))) : plan.source ?? "local";
   if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
-  // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
-  const mount = parentSource(source) ? "child" : plan.mount ?? "root";
+  // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it, but in the pair grids
+  // (`--pairs mount-source`), which name both: the parent then creates the values and mounts the component as the mount says.
+  const paired = plan.source !== undefined && plan.source !== "draw" && plan.mount !== undefined && plan.mount !== "root";
+  const mount = parentSource(source) ? (paired ? plan.mount : "child") : plan.mount ?? "root";
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
   const sourced = source === "local" ? {} : { source, sourced: sigs.map((sig) => sig.name) };
   // LOADING_ON_OUTSIDE_HOLD's boundary: `<Loading on={t()}>` around a read of the async memo, and the button that writes the trigger.
