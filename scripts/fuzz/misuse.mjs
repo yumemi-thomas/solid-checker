@@ -13,9 +13,9 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
-  CBP_CALLS, CBP_FORMS, cbProp,
+  CBP_CALLS, CBP_FORMS, cbProp, namedButton,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -126,6 +126,10 @@ const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
 const OWNED_PURE = ["body", "memo", "effect-compute", "render-compute", "render-apply", "root", "untrack", "jsx", "show", "for"];
 /** The leaf scopes that forbid child owners. */
 const LEAF = ["settled", "tracked"];
+/** STRICT_READ_UNTRACKED's misuse and legal contexts, where its `latest`/`is-pending` variants go. */
+const SRU_PENDING_READS = ["body", "effect-apply", "root", "render-apply", "memo", "effect-compute", "jsx", "untrack"];
+/** STORE_WRITE_OUTSIDE_SETTER's base contexts. */
+const SW_CONTEXTS = [...OWNED_PURE.filter((c) => !["show", "for"].includes(c)), "effect-apply", "handler", "timer", "then", "async"];
 
 export const MODULE = { "solid-js": "S", "@solidjs/web": "W" };
 
@@ -168,6 +172,22 @@ export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "m
 // The saturation transforms (model.mjs): T1/T3 hand-off and member-assign layers (HANDOFF_FORMS) and T2 depth layers at the
 // 16-layer climb bound (DEPTH_FORMS), with the fixes they exposed (ADRs 0531, 0532, 0534).
 export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS];
+/**
+ * The pair grids (`--pairs`, matrix.mjs `pairShapes`; Fable's report R7 and R10, Astra's proposal 1): two axes the recall grids cross
+ * only with the base grid, crossed with each other as enumerated pairs, on the base contexts:
+ *   mount-source      a parent that creates the values and mounts the component later or under a row (`show-later`, `for-item`,
+ *                     `for-signal`, `loading-on`, and `dynamic` for a module hook: `dynamic()` passes no props) × a prop, a spread, a
+ *                     destructured context, a module hook, an async prop or context: the two confirmed false-positive families of
+ *                     ADR 0506 (mounts) and ADRs 0511/0518 (sources) behind it
+ *   handoff-file      a hand-off form (HANDOFF_FORMS) inside the module helper's callback in each import form (FILE_LAYERS): one
+ *                     composite layer `handoff-X+module-Y`, every base binding
+ *   callback-handoff  the callback forms `bundle`, `alias`, `shared` × a hand-off form, on the contexts whose site is a callback
+ */
+export const PAIR_MOUNTS = ["show-later", "for-item", "for-signal", "loading-on", "dynamic"];
+export const PAIR_SOURCES = ["prop", "prop-spread", "context-destructured", "module-hook", "async-prop", "async-context"];
+export const PAIR_LAYERS = HANDOFF_FORMS.flatMap((handoff) => FILE_LAYERS.map((file) => `${handoff}+${file}`));
+export const PAIR_CALLBACKS = ["bundle", "alias", "shared"];
+export const PAIR_SETS = ["mount-source", "handoff-file", "callback-handoff"];
 /**
  * The recall bindings. Of an API: destructurings of the namespace other than the base `const { flush: flushD } = S` (nested, with a
  * default, with a rest, `let`, exported, through another `const` holding the namespace), a `const` member alias, and Solid re-exported
@@ -214,32 +234,56 @@ const STORE_OPERATIONS = {
   "items-length": { list: true, text: (o) => `${o}.items.length = 0` },
 };
 
+/**
+ * The rc.17 constructors and readers no base template emits (Fable's report 2026-11-03, R1), each a recall variant measured on the
+ * fast runtime first (API_VARIANTS): the signal kind a variant declares (model.mjs `apiSignal`).
+ */
+const API_KINDS = { "owned-write": "owned", optimistic: "optimistic", "writable-memo": "writable-memo", "optimistic-store": "optimistic-store", "optimistic-store-draft": "optimistic-store", projection: "projection" };
+/** A pending read in another reader: `latest(() => a1())`, `isPending(() => a1())`, or a plain read of a `createDeferred` source. */
+const pendingRead = (node, [sig]) => (node.variant === "latest" ? api("latest", `() => ${sig.name}()`, { locals: true }) : node.variant === "is-pending" ? api("isPending", `() => ${sig.name}()`, { locals: true }) : local(sig.name));
+/** The owner-attaching constructors a leaf or an effect apply refuses, besides memo, root and effect: a writable memo, a projection. */
+const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }") };
+
 export const SPEC = {
   REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : signal(name("w"), 0, "probe")],
+    setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
     call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
     // refresh is an API; the other two are local functions, which have no namespace form.
     bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : ["direct", "alias", "destructured", "wrapper"]),
+    // API_VARIANTS (recall; measured on rc.17's fast runtime, 2026-11-03): a writable memo's setter (`createSignal(() => 0)`) reports in
+    // every owned context and is legal in a handler and an apply; an optimistic setter (`createOptimistic(0)`) and a signal created
+    // `{ ownedWrite: true }` report nothing anywhere, so both are legal in the owned contexts too (`legalVariantContexts`).
+    recallVariants: ["writable-memo"], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
+    variantContexts: { "writable-memo": [...OWNED_PURE, "handler", "effect-apply"], optimistic: [...OWNED_PURE, "handler"], "owned-write": [...OWNED_PURE, "handler"] },
+    legalVariantContexts: { optimistic: OWNED_PURE, "owned-write": OWNED_PURE },
   },
   STORE_WRITE_OUTSIDE_SETTER: { legal: ["handler", "timer", "then"], recallContexts: [...OWNER_LIFETIME, "effect-cleanup-rerun", ...ASYNC_CONTROL],
     variants: ["assign", "delete"],
-    contexts: [...OWNED_PURE.filter((c) => !["show", "for"].includes(c)), "effect-apply", "handler", "timer", "then", "async"],
+    contexts: SW_CONTEXTS,
     bindings: ["direct", "alias", "wrapper"],
     // Grid-only (`gridVariantsOf`): writes past the root (a nested record's field, an array mutator), and a write deferred out of the
     // store's own setter callback (a microtask, a timer, a promise callback), which runs once the draft has closed and is dropped
     // (ADR 0476; Chrome-witnessed in probes/store-setter). A deferred write calls the setter, which is itself a defect in an owned
     // scope, so it runs only where the call is legal (`variantContexts`).
     gridVariants: ["nested-assign", "nested-push", "deferred-micro", "deferred-timer", "deferred-then"],
-    variantContexts: { "deferred-micro": ["handler", "timer", "then"], "deferred-timer": ["handler", "timer", "then"], "deferred-then": ["handler", "timer", "then"] },
+    variantContexts: { "deferred-micro": ["handler", "timer", "then"], "deferred-timer": ["handler", "timer", "then"], "deferred-then": ["handler", "timer", "then"],
+      "optional-link": ["body", "memo", "effect-apply", "handler"], "optional-link-leaf": ["body", "handler"], "optional-link-draft": ["handler"], "async-setter": ["handler"],
+      "optimistic-store": SW_CONTEXTS, projection: SW_CONTEXTS, "optimistic-store-draft": ["handler", "timer", "then"] },
     // Legal (legal.mjs): a write through the draft, and one through the read proxy inside its own setter, synchronously; both commit.
     legalVariants: ["draft", "in-setter"],
     // Recall only (`recallVariants`, catalogue rank 6): the other ways code mutates a store proxy, each measured on rc.17 (2026-11-01,
     // 700 runs): every one warns this code outside the store's setter (a body, a handler), and none commits. Under the setter they
     // are legal, as is a write to a copy (`recallLegalVariants`).
-    recallVariants: Object.keys(STORE_OPERATIONS),
-    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound"],
-    setup: (variant, name) => [variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    // Typed away on purpose (TYPED_VARIANTS, tsc-overlap.mjs): a write through an optional link (`s1.a.v = 7`, TS18048; `-leaf`
+    // is open-work.md's `a?: { b?: number }` form, which it records SC2003 still reports), the same through the draft in its
+    // setter, and an async setter callback (TS2345,
+    // ASYNC_STORE_SETTER's shape) whose write lands after an `await`, outside the draft.
+    // API_VARIANTS (measured 2026-11-03): a write through an optimistic store's or a projection's read proxy reports in every context;
+    // an optimistic store's draft write is legal.
+    recallVariants: [...Object.keys(STORE_OPERATIONS), "optional-link", "optional-link-leaf", "async-setter", "optimistic-store", "projection"],
+    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft"],
+    setup: (variant, name) => [API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
     call: (node, [sig]) => member(sig.name, (object) => {
       const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
       if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
@@ -251,6 +295,11 @@ export const SPEC = {
       if (node.variant === "slice-push") return `${object}.items.slice().push(7)`;
       if (node.variant === "draft-push") return `${sig.setter}((draft) => { draft.items.push(7); })`;
       if (node.variant === "draft-compound") return `${sig.setter}((draft) => { draft.v += 1; })`;
+      if (node.variant === "optimistic-store-draft") return `${sig.setter}((draft) => { draft.v = 7; })`;
+      if (node.variant === "optional-link") return `${object}.a.v = 7`;
+      if (node.variant === "optional-link-leaf") return `${object}.a.b = 1`;
+      if (node.variant === "optional-link-draft") return `${sig.setter}((draft) => { draft.a.v = 7; })`;
+      if (node.variant === "async-setter") return `${sig.setter}(async (draft) => { await Promise.resolve(); draft.v = 7; })`;
       return node.variant === "delete" ? `delete ${object}.v` : node.variant === "nested-assign" ? `${object}.a.v = 7` : node.variant === "nested-push" ? `${object}.items.push(1)` : `${object}.v = 7`;
     }),
   },
@@ -260,9 +309,21 @@ export const SPEC = {
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"] }, variantSources: { settled: ["module-hook-shared"] },
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : variant === "settled" ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
-    call: (node, [sig]) => local(sig.name),
+    // Typed away on purpose (TYPED_VARIANTS): an accessor used uncalled where TypeScript rejects it (uncalled-accessor's excluded
+    // positions: arithmetic, TS2362; an index, TS2538), misuse and legal alike; any violation there is tsc-overlap.mjs's.
+    // API_VARIANTS (measured 2026-11-03): `latest(() => a1())` and `isPending(() => a1())` of a pending async memo are strict reads
+    // (not a pending throw): reported where a read is, silent in a memo, a compute, JSX, `untrack` and a leaf (`legalVariantContexts`).
+    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending"],
+    bindingsFor: (variant) => (variant?.startsWith("uncalled") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
+      latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"] },
+    legalVariantContexts: { latest: LEAF, "is-pending": LEAF },
+    // A pending read in JSX or a memo the JSX reads is under `<Loading>` (`legalLoading`, see PENDING_ASYNC_UNTRACKED_READ); in a render
+    // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
+    legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
+    variantSources: { settled: ["module-hook-shared"] },
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
+    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : pendingRead(node, sigs)),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
@@ -283,24 +344,32 @@ export const SPEC = {
     call: (node) => api(node.variant === "errored" ? "Errored" : "Loading", "{ fallback: 0, children: 1 }"),
   },
   NO_OWNER_CONTEXT: { legal: ["body", "memo", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
-  CONTEXT_NOT_FOUND: {
+  CONTEXT_NOT_FOUND: { recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
     contexts: ["body", "memo", "render-compute", "root", "jsx", "show", "for"], bindings: BINDINGS, setup: () => [],
-    contextLine: "const Ctx = createContext<number>();", call: () => api("useContext", "Ctx"),
+    // `default-undefined` (recall): `createContext<number | undefined>(undefined)` is default-less too (CHEATSHEET.md; rc.17
+    // `getContext`, packages/signals/src/core/context.ts:38-52: an `undefined` value falls to the default, `undefined` again throws).
+    contextLine: (variant) => (variant === "default-undefined" ? "const Ctx = createContext<number | undefined>(undefined);" : "const Ctx = createContext<number>();"),
+    call: () => api("useContext", "Ctx"),
   },
   SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("onSettled", "() => () => {}") },
   CLEANUP_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], recallContexts: ["tracked-rerun"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  // `signal-fn`, `projection` (API_VARIANTS, measured 2026-11-03): a writable memo and a projection attach an owner like a memo:
+  // reported in a leaf and an effect apply, legal in a body and a root.
   PRIMITIVE_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], recallContexts: ["tracked-rerun"],
+    recallVariants: ["signal-fn", "projection"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": [...LEAF, "body", "root"], projection: [...LEAF, "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
-    call: (node) => (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+    call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
   ASYNC_OUTSIDE_LOADING_BOUNDARY: {
     contexts: ["jsx", "show", "for"], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
   // rc.17 dev-shared.js: a pending read inside createTrackedEffect or onSettled serves the committed value (and throws while uninitialized).
-  PENDING_ASYNC_FORBIDDEN_SCOPE: { recallContexts: ["tracked-rerun"],
+  // `deferred` (API_VARIANTS, measured 2026-11-03): a `createDeferred(async () => 1)` source read while pending reports both codes
+  // where an async memo does.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { recallContexts: ["tracked-rerun"], recallVariants: ["deferred"], variantContexts: { deferred: LEAF },
     contexts: LEAF, bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
+    setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : asyncSignal(name("a"))], call: (node, sigs) => pendingRead(node, sigs),
   },
   // The `-guarded` applies (ADR 0504 review): the read sits behind a guard that returns on the first run, which is the only run;
   // `-closure`: the guard is in a closure the apply calls. `-rerun`: the compute reads a signal a button sets to 2, so the apply runs again
@@ -308,9 +377,13 @@ export const SPEC = {
   // A module-scope async memo is created with no owner and is still pending when a `-guarded-rerun` apply runs again (Chrome reports
   // the read there): those two legal contexts do not take the `module` source, nor the recall source that re-exports it through a
   // barrel (`module-barrel`; 84 legal programs Chrome reported, 2026-10-30).
-  PENDING_ASYNC_UNTRACKED_READ: { sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+  // `legalLoading`: a legal program whose JSX reads the pending value (the `memo` cell's `{m1()}`) sits under `<Loading>`: without
+  // one rc.17 reports ASYNC_OUTSIDE_LOADING_BOUNDARY, advisory but placeless, which made the legal judge call a program with a violation
+  // at its site `disturbed` instead of judging it (60 lg-recall programs on the 644bd1a81 run, the `cb-*` forms of `memo`).
+  PENDING_ASYNC_UNTRACKED_READ: { legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+    recallVariants: ["deferred"], variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"] },
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
+    setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : asyncSignal(name("a"))], call: (node, sigs) => pendingRead(node, sigs),
   },
   SYNC_NODE_RECEIVED_ASYNC: {
     variants: ["memo", "effect"], contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
@@ -324,8 +397,9 @@ export const SPEC = {
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
   PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun"],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
+    recallVariants: ["signal-fn", "projection"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
-    call: (node) => (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+    call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
   // rc.17 signals dev.js: a `<Loading on>` re-armed by a write while a source it waits on is also read outside it (the fallback can
   // never show). SC5006 claims it as an obligation only (ADR 0517). The site is the outside read; the diagnostic is raised from the
@@ -340,10 +414,15 @@ export const SPEC = {
     probe: 'import { createStore } from "solid-js";\nexport function C1() {\n  const [s1, setS1] = createStore({ v: 0 });\n  return <button onClick={() => { setS1(async (s) => { await Promise.resolve(); s.v = 7; }); }}>{s1.v}</button>;\n}\n',
     why: "the typings reject it: the setter callback is `(state) => void | T`, so an async callback is TS2345 and tsc already reports it",
   },
-  MISSING_EFFECT_FN: {
-    typedAway: true, contexts: [], bindings: [], setup: () => [], call: () => api("createEffect", "() => 1"),
-    probe: 'import { createEffect } from "solid-js";\nexport function C1() {\n  createEffect(() => 1);\n  return <div></div>;\n}\n',
-    why: "createEffect(compute, effectFn) takes two functions: the typings reject the call (TS2554 \"Expected 2-3 arguments\"), so tsc already reports it",
+  // rc.17 `createEffect` (`@solidjs/signals` dist/dev.js:2504-2518) reports and throws this code when `effectFn === undefined`, before
+  // anything else. The one-argument call is TS2554, so the rule's claim (missing-effect-function.md) is what type-checks: an apply a
+  // cast hid (`undefined as unknown as () => void`, a violation) or an `any` (uncertifiable). Recall grids only (`recallOnly`), so
+  // the random draws and the base grids keep their programs. `one-arg` and `spread-one` (TS2554, TS2556) are typed away on purpose
+  // (TYPED_VARIANTS): the rule must stay silent there, and a violation is tsc-overlap.mjs's.
+  MISSING_EFFECT_FN: { recallOnly: true,
+    contexts: [], recallContexts: ["body", "root", "handler"], variants: ["cast-fn", "cast-any"], recallVariants: ["one-arg", "spread-one"],
+    bindings: BINDINGS, setup: () => [],
+    call: (node) => api("createEffect", { "cast-any": "() => 1, undefined as any", "one-arg": "() => 1", "spread-one": "...([() => 1] as const)" }[node.variant] ?? "() => 1, undefined as unknown as () => void"),
   },
   ACTION_CALLED_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "cleanup-root-named", "memo-shared"],
     contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -359,6 +438,32 @@ export const SPEC = {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
     call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
   },
+};
+
+/**
+ * The rc.17 API variants (recall grids only), per code: each measured on the fast runtime before it got cells (2026-11-03), misuse
+ * where its code reported at the site, legal where nothing was reported and the site ran.
+ */
+export const API_VARIANTS = {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["writable-memo", "optimistic", "owned-write"],
+  STORE_WRITE_OUTSIDE_SETTER: ["optimistic-store", "projection", "optimistic-store-draft"],
+  STRICT_READ_UNTRACKED: ["latest", "is-pending"],
+  PENDING_ASYNC_UNTRACKED_READ: ["deferred"],
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["deferred"],
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: ["signal-fn", "projection"],
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["signal-fn", "projection"],
+  CONTEXT_NOT_FOUND: ["default-undefined"],
+};
+
+/**
+ * The variants typed away on purpose, per code (recall grids only): every program of one is one `tsrs` rejects, and the grid judges the
+ * checker's answer on it (tsc-overlap.mjs: a violation on the rejected code is `tsc-overlap`, never dropped). misuse.test.mjs checks
+ * that each is rejected.
+ */
+export const TYPED_VARIANTS = {
+  STORE_WRITE_OUTSIDE_SETTER: ["optional-link", "optional-link-leaf", "async-setter", "optional-link-draft"],
+  STRICT_READ_UNTRACKED: ["uncalled-arith", "uncalled-index"],
+  MISSING_EFFECT_FN: ["one-arg", "spread-one"],
 };
 
 /**
@@ -454,7 +559,8 @@ const FLOW_PLACEMENT = {
  * a pending read in JSX or onSettled for PENDING_ASYNC_UNTRACKED_READ (another code fires there, so neither misuse nor legal).
  */
 export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
-const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.includes(/^cbp-([a-z]+)/.exec(context)[1]));
+// `attached` (CBP_CALLS): the child's intrinsic runs `props.run` itself as its click handler, as `handler` does through an arrow.
+const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.flatMap((call) => (call === "handler" ? ["handler", "attached"] : [call])).includes(/^cbp-([a-z]+)/.exec(context)[1]));
 const CBP_PLACEMENT = {
   REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
   ACTION_CALLED_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
@@ -558,16 +664,61 @@ const THUNK_PLACEMENT = {
   NO_OWNER_CLEANUP: { legal: THUNK_CONTEXTS },
   NO_OWNER_EFFECT: { legal: THUNK_CONTEXTS },
 };
+/**
+ * The later fire sites, named handlers and never-run code (`--recall` only, base shapes only; Fable's report 2026-11-03, R2-R4): each
+ * is equivalent at run time to the base context it names (a function a helper defers to a timer runs as a timer callback does), so a
+ * code takes it as a misuse cell where that context is one of its misuse contexts and as a legal cell where it is legal; measured on
+ * the fast runtime before (2026-11-03). `handler-mixed` (a named handler the body also calls) is a misuse where either caller is.
+ */
+export const FIRE_CONTEXTS = { "fire-helper-timer": "timer", "fire-helper-micro": "micro", "fire-helper-then": "then", "fire-store-handler": "handler", "fire-store-body": "body", "fire-store-timer": "timer", "fire-return-handler": "handler", "fire-return-body": "body" };
+export const HANDLER_CONTEXTS = { "handler-named-const": "handler", "handler-named-function": "handler", "handler-tuple": "handler" };
+export const DEAD_CONTEXTS = ["dead-if", "dead-after-return", "dead-and-false", "dead-comp-never"];
+const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
+  const spec = SPEC[code];
+  const placed = (kind) => Object.entries({ ...FIRE_CONTEXTS, ...HANDLER_CONTEXTS }).filter(([, base]) => (kind === "misuse" ? spec.contexts : spec.legal ?? []).includes(base)).map(([context]) => context);
+  const mixed = spec.contexts.includes("body") || spec.contexts.includes("handler") ? "misuse" : (spec.legal ?? []).includes("body") && (spec.legal ?? []).includes("handler") ? "legal" : null;
+  return [code, { misuse: [...placed("misuse"), ...(mixed === "misuse" ? ["handler-mixed"] : [])], legal: [...placed("legal"), ...(mixed === "legal" ? ["handler-mixed"] : []), ...DEAD_CONTEXTS] }];
+}));
+/** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
+export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS];
+
+/** The lazy-memo and deferred-apply contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
+export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun"];
+/**
+ * Measured on rc.17's fast runtime (2026-11-03, 162 probes, every variant of each code): a site in a lazy memo nobody reads, or in a
+ * deferred apply with no rerun, never runs (legal for every code: a violation there is an unexecuted one, ADR 0458). A lazy memo read
+ * in a handler computes there as its own computation: a write, a store proxy write, an action call and a sync node handed async
+ * report; an owner operation, a read and a primitive are silent (CONTEXT_NOT_FOUND, resolve, until and a static dynamic source are
+ * reported off the site's line: neither cell). A deferred apply's rerun is an apply's: the codes of `effect-apply-rerun` report, a
+ * write or an action is legal.
+ */
+const LAZY_HANDLER_LEGAL = ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "CLEANUP_IN_FORBIDDEN_SCOPE", "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "UNTRACKED_READ_AFTER_AWAIT", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"];
+const LAZY_HANDLER_MISUSE = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER", "SYNC_NODE_RECEIVED_ASYNC", "ACTION_CALLED_IN_OWNED_SCOPE"];
+const DEFER_RERUN_MISUSE = ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "STORE_WRITE_OUTSIDE_SETTER", "FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "DYNAMIC_STATIC_PROMISE"];
+const DEFER_RERUN_LEGAL = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
+const API_CONTEXT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => [code, {
+  misuse: [...(LAZY_HANDLER_MISUSE.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_MISUSE.includes(code) ? ["effect-apply-defer-rerun"] : [])],
+  legal: ["memo-lazy-unread", "effect-apply-defer", ...(LAZY_HANDLER_LEGAL.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_LEGAL.includes(code) ? ["effect-apply-defer-rerun"] : [])],
+}]));
 // With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
 for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
   SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...legal.filter((context) => !hasLegal.has(context))];
+}
+
+// A legal variant whose legal places include contexts where the code's other variants are misuses (`legalVariantContexts`): those
+// contexts become legal cells (`recallLegal`) that take only such variants (`variantOnlyLegal`, matrix.mjs `recallAxes`).
+for (const [code, spec] of Object.entries(SPEC)) for (const [variant, contexts] of Object.entries(spec.legalVariantContexts ?? {})) for (const context of contexts) {
+  if (spec.legal?.includes(context) || (spec.recallLegal?.includes(context) && !spec.variantOnlyLegal?.[context])) continue;
+  spec.recallLegal = [...new Set([...(spec.recallLegal ?? []), context])];
+  spec.variantOnlyLegal = { ...spec.variantOnlyLegal, [context]: [...(spec.variantOnlyLegal?.[context] ?? []), variant] };
 }
 
 /**
@@ -627,7 +778,7 @@ export function describeUse(node, signals) {
   const spec = SPEC[node.code];
   const sigs = (node.sigs ?? []).map((name) => signals.get(name));
   const target = spec.call(node, sigs);
-  const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: spec.contextLine };
+  const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine };
   const importsOf = (module) => (module === "@solidjs/web" ? out.web : out.solid);
   if (target.kind === "api") {
     const { module, name, args } = target;
@@ -909,6 +1060,49 @@ function recallContext(context, stmts, kit) {
         view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t],
       };
     }
+    // API_CONTEXTS: a lazy memo computes on its first read (`lazy: true`): never read, the site never runs; read in a handler, its
+    // compute runs there, on the handler's stack, as the memo's own computation. A deferred apply (`defer: true`) skips the first run:
+    // with no rerun the site never runs; `-rerun` reruns the compute from a button, and the apply then runs.
+    case "memo-lazy-unread": { const m = kit.name("m"); return { body: [decl(m, { ...prim("memo", fn([...stmts, ret(num(1))])), lazy: true })], view: [] }; }
+    case "memo-lazy-read-handler": { const m = kit.name("m"); return { body: [decl(m, { ...prim("memo", fn([...stmts, ret(num(1))])), lazy: true })], view: [button(kit.name("b"), [expr(call(ref(m)))])] }; }
+    case "effect-apply-defer": return { body: [expr({ ...prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }), defer: true })], view: [] };
+    case "effect-apply-defer-rerun": {
+      const t = trigger();
+      return { body: [expr({ ...prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }), defer: true })], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // FIRE_CONTEXTS: the site's function is written in the body and run elsewhere, later: handed to a project helper that defers it
+    // (a timer, a microtask, a promise callback), kept in the object a helper returns and fired from a handler, the body or a timer,
+    // or returned by a helper and called from a handler or the body.
+    case "fire-helper-timer": return { body: [expr(call(ref(kit.ensureHelper("timerCb")), [fn(stmts)]))], view: [] };
+    case "fire-helper-micro": return { body: [expr(call(ref(kit.ensureHelper("microCb")), [fn(stmts)]))], view: [] };
+    case "fire-helper-then": return { body: [expr(call(ref(kit.ensureHelper("thenCb")), [fn(stmts)]))], view: [] };
+    case "fire-store-handler": case "fire-store-body": case "fire-store-timer": {
+      const box = kit.name("box");
+      const fire = expr(call(memberOf(ref(box), "cb")));
+      const kept = decl(box, call(ref(kit.ensureHelper("storeCb")), [fn(stmts)]));
+      if (context === "fire-store-handler") return { body: [kept], view: [button(kit.name("b"), [fire])] };
+      if (context === "fire-store-body") return { body: [kept, fire], view: [] };
+      return { body: [kept, expr(prim("timer", fn([fire])))], view: [] };
+    }
+    case "fire-return-handler": case "fire-return-body": {
+      const run = kit.name("run");
+      const kept = decl(run, call(ref(kit.ensureHelper("returnCb")), [fn(stmts)]));
+      return context === "fire-return-body" ? { body: [kept, expr(call(ref(run)))], view: [] } : { body: [kept], view: [button(kit.name("b"), [expr(call(ref(run)))])] };
+    }
+    // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
+    case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {
+      // `hd`, not `h`: the same-file helpers are `hN` (generate.mjs ensureHelper), and a handler of that name would shadow one.
+      const h = kit.name("hd");
+      const handler = decl(h, context === "handler-named-function" ? fn(stmts, { form: "function" }) : fn(stmts));
+      return { body: context === "handler-mixed" ? [handler, expr(call(ref(h)))] : [handler], view: [namedButton(kit.name("b"), ref(h), { tuple: context === "handler-tuple" })] };
+    }
+    // DEAD_CONTEXTS: code rc.17 never runs (model.mjs CONTAINER_KINDS): under `if (false)`, after a `return`, after `false &&`, in a
+    // component never rendered. Legal for every code: a violation there is an unexecuted one (ADR 0458).
+    case "dead-if": return { body: [contain("dead-if", 9, stmts)], view: [] };
+    case "dead-after-return": return { body: [contain("dead-after-return", 9, stmts)], view: [] };
+    // The block form (`false && (() => { …; return 1; })()`): a lone assignment after `false &&` would not parse.
+    case "dead-and-false": return { body: [contain("and-false", 9, [...stmts, ret(num(1))])], view: [] };
+    case "dead-comp-never": return { body: [contain("comp-never", 9, [...stmts, ret(jsx())])], view: [] };
     case "tracked-rerun": {
       const t = trigger();
       return { body: [expr(prim("tracked", fn([expr(read(t.name)), ...stmts])))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
@@ -1052,7 +1246,9 @@ function buildOne(kit, plan = {}) {
   const contexts = plan.legal ? spec.legal ?? [] : spec.contexts;
   const context = plan.context ?? rng.pick(contexts);
   const recall = plan.legal ? recallLegalOf(code) : recallContextsOf(code);
-  if (!contexts.includes(context) && !recall.includes(context)) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
+  // A legal pair (matrix.mjs pairShapes, a later mount of a settled async source) sits in a misuse context of its code.
+  const legalPair = plan.legal && plan.source?.startsWith("async-") && plan.mount !== undefined && spec.contexts.includes(context);
+  if (!contexts.includes(context) && !recall.includes(context) && !legalPair) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
   // A variant one source carries (`variantSources`) is the grid's, never drawn: every random draw sees the variants it saw before.
   const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick((plan.legal ? legalVariantsOf(code) : variantsOf(code)).filter((v) => !spec.variantSources?.[v]));
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
@@ -1070,12 +1266,17 @@ function buildOne(kit, plan = {}) {
   // grids' shapes, and drawing them moved the combination grids' programs. Nor a grid-only one (`GRID_ONLY_SOURCES`).
   const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context).filter((s) => !SOURCE_AXES.files.includes(s) && !GRID_ONLY_SOURCES.includes(s))) : plan.source ?? "local";
   if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
-  // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
-  const mount = parentSource(source) ? "child" : plan.mount ?? "root";
+  // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it, but in the pair grids
+  // (`--pairs mount-source`), which name both: the parent then creates the values and mounts the component as the mount says.
+  const paired = plan.source !== undefined && plan.source !== "draw" && plan.mount !== undefined && plan.mount !== "root";
+  const mount = parentSource(source) ? (paired ? plan.mount : "child") : plan.mount ?? "root";
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
   const sourced = source === "local" ? {} : { source, sourced: sigs.map((sig) => sig.name) };
   // LOADING_ON_OUTSIDE_HOLD's boundary: `<Loading on={t()}>` around a read of the async memo, and the button that writes the trigger.
-  const view = placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])] : placed.view;
+  const loadingFor = plan.legal ? spec.legalLoading?.[context] : undefined;
+  const underLoading = loadingFor === true || (Array.isArray(loadingFor) && loadingFor.includes(variant));
+  const view = placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])]
+    : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
     sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view,
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,

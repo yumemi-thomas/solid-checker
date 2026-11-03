@@ -1455,5 +1455,43 @@
   "found": "the await-fc write-up (carrier-provably-runs/await-fc.md, 2026-11-03), measured with ADR 0563's predicate",
   "fixed": "ADR 0566",
   "outside": "no grid generates an empty or unknown-length receiver yet (the proposed handoff-foreach-empty and handoff-foreach-var layers belong to claude/fuzz-pattern-coverage, which owns scripts/fuzz now); fixture after-await-carrier-runs holds the shapes, and the 30 direct-binding agree programs of the inline-carrier layers keep their violation locally"
+ },
+ {
+  "finding": "CONTEXT_NOT_FOUND: a context created `createContext<number | undefined>(undefined)` is default-less (rc.17 getContext: an undefined default throws ContextNotFoundError), and useContext with no provider is a certified clean (no finding in the file)",
+  "found": "fuzz-pattern-coverage (2026-11-03): the `default-undefined` recall variant, 14 of 14 sampled programs certified false cleans on the debug checker, 2 confirmed in Chrome",
+  "fixed": null,
+  "open": "checker: missing-context-provider treats any createContext argument as a default (fc-signals-docs report section 0)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-default-undefined-direct-none",
+   "mx-context-not-found-jsx-default-undefined-direct-none",
+   "mx-context-not-found-root-default-undefined-direct-helper"
+  ]
+ },
+ {
+  "finding": "a violation at a site in a `createMemo(fn, { lazy: true })` nobody reads, which never runs (ADR 0458: an unexecuted violation is a false positive): SC2001, SC2002 and SC4002 report there",
+  "found": "fuzz-pattern-coverage (2026-11-03): the `memo-lazy-unread` legal recall context, 16 of 16 sampled SC2001/SC2002/SC4002 programs `unexecuted`, 3 confirmed in Chrome (the site's counter stays 0)",
+  "fixed": null,
+  "open": "checker: the memo's compute is taken to run at creation whatever its `lazy` option",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-memo-lazy-unread-x-direct-none",
+   "lg-context-not-found-memo-lazy-unread-x-direct-helper"
+  ]
+ },
+ {
+  "finding": "SC5001 (pending-async-unsuspendable-read) proves a pending read of a parent's async memo handed by prop or by context to a component the parent mounts later (`<Show when={on()}>`, on() set by a button): the memo settled before the mount, rc.17 reports no pending code (a strict read in a body)",
+  "found": "fuzz-pattern-coverage (2026-11-03): the lg-pairs mount-source set, show-later x async-prop/async-context; 9 of 24 sampled legal programs false-positive, all 9 confirmed in Chrome (the ADR 0518 settled-before-mount family on a later mount)",
+  "fixed": null,
+  "open": "checker: the read's pending premise does not see the later mount (ADR 0504/0505/0510 'static first mount')",
+  "grid": "lg-pairs",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "lg-pending-async-untracked-read-body-x-direct-none-m-show-later-s-async-prop",
+   "lg-pending-async-untracked-read-body-x-direct-none-m-show-later-s-async-context",
+   "lg-pending-async-untracked-read-root-x-direct-none-m-show-later-s-async-prop"
+  ]
  }
 ]

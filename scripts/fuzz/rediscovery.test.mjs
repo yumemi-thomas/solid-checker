@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { GRIDS } from "./focus.mjs";
-import { generateLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
-import { cellList, combined, generateShape, gridShapes, mountsOption, recallShapes } from "./matrix.mjs";
+import { generateLegal, legalCells, legalShapes, pairLegalCells, recallLegalShapes } from "./legal.mjs";
+import { cellList, combined, generateShape, gridShapes, mountsOption, pairShapes, recallShapes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
@@ -14,6 +14,11 @@ function gridIds(grid, code) {
   const [script, ...args] = GRIDS[grid];
   const value = (name) => { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; };
   const mounts = mountsOption(value("--mounts")), sources = sourcesOption(value("--sources")), combine = args.includes("--combine");
+  // The pair grids (`--pairs`): their cells and pair shapes (matrix.mjs pairShapes).
+  if (args.includes("--pairs")) {
+    if (script === "legal.mjs") return pairLegalCells({ codes: [code] }).flatMap((cell) => pairShapes(code, cell.context, { legal: true }).map((shape) => generateLegal({ seed: 1 }, cell, { shape }).built.id));
+    return cellList({ codes: [code] }).flatMap((cell) => pairShapes(code, cell.context).map((shape, index) => generateShape({ seed: 1 }, cell, shape, index).built.id));
+  }
   // The recall grids (`--recall`): their cells and the shapes the recall axes add (matrix.mjs recallAxes).
   if (args.includes("--recall")) {
     if (script === "legal.mjs") return legalCells({ codes: [code], recall: true }).flatMap((cell) => recallLegalShapes(code, cell.context).map((shape) => generateLegal({ seed: 1 }, cell, { shape }).built.id));
@@ -54,5 +59,6 @@ describe("rediscovery.json", () => {
         expect(entry.ids.filter((id) => !held.has(id))).toEqual([]);
       }
     }
+    // 114 s alone at 644bd1a81 (two whole recall grids' ids, generated): the old 120 s limit failed under a parallel test run.
   }, 300000);
 });

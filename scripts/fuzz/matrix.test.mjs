@@ -132,7 +132,7 @@ describe("buildMatrix", () => {
   it("classifies each code: proven, gaps, no-recall, untriggered, typed-away", () => {
     const m = matrixOf([row("FLUSH_IN_ACTION", "action", 1, "agree"), row("NO_OWNER_CLEANUP", "timer", 1, "agree"), row("NO_OWNER_CLEANUP", "timer", 2, "false-clean"), row("NO_OWNER_EFFECT", "timer", 1, "false-clean"), row("NO_OWNER_CONTEXT", "timer", 1, "not-fired")]);
     const by = Object.fromEntries(codeStatuses(m).map((s) => [s.code, s.status]));
-    expect(by).toMatchObject({ FLUSH_IN_ACTION: "proven", NO_OWNER_CLEANUP: "gaps", NO_OWNER_EFFECT: "no-recall", NO_OWNER_CONTEXT: "untriggered", MISSING_EFFECT_FN: "typed-away", DYNAMIC_STATIC_PROMISE: "not-run" });
+    expect(by).toMatchObject({ FLUSH_IN_ACTION: "proven", NO_OWNER_CLEANUP: "gaps", NO_OWNER_EFFECT: "no-recall", NO_OWNER_CONTEXT: "untriggered", ASYNC_STORE_SETTER: "typed-away", DYNAMIC_STATIC_PROMISE: "not-run" });
   });
 });
 

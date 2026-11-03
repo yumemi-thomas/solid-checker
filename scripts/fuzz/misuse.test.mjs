@@ -18,7 +18,7 @@ describe("the misuse spec", () => {
   });
   it("gives every code with no template the reason the typings reject it", () => {
     const typedAway = MISUSE_CODES.filter((code) => SPEC[code].typedAway);
-    expect(typedAway).toEqual(["MISSING_EFFECT_FN", "ASYNC_STORE_SETTER"]);
+    expect(typedAway).toEqual(["ASYNC_STORE_SETTER"]);
     for (const code of typedAway) { expect(SPEC[code].why).toMatch(/typings reject/); expect(SPEC[code].probe).toContain("export function"); }
   });
   it("lists the contexts, bindings and a call for every template", () => {
@@ -49,7 +49,7 @@ describe("the misuse generator", () => {
     expect(generateProgram(3, { profile: "misuse", misusePlan: plan("FLUSH_IN_ACTION") })).toEqual(a);
   });
   it("refuses a typed-away code and a context the code does not have", () => {
-    expect(() => generateProgram(1, { profile: "misuse", misusePlan: plan("MISSING_EFFECT_FN") })).toThrow(/no misuse template/);
+    expect(() => generateProgram(1, { profile: "misuse", misusePlan: plan("ASYNC_STORE_SETTER") })).toThrow(/no misuse template/);
     expect(() => generateProgram(1, { profile: "misuse", misusePlan: plan("FLUSH_IN_ACTION", { context: "memo" }) })).toThrow(/no memo context/);
   });
   it("records a wrapper's inner call line next to the site", () => {

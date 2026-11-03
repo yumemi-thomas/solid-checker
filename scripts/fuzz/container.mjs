@@ -131,6 +131,9 @@ function hoistList(list, rng, nameFor) {
     for (const [holder, key] of callbackSlots(stmt.e)) {
       const f = holder[key];
       if (f?.k !== "fn" || f.params.length || !rng.chance(0.4)) continue;
+      // An action's body is printed as its generator (`action(function* () { … })`): it is never a name. The draw above stays, so
+      // every other program keeps its draws (`--profile misuse --containers` crashed on 4 of 300 seeds, print.mjs `block`).
+      if (holder.k === "prim" && holder.name === "action") continue;
       // An effect's apply takes the compute's value as `v`: a declared function has no such parameter.
       if (key === "apply" && mentions(f, "v")) continue;
       const binding = rng.weighted(BINDINGS);

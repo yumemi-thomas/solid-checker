@@ -26,7 +26,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 /** Where the manifests live. */
 export const SMOKE_DIR = join(here, "smoke");
 const AXES = ["context", "variant", "binding", "layer", "mount", "source"];
-const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal"];
+const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 
 /** A grid's rows (programs.jsonl of its output directory). */
 export const readRows = (dir) => readFileSync(join(dir, "programs.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
@@ -147,8 +147,8 @@ function select(from, out, perBehaviour) {
 
 /** Outcomes from best to worst, a misuse grid's and a legal grid's: a move down this list is a regression. */
 const RANK = [
-  ["agree", "recall-gap", "not-fired", "typed-away", "harness", "wrong-rule", "false-clean"],
-  ["clean", "uncertifiable", "unexecuted", "disturbed", "typed-away", "not-legal", "harness", "false-positive"],
+  ["agree", "recall-gap", "not-fired", "typed-away", "harness", "wrong-rule", "false-clean", "tsc-overlap"],
+  ["clean", "uncertifiable", "unexecuted", "disturbed", "typed-away", "not-legal", "harness", "false-positive", "tsc-overlap"],
 ];
 const worse = (from, to) => RANK.some((rank) => rank.includes(from) && rank.includes(to) && rank.indexOf(to) > rank.indexOf(from));
 
