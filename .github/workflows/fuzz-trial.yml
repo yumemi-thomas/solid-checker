@@ -1,9 +1,15 @@
 name: Fuzz trial
 
 # A trial of the differential fuzzer on GitHub-hosted runners: the binaries are
-# built once, then one focus run (scripts/fuzz/focus.mjs) per matrix entry runs
-# in parallel, to measure scaling and a recall grid's memory on a 4-vCPU,
-# 16 GB runner. Provisioning mirrors scripts/fuzz/vm.sh setup and sync.
+# built once, then the same shard runs twice, cold and then with the first
+# run's caches restored, to measure what persisted caches buy on a free
+# 4-vCPU runner. Provisioning mirrors scripts/fuzz/vm.sh setup and sync.
+#
+# The caches' keys hash the size and mtime of every file under the npm
+# installs and the Playwright browser (scripts/fuzz/cache.mjs treeStat), so
+# the warm job restores those directories from the cold job's tar (mtimes
+# kept) instead of reinstalling them. Artifacts, not actions/cache, carry the
+# state: the repository's 10 GB Actions cache is CI's.
 
 on:
   push:
@@ -57,18 +63,10 @@ jobs:
           path: ${{ runner.temp }}/bins
           retention-days: 3
 
-  focus:
+  cold:
     needs: build
     runs-on: ubuntu-22.04
-    timeout-minutes: 300
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: flush-whole, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo", shard: "" }
-          - { name: flush-shard-0, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo", shard: "0/2" }
-          - { name: flush-shard-1, codes: FLUSH_IN_ACTION, grids: "mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo", shard: "1/2" }
-          - { name: store-recall-shard, codes: STORE_WRITE_OUTSIDE_SETTER, grids: "mx-recall", shard: "0/20" }
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -88,73 +86,65 @@ jobs:
           (cd scripts/runtime-oracle-install && npm ci --silent)
           (cd packages/cli && bun install --frozen-lockfile --silent)
           (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
-      - name: Focus run
+      - name: Focus run (cold)
         env:
           SOLID_CHECKER_TSRS_BIN: ${{ runner.temp }}/bins/tsrs
+        run: bash .github/fuzz-trial-run.sh
+      - name: Pack the warm state
         run: |
-          bins="$RUNNER_TEMP/bins"
-          # Peak memory of the whole machine, sampled every 10 s.
-          ( peak=0; while sleep 10; do used=$(free -m | awk '/^Mem:/{print $3}'); [ "$used" -gt "$peak" ] && peak=$used && echo "$peak" > "$RUNNER_TEMP/mem-peak"; done ) &
-          start=$(date +%s)
-          status=0
-          shard=()
-          [ -n "${{ matrix.shard }}" ] && shard=(--shard "${{ matrix.shard }}")
-          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" node scripts/fuzz/focus.mjs --codes "${{ matrix.codes }}" --grids "${{ matrix.grids }}" "${shard[@]}" \
-            --split-codes --prune-cases --grid-timeout 290 --out "$RUNNER_TEMP/fuzz-out" \
-            --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" || status=$?
-          echo "focus run: $(( $(date +%s) - start )) s, exit $status"
-          grep -E "Maximum resident|Elapsed" "$RUNNER_TEMP/time.txt"
-          echo "machine memory peak: $(cat "$RUNNER_TEMP/mem-peak" 2>/dev/null) MiB used"
-          exit $status
+          du -sh ~/fuzz-cache ~/fuzz-cache/* scripts/fuzz/install/node_modules scripts/runtime-oracle-install/node_modules packages/cli/node_modules ~/.cache/ms-playwright 2>/dev/null
+          find ~/fuzz-cache -type f | wc -l
+          tar --zstd -cf "$RUNNER_TEMP/warm-state.tar.zst" -C / \
+            "${HOME#/}/fuzz-cache" "${HOME#/}/.cache/ms-playwright" \
+            "${PWD#/}/scripts/fuzz/install/node_modules" "${PWD#/}/scripts/runtime-oracle-install/node_modules" "${PWD#/}/packages/cli/node_modules"
+          ls -lh "$RUNNER_TEMP/warm-state.tar.zst"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: warm-state
+          path: ${{ runner.temp }}/warm-state.tar.zst
+          compression-level: 0
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fuzz-out-${{ matrix.name }}
+          name: fuzz-out-cold
           path: |
             ${{ runner.temp }}/fuzz-out/**/*.json
-            ${{ runner.temp }}/fuzz-out/**/*.jsonl
             ${{ runner.temp }}/fuzz-out/**/*.log
-          if-no-files-found: warn
 
-  # The two shards of FLUSH_IN_ACTION are the whole run: the same programs (no overlap, none missing) with the same outcomes.
-  shard-union:
-    needs: focus
-    if: always()
+  warm:
+    needs: cold
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.13.0
       - uses: actions/download-artifact@v4
-        with: { name: fuzz-out-flush-whole, path: whole }
+        with:
+          name: fuzz-binaries
+          path: ${{ runner.temp }}/bins
       - uses: actions/download-artifact@v4
-        with: { name: fuzz-out-flush-shard-0, path: s0 }
-      - uses: actions/download-artifact@v4
-        with: { name: fuzz-out-flush-shard-1, path: s1 }
-      - name: Compare
+        with:
+          name: warm-state
+          path: ${{ runner.temp }}
+      - name: Restore the warm state
         run: |
-          cat > union.mjs <<'JS'
-          import { readdirSync, readFileSync } from "node:fs";
-          import { join, relative } from "node:path";
-          const rows = (root) => {
-            const out = new Map();
-            const walk = (dir) => { for (const e of readdirSync(dir, { withFileTypes: true })) {
-              const p = join(dir, e.name);
-              if (e.isDirectory()) walk(p);
-              else if (e.name === "programs.jsonl") for (const line of readFileSync(p, "utf8").split("\n").filter(Boolean)) {
-                const row = JSON.parse(line); const key = `${relative(root, dir)}|${row.id}`;
-                if (out.has(key)) throw new Error(`duplicate ${key}`);
-                out.set(key, row.outcome);
-              }
-            } };
-            walk(root); return out;
-          };
-          const whole = rows("whole"), s0 = rows("s0"), s1 = rows("s1");
-          const overlap = [...s0.keys()].filter((k) => s1.has(k));
-          const union = new Map([...s0, ...s1]);
-          const missing = [...whole.keys()].filter((k) => !union.has(k));
-          const extra = [...union.keys()].filter((k) => !whole.has(k));
-          const moved = [...whole].filter(([k, o]) => union.has(k) && union.get(k) !== o);
-          console.log(`whole ${whole.size}, shard 0 ${s0.size}, shard 1 ${s1.size}; overlap ${overlap.length}, missing ${missing.length}, extra ${extra.length}, outcome differs ${moved.length}`);
-          for (const k of [...overlap, ...missing, ...extra].slice(0, 10)) console.log(`  ${k}`);
-          for (const [k, o] of moved.slice(0, 10)) console.log(`  ${k}: whole ${o}, shard ${union.get(k)}`);
-          if (!whole.size || overlap.length || missing.length || extra.length || moved.length) process.exit(1);
-          JS
-          node union.mjs
+          chmod +x "$RUNNER_TEMP"/bins/*
+          start=$(date +%s)
+          tar --zstd -xf "$RUNNER_TEMP/warm-state.tar.zst" -C /
+          echo "restore: $(( $(date +%s) - start )) s"
+          # The browser's system libraries only (the browser itself is restored).
+          (cd scripts/runtime-oracle-install && sudo env PATH=$PATH ./node_modules/.bin/playwright install-deps chromium-headless-shell >/dev/null)
+      - name: Focus run (warm)
+        env:
+          SOLID_CHECKER_TSRS_BIN: ${{ runner.temp }}/bins/tsrs
+        run: bash .github/fuzz-trial-run.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-out-warm
+          path: |
+            ${{ runner.temp }}/fuzz-out/**/*.json
+            ${{ runner.temp }}/fuzz-out/**/*.log
