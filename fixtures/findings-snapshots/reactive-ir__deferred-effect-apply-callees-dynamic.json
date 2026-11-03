@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees-dynamic/App.tsx",
+      "start": 433,
+      "end": 449,
+      "fixes": 0
+    }
+  ]
+}

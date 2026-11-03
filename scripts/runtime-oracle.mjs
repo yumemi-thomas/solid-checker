@@ -301,6 +301,9 @@ const thrownCodes = [
 ];
 // Withholdings that cover any rule at their site.
 const withholdingRules = ["reactive-dispatch-unresolved"];
+// Rules whose uncertifiable finding at a site declines the code without claiming it (scripts/fuzz/codes.mjs `declining`):
+// SC4001's obligation on a `useContext` read leaves SC4002's provider question unasked.
+const decliningRules = {"CONTEXT_NOT_FOUND":["missing-owner"]};
 const settle = { action: "wait-for-text", selector: "#ready", text: "settled" };
 // Reads the page's behavioural report back: its checkpoint text is the JSON list runCase parses.
 const probeStep = { action: "wait-for-selector", selector: "#oracle-behaviour" };
@@ -662,7 +665,8 @@ async function runCase(id) {
         .filter((position) => position.file);
       const covering = findings.filter((finding) => positions.some((position) => finding.file === position.file
         && finding.line <= position.line && position.line <= finding.endLine)
-        && (rules?.includes(finding.rule) || withholdingRules.includes(finding.rule)));
+        && (rules?.includes(finding.rule) || withholdingRules.includes(finding.rule)
+          || (finding.kind === "uncertifiable" && (decliningRules[row.code] ?? []).includes(finding.rule))));
       framed.push({ rules: rules ?? [], positions });
       return {
         code: row.code, file, line, column: row.site.column, operation: row.operation?.in ?? null,

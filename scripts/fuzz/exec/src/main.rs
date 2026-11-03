@@ -292,7 +292,7 @@ struct Checker {
     warmed: Mutex<std::collections::BTreeSet<String>>,
 }
 
-/// One worker for each of a check's own fan-outs (ADR 0564): the reactive IR's, the Type Facts producer's per-file passes and the
+/// One worker for each of a check's own fan-outs (ADR 0594): the reactive IR's, the Type Facts producer's per-file passes and the
 /// tsrs pool the producer parses on. The executor already runs a check per core, so a check that spreads over the cores only adds
 /// thread starts and wake-ups (a third of a warm check's CPU). Answers do not depend on the worker counts. A value the executor's
 /// caller set is kept; the executor's own type checks are not the checker's and keep theirs.
@@ -966,7 +966,7 @@ struct Slots {
 }
 impl Slots {
     /// A free pair, preferring one whose clean slot last held a project of the same `shape` (`project_shape`): a warm checker's
-    /// daemon updates the files of such a project in place, and reopens its whole program for any other (ADR 0562).
+    /// daemon updates the files of such a project in place, and reopens its whole program for any other (ADR 0592).
     fn take(&self, shape: Option<&str>) -> (SlotDir, SlotDir) {
         let mut free = self.free.lock().unwrap();
         loop {
@@ -1015,7 +1015,7 @@ impl SlotDir {
     }
 }
 
-/// What decides whether a retained checker daemon reopens its program when a slot takes a project (ADR 0562): its file names and
+/// What decides whether a retained checker daemon reopens its program when a slot takes a project (ADR 0592): its file names and
 /// its tsconfig.json. The daemon rebuilds on a changed tsconfig or a changed directory listing, and updates the files of the program
 /// it holds otherwise. Only the order in which slots are handed out reads it, never an answer.
 fn project_shape(files: &serde_json::Map<String, Value>) -> String {
@@ -1031,7 +1031,7 @@ fn slot_shape(request: &Value) -> Option<String> {
     project.get("files").and_then(Value::as_object).map(project_shape)
 }
 
-/// Step-1 requests waiting for a worker (ADR 0562). A worker takes the oldest of the first `JOB_WINDOW` whose project has the shape a
+/// Step-1 requests waiting for a worker (ADR 0592). A worker takes the oldest of the first `JOB_WINDOW` whose project has the shape a
 /// free slot last held, so the slot's warm daemon updates its program instead of reopening it; else the oldest. Each request is passed
 /// over at most `limit` times, so none waits for ever behind a run of others. The order in which programs are prepared changes no
 /// answer: each is its own request, answered by its own `seq`.

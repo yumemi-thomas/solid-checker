@@ -75,11 +75,11 @@ struct DeferScans(Chunks<DeferCalls>);
 
 /// What one file contributes to the apply regions: the callbacks its calls
 /// supply (a call's callee, its arguments and their literal members) with
-/// each site's execution, and the callbacks its other references and exports
-/// can escape to.
+/// the supplying call and that site's execution, and the callbacks its other
+/// references and exports can escape to.
 #[derive(Clone, Default)]
 struct RegionSites {
-    supplied: Vec<((String, Span), ApplyExecution)>,
+    supplied: Vec<((String, Span), Span, ApplyExecution)>,
     escaped: Vec<(String, Span)>,
 }
 
@@ -444,14 +444,17 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegionRows {
     let unique = unique_paths(lookup);
     lookup.with_kept_state::<RegionChunks, _>(REGION_CHUNKS, |chunks, kept| {
         let kept = kept && unique;
-        let mut targets: HashMap<(String, Span), Vec<ApplyExecution>> = HashMap::default();
+        let mut targets: HashMap<(String, Span), Vec<Site>> = HashMap::default();
         let mut escaped = Vec::new();
         for file in lookup.files() {
             let sites = chunked(&mut chunks.0, file, lookup, kept, || {
                 file_region_sites(file, lookup)
             });
-            for (target, execution) in sites.supplied {
-                targets.entry(target).or_default().push(execution);
+            for (target, call, execution) in sites.supplied {
+                targets.entry(target).or_default().push(Site {
+                    at: Some((file.path.to_string(), call)),
+                    execution,
+                });
             }
             escaped.extend(sites.escaped);
         }
@@ -460,7 +463,10 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegionRows {
         // globally; and a callback no site supplies has no region.
         for target in escaped {
             if let Some(sites) = targets.get_mut(&target) {
-                sites.push(ApplyExecution::Unknown);
+                sites.push(Site {
+                    at: None,
+                    execution: ApplyExecution::Unknown,
+                });
             }
         }
         if kept {
@@ -484,6 +490,7 @@ fn file_region_sites(file: &FileFacts, lookup: &SemanticLookup<'_>) -> RegionSit
         if let Some((definition, function)) = callback(file, call.callee, lookup) {
             sites.supplied.push((
                 (definition.path.to_string(), function.span),
+                call.span,
                 ApplyExecution::Proven,
             ));
             uses.insert(file.ast.peel_ts_sugar_span(call.callee));
@@ -528,9 +535,11 @@ fn file_region_sites(file: &FileFacts, lookup: &SemanticLookup<'_>) -> RegionSit
                         }
                     },
                 );
-                sites
-                    .supplied
-                    .push(((definition.path.to_string(), function.span), execution));
+                sites.supplied.push((
+                    (definition.path.to_string(), function.span),
+                    call.span,
+                    execution,
+                ));
                 uses.insert(file.ast.peel_ts_sugar_span(value));
             }
         }
@@ -559,17 +568,97 @@ fn file_region_sites(file: &FileFacts, lookup: &SemanticLookup<'_>) -> RegionSit
     sites
 }
 
-fn fold_regions(targets: HashMap<(String, Span), Vec<ApplyExecution>>) -> ApplyRegionRows {
+/// One invocation of a region's callback: the supplying call (none for an
+/// escape or export, which is unconditional) and its own execution.
+struct Site {
+    at: Option<(String, Span)>,
+    execution: ApplyExecution,
+}
+
+const fn rank(execution: ApplyExecution) -> u8 {
+    match execution {
+        ApplyExecution::Absent => 0,
+        ApplyExecution::Unknown => 1,
+        ApplyExecution::Proven => 2,
+    }
+}
+
+/// A supplying call runs only when every callback lexically around it runs
+/// (ADR 0590): a call written in an apply that provably never runs supplies
+/// nothing, one in an apply that may not run supplies at most an unknown run.
+/// Each callback's execution is the best of its sites, each site's the worst
+/// of its own and of the callbacks around it: the least fixed point, so
+/// callbacks only dead code calls (recursion included) never run. A callback
+/// no site supplies is not a region and runs as its context does.
+fn fold_regions(targets: HashMap<(String, Span), Vec<Site>>) -> ApplyRegionRows {
+    let mut keys = targets.keys().cloned().collect::<Vec<_>>();
+    keys.sort_unstable();
+    // Each path's callbacks by span, for the enclosing lookup below.
+    let mut by_path = HashMap::<&str, Vec<(Span, usize)>>::default();
+    for (position, (path, span)) in keys.iter().enumerate() {
+        by_path
+            .entry(path.as_str())
+            .or_default()
+            .push((*span, position));
+    }
+    // sites[t]: (own execution, the callbacks around the supplying call).
+    let sites = keys
+        .iter()
+        .map(|key| {
+            targets[key]
+                .iter()
+                .map(|site| {
+                    let around = site.at.as_ref().map_or_else(Vec::new, |(path, call)| {
+                        by_path
+                            .get(path.as_str())
+                            .into_iter()
+                            .flatten()
+                            .filter(|(span, _)| span.contains(*call))
+                            .map(|(_, position)| *position)
+                            .collect::<Vec<_>>()
+                    });
+                    (site.execution, around)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let mut dependents = vec![Vec::new(); keys.len()];
+    for (target, target_sites) in sites.iter().enumerate() {
+        for (_, around) in target_sites {
+            for enclosing in around {
+                dependents[*enclosing].push(target);
+            }
+        }
+    }
+    let mut value = vec![ApplyExecution::Absent; keys.len()];
+    let mut queued = vec![true; keys.len()];
+    let mut work = (0..keys.len()).collect::<std::collections::VecDeque<_>>();
+    while let Some(target) = work.pop_front() {
+        queued[target] = false;
+        let next = sites[target]
+            .iter()
+            .map(|(execution, around)| {
+                around
+                    .iter()
+                    .map(|enclosing| value[*enclosing])
+                    .chain(std::iter::once(*execution))
+                    .min_by_key(|execution| rank(*execution))
+                    .unwrap_or(*execution)
+            })
+            .max_by_key(|execution| rank(*execution))
+            .unwrap_or(ApplyExecution::Absent);
+        if rank(next) > rank(value[target]) {
+            value[target] = next;
+            for dependent in &dependents[target] {
+                if !queued[*dependent] {
+                    queued[*dependent] = true;
+                    work.push_back(*dependent);
+                }
+            }
+        }
+    }
     let mut result = ApplyRegions::default();
-    // `targets` iterates in insertion history: the answer is sorted below.
-    for ((path, span), sites) in targets {
-        let execution = if sites.contains(&ApplyExecution::Proven) {
-            ApplyExecution::Proven
-        } else if sites.contains(&ApplyExecution::Unknown) {
-            ApplyExecution::Unknown
-        } else {
-            ApplyExecution::Absent
-        };
+    for ((path, span), execution) in keys.into_iter().zip(value) {
         if execution != ApplyExecution::Proven {
             result.entry(path).or_default().push((span, execution));
         }
@@ -714,6 +803,64 @@ mod tests {
                 OptionLiteral::Unknown,
                 OptionLiteral::Unknown
             ]
+        );
+    }
+
+    #[test]
+    fn a_call_in_a_dead_region_supplies_nothing() {
+        // a.ts: apply [10, 20) is dead; it calls f [30, 40) at 12; f calls
+        // itself at 32 and g [50, 60) at 34; h [70, 80) is called at 14 in
+        // the apply and at 100, outside every region; u [110, 120) is called
+        // in an unknown apply [130, 140) at 132.
+        let site = |at: Option<(u32, u32)>, execution| Site {
+            at: at.map(|(start, end)| ("a.ts".to_string(), Span::new(start, end))),
+            execution,
+        };
+        let key = |start, end| ("a.ts".to_string(), Span::new(start, end));
+        let mut targets = HashMap::default();
+        targets.insert(
+            key(10, 20),
+            vec![site(Some((0, 25)), ApplyExecution::Absent)],
+        );
+        targets.insert(
+            key(30, 40),
+            vec![
+                site(Some((12, 13)), ApplyExecution::Proven),
+                site(Some((32, 33)), ApplyExecution::Proven),
+            ],
+        );
+        targets.insert(
+            key(50, 60),
+            vec![site(Some((34, 35)), ApplyExecution::Proven)],
+        );
+        targets.insert(
+            key(70, 80),
+            vec![
+                site(Some((14, 15)), ApplyExecution::Proven),
+                site(Some((100, 101)), ApplyExecution::Proven),
+            ],
+        );
+        targets.insert(
+            key(130, 140),
+            vec![site(Some((125, 145)), ApplyExecution::Unknown)],
+        );
+        targets.insert(
+            key(110, 120),
+            vec![site(Some((132, 133)), ApplyExecution::Proven)],
+        );
+        let rows = fold_regions(targets);
+        assert_eq!(
+            rows,
+            vec![(
+                "a.ts".to_string(),
+                vec![
+                    (Span::new(10, 20), ApplyExecution::Absent),
+                    (Span::new(30, 40), ApplyExecution::Absent),
+                    (Span::new(50, 60), ApplyExecution::Absent),
+                    (Span::new(110, 120), ApplyExecution::Unknown),
+                    (Span::new(130, 140), ApplyExecution::Unknown),
+                ]
+            )]
         );
     }
 

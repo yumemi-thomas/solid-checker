@@ -45,7 +45,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statf
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { legalCells } from "./legal.mjs";
+import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
@@ -72,11 +72,14 @@ export const GRIDS = {
   // are the measured known misses, not regressions.
   "mx-recall": ["matrix.mjs", "--recall"],
   "lg-recall": ["legal.mjs", "--recall"],
+  // The pair grids (matrix.mjs pairShapes, misuse.mjs PAIR_SETS): asked for by name too, `--sample-big` when iterating.
+  "mx-pairs": ["matrix.mjs", "--pairs", "all"],
+  "lg-pairs": ["legal.mjs", "--pairs", "all"],
 };
-/** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall ones. */
-export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall"));
+/** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall and pair ones. */
+export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall") && !grid.endsWith("-pairs"));
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
-export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal"];
+export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 
 /** One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. */
 export function readGrid(out) {
@@ -311,7 +314,9 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (const grid of options.grids.split(",")) {
       const [script, ...shape] = GRIDS[grid];
       // A grid with no cell for these codes (a code with no legal context, say) has nothing to run.
-      const cells = script === "legal.mjs" ? legalCells({ codes, recall: shape.includes("--recall") }) : cellList({ codes, recall: shape.includes("--recall") });
+      // lg-pairs takes the misuse cells a settled pair is legal in too (legal.mjs pairLegalCells): `--split-codes` must make a unit for
+      // their codes (PENDING_ASYNC_FORBIDDEN_SCOPE has no legal cell of its own; its onSettled later-mount pairs were skipped).
+      const cells = script === "legal.mjs" ? (shape.includes("--pairs") ? pairLegalCells({ codes }) : legalCells({ codes, recall: shape.includes("--recall") })) : cellList({ codes, recall: shape.includes("--recall") });
       if (!cells.length) { console.log(`  ${grid.padEnd(8)}    -  no cells for these codes`); continue; }
       const manifest = join(SMOKE_DIR, `${grid}.json`);
       if (options.smoke && !existsSync(manifest)) { attention.push(`${grid}: no smoke manifest ${manifest} (smoke.mjs select)`); continue; }

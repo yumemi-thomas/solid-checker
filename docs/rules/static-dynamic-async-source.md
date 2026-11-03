@@ -102,6 +102,8 @@ change, resolve it before calling `dynamic()` and pass a synchronous source.
   binding, a call chained off a Promise (`Promise.resolve(x).then(f)`), and a
   `Promise` that is not the standard library's all stay silent. This is an
   approximation, not a claim that they are synchronous.
+- **A site that never runs.** A call in a function only a `defer: true` apply
+  with no compute source calls is silent (ADR 0590).
 
 ## Related
 

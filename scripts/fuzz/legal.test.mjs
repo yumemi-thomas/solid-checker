@@ -75,3 +75,15 @@ describe("the legal cells", () => {
     expect(legalShapes("STORE_WRITE_OUTSIDE_SETTER").every((shape) => ["draft", "in-setter"].includes(shape.variant))).toBe(true);
   });
 });
+
+describe("a legal program whose JSX reads a pending value (misuse.mjs legalLoading)", () => {
+  it("renders its view under <Loading>, so rc.17 reports no placeless ASYNC_OUTSIDE_LOADING_BOUNDARY that would leave it unjudged", () => {
+    const memo = generateLegal({ seed: 1 }, { code: "PENDING_ASYNC_UNTRACKED_READ", context: "memo" }, { shape: { variant: null, binding: "direct", layer: "none", callback: "const" } }).built.text;
+    expect(memo).toContain("<Loading fallback={0}>");
+    const guarded = generateLegal({ seed: 1 }, { code: "PENDING_ASYNC_UNTRACKED_READ", context: "effect-apply-guarded" }, { shape: { variant: null, binding: "direct", layer: "none" } }).built.text;
+    expect(guarded).not.toContain("<Loading");
+    expect(generateLegal({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context: "jsx" }, { shape: { variant: "latest", binding: "direct", layer: "none" } }).built.text).toContain("<Loading fallback={0}>");
+    expect(generateLegal({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context: "jsx" }, { shape: { variant: "signal", binding: "direct", layer: "none" } }).built.text).not.toContain("<Loading");
+    expect(SPEC.STRICT_READ_UNTRACKED.variantContexts.latest).not.toContain("render-compute");
+  });
+});

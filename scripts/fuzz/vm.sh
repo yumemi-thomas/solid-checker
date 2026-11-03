@@ -95,12 +95,15 @@ scratch_in_ram() {
     done"
 }
 
-# Refuse a run the VM's disk cannot hold: below 10 GiB or 10% of the inodes free where runs/ and tmp/ live.
+# Refuse a run the VM's disk cannot hold: below 10 GiB or 10% of the inodes free where runs/ and tmp/ live. FUZZ_VM_MIN_FREE_INODES_PCT
+# lowers the inode floor for a run known to write few files (a focus run on a few codes; never a full run), when the free inodes are
+# held by caches someone else may still need.
 preflight() {
+  local floor=$((100 - ${FUZZ_VM_MIN_FREE_INODES_PCT:-10}))
   vm "set -euo pipefail; mkdir -p $root/runs $root/tmp
     for d in $root/runs/ $root/tmp/; do
       read -r avail ipct < <(df --output=avail,ipcent -B1G \$d | tail -1 | tr -d '%')
-      [ \"\$avail\" -ge 10 ] && [ \"\$ipct\" -le 90 ] || { echo \"vm.sh: \$d has \$avail GiB and \$((100 - ipct))% of its inodes free; delete old runs (their cases/ directories hold most of the files)\" >&2; exit 2; }
+      [ \"\$avail\" -ge 10 ] && [ \"\$ipct\" -le $floor ] || { echo \"vm.sh: \$d has \$avail GiB and \$((100 - ipct))% of its inodes free; delete old runs (their cases/ directories hold most of the files)\" >&2; exit 2; }
     done"
 }
 

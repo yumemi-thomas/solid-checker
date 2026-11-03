@@ -167,7 +167,8 @@ effect.
 - **Positions it does not place.** An apply passed by name
   (`createEffect(v, applyFn)`), the `{ effect, error }` bundle form, and an
   apply the engine proves absent (`defer: true` on a constant compute: it
-  reports nothing there, ADR 0302). `createRenderEffect`'s apply is
+  reports nothing there, ADR 0302, nor in a function only such an apply
+  calls, ADR 0590). `createRenderEffect`'s apply is
   uncertifiable on rc.17, never a violation (ADR 0541; see the table).
 - **Returned cleanups.** A cleanup function the apply returns reports only on
   the run that replaces it, so no single answer holds: uncertifiable (ADR 0541).

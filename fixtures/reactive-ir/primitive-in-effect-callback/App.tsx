@@ -24,6 +24,27 @@ export function MemoInApply() {
   return null;
 }
 
+// Uncertifiable (ADR 0581): an arrow slot holding a nested class whose
+// constructor writes `this.m` resolves; the member's run is an obligation.
+export function MemoInClassMemberOfSlot() {
+  const [count] = createSignal(0);
+  const box = {
+    apply: () => {
+      class Holder {
+        m?: () => void;
+        constructor() {
+          this.m = () => {
+            createMemo(() => 1);
+          };
+        }
+      }
+      new Holder().m?.();
+    },
+  };
+  createEffect(() => count(), box.apply);
+  return null;
+}
+
 export function RootInApply() {
   const [count] = createSignal(0);
   createEffect(

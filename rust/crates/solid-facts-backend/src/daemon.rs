@@ -341,7 +341,7 @@ fn implementation_identity() -> Result<&'static str, Box<dyn Error>> {
 fn loaded_implementation_identity() -> Result<String, String> {
     // /proc/self/exe opens the executing inode even after unlink/replacement.
     let image = Path::new("/proc/self/exe");
-    // ADR 0561: the linker-issued GNU build id that image carries names it,
+    // ADR 0591: the linker-issued GNU build id that image carries names it,
     // as LC_UUID names a Mach-O image, for a few header reads where the
     // digest below reads and hashes the whole executable on every check.
     // An image without exactly one usable build id keeps the digest.
@@ -361,7 +361,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// The one `NT_GNU_BUILD_ID` note of a little-endian ELF64 image's `PT_NOTE`
-/// segments (ADR 0561), read through its program headers. `None` for any
+/// segments (ADR 0591), read through its program headers. `None` for any
 /// other image, a malformed or oversized header or note, no build id, more
 /// than one, or one shorter than 16 bytes (an 8-byte `--build-id=fast` hash
 /// is too short to name an implementation): the caller then hashes the whole

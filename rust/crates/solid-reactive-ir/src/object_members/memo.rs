@@ -226,16 +226,31 @@ pub(super) fn literal_function<'w>(
         .collect::<Vec<_>>();
     // Methods can expose their receiver through `this` or `arguments` to
     // opaque code. This conservative spelling veto only withholds a target;
-    // it never supplies identity (comments/strings can over-veto).
-    if properties
-        .iter()
-        .any(|p| !p.data || p.value_kind == ast::RuntimeValueKind::Function)
-        && file.source_text(literal).is_some_and(|text| {
-            text.contains("this")
-                || text.contains("arguments")
-                || text.contains("eval")
-                || text.contains("super")
-        })
+    // it never supplies identity (comments/strings can over-veto). An arrow
+    // value binds no `this`, `arguments` or `super` of its own, so those
+    // spellings in it name the enclosing scope's, never this object (ADR
+    // 0581): only a method, an accessor or another function value is read.
+    let callable =
+        |p: &&&ast::ObjectPropertyFact| !p.data || p.value_kind == ast::RuntimeValueKind::Function;
+    let arrow_value = |p: &ast::ObjectPropertyFact| {
+        p.data
+            && file
+                .ast
+                .function_at(file.ast.peel_ts_sugar_span(p.value))
+                .is_some_and(|function| function.kind == ast::FunctionKind::Arrow)
+    };
+    if properties.iter().any(|p| callable(&p))
+        && (file
+            .source_text(literal)
+            .is_some_and(|text| text.contains("eval"))
+            || properties.iter().filter(callable).any(|p| {
+                !arrow_value(p)
+                    && file.source_text(p.span).is_some_and(|text| {
+                        text.contains("this")
+                            || text.contains("arguments")
+                            || text.contains("super")
+                    })
+            }))
     {
         return None;
     }

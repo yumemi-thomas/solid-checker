@@ -78,7 +78,7 @@ const timed = (phase, work) => {
  * halves are `evaluate`'s, so the records and classifications are the same.
  */
 /**
- * The prepared stage of each chunk, in order, with `ahead` more chunks already preparing (ADR 0565): `stageOf(k)` starts chunks k to
+ * The prepared stage of each chunk, in order, with `ahead` more chunks already preparing (ADR 0595): `stageOf(k)` starts chunks k to
  * k + ahead and hands back chunk k's stage. Waiting for chunk k's preparation before starting chunk k + 1's let the executor's queue run
  * dry at every chunk's end (its workers idle until the slowest check of the chunk answered, and its slots took whatever program came
  * last). Each chunk's stage is the one `prepare` gives it either way.

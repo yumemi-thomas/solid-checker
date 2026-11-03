@@ -270,7 +270,7 @@ fn the_running_executable_has_a_loaded_identity() {
     assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
     assert!(lengths.contains(&digest.len()), "{identity}");
     if cfg!(target_os = "linux") {
-        // ADR 0561: the build id whenever the image has one.
+        // ADR 0591: the build id whenever the image has one.
         let named = elf_build_id(&mut fs::File::open("/proc/self/exe").unwrap()).is_some();
         assert_eq!(identity.starts_with("gnu-build-id:"), named, "{identity}");
     }

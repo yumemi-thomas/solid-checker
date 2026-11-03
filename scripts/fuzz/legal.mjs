@@ -4,6 +4,8 @@
 // write through its draft or inside its own setter), judged at its site:
 //
 //   typed-away        tsc rejects the program (not evidence)
+//   tsc-overlap       tsc rejects the program and a checker violation covers the rejected code (tsc-overlap.mjs): a candidate breach of
+//                     invariant 1 for a person to read
 //   harness           the checker or the runtime run failed (not evidence)
 //   not-legal         the runtime reports the code anyway: the template is not legal there, a generator problem to fix
 //   disturbed         the program threw, halted or could not be driven, and the checker reports a violation there: not judgeable
@@ -23,7 +25,8 @@ import { runChrome } from "./chrome.mjs";
 import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
-import { codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -32,7 +35,7 @@ import { budgetOf } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
-import { axesKey, combined, mountSuffix, mountsOption, recallAxes, shapeAxes } from "./matrix.mjs";
+import { axesKey, cellList, combined, mountSuffix, mountsOption, pairShapes, pairsOption, recallAxes, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
@@ -44,7 +47,7 @@ import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { gridShardOptions, shardEntries, shardLine, shardOf } from "./shard.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
-export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
+export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean", "tsc-overlap"];
 
 const inLines = (finding, lines) => lines.some((line) => finding.line <= line && line <= finding.endLine);
 
@@ -56,7 +59,8 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
 export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false }) {
-  if (typed && typed.ok === false) return { outcome: "typed-away", detail: { error: typed.errors?.[0] } };
+  // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
+  if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
   const events = runtimeEvents(runtime);
@@ -91,7 +95,7 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
 }
 
 /** Outcomes from worst to best: a combination program takes its worst site's. */
-const WORST_FIRST = ["false-positive", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
+const WORST_FIRST = ["false-positive", "tsc-overlap", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
 
 /**
  * Judges a legal program: at its site, or, for a combination program (`--combine`, misuse.mjs `buildCombo`), at every use, each with
@@ -111,11 +115,18 @@ export function legalCells({ codes, recall = false } = {}) {
   return (recall ? TEMPLATE_CODES.filter((code) => contextsOf(code).length) : LEGAL_CODES()).filter((code) => !codes || codes.includes(code)).flatMap((code) => contextsOf(code).map((context) => ({ code, context })));
 }
 
+/** The legal pair grid's cells (`--pairs`): every legal cell, then each misuse cell a settled pair is legal in (matrix.mjs `pairShapes`). */
+export function pairLegalCells({ codes } = {}) {
+  const legal = legalCells({ codes });
+  const has = new Set(legal.map((cell) => `${cell.code}|${cell.context}`));
+  return [...legal, ...cellList({ codes }).filter((cell) => !has.has(`${cell.code}|${cell.context}`) && pairShapes(cell.code, cell.context, { legal: true }).length)];
+}
+
 /** The legal shapes of a code (`--grid`): its legal variants x its grid bindings x the layers. */
 export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** `--recall`: the shapes the recall axes add to a legal cell (matrix.mjs `recallAxes`), on the legal grid's base shapes. */
-export const recallLegalShapes = (code, context) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true });
+export const recallLegalShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true, lean });
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 /** A legal program's id, from its cell and its shape or index alone (before it is generated): `--grid-shard` picks by it. */
@@ -143,7 +154,8 @@ export async function runLegal(options) {
     const profile = gridProfile();
     const budget = budgetOf(options);
     const phaseStart = performance.now();
-    const cells = legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) }).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
+    // `--pairs`: the legal cells, and the misuse cells a settled pair is legal in (matrix.mjs pairShapes).
+    const cells = (options.pairs ? pairLegalCells({ codes: options.codes?.split(",") }) : legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) })).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
     let entries = [];
     // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (matrix.mjs `sweep`).
     const sharding = gridShardOptions(options);
@@ -153,7 +165,8 @@ export async function runLegal(options) {
     const ids = options.ids && options.grid ? idFilter(options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
     let planned = 0;
     for (const cell of cells) {
-      const shapes = options.recall ? recallLegalShapes(cell.code, cell.context) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
+      // `--pairs` (matrix.mjs pairShapes): the pair grid's shapes of a legal cell.
+      const shapes = options.pairs ? pairShapes(cell.code, cell.context, { legal: true, sets: pairsOption(options.pairs) }) : options.recall ? recallLegalShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
       if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => {
         planned += 1;
         if (early && shardOf(legalId(cell, { shape }), early.count) !== early.index) return;
@@ -197,6 +210,8 @@ export async function runLegal(options) {
       const at = number * 150;
       const stage = await stageOf(number);
       const results = await finishEntries(stage, run);
+      // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
+      await checkTypedAway(results, run);
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);
         const site = siteOf(built);
@@ -211,7 +226,9 @@ export async function runLegal(options) {
     profile.add("evaluate", Date.now() - started);
     console.error(`legal: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
     assertFindingsMapped();
-    const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length);
+    // A variant typed away on purpose (misuse.mjs TYPED_VARIANTS) is no sign of a broken type checker (tsc-overlap.mjs).
+    const rejected = typeRejectedRows(rows);
+    const refusal = typeErrorRefusal(rejected.length, rows.length - rows.filter(typedOnPurpose).length);
     if (refusal) throw new Error(refusal);
     const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
     if (broken) throw new Error(broken);
@@ -263,7 +280,7 @@ export async function runLegal(options) {
       cell[row.outcome] += 1;
       cell.verdicts[String(row.seed)] = row.outcome;
     }
-    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(gridSample ? { gridSample } : {}), ...(gridShard ? { gridShard } : {}), selected, ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
+    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), ...(gridSample ? { gridSample } : {}), ...(gridShard ? { gridShard } : {}), selected, ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
       falsePositives: candidates.map(({ id, code, context, variant, binding, layer, detail, chrome }) => ({ id, code, context, variant, binding, layer, rules: detail.rules, chrome })),
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -294,7 +311,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

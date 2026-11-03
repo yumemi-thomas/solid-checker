@@ -1,0 +1,3 @@
+# undecided-flush-closure
+
+ADR 0571: in a body entered only through an exact dynamic factory (ADR 0530), a local closure whose every reference is a plain call inside the carved `flush(fn)` callback (ADR 0542) is carved too. Violations (SC2003): `Wrapped`, `Namespaced` (`Solid.flush`, `push`). Uncertifiable: `AlsoInBody` (also called in the body), `Handed` (`flush(wrapUse)`), `Lookalike` (a project `flush`), `Row` (handed to `map`). The SC1001 rows are ADR 0530's stale snapshots (rc.17 warns nothing under `dynamicCore`'s unlabelled `untrack`). Stub: `rc17-dynamic-component`'s plus rc.17's plain `createStore`; tsc-clean on it and on the published packages.

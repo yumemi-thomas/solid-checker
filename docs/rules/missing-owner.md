@@ -238,8 +238,12 @@ In a closed program (a project whose boundary is declared closed, or whose manif
 A cleanup registered in a leaf whose leaf is itself owned runs in that leaf, which `leaf-owner-forbidden-call` reports, so it is not reported here. A `createTrackedEffect` body runs under its tracked node whatever the effect's owner, so its cleanup is that rule's claim too. A cleanup in an `onSettled` callback queued with no owner never runs, and that claim stays here (ADR 0347).
 
 A primitive no execution reaches (after a `return`, in a class declared there,
-in an async child nothing renders or names) is uncertifiable (ADR 0458,
-`fixtures/reactive-ir/dead-code-sites`).
+in an async child nothing renders or names, in an unexported module-scope
+function only dead code names: ADR 0578) is uncertifiable (ADR 0458,
+`fixtures/reactive-ir/dead-code-sites`); one in a function nothing names at
+all is silent. A context read whose function also runs under an owner, where
+the context has no provider, is SC4002's violation and an obligation here
+(ADR 0577).
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup
@@ -301,6 +305,21 @@ A callback passed to a primitive, a handler or a ref is the function the argumen
 
 A package function whose same-operation creation calls cover every exit between them (`if (c) createEffect(…); else createRenderEffect(…);`) requires an owner as one fact (ADR 0359). Any exit without a creation, async/generator bodies, try, loops, `never` calls and member/namespace callees keep the requirement uncertifiable.
 
+- **A standard-library carrier runs its callback at the call (ADR 0561).** A
+  function handed whole to a reviewed inline carrier (`forEach`, `map`,
+  `sort`, `Array.from`'s map function, `Reflect.apply`; the compiler-selected
+  standard-library declaration, never the spelling) or used as a template tag
+  runs on the caller's stack, under the caller's owner: in a handler or a timer
+  it is a violation, in a component body it is owned. A generator handed there
+  runs nothing and stays uncertifiable; so does a carrier in the owner's own
+  JSX or an instance field, and one that may run it zero times (an empty or
+  unknown-length receiver, ADR 0563).
+- **A callback prop runs where the child calls it (ADR 0562).** An arrow
+  written as a prop of a same-file project component that reaches nothing but
+  calls (ADR 0538's proof) runs at each call the component writes in its own
+  body or JSX, under the component's owner: an `onCleanup` there is owned.
+  A call in the child's handler or `onSettled` callback, a forwarded, spread,
+  defaulted or copied prop, and a child in another file stay as before.
 - **A helper that calls its callback runs it at the call (ADR 0474).** An
   `onCleanup` (or another owner-requiring call) in a callback handed to a
   project helper that calls it is placed at the helper's call: in a timer, a

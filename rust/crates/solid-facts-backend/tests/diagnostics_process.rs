@@ -1565,14 +1565,17 @@ fn solid2_precision_corrections_are_end_to_end() {
     };
 
     // Each count pins one side of a proof. SC1002: the accessor call and the
-    // store member read inside the exact `Array#filter` callback, and the
-    // read in `PromiseCallbackAfterAwait` (ADR 0340), which is uncertifiable:
+    // store member read inside the exact `Array#filter` callback, uncertifiable
+    // since ADR 0566 (the awaited array may be empty, so `filter` may never
+    // call it), and the read in `PromiseCallbackAfterAwait` (ADR 0340), which is
+    // uncertifiable:
     // the handler of `Promise.resolve(..).then(..)` returned, not awaited, by
     // the async memo is queued before the memo adopts the promise, and the
     // rc.13 runtime attributes no read to a handler that has no frame of the
     // computation below it; the shadowed project `filter` method, whose exact
-    // body calls its callback synchronously (ADR 0485), and nothing for the
-    // unresolved or wrapper-built callbacks.
+    // body calls its callback synchronously (ADR 0485), and an obligation for
+    // each of the unresolved and wrapper-built callbacks (ADR 0565: handed where
+    // nothing follows them).
     // The cleanup-return *value* rules are gone (every illegal return is a
     // TypeScript error against the real `EffectFunction` signature), so the
     // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
@@ -1591,7 +1594,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 4),
+        ("reactive-read-after-await", 6),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
@@ -1672,13 +1675,39 @@ fn solid2_precision_corrections_are_end_to_end() {
 
     // `filter(makePredicate(post => …))` hands the arrow to a wrapper, so the
     // accessor call inside it is not proven to run before the await resumes.
+    // ADR 0565: it and the unresolved callback after it are obligations.
     let wrapped_callback = start_of("makePredicate((post)");
+    let after_await_at = |kind: &str| {
+        findings_for_rule(&findings, "reactive-read-after-await")
+            .iter()
+            .filter(|finding| finding["kind"].as_str() == Some(kind))
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .collect::<Vec<_>>()
+    };
     assert!(
-        starts("reactive-read-after-await")
+        after_await_at("violation")
             .iter()
             .all(|start| *start < wrapped_callback),
         "a wrapper-built filter callback is not a proven synchronous read"
     );
+    assert_eq!(
+        after_await_at("uncertifiable")
+            .iter()
+            .filter(|start| **start > wrapped_callback)
+            .count(),
+        2,
+        "the wrapper-built and unresolved callbacks are obligations, never silent (ADR 0565)"
+    );
+    // ADR 0566: the reads in the `filter` callbacks over the awaited array.
+    for filtered in ["post.includes(id())", "post === selection.id"] {
+        let at = start_of(filtered);
+        assert!(
+            after_await_at("uncertifiable")
+                .iter()
+                .any(|start| *start >= at && *start < at + u64::try_from(filtered.len()).unwrap()),
+            "{filtered:?} is in a callback an awaited array may never run: an obligation"
+        );
+    }
 
     // A returned call is still classified from its result, not from its
     // callable callee — the ownership half of that work is what survives the

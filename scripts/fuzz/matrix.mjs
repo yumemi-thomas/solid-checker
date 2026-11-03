@@ -4,6 +4,8 @@
 //
 //   programs         generated for the cell
 //   typed-away       tsc rejects the program (invariant 1: the checker stays silent; not a gap)
+//   tsc-overlap      tsc rejects the program and a checker violation covers the rejected code (tsc-overlap.mjs): a candidate breach
+//                    of invariant 1 for a person to read, counted as a problem (focus.mjs PROBLEMS) and by the gate
 //   harness          the checker or the runtime run failed (not evidence)
 //   not-fired        the program type-checks and the runtime did not report the code at the site: a generator problem, not the checker's
 //   confirmed        the runtime reported the code at the site (the only programs that count in the checker columns)
@@ -23,7 +25,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { codeOfThrown, codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -31,11 +33,11 @@ import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, 
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
-  CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
+  BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, legalVariantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
 } from "./misuse.mjs";
-import { RECALL_MOUNTS } from "./mounts.mjs";
-import { isSite, walk } from "./model.mjs";
+import { LATER_MOUNTS, RECALL_MOUNTS } from "./mounts.mjs";
+import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
@@ -49,9 +51,10 @@ import { idFilter, keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
+import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean"];
+export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "tsc-overlap"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -67,7 +70,8 @@ export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line)
  * @returns {{ outcome: string, detail?: object }}
  */
 export function judge({ code, site, typecheck: typed, checker, runtime, others = [] }) {
-  if (typed && typed.ok === false) return { outcome: "typed-away", detail: { error: typed.errors?.[0] } };
+  // A program tsc rejects is no evidence of recall, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
+  if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
   const region = regionOf(site);
@@ -99,7 +103,7 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
   // A combination program's other uses are legal sites of other codes: a finding on their lines is theirs, never this site's.
   const elsewhere = (finding) => others.some((lines) => inLines(finding, lines)) && !inLines(finding, region);
   const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && !elsewhere(finding));
-  const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
+  const claims = (finding) => coversCode(code, finding);
   const covering = relevant.filter((finding) => inLines(finding, region));
   // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
   // line itself. In a one-site program a claiming finding anywhere is this misuse's: it is an agree (or a gap) with `remote` set.
@@ -116,7 +120,7 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
     .map((event) => event.code))]
     .map((other) => [other, relevant.some((finding) => finding.kind === "violation" && codeRules[other].includes(finding.rule))
       ? "agree"
-      : relevant.some((finding) => codeRules[other].includes(finding.rule)) ? "recall-gap" : "false-clean"])
+      : relevant.some((finding) => codeRules[other].includes(finding.rule) || declinesCode(other, finding)) ? "recall-gap" : "false-clean"])
     .filter(([, verdict]) => verdict !== "agree"));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
@@ -127,7 +131,7 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
   const wrong = violations.filter((finding) => !corroborated(finding));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
-  // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims it (or a withholding) at the site.
+  // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
   if (covering.some(claims)) return { outcome: "recall-gap", detail };
   const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
@@ -173,14 +177,30 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  * A recall context (a cell only `--recall` lists) takes its base grid as well. `base` is the cell's base grid (`gridShapes`, or the
  * legal grid's `legalShapes`); `variants` its variants.
  */
-export function recallAxes(code, context, base, variants, { legal = false } = {}) {
+/**
+ * `--recall-lean` (off by default; Fable's report 2026-11-03, R0.3): the recall mounts and callback forms whose every program answered
+ * as a kept one's on the 644bd1a81 full run (`redundancy.mjs`, 2026-11-03): ten mounts as `show-signal`'s program of the same shape
+ * (`--against show-signal`; show-keyed's two legal differences were harness rows, a Chrome call with no response), `loading` as the
+ * root program, `function` and `let` as `const` (`--against-callback const`). Kept: `show-signal` and `const` (each differs from the
+ * base program: 240 and 824 misuse programs), `named` (310 differ from `const`), `for-item` (4), `dynamic`, `show-later`. That run had
+ * no role log, so whether a demoted value adds an arm is unmeasured: the flag stays off by default.
+ */
+export const LEAN_DEMOTED = {
+  mounts: ["show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
+  callbacks: ["function", "let"],
+};
+export function recallAxes(code, context, base, variants, { legal = false, lean = false } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
-  const takes = (variant) => !SPEC[code].recallVariantsNotIn?.[context]?.includes(variant);
+  // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
+  const only = legal ? SPEC[code].variantOnlyLegal?.[context] : null;
+  const takes = (variant) => !SPEC[code].recallVariantsNotIn?.[context]?.includes(variant) && (!only || only.includes(variant));
   const shapes = recallCell ? base.filter((shape) => takes(shape.variant)) : [];
   // A callback-prop context (misuse.mjs CBP_CONTEXTS) takes its base grid only: its own axis is the pass form (30 contexts a code),
-  // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold.
-  if (CBP_CONTEXTS.includes(context)) return shapes;
+  // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold. So do the lazy-memo, deferred-apply,
+  // later-fire, named-handler and never-run contexts (misuse.mjs BASE_ONLY_CONTEXTS): their question is the host's run, not the
+  // spelling around the site.
+  if (CBP_CONTEXTS.includes(context) || BASE_ONLY_CONTEXTS().includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
     // axes are written on the local source, which it cannot take.
@@ -194,21 +214,64 @@ export function recallAxes(code, context, base, variants, { legal = false } = {}
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
   for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context)).filter(takes)) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
   const local = base.filter((shape) => !shape.mount && !shape.source && takes(shape.variant));
-  if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
+  if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS.filter((form) => !lean || !LEAN_DEMOTED.callbacks.includes(form))) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's
   // strict-read window never opens there: rc.17 is silent on a stale body read, and a pending one re-runs the body without end.
   const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
   // A mount a recall-only context's code cannot take (`recallMountsNotIn`: there Solid reports nothing).
   const mountTakes = (mount) => !SPEC[code].recallMountsNotIn?.[context]?.includes(mount);
-  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount)) for (const shape of local) shapes.push({ ...shape, mount });
+  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount) && !(lean && LEAN_DEMOTED.mounts.includes(mount))) for (const shape of local) shapes.push({ ...shape, mount });
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
+}
+
+/**
+ * `--pairs <sets>` (misuse.mjs PAIR_SETS, default all): the pair grid's shapes of a base cell (a code's base context, or a legal one),
+ * each pair of axis values crossed with the base variants, bindings and layers the cell takes (the layer is the pair's own in
+ * `handoff-file`). A pair a shape cannot take is left out, as the recall grids leave it: a source the (code, variant, binding) does not
+ * take (`sourcesOf`), `dynamic` but for a module hook (it passes no props) and for a body read rc.17 never labels (`BODY_LABEL`), a
+ * `try-catch`-free code's hand-off is every one. Recall-only contexts take no pairs.
+ */
+export function pairShapes(code, context, { legal = false, sets = PAIR_SETS } = {}) {
+  const spec = SPEC[code];
+  // A later mount of an async source (`show-later` × `async-*`): the parent's async memo settles before the button mounts the
+  // component, so its first read is no pending read (measured on the fast runtime, 2026-11-03: rc.17 reports STRICT_READ_UNTRACKED
+  // there, never the pending code). Such a pair of an async template is a legal program in the code's misuse contexts.
+  const settled = (mount, source) => LATER_MOUNTS.includes(mount) && source.startsWith("async-") && spec.setup(null, (prefix) => `${prefix}1`).some((sig) => sig.kind === "async");
+  const misuseContext = spec.contexts.includes(context);
+  if (!(legal ? [...(spec.legal ?? []), ...spec.contexts] : spec.contexts).includes(context)) return [];
+  const onlySettled = legal && misuseContext && !(spec.legal ?? []).includes(context);
+  const variants = (legal ? legalVariantsOf(code) : gridVariantsOf(code)).filter(variantFits(code, context)).filter((variant) => !spec.variantSources?.[variant]);
+  const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
+  const shapes = [];
+  for (const variant of variants) for (const binding of gridBindingsOf(code, variant)) {
+    if (sets.includes("mount-source")) {
+      const takes = sourcesOf(code, variant, binding, context);
+      for (const source of PAIR_SOURCES.filter((one) => takes.includes(one))) for (const mount of PAIR_MOUNTS) {
+        if (mount === "dynamic" && (source !== "module-hook" || bodyLabelled)) continue;
+        // A settled pair is no misuse: the legal grid takes it, in the code's misuse contexts (`onlySettled`).
+        if (!legal && settled(mount, source)) continue;
+        if (onlySettled && !settled(mount, source)) continue;
+        for (const layer of LAYERS) shapes.push({ variant, binding, layer, mount, source });
+      }
+    }
+    if (onlySettled) continue;
+    if (sets.includes("handoff-file")) for (const layer of PAIR_LAYERS) shapes.push({ variant, binding, layer });
+    if (sets.includes("callback-handoff") && CALLBACK_CONTEXTS.includes(context)) for (const callback of PAIR_CALLBACKS) for (const layer of HANDOFF_FORMS) shapes.push({ variant, binding, layer, callback });
+  }
+  return shapes;
+}
+/** `--pairs a,b` or `--pairs all`. */
+export function pairsOption(value) {
+  const sets = !value || value === true || value === "all" ? PAIR_SETS : String(value).split(",");
+  for (const set of sets) if (!PAIR_SETS.includes(set)) throw new Error(`--pairs: unknown pair set ${set} (${PAIR_SETS.join(", ")}, all)`);
+  return sets;
 }
 const THROWN = new Set(thrownCodes.map(([, code]) => code));
 const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
 /** The misuse grid's recall shapes of a cell (`--recall`). */
-export const recallShapes = (code, context) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)));
+export const recallShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -376,7 +439,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
-    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), checker: header, total,
+    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
     byFeature: featureTable(rows), typedAway, cells: out,
@@ -411,13 +474,13 @@ export function markdown(matrix, statuses) {
   const lines = [];
   lines.push(`# Misuse recall matrix`, "");
   lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.sampling === "grid" ? "one program per shape (variant, binding, layer)" : `${matrix.perCell} programs per cell`}. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
-  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
+  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`T\` tsc-overlap, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
   lines.push(`| code | ${contexts.join(" | ")} |`, `| --- | ${contexts.map(() => "---").join(" | ")} |`);
   for (const code of codes) {
     const cells = contexts.map((context) => {
       const cell = matrix.cells[`${code}|${context}`];
       if (!cell) return "";
-      const extras = [["W", cell["wrong-rule"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
+      const extras = [["W", cell["wrong-rule"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
       // A dagger: Chrome did not reproduce any of the sampled programs of this cell (the fast path's evidence stands alone).
       const unconfirmed = cell.chrome && cell.chrome.checked > 0 && cell.chrome.same === 0 ? " †" : "";
       return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}${unconfirmed}`;
@@ -490,6 +553,9 @@ const UNJUDGED = new Set(["typed-away", "harness"]);
  */
 export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
+  // A pair grid (`--pairs`) holds other programs than the grid it sits beside: compared only with a pair grid of the same sets.
+  if (JSON.stringify(baseline.pairs ?? null) !== JSON.stringify(current.pairs ?? null)) return { ok: false, refused: `the matrices differ in pairs (${baseline.pairs ?? "none"} vs ${current.pairs ?? "none"})`, ...empty };
+  if (Boolean(baseline.recallLean) !== Boolean(current.recallLean)) return { ok: false, refused: "one matrix is --recall-lean and the other is not: they hold other programs", ...empty };
   for (const field of ["seed", "perCell", "generator", "sampling"]) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
@@ -500,7 +566,7 @@ export function gate(baseline, current) {
   if (shardKey(baseline) !== shardKey(current)) return { ok: false, refused: `the matrices are different parts of the grid (baseline ${shardKey(baseline)}, current ${shardKey(current)}): the gate compares the same programs`, ...empty };
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
-  const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
+  const unjudged = (now["typed-away"] ?? 0) + (now["tsc-overlap"] ?? 0) + (now.harness ?? 0);
   if (all && unjudged / all > TYPE_ERROR_REFUSAL_SHARE) return { ok: false, refused: `${unjudged} of ${all} programs of the current run are typed-away or harness: it judged nothing (the limit is ${TYPE_ERROR_REFUSAL_SHARE * 100}%)`, ...empty };
   const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = []; const retired = []; const newPrograms = [];
   for (const [key, base] of Object.entries(baseline.cells)) {
@@ -517,6 +583,9 @@ export function gate(baseline, current) {
     const gained = list((was, is) => is === "false-clean" && was !== "false-clean" && !UNJUDGED.has(was));
     if (lost.length) regressions.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}`, programs: lost });
     if (gained.length) regressions.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}`, programs: gained });
+    // A violation on code tsc rejects (tsc-overlap.mjs) fails from any baseline, a typed-away one included: it is new evidence.
+    const overlapping = list((was, is) => is === "tsc-overlap" && was !== "tsc-overlap");
+    if (overlapping.length) regressions.push({ cell: key, why: `tsc-overlap ${base["tsc-overlap"] ?? 0} -> ${cell["tsc-overlap"]}`, programs: overlapping });
     const fromUnjudged = list((was, is) => UNJUDGED.has(was) && is !== was);
     if (fromUnjudged.length) baselineUnjudged.push({ cell: key, programs: fromUnjudged });
     const intoUnjudged = list((was, is) => UNJUDGED.has(is) && !UNJUDGED.has(was));
@@ -657,8 +726,9 @@ async function sweep(options, config, out) {
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
   const mounts = mountsOption(options.mounts);
   const sources = sourcesOption(options.sources);
-  // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs.
-  const shapesOf = (cell) => (options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context, mounts, sources));
+  // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs. `--pairs` (pairShapes): the pair grid's.
+  const pairs = options.pairs ? pairsOption(options.pairs) : null;
+  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : gridShapes(cell.code, cell.context, mounts, sources));
   // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (their ids are known from the shapes),
   // the same programs as generating the whole grid and keeping the shard; `planned` counts the whole grid's.
   const sharding = gridShardOptions(options);
@@ -709,6 +779,8 @@ async function sweep(options, config, out) {
   for (const [number, chunk] of chunks.entries()) {
     const stage = await stageOf(number);
     const results = await finishEntries(stage, run);
+    // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
+    await checkTypedAway(results, run);
     const at = number * CHUNK;
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
@@ -726,7 +798,9 @@ async function sweep(options, config, out) {
   profile.add("evaluate", Date.now() - started);
   console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
-  const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
+  // A variant typed away on purpose (misuse.mjs TYPED_VARIANTS) is no sign of a broken type checker (tsc-overlap.mjs).
+  const rejected = typeRejectedRows(rows);
+  const refusal = typeErrorRefusal(rejected.length, rows.length - rows.filter(typedOnPurpose).length, { first: rejected[0]?.detail?.error });
   if (refusal) throw new Error(refusal);
   const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
   if (broken) throw new Error(broken);
@@ -841,7 +915,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

@@ -17,8 +17,11 @@ can provide the context:
   analysis cannot see, so a read the same census finds no provider for there
   is an uncertifiable obligation, never a violation (ADR 0517).
 - The context is a project binding, `const Ctx = createContext()` with no
-  argument, that is never written.
-- No `<Ctx value={…}>` element names the binding, and no other reference to it
+  argument or with `undefined` (rc.17 treats an `undefined` default as none;
+  ADR 0575), that is never written. A default the syntax does not prove is a
+  value (`createContext(maybe())`) makes the read an uncertifiable obligation.
+- No `<Ctx value={…}>` element names the binding (one passing the global
+  `undefined`, with no spread, provides nothing: ADR 0575), and no other reference to it
   escapes. An escape is any use that could hand the binding to code that
   provides it: an object literal, a call argument, a return, an assignment.
   Import and export specifiers do not escape; each importer's own uses are
@@ -28,9 +31,26 @@ can provide the context:
   naming it.
 
 The read must run under an owner on every path: a component body, a computation
-a component creates, or a function called from one. A read with no owner is
+a component creates, or a function called from one. A function a reviewed
+standard-library carrier runs before it returns (`[1].forEach(hf)`, `map`,
+`sort`, `Array.from`'s map function, `Reflect.apply`) or a tagged template's tag
+counts as called there (ADR 0561) where it provably runs it (a non-empty array
+literal, `Reflect.apply`; ADR 0563); a same-named project or local `forEach`
+does not, and an empty or unknown-length receiver leaves SC4001's obligation.
+An arrow written as a prop of a same-file component that only ever calls the
+prop also counts as called, at each call written in the component's own body or JSX
+(`<Kid run={() => useContext(Ctx)} />` with `props.run()` or `({ run }) => run()`
+in `Kid`; ADR 0562). A forwarded, spread, defaulted or copied prop, a call in
+the child's handler or `onSettled` callback, and a child in another file are
+not followed. A read in a function stored on a member (`o.m = …`,
+`this.m = …`, a factory's returned object, an object literal's slot) or handed
+to a project wrapper and called later stays SC4001's obligation. A read with no owner is
 `missing-owner` (SC4001), which throws `NoOwnerError` instead. A read whose owner
-is uncertain is SC4001's uncertifiable result.
+is uncertain is SC4001's uncertifiable result. A read in a function that runs
+both under an owner and with none (called in the body and handed to `onClick`)
+is reported here, since the owned run throws first, and SC4001's claim there is
+an obligation (ADR 0577). A read in a lazy memo nothing proves is read
+(ADR 0576), or in code no execution reaches (ADRs 0458, 0578), is uncertifiable.
 
 A default makes the read a value rather than a throw. A context with a provider
 above the reader is silent, since the provider is what the rule looks for.

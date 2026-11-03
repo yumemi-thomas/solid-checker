@@ -651,7 +651,7 @@ impl<I: Copy + Eq + Hash + Send> Graph<I> {
 }
 
 /// Below this many entries (edges, nodes) across the shards, [`each_shard`]
-/// runs on the caller's thread (ADR 0563): a small program's flush is a
+/// runs on the caller's thread (ADR 0593): a small program's flush is a
 /// few microseconds of work against a dozen thread starts.
 const SHARD_THREADS_MIN_WORK: usize = 4096;
 

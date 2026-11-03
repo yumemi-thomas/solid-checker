@@ -425,7 +425,7 @@ fn shard_work_answers_alike_inline_and_on_workers() {
     assert_eq!(each_shard(items, SHARD_THREADS_MIN_WORK, work), expected);
 }
 
-/// ADR 0563: a graph whose flushes cross `SHARD_THREADS_MIN_WORK`, so the
+/// ADR 0593: a graph whose flushes cross `SHARD_THREADS_MIN_WORK`, so the
 /// shard workers run, against a fresh store at every step.
 #[test]
 fn invalidation_is_complete_on_a_graph_large_enough_for_shard_workers() {

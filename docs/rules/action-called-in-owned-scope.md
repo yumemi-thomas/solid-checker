@@ -19,6 +19,9 @@ declaration, or an arrow or function expression bound to a `const` identifier
 (`const useMenu = () => ...`), is proven to run where its direct callers run.
 A `let` nothing reassigns is exact too (ADR 0516); a written `let` and a
 `var` are not, so a helper held in one stays uncertifiable.
+An action call in a lazy memo (`createMemo(fn, { lazy: true })`) no proven
+read of its accessor computes, or in code no execution reaches (ADRs 0458,
+0578), is uncertifiable (ADR 0576).
 
 A `createRoot` body runs during the call with the new root as the ambient
 owner, and the action guard has no root exemption on any release: an action

@@ -12,10 +12,11 @@ function count(posts: number[]) {
 }
 
 export function AfterAwait() {
-  // Control: the read written after the await is a violation.
+  // Control: the read written after the await is a violation (a one-element
+  // literal receiver: ADR 0566 needs a carrier that provably runs).
   const direct = createMemo(async () => {
     const posts = await fetchPosts();
-    return posts.filter((post) => post === userId());
+    return [posts.length].filter((post) => post === userId());
   });
   // The read in a helper called after the await: uncertifiable.
   const helper = createMemo(async () => {

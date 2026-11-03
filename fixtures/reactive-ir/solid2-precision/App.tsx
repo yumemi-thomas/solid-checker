@@ -35,9 +35,9 @@ declare const teardown: {
 };
 declare const teardownKey: "dispose";
 
-// Positive: Array.prototype.filter is an exact synchronous callback target.
-// The accessor read is after the dominating await, but still runs before the
-// async computation resumes because filter invokes its callback inline.
+// Array.prototype.filter is an exact synchronous callback target: the read is
+// after the dominating await and runs on the continuation when filter calls it.
+// The awaited array may be empty, so it is uncertifiable (ADR 0566).
 export function FilterAfterAwait() {
   const [id] = createSignal("42");
   const posts = createMemo(async () => {
@@ -80,8 +80,9 @@ export function ShadowedFilterAfterAwait() {
   return <div>{posts()}</div>;
 }
 
-// A store member read inside the proven-synchronous callback is the awaiting
-// computation's own read, exactly like an accessor call there.
+// A store member read inside the synchronous callback is the awaiting
+// computation's own read, exactly like an accessor call there (uncertifiable
+// on a receiver that may be empty, ADR 0566).
 export function FilterStoreReadAfterAwait() {
   const [selection] = createStore({ id: "42" });
   const posts = createMemo(async () => {
