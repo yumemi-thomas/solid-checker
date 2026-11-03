@@ -1278,20 +1278,35 @@ fn member_reads_after_await(
 ) {
     let (file, ast_function, boundary) = site;
     for member in &file.ast.members {
-        if member.span.start < boundary
-            || !ast_function.body.contains(member.span)
-            || !crate::owners::owned_by_body(&file.ast, ast_function, member.span)
-        {
+        if member.span.start < boundary || !ast_function.body.contains(member.span) {
+            continue;
+        }
+        // ADR 0612: a function written past the boundary and run in place
+        // there (an IIFE, a helper's callback, a named closure's one call)
+        // reads on the same continuation, as an accessor call there does. Not
+        // through a library callback, which may run zero times (ADR 0566).
+        let climbed = || {
+            crate::execution_role::climb_in_place_layers(file, member.span, ctx.semantic_lookup)
+                .is_some_and(|climb| {
+                    !climb.exhausted
+                        && !climb.in_list
+                        && !climb.among_others
+                        && crate::owners::owned_by_body(&file.ast, ast_function, climb.at)
+                        && !crate::execution_role::climb_crosses_library_callback(
+                            file,
+                            member.span,
+                            climb.at,
+                            ctx.semantic_lookup,
+                        )
+                })
+        };
+        if !crate::owners::owned_by_body(&file.ast, ast_function, member.span) && !climbed() {
             continue;
         }
         // Only the complete member chain reads a store path; its prefixes are
-        // the same read's steps.
-        if file
-            .ast
-            .members
-            .iter()
-            .any(|candidate| candidate.object == member.span)
-        {
+        // the same read's steps. ADR 0612: the object of a written member is
+        // read on its own, as in a strict-read window (ADR 0498).
+        if crate::local_access::read_as_part_of_longer_path(file, member) {
             continue;
         }
         if file.ast.is_plain_write_target(member.span) {

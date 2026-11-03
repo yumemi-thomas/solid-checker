@@ -2265,5 +2265,95 @@
    "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-closure-cb-const"
   ],
   "rediscovered": "locally: fuzz-focus CODES=REACTIVE_WRITE_IN_OWNED_SCOPE on the build before ADR 0611 gives 16,528 false-positive in lg-recall; the fix build none"
+ },
+ {
+  "finding": "no-await-primitive-in-tracked-scope (SC2004) proved a violation for resolve() past an async compute's await, where rc.17's observer guard is clear (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "lg-recall",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-none",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-closure",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-helper",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-iife",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-closure-helper",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-module-helper",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-for",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-while"
+  ],
+  "rediscovered": "locally: fuzz-focus with --contexts on the async family: false-positive before ADR 0612, none on the fix"
+ },
+ {
+  "finding": "no-await-primitive-in-tracked-scope (SC2005) proved a violation for until() past an async compute's await (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "lg-recall",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "lg-until-in-reactive-scope-memo-async-x-direct-none",
+   "lg-until-in-reactive-scope-memo-async-x-direct-closure",
+   "lg-until-in-reactive-scope-memo-async-x-direct-helper",
+   "lg-until-in-reactive-scope-memo-async-x-direct-iife",
+   "lg-until-in-reactive-scope-memo-async-x-direct-closure-helper",
+   "lg-until-in-reactive-scope-memo-async-x-direct-module-helper",
+   "lg-until-in-reactive-scope-memo-async-x-direct-for",
+   "lg-until-in-reactive-scope-memo-async-x-direct-while"
+  ],
+  "rediscovered": "locally: as the SC2004 row"
+ },
+ {
+  "finding": "missing-owner (SC4001) certified clean a primitive created past an async compute's await: the compute's region answered root_owned before the after-await path (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-memo-async-effect-direct-none",
+   "mx-no-owner-effect-memo-async-render-direct-none",
+   "mx-no-owner-effect-memo-async-effect-direct-for",
+   "mx-no-owner-effect-memo-async-effect-direct-while",
+   "mx-no-owner-effect-memo-async-effect-direct-do",
+   "mx-no-owner-effect-memo-async-effect-direct-switch",
+   "mx-no-owner-effect-memo-async-effect-direct-try-catch",
+   "mx-no-owner-effect-memo-async-effect-direct-try-finally"
+  ],
+  "rediscovered": "locally: false-clean before ADR 0612, agree on the fix"
+ },
+ {
+  "finding": "missing-owner (SC4001) certified clean onCleanup past an async compute's await (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-memo-async-x-direct-none",
+   "mx-no-owner-cleanup-memo-async-x-direct-for",
+   "mx-no-owner-cleanup-memo-async-x-direct-while",
+   "mx-no-owner-cleanup-memo-async-x-direct-do",
+   "mx-no-owner-cleanup-memo-async-x-direct-switch",
+   "mx-no-owner-cleanup-memo-async-x-direct-try-catch",
+   "mx-no-owner-cleanup-memo-async-x-direct-try-finally",
+   "mx-no-owner-cleanup-memo-async-x-direct-label"
+  ],
+  "rediscovered": "locally: as the NO_OWNER_EFFECT row"
+ },
+ {
+  "finding": "reactive-read-after-await (SC1002) missed the object of a written store member past an async compute's await (s.a in s.a.v = 1), and a member read in a function run in place there: a certified false clean as the second code of SC2003 (ADR 0612)",
+  "found": "the certified-secondary flag (focus.mjs secondary-false-clean) on the async family's recall cells",
+  "fixed": "ADR 0612",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-none",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-closure",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-helper",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-iife",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-closure-helper",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-module-helper",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-for",
+   "mx-store-write-outside-setter-effect-async-nested-assign-direct-while"
+  ],
+  "rediscovered": "locally: secondary false-clean-certified before ADR 0612, gone on the fix"
  }
 ]

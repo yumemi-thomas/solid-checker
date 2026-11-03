@@ -699,6 +699,11 @@ fn resolve_tracked_scope(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
 ) -> Option<String> {
+    // ADR 0612: the guard reads the observer, which no task past an await has.
+    // Past one on some path nothing is proven ([`resolve_scope_unplaced`]).
+    if crate::execution_role::past_suspension(file, call.span, context.lookup).is_some() {
+        return None;
+    }
     // ADR 0494: a call in function layers that run in place inside the
     // callback (ADR 0469's climb, as ADR 0478 reads it) runs on the stack of
     // the outermost layer's call, with the callback's observer active; not in
@@ -802,6 +807,13 @@ fn resolve_scope_unplaced(
     use crate::ExecutionRole;
     if resolve_tracked_scope(file, call, allowed, context).is_some() {
         return false;
+    }
+    // ADR 0612: past an await on every path no observer is active; on some
+    // path the call may still run on the compute's first stack.
+    match crate::execution_role::past_suspension(file, call.span, context.lookup) {
+        Some(true) => return false,
+        Some(false) => return true,
+        None => {}
     }
     // ADR 0517: a library callback on the way (`[1].forEach`) may run zero
     // times, so `resolve_tracked_scope` does not climb it; when the layers

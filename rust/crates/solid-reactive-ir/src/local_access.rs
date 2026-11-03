@@ -3492,24 +3492,7 @@ impl LocalAccessContext<'_, '_> {
                     self.prop_sources.contains_key(symbol)
                         && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 });
-        // ADR 0498: a member that is the object of a written, deleted or
-        // iterated member (`store.a` in `store.a.v = 1`) is read on its own:
-        // the longer path is no read, so the Get of this one is the chain's.
-        let read_as_part = |candidate: &solid_facts::ast::MemberFact| {
-            file.ast.peel_ts_sugar_span(candidate.object) == member.span
-                && !(file.ast.is_plain_write_target(candidate.span)
-                    || file
-                        .ast
-                        .deleted_targets
-                        .iter()
-                        .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span)
-                    || file
-                        .ast
-                        .iteration_targets
-                        .iter()
-                        .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span))
-        };
-        if !prop_head && file.ast.members.iter().any(read_as_part) {
+        if !prop_head && read_as_part_of_longer_path(file, member) {
             return;
         }
         // A plain assignment writes this exact member without reading its
@@ -5828,4 +5811,25 @@ fn handed_role(
     } else {
         silent.map(|role| (role, None))
     }
+}
+
+/// Whether `member` is read as part of a longer path, which is reported
+/// instead. ADR 0498: a member that is the object of a written, deleted or
+/// iterated member (`store.a` in `store.a.v = 1`) is read on its own: the
+/// longer path is no read, so the Get of this one is the chain's.
+pub(crate) fn read_as_part_of_longer_path(
+    file: &solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> bool {
+    let target = |targets: &[solid_facts::core::Span], candidate: solid_facts::core::Span| {
+        targets
+            .iter()
+            .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate)
+    };
+    file.ast.members.iter().any(|candidate| {
+        file.ast.peel_ts_sugar_span(candidate.object) == member.span
+            && !(file.ast.is_plain_write_target(candidate.span)
+                || target(&file.ast.deleted_targets, candidate.span)
+                || target(&file.ast.iteration_targets, candidate.span))
+    })
 }

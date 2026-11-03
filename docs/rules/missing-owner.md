@@ -228,7 +228,9 @@ The code after an async IIFE's first `await` is a continuation with no owner
 (ADR 0333), as for any async function, and so is an operation in function layers
 that run in place there (an IIFE, a project helper's callback, a function bound
 to a name and called once) when the outermost layer's call follows an `await` on
-every path (ADR 0493). An operation in a literal that a
+every path (ADR 0493). In an async memo or effect compute too: a compute's region
+owns its synchronous run only (ADR 0612). A `catch` or `finally` counts only past a
+`try` head that cannot throw before it suspends. An operation in a literal that a
 synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
 only under an owner, so it is not reported; the guard must be Solid's
 `getOwner`, and no `await` may separate it from the operation (ADR 0347).

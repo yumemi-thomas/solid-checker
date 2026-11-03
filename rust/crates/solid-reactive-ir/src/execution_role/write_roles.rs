@@ -2715,34 +2715,54 @@ pub(crate) enum LayerRun {
     Elsewhere,
 }
 
-/// ADR 0611: whether code in `span`'s function runs past a suspension of an
-/// enclosing function it runs in place inside. Climbs the layers
-/// [`layer_run`] proves run in place (on their call's stack and owner) and
-/// asks, at each layer's call, whether that call follows an await of its own
-/// async function: `Some(true)` past one on every path, `Some(false)` past one
-/// on some path, `None` when no such call is found before a layer that does
-/// not run in place.
-pub(super) fn suspension_through_in_place_layers(
+/// ADR 0611: whether code at `span` runs past a suspension of a function it
+/// runs in place inside ([`climb_in_place_layers`]): `Some(true)` when a
+/// layer's call follows an await on every path, `Some(false)` on some path,
+/// `None` when none does. Only [`follows_dominating_await`]'s proof counts, not
+/// the climb's own `suspended`: code past an await may still run later under
+/// an owner (JSX, an instance field), which that proof excludes. A helper that
+/// also hands its callback on, or a climb cut short, proves nothing about the
+/// runs it did not follow.
+pub(crate) fn suspension_through_in_place_layers(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
-    let mut layer = crate::owners::containing_ast_function(&file.ast, span)?;
-    let mut crossed = HashSet::default();
-    loop {
-        if layer.generator || !crossed.insert(layer.span) {
-            return None;
-        }
-        let LayerRun::InPlace(call) = layer_run(file, layer, lookup) else {
-            return None;
-        };
+    let mut calls = Vec::new();
+    let climb = climb_in_place_layers_recording(file, span, lookup, None, &mut calls)?;
+    if climb.among_others || climb.exhausted {
+        return None;
+    }
+    let mut answer = None;
+    for call in calls {
         if follows_dominating_await(file, call) || follows_try_head_await(file, call, lookup) {
             return Some(true);
         }
         if may_follow_suspension(file, call) {
-            return Some(false);
+            answer = Some(false);
         }
-        layer = crate::owners::owning_function(&file.ast, call)?;
+    }
+    answer
+}
+
+/// [`suspension_through_in_place_layers`] with `span`'s own function: whether
+/// code at `span` runs on a later task than the one its enclosing callback was
+/// entered on, with no ambient owner or observer (ADRs 0333, 0611, 0612).
+pub(crate) fn past_suspension(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let layered = suspension_through_in_place_layers(file, span, lookup);
+    if layered == Some(true)
+        || follows_dominating_await(file, span)
+        || follows_try_head_await(file, span, lookup)
+    {
+        Some(true)
+    } else if layered == Some(false) || may_follow_suspension(file, span) {
+        Some(false)
+    } else {
+        None
     }
 }
 

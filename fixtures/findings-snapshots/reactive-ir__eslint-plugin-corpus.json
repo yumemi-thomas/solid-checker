@@ -112,6 +112,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-valid.tsx",
+      "start": 564,
+      "end": 576,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -239,6 +249,16 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-valid.tsx",
       "start": 629,
       "end": 636,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-valid.tsx",
+      "start": 752,
+      "end": 764,
       "fixes": 0
     },
     {

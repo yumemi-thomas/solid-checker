@@ -12,6 +12,7 @@ Defects the runtime reports and the checker does not. Each is a missing violatio
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
 
+- Fuzzer async family (ADR 0612): SC1002 past an async compute's await for a store reached through a hook's result or member, a tuple, or a wrapper function written before the await (1,316 certified `secondary-false-clean` rows in `mx-recall`, second code of SC2003): member reads follow only functions written past the boundary and run in place. A thrown code past an async compute's await is reported by nothing (README, Not built).
 - Fuzzer `ref-factory-body` with a helper or IIFE layer and a `hook-member`, `or-assign` or `bind` binding (about 190 recall programs, ADR 0527): the read reaches the layer through a binding dispatch, ADR 0522's non-layer edge; certified clean.
 - Fuzzer `pos-handler-expr` with some non-direct bindings (about 25 recall programs, ADR 0527): a read in the IIFE of a handler expression reached through an alias, tuple or hook binding of the memo variant; certified clean.
 

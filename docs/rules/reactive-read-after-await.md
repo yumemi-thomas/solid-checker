@@ -16,7 +16,8 @@ branches, loops, `switch`, and `try`/`finally` precisely (both-branch awaits
 dominate; a conditional or looped await does not). Store-path and props **member
 reads** are proven against the function's straight-line awaits: an await with no
 conditional, logical, loop, switch, or try construct between the function entry
-and the expression dominates every later read in the same function body. Props
+and the expression dominates every later read in the same function body. The
+object of a written member (`s.a` in `s.a.v = 1`) is such a read (ADR 0612). Props
 member reads follow the component's caller classification (see
 [strict-read-untracked](strict-read-untracked.md)): proven-static props are not
 reactive and stay silent; unprovable ones are reported as **uncertifiable**.

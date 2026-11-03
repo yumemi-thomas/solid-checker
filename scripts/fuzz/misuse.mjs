@@ -702,6 +702,29 @@ const LAZY_HANDLER_LEGAL = ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWN
 const LAZY_HANDLER_MISUSE = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER", "SYNC_NODE_RECEIVED_ASYNC", "ACTION_CALLED_IN_OWNED_SCOPE"];
 const DEFER_RERUN_MISUSE = ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "STORE_WRITE_OUTSIDE_SETTER", "FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "DYNAMIC_STATIC_PROMISE"];
 const DEFER_RERUN_LEGAL = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
+// The async family (2026-11-04, rc.17 fast runtime, 476 probes: every base variant of each code in each context, direct, no
+// layer; a context takes a cell only where every variant agreed): past an await in an async function the body calls (`async`,
+// its loop, `for await` and `finally`), in an async memo or effect compute (`memo-async*`, `effect-async*`), or in a handler's
+// async function (`handler-async-loop`, `-finally`). A cell a code already had is unchanged; mixed or disturbed answers take none
+// (STRICT_READ_UNTRACKED and the pending codes in an async compute report UNTRACKED_READ_AFTER_AWAIT, CLEANUP_IN_FORBIDDEN_SCOPE
+// reports another code everywhere, CONTEXT_NOT_FOUND outside a compute throws). Every legal cell was measured again with its site in
+// a `try` and a marker after it: a code an async compute throws past its await only rejects the compute's promise and no diagnostic
+// says so, so `useContext` (NO_OWNER_CONTEXT, CONTEXT_NOT_FOUND) and `dynamic(..., { static: true })` in `memo-async*`/`effect-async*`
+// are neither legal (they throw) nor misuse cells (nothing reports them): they take no cell.
+const PLAIN_ASYNC = ["async", ...ASYNC_CONTROL];
+const COMPUTE_ASYNC = ["memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"];
+const HANDLER_ASYNC_PROBED = ["handler-async-loop", "handler-async-finally"];
+const ASYNC_FAMILY_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  PENDING_ASYNC_UNTRACKED_READ: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  UNTRACKED_READ_AFTER_AWAIT: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  NO_OWNER_CONTEXT: { misuse: HANDLER_ASYNC_PROBED },
+  DYNAMIC_STATIC_PROMISE: { misuse: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  ...Object.fromEntries(["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "SETTLED_CLEANUP_UNOWNED", "STORE_WRITE_OUTSIDE_SETTER"].map((code) => [code, { misuse: [...COMPUTE_ASYNC, ...HANDLER_ASYNC_PROBED] }])),
+  SYNC_NODE_RECEIVED_ASYNC: { misuse: [...PLAIN_ASYNC, ...COMPUTE_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  ...Object.fromEntries(["ACTION_CALLED_IN_OWNED_SCOPE", "RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK"].map((code) => [code, { legal: [...PLAIN_ASYNC, ...COMPUTE_ASYNC, ...HANDLER_ASYNC_PROBED] }])),
+};
 const API_CONTEXT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => [code, {
   misuse: [...(LAZY_HANDLER_MISUSE.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_MISUSE.includes(code) ? ["effect-apply-defer-rerun"] : [])],
   legal: ["memo-lazy-unread", "effect-apply-defer", ...(LAZY_HANDLER_LEGAL.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_LEGAL.includes(code) ? ["effect-apply-defer-rerun"] : [])],
@@ -711,7 +734,7 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
