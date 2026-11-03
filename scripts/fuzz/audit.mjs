@@ -29,8 +29,8 @@ import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-/** The full run's grids, in focus.mjs's order. */
-export const AUDIT_GRIDS = Object.keys(GRIDS);
+/** The full run's eight grids, in focus.mjs's order: the pair grids (`mx-pairs`, `lg-pairs`) are asked for by name, not audited. */
+export const AUDIT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-pairs"));
 /** The oracle sample a focus run takes (focus.mjs defaults): per stratum, and the stratum's axes. */
 const FOCUS_DEFAULTS = parseFocus(["--codes", "all"]);
 export const ORACLE_PER_STRATUM = FOCUS_DEFAULTS.runtimeDiff;
