@@ -34,7 +34,7 @@ import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
 import { axesKey, combined, mountSuffix, mountsOption, recallAxes, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
-import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { finishEntries, formatPhaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
@@ -192,11 +192,10 @@ export async function runLegal(options) {
     const chunks = [];
     for (let at = 0; at < entries.length; at += 150) chunks.push(entries.slice(at, at + 150));
     const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
-    let next = chunks.length ? prepare(chunks[0]) : null;
+    const stageOf = preparedAhead(chunks, prepare);
     for (const [number, chunk] of chunks.entries()) {
       const at = number * 150;
-      const stage = await next;
-      next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
+      const stage = await stageOf(number);
       const results = await finishEntries(stage, run);
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);

@@ -615,7 +615,13 @@ impl<I: Copy + Eq + Hash + Send> Graph<I> {
         if self.shards.iter().all(|shard| shard.pending.is_empty()) {
             return;
         }
-        let edges = each_shard(self.shards.iter_mut().collect(), |shard| {
+        let work = self
+            .shards
+            .iter()
+            .flat_map(|shard| &shard.pending)
+            .map(|(_, dropped)| 1 + dropped.len())
+            .sum();
+        let edges = each_shard(self.shards.iter_mut().collect(), work, |shard| {
             shard.pending_edges()
         });
         let mut by_read: [(Vec<u64>, Vec<u64>); TABLE_SHARDS] =
@@ -632,19 +638,35 @@ impl<I: Copy + Eq + Hash + Send> Graph<I> {
     /// Applies reverse-edge changes already split by the shard of the node
     /// read ([`GraphShard::apply_edges`]).
     fn apply_edges(&mut self, by_read: [(Vec<u64>, Vec<u64>); TABLE_SHARDS]) {
+        let work = by_read
+            .iter()
+            .map(|(lost, gained)| lost.len() + gained.len())
+            .sum();
         each_shard(
             self.shards.iter_mut().zip(by_read).collect(),
+            work,
             |(shard, (lost, gained))| shard.apply_edges(lost, gained),
         );
     }
 }
 
+/// Below this many entries (edges, nodes) across the shards, [`each_shard`]
+/// runs on the caller's thread (ADR 0563): a small program's flush is a
+/// few microseconds of work against a dozen thread starts.
+const SHARD_THREADS_MIN_WORK: usize = 4096;
+
 /// Runs `work` on each item (one per graph shard), on several analysis
-/// workers when there are; the sequential arm is the wasm32-wasip1 one.
+/// workers when there are and `size` (the entries the items hold) is worth
+/// them; the sequential arm is the wasm32-wasip1 one. Either way the
+/// results are in item order and each item touches only its own shard.
 #[allow(clippy::disallowed_methods)]
-fn each_shard<T: Send, R: Send>(items: Vec<T>, work: impl Fn(T) -> R + Sync) -> Vec<R> {
+fn each_shard<T: Send, R: Send>(
+    items: Vec<T>,
+    size: usize,
+    work: impl Fn(T) -> R + Sync,
+) -> Vec<R> {
     let workers = crate::pipeline::available_analysis_workers().min(items.len());
-    if workers <= 1 {
+    if workers <= 1 || size < SHARD_THREADS_MIN_WORK {
         return items.into_iter().map(work).collect();
     }
     let chunk = items.len().div_ceil(workers);
@@ -1181,6 +1203,20 @@ impl<S: Schema> Store<S> {
     /// Locks are taken graph, then input or record shard.
     fn synced_graph(&self) -> parking_lot::RwLockWriteGuard<'_, Graph<S::Input>> {
         let mut graph = self.graph.write().expect("memo graph lock");
+        let work = self
+            .inputs
+            .iter()
+            .zip(self.records.iter())
+            .map(|(inputs, records)| {
+                let fresh = inputs.lock().expect("memo input lock").fresh.len();
+                let records = records.lock().expect("memo record lock");
+                fresh
+                    + records
+                        .iter()
+                        .map(|(_, _, reads)| 1 + reads.len())
+                        .sum::<usize>()
+            })
+            .sum();
         // Shard by shard: an input's id and a record's query are in the
         // graph shard of their own shard.
         each_shard(
@@ -1189,6 +1225,7 @@ impl<S: Schema> Store<S> {
                 .iter_mut()
                 .zip(self.inputs.iter().zip(self.records.iter()))
                 .collect(),
+            work,
             |(shard, (inputs, records))| {
                 let fresh = std::mem::take(&mut inputs.lock().expect("memo input lock").fresh);
                 let records = std::mem::take(&mut *records.lock().expect("memo record lock"));
