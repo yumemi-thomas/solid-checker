@@ -37,3 +37,10 @@ describe("redundancy --against <mount>", () => {
     expect(twinOf("mx-a-memo-x-direct-none-cb-const", { against: "show-signal" })).toEqual({ axis: "callback:const", twin: "mx-a-memo-x-direct-none" });
   });
 });
+
+describe("redundancy --against-callback <form>", () => {
+  it("pairs a callback form's program with the same shape in the reference form", () => {
+    expect(twinOf("mx-a-memo-x-direct-none-cb-let", { againstCallback: "const" })).toEqual({ axis: "callback:let", twin: "mx-a-memo-x-direct-none-cb-const" });
+    expect(twinOf("mx-a-memo-x-direct-none-cb-const", { againstCallback: "const" })).toBeNull();
+  });
+});
