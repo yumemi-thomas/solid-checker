@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -21,6 +21,13 @@ describe("the SSR programs", () => {
     expect(TEMPLATES.filter((t) => t.kind === "misuse").length).toBeGreaterThan(0);
     expect(TEMPLATES.filter((t) => t.kind === "legal").length).toBeGreaterThan(0);
     expect(ssrPrograms({ templates: ["l-shell"] }).map((program) => program.id)).toEqual(["ssr-l-shell-header", "ssr-l-shell-status"]);
+  });
+
+  it("generates the programs the rediscovery ledger names for its defects", () => {
+    const ids = new Set(ssrPrograms().map((program) => program.id));
+    const entries = JSON.parse(readFileSync(new URL("./rediscovery.json", import.meta.url), "utf8")).filter((entry) => entry.ssrIds);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) expect(entry.ssrIds.filter((id) => !ids.has(id))).toEqual([]);
   });
 
   it("parses its options and refuses unknown ones", () => {
