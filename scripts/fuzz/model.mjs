@@ -175,6 +175,9 @@ export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"),
 export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-nested" });
 /** `createStore({ v, items: [1, 2] })`: an array an order-changing mutator (`sort`, `reverse`, `copyWithin`) does change. */
 export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-list" });
+/** `createStore<{ v: number; a?: { v: number } }>({ v })`: an optional link (`s.a.v = 7` is TS18048: the typed-away templates);
+ * `leaf`: `a?: { b?: number }`, open-work.md's form (`s.a.b = 1`). */
+export const storeLinkSignal = (name, init, leaf = false) => ({ ...signal(name, init, "probe"), kind: leaf ? "store-link-leaf" : "store-link" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 /** A `createReaction` tracker (`const track1 = createReaction(() => {})`); misuse.mjs NO_OWNER_EFFECT's `reaction-track` variants call it. */

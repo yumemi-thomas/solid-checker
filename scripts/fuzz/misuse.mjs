@@ -13,7 +13,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
   CBP_CALLS, CBP_FORMS, cbProp,
 } from "./model.mjs";
@@ -231,15 +231,20 @@ export const SPEC = {
     // (ADR 0476; Chrome-witnessed in probes/store-setter). A deferred write calls the setter, which is itself a defect in an owned
     // scope, so it runs only where the call is legal (`variantContexts`).
     gridVariants: ["nested-assign", "nested-push", "deferred-micro", "deferred-timer", "deferred-then"],
-    variantContexts: { "deferred-micro": ["handler", "timer", "then"], "deferred-timer": ["handler", "timer", "then"], "deferred-then": ["handler", "timer", "then"] },
+    variantContexts: { "deferred-micro": ["handler", "timer", "then"], "deferred-timer": ["handler", "timer", "then"], "deferred-then": ["handler", "timer", "then"],
+      "optional-link": ["body", "memo", "effect-apply", "handler"], "optional-link-leaf": ["body", "handler"], "optional-link-draft": ["handler"], "async-setter": ["handler"] },
     // Legal (legal.mjs): a write through the draft, and one through the read proxy inside its own setter, synchronously; both commit.
     legalVariants: ["draft", "in-setter"],
     // Recall only (`recallVariants`, catalogue rank 6): the other ways code mutates a store proxy, each measured on rc.17 (2026-11-01,
     // 700 runs): every one warns this code outside the store's setter (a body, a handler), and none commits. Under the setter they
     // are legal, as is a write to a copy (`recallLegalVariants`).
-    recallVariants: Object.keys(STORE_OPERATIONS),
-    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound"],
-    setup: (variant, name) => [variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    // Typed away on purpose (TYPED_VARIANTS, tsc-overlap.mjs): a write through an optional link (`s1.a.v = 7`, TS18048; `-leaf`
+    // is open-work.md's `a?: { b?: number }` form, which it records SC2003 still reports), the same through the draft in its
+    // setter, and an async setter callback (TS2345,
+    // ASYNC_STORE_SETTER's shape) whose write lands after an `await`, outside the draft.
+    recallVariants: [...Object.keys(STORE_OPERATIONS), "optional-link", "optional-link-leaf", "async-setter"],
+    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft"],
+    setup: (variant, name) => [variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
     call: (node, [sig]) => member(sig.name, (object) => {
       const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
       if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
@@ -251,6 +256,10 @@ export const SPEC = {
       if (node.variant === "slice-push") return `${object}.items.slice().push(7)`;
       if (node.variant === "draft-push") return `${sig.setter}((draft) => { draft.items.push(7); })`;
       if (node.variant === "draft-compound") return `${sig.setter}((draft) => { draft.v += 1; })`;
+      if (node.variant === "optional-link") return `${object}.a.v = 7`;
+      if (node.variant === "optional-link-leaf") return `${object}.a.b = 1`;
+      if (node.variant === "optional-link-draft") return `${sig.setter}((draft) => { draft.a.v = 7; })`;
+      if (node.variant === "async-setter") return `${sig.setter}(async (draft) => { await Promise.resolve(); draft.v = 7; })`;
       return node.variant === "delete" ? `delete ${object}.v` : node.variant === "nested-assign" ? `${object}.a.v = 7` : node.variant === "nested-push" ? `${object}.items.push(1)` : `${object}.v = 7`;
     }),
   },
@@ -260,9 +269,14 @@ export const SPEC = {
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"] }, variantSources: { settled: ["module-hook-shared"] },
+    // Typed away on purpose (TYPED_VARIANTS): an accessor used uncalled where TypeScript rejects it (uncalled-accessor's excluded
+    // positions: arithmetic, TS2362; an index, TS2538), misuse and legal alike; any violation there is tsc-overlap.mjs's.
+    recallVariants: ["uncalled-arith", "uncalled-index"], recallLegalVariants: ["uncalled-arith"],
+    bindingsFor: (variant) => (variant?.startsWith("uncalled") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"] },
+    variantSources: { settled: ["module-hook-shared"] },
     setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : variant === "settled" ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
-    call: (node, [sig]) => local(sig.name),
+    call: (node, [sig]) => (node.variant === "uncalled-arith" ? member(sig.name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sig.name, (o) => `[1, 2][${o}]`) : local(sig.name)),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
@@ -340,10 +354,15 @@ export const SPEC = {
     probe: 'import { createStore } from "solid-js";\nexport function C1() {\n  const [s1, setS1] = createStore({ v: 0 });\n  return <button onClick={() => { setS1(async (s) => { await Promise.resolve(); s.v = 7; }); }}>{s1.v}</button>;\n}\n',
     why: "the typings reject it: the setter callback is `(state) => void | T`, so an async callback is TS2345 and tsc already reports it",
   },
-  MISSING_EFFECT_FN: {
-    typedAway: true, contexts: [], bindings: [], setup: () => [], call: () => api("createEffect", "() => 1"),
-    probe: 'import { createEffect } from "solid-js";\nexport function C1() {\n  createEffect(() => 1);\n  return <div></div>;\n}\n',
-    why: "createEffect(compute, effectFn) takes two functions: the typings reject the call (TS2554 \"Expected 2-3 arguments\"), so tsc already reports it",
+  // rc.17 `createEffect` (`@solidjs/signals` dist/dev.js:2504-2518) reports and throws this code when `effectFn === undefined`, before
+  // anything else. The one-argument call is TS2554, so the rule's claim (missing-effect-function.md) is what type-checks: an apply a
+  // cast hid (`undefined as unknown as () => void`, a violation) or an `any` (uncertifiable). Recall grids only (`recallOnly`), so
+  // the random draws and the base grids keep their programs. `one-arg` and `spread-one` (TS2554, TS2556) are typed away on purpose
+  // (TYPED_VARIANTS): the rule must stay silent there, and a violation is tsc-overlap.mjs's.
+  MISSING_EFFECT_FN: { recallOnly: true,
+    contexts: [], recallContexts: ["body", "root", "handler"], variants: ["cast-fn", "cast-any"], recallVariants: ["one-arg", "spread-one"],
+    bindings: BINDINGS, setup: () => [],
+    call: (node) => api("createEffect", { "cast-any": "() => 1, undefined as any", "one-arg": "() => 1", "spread-one": "...([() => 1] as const)" }[node.variant] ?? "() => 1, undefined as unknown as () => void"),
   },
   ACTION_CALLED_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "cleanup-root-named", "memo-shared"],
     contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -359,6 +378,17 @@ export const SPEC = {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
     call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
   },
+};
+
+/**
+ * The variants typed away on purpose, per code (recall grids only): every program of one is one `tsrs` rejects, and the grid judges the
+ * checker's answer on it (tsc-overlap.mjs: a violation on the rejected code is `tsc-overlap`, never dropped). misuse.test.mjs checks
+ * that each is rejected.
+ */
+export const TYPED_VARIANTS = {
+  STORE_WRITE_OUTSIDE_SETTER: ["optional-link", "optional-link-leaf", "async-setter", "optional-link-draft"],
+  STRICT_READ_UNTRACKED: ["uncalled-arith", "uncalled-index"],
+  MISSING_EFFECT_FN: ["one-arg", "spread-one"],
 };
 
 /**

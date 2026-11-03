@@ -9,6 +9,7 @@ import { rmSync } from "node:fs";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { checkerProjectFiles, checkerResult, checkerWorkDir, materializeForChecker, runChecker } from "./checker.mjs";
 import { costOf } from "./cost.mjs";
+import { TYPED_VARIANTS } from "./misuse.mjs";
 import { hasPackages } from "./pipeline.mjs";
 
 /** A type-check error line as `typecheck.mjs` returns it: `App.tsx(12,5): error TS2345: ...`. */
@@ -24,10 +25,15 @@ export function typeErrorsIn(typed, file = "App.tsx") {
 }
 
 /**
- * Pairs a person has read and judged a different claim from the type error's: `{ ts, rule, message }` (the TS code, the rule, a
- * pattern on the TS message), each with its reason. Empty: none was needed.
+ * Pairs a person has read and judged a different claim from the type error's: `{ ts, rule, message, why }` (the TS code, the rule, a
+ * pattern on the TS message), each with its reason. The owner removes an entry to have its programs flagged again.
  */
-export const ACCEPTED = [];
+export const ACCEPTED = [
+  // misuse.mjs TYPED_VARIANTS `optional-link*` (2026-11-03, 23 of 48 body/effect-apply programs): `s1.a.v = 7` in a component body or
+  // an effect apply. TS18048 says `s1.a` may be undefined; SC1001 says the read of `s1.a` is untracked where Solid's strict-read
+  // window is open (a tracking claim, which rc.17 reports as STRICT_READ_UNTRACKED on the same read). Neither claim implies the other.
+  { ts: "TS18048", rule: "strict-read-untracked", message: /is possibly 'undefined'/, why: "the untracked read of the link, not its nullability" },
+];
 const accepted = (error, finding) => ACCEPTED.find((entry) => entry.ts === error.code && entry.rule === finding.rule && entry.message.test(error.message));
 
 /**
@@ -59,8 +65,9 @@ export function tscOverlap({ typed, checker, region = [], rules = [] }) {
  */
 export function typedAwayVerdict({ typed, checker, region, rules }) {
   const error = typed.errors?.[0];
-  if (!checker) return { outcome: "typed-away", detail: { error } };
-  if (!checker.ok) return { outcome: "typed-away", detail: { error, checker: `failed: ${String(checker.error ?? "").slice(0, 120)}` } };
+  const errors = typeErrorsIn(typed).map((each) => `${each.code}@${each.line}`);
+  if (!checker) return { outcome: "typed-away", detail: { error, errors } };
+  if (!checker.ok) return { outcome: "typed-away", detail: { error, errors, checker: `failed: ${String(checker.error ?? "").slice(0, 120)}` } };
   const found = tscOverlap({ typed, checker, region, rules });
   const listed = { errors: found.errors, ...(found.accepted.length ? { accepted: found.accepted } : {}), ...(found.elsewhere.length ? { elsewhere: found.elsewhere } : {}) };
   if (found.overlaps.length) return { outcome: "tsc-overlap", detail: { error, overlaps: found.overlaps, ...listed } };
@@ -94,3 +101,12 @@ export async function checkTypedAway(results, config, deps = {}) {
   settled.forEach((result, index) => { if (result.error) pending[index].checker = { ok: false, findings: [], error: String(result.error.message ?? result.error) }; });
   return pending.length;
 }
+
+/**
+ * A grid row the type check rejected that does not count against the run's health (typecheck.mjs `typeErrorRefusal`, the net for a
+ * broken `tsrs`): a variant typed away on purpose (misuse.mjs TYPED_VARIANTS) whose rejection is a real `TSnnnn` error in App.tsx.
+ * Any other rejected row counts, as before.
+ */
+export const typedOnPurpose = (row) => ["typed-away", "tsc-overlap"].includes(row.outcome) && Boolean(TYPED_VARIANTS[row.code]?.includes(row.variant)) && (row.detail?.errors?.length ?? 0) > 0;
+/** The rows that count toward the type-error refusal: rejected (typed-away or tsc-overlap) and not typed away on purpose. */
+export const typeRejectedRows = (rows) => rows.filter((row) => (row.outcome === "typed-away" || row.outcome === "tsc-overlap") && !typedOnPurpose(row));

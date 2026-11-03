@@ -494,7 +494,7 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list", "store-link", "store-link-leaf"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
@@ -726,6 +726,8 @@ function signalText(sig, signals, used) {
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
     case "store-list": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, items: [1, 2] });`;
     case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
+    case "store-link": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { v: number } }>({ v: ${sig.init} });`;
+    case "store-link-leaf": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { b?: number } }>({ v: ${sig.init} });`;
     default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
   }
 }
@@ -735,7 +737,7 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "memo": return [[sig.name, "SourceAccessor<number>"]];

@@ -26,7 +26,7 @@ import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
 import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
-import { checkTypedAway, typedAwayVerdict } from "./tsc-overlap.mjs";
+import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -197,7 +197,9 @@ export async function runLegal(options) {
     profile.add("evaluate", Date.now() - started);
     console.error(`legal: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
     assertFindingsMapped();
-    const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away" || row.outcome === "tsc-overlap").length, rows.length);
+    // A variant typed away on purpose (misuse.mjs TYPED_VARIANTS) is no sign of a broken type checker (tsc-overlap.mjs).
+    const rejected = typeRejectedRows(rows);
+    const refusal = typeErrorRefusal(rejected.length, rows.length - rows.filter(typedOnPurpose).length);
     if (refusal) throw new Error(refusal);
     const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
     if (broken) throw new Error(broken);

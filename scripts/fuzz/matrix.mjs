@@ -50,7 +50,7 @@ import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
-import { checkTypedAway, typedAwayVerdict } from "./tsc-overlap.mjs";
+import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "tsc-overlap"];
@@ -698,8 +698,9 @@ async function sweep(options, config, out) {
   profile.add("evaluate", Date.now() - started);
   console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
-  const typeRejected = (row) => row.outcome === "typed-away" || row.outcome === "tsc-overlap";
-  const refusal = typeErrorRefusal(rows.filter(typeRejected).length, rows.length, { first: rows.find(typeRejected)?.detail?.error });
+  // A variant typed away on purpose (misuse.mjs TYPED_VARIANTS) is no sign of a broken type checker (tsc-overlap.mjs).
+  const rejected = typeRejectedRows(rows);
+  const refusal = typeErrorRefusal(rejected.length, rows.length - rows.filter(typedOnPurpose).length, { first: rejected[0]?.detail?.error });
   if (refusal) throw new Error(refusal);
   const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
   if (broken) throw new Error(broken);
