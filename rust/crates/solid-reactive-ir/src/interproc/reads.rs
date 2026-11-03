@@ -1075,19 +1075,22 @@ fn discover_summary_graph_nodes<'a, 'c>(
         .map(|file| file.path.as_str())
         .collect::<HashSet<_>>();
     cache.retain(|path, _| current_paths.contains(path.as_str()));
-    let reusable_paths = facts
-        .files
+    // Each kept file's proof is checked on the workers.
+    let kept = &*cache;
+    let project_files = &facts.files;
+    let reusable = parallel_file_results(project_files, |file| {
+        unchanged_paths.contains(file.path.as_str())
+            && kept.get(file.path.as_str()).is_some_and(|cached| {
+                cached.proof.holds(*lookup)
+                    && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
+                    && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                        || same_compiler_semantics(&cached.compiler, &file.compiler))
+            })
+    });
+    let reusable_paths = project_files
         .iter()
-        .filter_map(|file| {
-            (unchanged_paths.contains(file.path.as_str())
-                && cache.get(file.path.as_str()).is_some_and(|cached| {
-                    cached.proof.holds(*lookup)
-                        && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
-                        && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                            || same_compiler_semantics(&cached.compiler, &file.compiler))
-                }))
-            .then_some(file.path.as_str())
-        })
+        .zip(reusable)
+        .filter_map(|(file, reusable)| reusable.then_some(file.path.as_str()))
         .collect::<HashSet<_>>();
     let discovered = parallel_file_results(&facts.files, |file| {
         (!reusable_paths.contains(file.path.as_str())).then(|| {
@@ -2065,32 +2068,35 @@ fn collect_result_reads(
             // changes). The rest are recomputed together, on the workers the
             // first build uses: an edit that moves the stage's proof reruns
             // every file, and one at a time that was most of the edit.
-            let reused = facts
-                .files
-                .iter()
-                .map(|file| {
-                    unchanged_paths.contains(file.path.as_str())
-                        && cache.files.get(file.path.as_str()).is_some_and(|cached| {
-                            (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                                || same_compiler_semantics(&cached.compiler, &file.compiler))
-                                && cached.dependencies.is_disjoint(&changed_dependencies)
-                                && cached.proof.holds(*lookup)
-                                && stage_proofs_hold
-                                    .entry(Arc::as_ptr(&cached.stage_proof) as usize)
-                                    .or_insert_with(|| {
-                                        (
-                                            Arc::clone(&cached.stage_proof),
-                                            cached.stage_proof.holds(*lookup),
-                                        )
-                                    })
-                                    .1
-                                && super::transport_reads::hold(
-                                    &cached.transport,
-                                    result_read_context,
-                                )
-                        })
-                })
-                .collect::<Vec<_>>();
+            // The kept stage proofs are few (one per build that computed a
+            // chunk): each is decided once, here. Each file's own proof is
+            // then checked on the workers; a check reads only its own entry.
+            for cached in cache.files.values() {
+                stage_proofs_hold
+                    .entry(Arc::as_ptr(&cached.stage_proof) as usize)
+                    .or_insert_with(|| {
+                        (
+                            Arc::clone(&cached.stage_proof),
+                            cached.stage_proof.holds(*lookup),
+                        )
+                    });
+            }
+            let kept = &cache.files;
+            let stage_holds = &stage_proofs_hold;
+            let changed = &changed_dependencies;
+            let reused = parallel_file_results(&facts.files, |file| {
+                unchanged_paths.contains(file.path.as_str())
+                    && kept.get(file.path.as_str()).is_some_and(|cached| {
+                        (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                            || same_compiler_semantics(&cached.compiler, &file.compiler))
+                            && cached.dependencies.is_disjoint(changed)
+                            && cached.proof.holds(*lookup)
+                            && stage_holds
+                                .get(&(Arc::as_ptr(&cached.stage_proof) as usize))
+                                .is_some_and(|(_, holds)| *holds)
+                            && super::transport_reads::hold(&cached.transport, result_read_context)
+                    })
+            });
             let stale = facts
                 .files
                 .iter()

@@ -736,9 +736,12 @@ pub(super) fn reachable_call_multiplicity_incremental(
     let mut recomputed_paths = HashSet::<String>::default();
     let mut topology_unchanged = !multiplicity_by_path.is_empty() && removed_paths.is_empty();
     let mut recomputed = Vec::new();
-    for file in &facts.files {
-        let reusable = (typescript_unchanged || typescript_delta.is_some())
-            && cache.get(file.path.as_str()).is_some_and(|cached| {
+    // Each kept file's proof is checked on the workers.
+    let kept = &*cache;
+    let project_files = &facts.files;
+    let reusable = parallel_slice_results(project_files, |file| {
+        (typescript_unchanged || typescript_delta.is_some())
+            && kept.get(file.path.as_str()).is_some_and(|cached| {
                 source_discovery_identity_matches(
                     &cached.identity,
                     file.path.as_str(),
@@ -749,7 +752,9 @@ pub(super) fn reachable_call_multiplicity_incremental(
                 ) && cached.proof.holds(lookup)
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
-            });
+            })
+    });
+    for (file, reusable) in project_files.iter().zip(reusable) {
         if reusable {
             reused_files += 1;
             continue;

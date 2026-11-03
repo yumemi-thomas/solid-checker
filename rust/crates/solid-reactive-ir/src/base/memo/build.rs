@@ -1684,6 +1684,9 @@ impl<'w> BuildWorld<'w> {
         table: TableId,
         query: super::QueryId,
     ) -> (Option<super::Revision>, bool) {
+        if let Some(changed_at) = self.store.store.clean_changed_at(table, query) {
+            return (Some(changed_at), false);
+        }
         super::derived::computing(|| {
             crate::base::reads::suppress(|| {
                 super::derived::deferring(|| self.store.store.changed_at(self, table, query))

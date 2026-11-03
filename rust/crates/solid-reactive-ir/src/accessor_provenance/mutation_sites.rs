@@ -184,11 +184,40 @@ fn resolves_to_project_function(
         })
 }
 
+/// Each file's part of [`tuple_iteration_write`], kept between builds while
+/// its source, compiler map and recorded reads hold (as the effect-apply
+/// scans are, `effect_execution::chunked`).
+#[derive(Default)]
+struct TupleWriteChunks(crate::effect_execution::Chunks<bool>);
+
+const TUPLE_WRITE_CHUNKS: crate::base::memo::derived::SolverId =
+    crate::base::memo::derived::SolverId(460);
+
+/// Each file's part of [`visible_string_code`], kept as the tuple census is.
+#[derive(Default)]
+struct StringCodeChunks(crate::effect_execution::Chunks<bool>);
+
+const STRING_CODE_CHUNKS: crate::base::memo::derived::SolverId =
+    crate::base::memo::derived::SolverId(461);
+
 pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
     if lookup.visible_string_code() {
         return true;
     }
-    lookup.files().iter().any(|file| {
+    let unique = crate::effect_execution::unique_paths(lookup);
+    lookup.with_kept_state::<TupleWriteChunks, _>(TUPLE_WRITE_CHUNKS, |chunks, kept| {
+        lookup.files().iter().any(|file| {
+            crate::effect_execution::chunked(&mut chunks.0, file, lookup, kept && unique, || {
+                tuple_iteration_write_in(file, lookup)
+            })
+        })
+    })
+}
+
+/// Whether `file` may mutate the tuple-iteration protocol
+/// ([`tuple_iteration_write`]'s question of one file).
+fn tuple_iteration_write_in(file: &FileFacts, lookup: &SemanticLookup<'_>) -> bool {
+    {
         let targets = file
             .ast
             .write_targets
@@ -311,32 +340,43 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                 })),
             }
         })
-    })
+    }
 }
 
 /// This census withholds authority: it never proves that a gateway ran or
 /// mutated a particular property. Erased signatures cannot hide visible code
 /// construction, including source slots and returned gateway values.
 pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
-    lookup.program_has_eval()
-        || lookup.files().iter().any(|file| {
-            file.ast.calls.iter().any(|call| {
-                string_code_reference(file, call.callee, lookup, 24, false)
-                    || tuple_mutation_method(file, call, lookup) == Some("stringCode")
-                    || (call.construct
-                        && lookup
-                            .standard_library_declaration(
-                                file,
-                                call,
-                                typefacts::CallKind::Construct,
-                            )
-                            .is_some_and(|declaration| {
-                                declaration
-                                    .qualified_name
-                                    .starts_with("FunctionConstructor")
-                            }))
+    if lookup.program_has_eval() {
+        return true;
+    }
+    let unique = crate::effect_execution::unique_paths(lookup);
+    lookup.with_kept_state::<StringCodeChunks, _>(STRING_CODE_CHUNKS, |chunks, kept| {
+        lookup.files().iter().any(|file| {
+            crate::effect_execution::chunked(&mut chunks.0, file, lookup, kept && unique, || {
+                string_code_in(file, lookup)
             })
         })
+    })
+}
+
+/// Whether `file` constructs code from a string ([`visible_string_code`]'s
+/// question of one file).
+fn string_code_in(file: &FileFacts, lookup: &SemanticLookup<'_>) -> bool {
+    {
+        file.ast.calls.iter().any(|call| {
+            string_code_reference(file, call.callee, lookup, 24, false)
+                || tuple_mutation_method(file, call, lookup) == Some("stringCode")
+                || (call.construct
+                    && lookup
+                        .standard_library_declaration(file, call, typefacts::CallKind::Construct)
+                        .is_some_and(|declaration| {
+                            declaration
+                                .qualified_name
+                                .starts_with("FunctionConstructor")
+                        }))
+        })
+    }
 }
 
 pub(super) fn string_code_reference(

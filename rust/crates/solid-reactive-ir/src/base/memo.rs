@@ -1247,6 +1247,18 @@ impl<S: Schema> Store<S> {
     /// The revision the entry `query` of `table` last changed in, brought up
     /// to date for a reader outside every memo; `None` when the entry is
     /// gone or its computation met a cycle.
+    /// [`Self::changed_at`] of an entry that is clean in this build, without
+    /// a world: the answer a chunk proof's check needs most often, read
+    /// before any recording or derivation guard is set up.
+    pub(crate) fn clean_changed_at(&self, table: TableId, query: QueryId) -> Option<Revision> {
+        if self.verify_reused {
+            return None;
+        }
+        self.tables
+            .table(table)
+            .clean_changed_at(query, self.revision())
+    }
+
     pub(crate) fn changed_at(
         &self,
         world: &S::World<'_>,

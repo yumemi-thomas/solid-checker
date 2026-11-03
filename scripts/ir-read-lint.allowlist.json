@@ -190,7 +190,7 @@
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
-    "facts.files": 15,
+    "facts.files": 17,
     "file_by_path": 3,
     "hashmap-iteration": 3
   },

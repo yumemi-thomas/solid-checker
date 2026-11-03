@@ -58,14 +58,14 @@ impl crate::base::memo::Canonical for ApplyExecution {}
 /// One file's answer for one of the tables below, with what it read of the
 /// program, the file's own facts included (S7g): reused while the file is
 /// unchanged and every read answers as recorded ([`crate::base::reads`]).
-struct Chunk<T> {
+pub(crate) struct Chunk<T> {
     source_hash: solid_facts::core::SourceHash,
     compiler: std::sync::Arc<solid_facts::compiler::ExecutionMap>,
     proof: crate::base::reads::ReadProof,
     value: T,
 }
 
-type Chunks<T> = HashMap<std::sync::Arc<str>, Chunk<T>>;
+pub(crate) type Chunks<T> = HashMap<std::sync::Arc<str>, Chunk<T>>;
 
 /// The calls of a file whose primitive has an apply with a defer option.
 type DeferCalls = Vec<(usize, Primitive)>;
@@ -93,7 +93,7 @@ const REGION_CHUNKS: crate::base::memo::derived::SolverId =
 /// `file`'s chunk in `chunks`, computed when absent or no longer valid. Kept
 /// only for a retained build whose paths are unique (a path held by two slots
 /// is answered fresh).
-fn chunked<T: Clone>(
+pub(crate) fn chunked<T: Clone>(
     chunks: &mut Chunks<T>,
     file: &FileFacts,
     lookup: &SemanticLookup<'_>,
@@ -133,7 +133,7 @@ fn chunked<T: Clone>(
 }
 
 /// Whether the build's files have distinct paths.
-fn unique_paths(lookup: &SemanticLookup<'_>) -> bool {
+pub(crate) fn unique_paths(lookup: &SemanticLookup<'_>) -> bool {
     let mut seen = HashSet::default();
     lookup
         .files()
