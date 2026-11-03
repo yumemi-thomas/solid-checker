@@ -6,6 +6,6 @@ Violations (SC5001): `SettledNamedForEach` (`[1].forEach(hf)` in a named `onSett
 
 Uncertifiable, never a violation: `SettledNamedEmpty` (an empty receiver), `SettledInlineEmpty` (the `onSettled` literal is around `hf` lexically, but only an empty receiver runs it: a proven violation before), `SettledProjectForEach` (a project `forEach`: no carrier; SC9012 at the call).
 
-Silent: `MemoNamedForEach` (the named function runs in a memo compute, which suspends).
+Silent for SC5001: `MemoNamedForEach` (the named function runs in a memo compute, which suspends); its SC5003 obligation (no render root traced) is the direct read's in a named compute (ADR 0585 merge).
 
 Runtime: rc.17 throws `PENDING_ASYNC_FORBIDDEN_SCOPE` at each violation (fuzzer mx-pairs PENDING_ASYNC_FORBIDDEN_SCOPE `settled`/`tracked` × `handoff-*` × `cb-shared`, 96 false cleans, all certified, before this change). Stub: `async-carrier-call-attributed`'s. `tsc --noEmit` clean against the published rc.17 typings (tsrs).

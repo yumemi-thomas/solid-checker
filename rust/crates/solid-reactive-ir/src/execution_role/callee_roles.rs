@@ -327,6 +327,20 @@ pub(super) fn semantic_role_before_awaits(
             if !(entry.tracked || entry.effect_compute) {
                 return role_arm!("callee_roles.named-callback", role);
             }
+            // A closure whose binding only inline carriers in the callback's
+            // body (or in closures they carry) take (`[1].forEach(hf)`,
+            // `` hf`x` ``) runs there, in the callback's pass, if at all:
+            // the tracked role, which ADR 0580's carried leaf owner then
+            // reads for an async row.
+            if entry.tracked
+                && !callback.r#async
+                && carried_into_callback(file, span, callback.span, lookup, 4)
+            {
+                return role_arm!(
+                    "callee_roles.named-callback-carried",
+                    ExecutionRole::TrackedJsx
+                );
+            }
             if attribute_function_within(file, callback.span, span, lookup)
                 || unrun_closure_within(file, callback.span, span, entities, symbol_names, lookup)
             {
@@ -2331,5 +2345,33 @@ fn action_step_timing_unproven(
             crate::effect_execution::at_span(file, call.span, lookup)
                 != crate::effect_execution::ApplyExecution::Proven
                 || callee_callback_timing_within(file, call.span, execution, lookup, following)
+        })
+}
+
+/// ADR 0585 (merge with ADR 0580): whether the closure around `span` runs
+/// only at inline carriers written in the named callback at `callback`'s own
+/// body, directly or through closures that run only at such carriers
+/// themselves (at most `depth` closures out).
+fn carried_into_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    callback: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if function.span == callback {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    let carriers = crate::local_access::only_inline_carriers(file, function, lookup);
+    !carriers.is_empty()
+        && carriers.iter().all(|carrier| {
+            !function.span.contains(*carrier)
+                && carried_into_callback(file, *carrier, callback, lookup, depth - 1)
         })
 }

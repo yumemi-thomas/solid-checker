@@ -4647,6 +4647,44 @@ pub(crate) fn inline_carriers(
         .collect()
 }
 
+/// ADR 0585 (merge with ADR 0580): [`inline_carriers`] when they are the only
+/// hand-offs of `function`'s binding (no copy, no project or unknown call, no
+/// host that keeps it) and it is no member's or object slot's value; empty
+/// otherwise.
+pub(crate) fn only_inline_carriers(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<solid_facts::core::Span> {
+    if function.generator
+        || function.r#async
+        || member_assigned(file, function)
+        || object_slot_value(file, function)
+    {
+        return Vec::new();
+    }
+    let named_expression =
+        function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some();
+    let name = if named_expression {
+        crate::execution_role::named_expression_binding(file, function, lookup)
+    } else {
+        crate::owners::function_binding_name(file, function)
+    };
+    let Some(name) = name else {
+        return Vec::new();
+    };
+    let mut hand_offs = Vec::new();
+    binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+    let mut carriers = Vec::new();
+    for hand_off in hand_offs {
+        match hand_off {
+            HandOff::Inline(at) => carriers.push(at),
+            _ => return Vec::new(),
+        }
+    }
+    carriers
+}
+
 /// ADR 0535: whether the named function around `span` is handed whole to
 /// project code or an unresolved call (`run(hf)`, `box.forEach(hf)`), which
 /// may run it anywhere, or written as a member's value. A host that keeps it
