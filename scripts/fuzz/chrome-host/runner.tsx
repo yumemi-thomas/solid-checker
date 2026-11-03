@@ -64,11 +64,12 @@ async function runCase() {
   const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];
-  // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED is reported or the page has an uncaught error,
-  // a plan step whose element is missing ends on the marker, and the run is a partial one.
+  // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED or an error-severity diagnostic (thrown at its
+  // site, perhaps caught by an Errored boundary that never renders its children again) is reported or the page has an uncaught
+  // error, a plan step whose element is missing ends on the marker, and the run is a partial one.
   const uncaught = ['window-error'];
   const missingStep = (selector: string) => {
-    if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
+    if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED' || d.severity === 'error') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
   };
   let hits: Record<string, number> | null = null, order: number[] = [], hitsDom: string | null = null, quiescent: boolean | null = null;
   // The oracle's stack depths: 41 frames for a page error (its halt module, scripts/runtime-oracle.mjs) and for a diagnostic
@@ -97,7 +98,7 @@ async function runCase() {
   };
   const stop = OBSERVE!.diagnostics.subscribe((event: any) => {
     diagnostics.push({ code: event.code, message: event.message ?? null, loc: event.loc ?? null, siteKind: event.siteKind ?? null,
-      phase, stack: diagnosticStack(event.code) });
+      severity: event.severity ?? null, phase, stack: diagnosticStack(event.code) });
   });
   try {
     const plan = await (await fetch(`/cases/${id}/sites.json`)).json();

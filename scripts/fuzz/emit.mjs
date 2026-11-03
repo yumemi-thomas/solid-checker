@@ -24,7 +24,7 @@ const clickSelector = (id) => `[data-act="${id}"]`;
  * The scenario steps for a plan: its edits (`{ selector, text }`: the user types into an input, before any click), clicks in order,
  * then one read per distinct witness selector. An edit is not `haltable` (a halt marker cannot be typed into: a halted run fails there).
  * `hits` appends two reads of the hit readout last (their checkpoints are the counters; equal texts show the page was still).
- * Every click and witness read is `haltable`: after REACTIVITY_HALTED a missing element resolves to the oracle's halt marker
+ * Every click and witness read is `haltable`: after REACTIVITY_HALTED, an error-severity diagnostic or an uncaught error a missing element resolves to the oracle's halt marker
  * (`haltMarker` in oracle.json) instead of holding the run for the scenario timeout. chrome.mjs reads such a checkpoint as absent
  * and the run as cut short (a partial run).
  */
