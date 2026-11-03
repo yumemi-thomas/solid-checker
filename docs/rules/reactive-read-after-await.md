@@ -39,8 +39,12 @@ there, and the reads in it are then reported with the same two proofs:
   `try` around the await is enough). An `async` callback or IIFE runs its
   prefix the same way: the code up to its first own suspension (its operand
   included) is on the caller's stack, and its tail belongs to the
-  promise-flight walk. An empty receiver never invokes its
-  callback: the read is reported as where the callback would run. A `sort`
+  promise-flight walk. The carrier must provably run the callback (ADR
+  0566, ADR 0563's predicate): an array literal receiver with an element
+  (`[1].forEach(cb)`), `Array.from` of one, `.call`/`.apply`, `Reflect.apply`,
+  the `Promise` executor and a tagged template do; a receiver that may be
+  empty (an awaited or prop array, `[]`, a `Set` or `Map`, a `NodeList`) may
+  run it zero times, so a read in it is **uncertifiable**. A `sort`
   comparator, a `reduce`/`reduceRight` reducer with no initial value (not
   called under two elements) and a `replace`/`replaceAll` replacer are the
   exception: whether they run depends on the contents or on a match, so a read
@@ -148,8 +152,9 @@ Each of these keeps it from applying:
 **The feasible-path premise.** A read is reported where the code is written to
 run it, not where one input makes it dead: a `catch` that only an await
 rejecting would reach (`try { await rejecting(); return value() } catch {}`), a
-branch on a condition the analysis cannot decide (`if (tick() > 100)`), an empty
-receiver of `map`. The runtime stays silent on a run that does not take the
+branch on a condition the analysis cannot decide (`if (tick() > 100)`). A
+callback a carrier may run zero times is not on such a path: it is an
+obligation (ADR 0566). The runtime stays silent on a run that does not take the
 path; the rule does not.
 
 **A source already tracked is exempt** (ADR 0195). A read after the await of
@@ -273,7 +278,8 @@ Examples of **incorrect** code for this rule:
 const profile = createMemo(async () => {
   const posts = await fetchPosts();
   // Tracking ended at the await: changing userId() never re-runs this memo.
-  return posts.filter((post) => post.author === userId());
+  const id = userId();
+  return posts.filter((post) => post.author === id);
 });
 ```
 

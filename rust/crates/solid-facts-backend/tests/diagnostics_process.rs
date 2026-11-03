@@ -1565,8 +1565,10 @@ fn solid2_precision_corrections_are_end_to_end() {
     };
 
     // Each count pins one side of a proof. SC1002: the accessor call and the
-    // store member read inside the exact `Array#filter` callback, and the
-    // read in `PromiseCallbackAfterAwait` (ADR 0340), which is uncertifiable:
+    // store member read inside the exact `Array#filter` callback, uncertifiable
+    // since ADR 0566 (the awaited array may be empty, so `filter` may never
+    // call it), and the read in `PromiseCallbackAfterAwait` (ADR 0340), which is
+    // uncertifiable:
     // the handler of `Promise.resolve(..).then(..)` returned, not awaited, by
     // the async memo is queued before the memo adopts the promise, and the
     // rc.13 runtime attributes no read to a handler that has no frame of the
@@ -1696,6 +1698,16 @@ fn solid2_precision_corrections_are_end_to_end() {
         2,
         "the wrapper-built and unresolved callbacks are obligations, never silent (ADR 0565)"
     );
+    // ADR 0566: the reads in the `filter` callbacks over the awaited array.
+    for filtered in ["post.includes(id())", "post === selection.id"] {
+        let at = start_of(filtered);
+        assert!(
+            after_await_at("uncertifiable")
+                .iter()
+                .any(|start| *start >= at && *start < at + u64::try_from(filtered.len()).unwrap()),
+            "{filtered:?} is in a callback an awaited array may never run: an obligation"
+        );
+    }
 
     // A returned call is still classified from its result, not from its
     // callable callee — the ownership half of that work is what survives the

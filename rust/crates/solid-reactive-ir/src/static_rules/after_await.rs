@@ -1305,6 +1305,20 @@ impl<'f, 'a> Reach<'f, 'a> {
                 {
                     self.report_conditional_region(draft, walk, file, callback, depth);
                 }
+                // ADR 0566 (ADR 0563's predicate): an inline row is a timing
+                // claim, not a count. Where the carrier may run the callback
+                // zero times (`[].forEach(hf)`, `props.xs.forEach(hf)`, a
+                // `Set`), a read in it is an obligation, never a violation.
+                Some((callback_file, callback))
+                    if !callback.generator
+                        && !crate::carrier_runs::carrier_provably_runs(
+                            file,
+                            call.span,
+                            ctx.semantic_lookup,
+                        ) =>
+                {
+                    self.report_conditional_region(draft, walk, callback_file, callback, depth);
+                }
                 Some((file, callback)) if !callback.generator => {
                     self.report_prefix(draft, walk, file, callback, depth);
                 }
@@ -1988,9 +2002,13 @@ impl<'f, 'a> Reach<'f, 'a> {
         let Some(argument) = mapped.arguments.first().filter(|argument| !argument.spread) else {
             return;
         };
+        // ADR 0566: a receiver that may be empty runs no helper, so the members
+        // `map` adds are conditional (their reads are obligations).
+        let unproven_run =
+            !crate::carrier_runs::carrier_provably_runs(file, mapped.span, ctx.semantic_lookup);
         if let Some(callback) = callback_argument_literal(file, argument.span) {
             if callback.r#async && !callback.generator {
-                self.enqueue(walk, queue, file, callback, false);
+                self.enqueue(walk, queue, file, callback, unproven_run);
             }
         } else if let Some((helper_file, helper)) = ctx.semantic_lookup.function_called_at(
             file.path.as_str(),
@@ -2002,7 +2020,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .semantic_lookup
                 .function_value_is_current(helper_file, helper)
         {
-            self.enqueue(walk, queue, helper_file, helper, false);
+            self.enqueue(walk, queue, helper_file, helper, unproven_run);
         }
     }
 
