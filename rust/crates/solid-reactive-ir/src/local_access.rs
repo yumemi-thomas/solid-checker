@@ -4839,6 +4839,38 @@ fn binding_hand_offs(
     lookup: &SemanticLookup<'_>,
     out: &mut Vec<HandOff>,
 ) {
+    let mut placed = Vec::new();
+    binding_reference_hand_offs(file, name, lookup, &mut placed);
+    out.extend(placed.into_iter().map(|(_, hand_off)| hand_off));
+}
+
+/// ADR 0565: the hand-off of every same-file reference of `function`'s
+/// binding (a named function expression's `const`, any other function's own
+/// binding), with the reference's span. `None` when it has no binding.
+pub(crate) fn function_reference_hand_offs(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<(solid_facts::core::Span, HandOff)>> {
+    let named_expression =
+        function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some();
+    let name = if named_expression {
+        crate::execution_role::named_expression_binding(file, function, lookup)
+    } else {
+        crate::owners::function_binding_name(file, function)
+    }?;
+    let mut placed = Vec::new();
+    binding_reference_hand_offs(file, name.span, lookup, &mut placed);
+    Some(placed)
+}
+
+/// [`binding_hand_offs`] with each reference's span.
+fn binding_reference_hand_offs(
+    file: &solid_facts::FileFacts,
+    name: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+    out: &mut Vec<(solid_facts::core::Span, HandOff)>,
+) {
     use solid_facts::core::Span;
     let path = file.path.as_str();
     let references = lookup
@@ -4868,10 +4900,10 @@ fn binding_hand_offs(
                 .as_ref()
                 .is_some_and(|identifier| identifier.span == at)
         }) {
-            out.push(HandOff::Unfollowed);
+            out.push((at, HandOff::Unfollowed));
             continue;
         }
-        out.push(hand_off_at(file, at, lookup));
+        out.push((at, hand_off_at(file, at, lookup)));
     }
 }
 

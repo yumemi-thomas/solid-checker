@@ -114,6 +114,16 @@ there, and the reads in it are then reported with the same two proofs:
   the literal's function. It is followed as the named helpers above are (ADR
   0351).
 
+**A hand-off the walk does not follow is an obligation (ADR 0565).** A
+function the walk above does not place, handed whole to a project or
+unresolved call (`run(hf)`), copied, or written as a member's value or an
+object literal's slot (`ho.m = () => …`, `{ m: hf }`), may run on the
+continuation's stack where that code calls it: its reads are
+**uncertifiable** when it is written after the await, handed on after it, or
+(a member's value or a slot) outlives a later await. A function the
+computation returns, schedules on a fresh stack or never mentions stays
+silent.
+
 Each of these keeps it from applying:
 
 - a method that does not resolve to the built-in or standard declaration: a
