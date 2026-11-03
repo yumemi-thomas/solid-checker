@@ -156,6 +156,8 @@ const OWNER_LIFETIME = ["root-named", "root-method", "root-hook", "root-stored",
 // action call there throws.
 const FALSE_CLEAN_CONTEXTS = ["comp-slot", "comp-rendered"];
 const ASYNC_CONTROL = ["async-loop", "async-for-await", "async-finally"];
+/** A handler's async function with the site past a possible await (ADR 0610). */
+const HANDLER_ASYNC = ["handler-async-loop", "handler-async-for-await", "handler-async-finally"];
 /** The contexts whose site sits in a callback handed to a primitive: the callback-form axis can pass it by name. */
 export const CALLBACK_CONTEXTS = ["memo", "effect-compute", "effect-apply", "render-compute", "render-apply", "tracked", "settled", "untrack", "root",
   "owner-null", "timer", "then", "micro", "memo-async", "effect-async", "owner-bound", "owner-create", "tracked-rerun", "effect-apply-rerun",
@@ -245,7 +247,10 @@ const pendingRead = (node, [sig]) => (node.variant === "latest" ? api("latest", 
 const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }") };
 
 export const SPEC = {
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
+  // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
+  // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
+    recallLegal: [...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
     call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
@@ -952,9 +957,15 @@ function inContext(context, stmts, kit) {
 function recallContext(context, stmts, kit) {
   const awaited = { loop: "loop-await", "for-await": "for-await", finally: "finally-await" };
   const trigger = () => signal(kit.name("t"), 1, "src");
-  const after = /^(memo-async|effect-async|async)-(loop|for-await|finally)$/.exec(context);
+  const after = /^(memo-async|effect-async|async|handler-async)-(loop|for-await|finally)$/.exec(context);
   if (after) {
     const body = [ctl(awaited[after[2]], stmts)];
+    // A handler's async function: the site may follow the await (a `finally`, a loop's second pass), so it runs on the handler's
+    // stack or on a later task, with no owner either way (ADR 0610).
+    if (after[1] === "handler-async") {
+      const f = kit.name("f");
+      return { body: [decl(f, fn(body, { async: true }))], view: [button(kit.name("b"), [expr(call(ref(f)))])] };
+    }
     if (after[1] === "memo-async") {
       const m = kit.name("m");
       return { body: [decl(m, prim("memo", fn([...body, ret(num(1))], { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };

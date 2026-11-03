@@ -6,26 +6,6 @@
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
-      "start": 664,
-      "end": 730,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
-      "start": 754,
-      "end": 770,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package-listeners.ts",
       "start": 486,
       "end": 503,

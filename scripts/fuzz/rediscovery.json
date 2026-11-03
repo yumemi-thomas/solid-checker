@@ -2239,5 +2239,31 @@
    "ssr-m-nested-status"
   ],
   "rediscovered": "locally: the build before ADR 0596 gives both false-clean, the fix build agree (ssr run 2026-11-03: 10 agree, 0 false clean)"
+ },
+ {
+  "finding": "no-write-in-pure-computation (SC2001) proved a violation for a write in a function run in place (an IIFE, a helper calling its callback, a named closure's one call) past an async memo or effect compute's await: the lexical role was the compute's, and rc.17 runs the write on the later task with no owner (ADR 0611)",
+  "found": "the SC2001 async legal cells (ADR 0610) on main's checker: lg-recall 16,528 false positives in memo-async* and effect-async* (layers iife, helper, closure+helper, module-helper, closure, module imports, depth-15)",
+  "fixed": "ADR 0611",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-closure-cb-const",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-closure-cb-const",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-closure-cb-const",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-closure-cb-const"
+  ],
+  "rediscovered": "locally: fuzz-focus CODES=REACTIVE_WRITE_IN_OWNED_SCOPE on the build before ADR 0611 gives 16,528 false-positive in lg-recall; the fix build none"
  }
 ]

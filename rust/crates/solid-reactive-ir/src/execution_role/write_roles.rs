@@ -2045,15 +2045,36 @@ pub(super) fn write_role_walk<'f>(
             ExecutionRole::Unreported
         );
     }
+    // ADR 0611: the same past an await of a function the write's own function
+    // runs in place inside (an IIFE, a helper calling its callback, a named
+    // closure's one call, an inline standard-library callback, each on its
+    // caller's stack and owner): `await p; (() => set(1))()` in an async memo
+    // compute writes on the later task too, though the lexical role is the
+    // compute's.
+    let layered_suspension = suspension_through_in_place_layers(file, span, lookup);
+    if layered_suspension == Some(true) {
+        return role_arm!(
+            "write_roles.write_role_walk.unreported-layered",
+            ExecutionRole::Unreported
+        );
+    }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`
-    // inside a branch), so the answer is no claim rather than a legal write.
-    // An implicit suspension (`for await`) is the same, and is not proven to
-    // run at all; its callers' roles do not describe the code after it.
-    if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
-        && may_follow_suspension(file, span)
-    {
+    // inside a branch, a `catch` or `finally` whose `try` may throw before it
+    // suspends), the write runs either on the stack its function was entered
+    // on, in the role its entries give it, or past the await with no owner
+    // (Solid's write guard reads the ambient owner, which every entry point
+    // restores before a promise job can run). A rejecting role is no claim
+    // then; a permissive one is the write's on both paths, so the walk below
+    // places it (`suspendable`). An implicit suspension (`for await`) is the
+    // same, and is not proven to run at all.
+    // ADR 0611: a layer run in place past a possible await of its caller's
+    // function is the same; and whatever role a position names (a named
+    // tracked compute, an effect compute, the entries), only a permissive one
+    // holds past a possible suspension.
+    let suspendable = may_follow_suspension(file, span) || layered_suspension == Some(false);
+    if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
     }
     // A site in a parameter list (a default value, a pattern, a function written
@@ -2088,6 +2109,7 @@ pub(super) fn write_role_walk<'f>(
             visiting,
         ) {
             Some(HandleRole::Decided(role)) => {
+                let role = past_possible_suspension(role, suspendable, unknown);
                 if role == ExecutionRole::Unknown {
                     *decided = true;
                 }
@@ -2107,6 +2129,9 @@ pub(super) fn write_role_walk<'f>(
     // the effect owns, as the same compute written inline does: a write it runs
     // in place is rejected there, whatever the function's other entries do.
     if !direct.reports_disallowed_write() && named_effect_compute_runs(file, span, lookup) {
+        if suspendable {
+            return role_arm!("write_roles.walk-suspended-compute", unknown);
+        }
         return role_arm!(
             "write_roles.write_role_walk.tracked-jsx",
             ExecutionRole::TrackedJsx
@@ -2136,7 +2161,11 @@ pub(super) fn write_role_walk<'f>(
     let possible_render = direct == ExecutionRole::UntrackedRendering
         && innermost_identity_is_possible(file, span, lookup);
     if direct != ExecutionRole::Unknown && named_callback.is_none() && !possible_render {
-        return role_arm!("write_roles.walk-direct-1", direct);
+        // Past a possible suspension only a permissive role holds on both paths.
+        return role_arm!(
+            "write_roles.walk-direct-1",
+            past_possible_suspension(direct, suspendable, unknown)
+        );
     }
     let Some(innermost) = innermost else {
         return role_arm!("write_roles.walk-unknown-6", unknown);
@@ -2189,7 +2218,7 @@ pub(super) fn write_role_walk<'f>(
             .get(function.span)
             .tracked_owned
     {
-        return if current {
+        return if current && !suspendable {
             role_arm!("write_roles.named-tracked-owned", ExecutionRole::TrackedJsx)
         } else {
             unknown
@@ -2243,6 +2272,7 @@ pub(super) fn write_role_walk<'f>(
         current,
         possible_render,
         unknown,
+        suspendable,
     };
     if let Some(plan) = plan {
         *plan = Some(loop_plan);
@@ -2279,6 +2309,10 @@ pub(super) struct LoopPlan<'f> {
     /// What an unplaced walk answers: `Unknown`, or `Unreported` when the
     /// position proved a non-reporting mix.
     pub(super) unknown: ExecutionRole,
+    /// The write may follow a suspension in its own function: its entries'
+    /// role holds only on the path that does not suspend, so only a
+    /// permissive one is the write's ([`past_possible_suspension`]).
+    pub(super) suspendable: bool,
 }
 
 impl LoopPlan<'_> {
@@ -2291,6 +2325,24 @@ impl LoopPlan<'_> {
             && self.current
             && !self.possible_render
             && self.unknown == ExecutionRole::Unknown
+            && !self.suspendable
+    }
+}
+
+/// The role of a write that may follow a suspension in its own function
+/// (`suspendable`), given `role`, the role on the path that does not suspend:
+/// the other path runs on a later task with no owner, where the write is
+/// legal. So a permissive role holds on both paths, and a rejecting or
+/// unplaced one proves nothing (`unknown`).
+pub(super) fn past_possible_suspension(
+    role: ExecutionRole,
+    suspendable: bool,
+    unknown: ExecutionRole,
+) -> ExecutionRole {
+    if suspendable && (role == ExecutionRole::Unknown || role.reports_disallowed_write()) {
+        unknown
+    } else {
+        role
     }
 }
 
@@ -2327,6 +2379,7 @@ pub(super) fn caller_loop(
         current,
         possible_render,
         unknown,
+        suspendable,
     } = plan;
     let key = (file.path.to_string(), function.span);
     if !visit_insert(visiting, key.clone()) {
@@ -2357,7 +2410,13 @@ pub(super) fn caller_loop(
     });
     visiting.remove(&key);
     let (imperative, unplaced) = match folded {
-        CallerFold::Rejected(role) => return if nested || !current { unknown } else { role },
+        CallerFold::Rejected(role) => {
+            return if nested || !current || suspendable {
+                unknown
+            } else {
+                role
+            };
+        }
         CallerFold::Entries {
             imperative,
             unplaced,
@@ -2373,7 +2432,7 @@ pub(super) fn caller_loop(
     // function's entries: a use the walk did not follow (handed to a child
     // component, stored, aliased, exported) may run it in an owned scope.
     if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
-        role
+        past_possible_suspension(role, suspendable, unknown)
     } else {
         unknown
     }
@@ -2654,6 +2713,37 @@ pub(crate) enum LayerRun {
     FreshStack,
     /// Anything else: stored, handed on, or run by a call this does not know.
     Elsewhere,
+}
+
+/// ADR 0611: whether code in `span`'s function runs past a suspension of an
+/// enclosing function it runs in place inside. Climbs the layers
+/// [`layer_run`] proves run in place (on their call's stack and owner) and
+/// asks, at each layer's call, whether that call follows an await of its own
+/// async function: `Some(true)` past one on every path, `Some(false)` past one
+/// on some path, `None` when no such call is found before a layer that does
+/// not run in place.
+pub(super) fn suspension_through_in_place_layers(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let mut layer = crate::owners::containing_ast_function(&file.ast, span)?;
+    let mut crossed = HashSet::default();
+    loop {
+        if layer.generator || !crossed.insert(layer.span) {
+            return None;
+        }
+        let LayerRun::InPlace(call) = layer_run(file, layer, lookup) else {
+            return None;
+        };
+        if follows_dominating_await(file, call) || follows_try_head_await(file, call, lookup) {
+            return Some(true);
+        }
+        if may_follow_suspension(file, call) {
+            return Some(false);
+        }
+        layer = crate::owners::owning_function(&file.ast, call)?;
+    }
 }
 
 pub(crate) fn layer_run(

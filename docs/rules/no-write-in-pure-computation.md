@@ -182,7 +182,15 @@ none it is **uncertifiable**. One proof makes it legal (ADR 0333): it runs
 after an await that dominates it (later in the await's block, a `try` block
 included; its `catch` or `finally` only when the block starts by awaiting a
 call of an async function with inert arguments; not in a generator, JSX or
-an instance field). That covers a literal handed to a function that
+an instance field). A write that only may follow an await in its own function
+(a `catch` or `finally` past another `try` head, code after an await in a
+branch) runs on the stack its function was entered on or on a later task with
+no owner: it takes its function's entries' role when that role is permissive
+(a handler's async function), and stays uncertifiable when an entry rejects
+(ADR 0610, `fixtures/reactive-ir/write-past-possible-await`). The same holds
+through functions run in place (an IIFE, a helper calling its callback, a named
+closure's one call) whose call follows the await, not through a primitive's
+callback such as a `createRoot` body (ADR 0611). That covers a literal handed to a function that
 stores it (`later(() => setCount(1))` with a timer calling it), a closure a
 callback returns (`keep(() => () => setCount(1))`), and a literal handed to a
 package export whose behavior is unavailable from source. The write may throw, if the
