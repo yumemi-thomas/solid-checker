@@ -329,11 +329,7 @@ pub(super) fn returned_source_through<'a>(
                 .iter()
                 .any(|member| file.ast.peel_ts_sugar_span(member.object) == at)
                 || (returned.kind == "accessor"
-                    && file
-                        .ast
-                        .calls
-                        .iter()
-                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == at)))
+                    && file.ast.calls_with_peeled_callee(at).next().is_some()))
         {
             return None;
         }

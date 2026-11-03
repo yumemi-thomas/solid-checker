@@ -1251,9 +1251,9 @@ pub(super) fn object_literal_only_dispatched(
                     .is_err()
                 && file
                     .ast
-                    .calls
-                    .iter()
-                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+                    .calls_with_peeled_callee(member.span)
+                    .next()
+                    .is_some()
         })
     };
     let closed_argument = |value: Span| {

@@ -137,9 +137,9 @@ fn stored_function(
             })
         && !file
             .ast
-            .calls
-            .iter()
-            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+            .calls_with_peeled_callee(literal.span)
+            .next()
+            .is_some()
         && control_flow_execution_role(file, literal.body, entities, symbol_names, lookup.dialect)
             .is_none()
 }
@@ -903,9 +903,7 @@ pub(crate) fn nested_literal_runs_during_body(
             // render (`control_flow_execution_role` proved that role).
             if let Some(call) = file
                 .ast
-                .calls
-                .iter()
-                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+                .calls_with_peeled_callee(literal.span)
                 .min_by_key(|call| call.span.end - call.span.start)
             {
                 span = call.span;

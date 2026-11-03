@@ -447,9 +447,9 @@ fn getter_is_only_called_or_decided(
     references.into_iter().all(|reference| {
         if file
             .ast
-            .calls
-            .iter()
-            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == reference)
+            .calls_with_peeled_callee(reference)
+            .next()
+            .is_some()
         {
             return true;
         }

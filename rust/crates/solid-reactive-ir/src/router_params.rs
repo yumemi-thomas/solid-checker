@@ -772,9 +772,8 @@ fn safe_action_use(file: &FileFacts, locals: &ActionLocals, reference: Span) -> 
                 locals.use_action.contains(&callee) || locals.readers.contains(&callee)
             })
     }) || ast
-        .calls
-        .iter()
-        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == reference)
+        .calls_with_peeled_callee(reference)
+        .any(|call| !call.construct)
         || ast.jsx_elements.iter().any(|element| {
             element.member_object.is_none()
                 && text(file, element.name.span)

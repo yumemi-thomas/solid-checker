@@ -2458,10 +2458,7 @@ fn links_proven_wrappable(
         Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
         _ => return false,
     };
-    let called = ast
-        .calls
-        .iter()
-        .any(|call| ast.peel_ts_sugar_span(call.callee) == member);
+    let called = ast.calls_with_peeled_callee(member).next().is_some();
     if called
         && !file
             .source_text(*last)
@@ -2561,9 +2558,8 @@ fn consumed_by_alias_slots(
         return !uses.is_empty()
             && uses.iter().all(|&callee| {
                 let Some(call) = ast
-                    .calls
-                    .iter()
-                    .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == callee)
+                    .calls_with_peeled_callee(callee)
+                    .find(|call| !call.construct)
                 else {
                     return false;
                 };
@@ -2862,9 +2858,8 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
         return holds_object(resolve_literal_path(file, initial, prefix));
     }
     let called = ast
-        .calls
-        .iter()
-        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == top);
+        .calls_with_peeled_callee(top)
+        .any(|call| !call.construct);
     if called {
         return file
             .source_text(*last)

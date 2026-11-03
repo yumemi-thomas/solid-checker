@@ -208,13 +208,15 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                 if lookup
                     .standard_library_declaration(file, call, typefacts::CallKind::Call)
                     .is_none()
-                    && file.ast.members.iter().any(|member| {
-                        member.span == file.ast.peel_ts_sugar_span(call.callee)
-                            && matches!(
+                    && file
+                        .ast
+                        .members_at(file.ast.peel_ts_sugar_span(call.callee))
+                        .any(|member| {
+                            matches!(
                                 member_key(file, member),
                                 None | Some("call" | "apply" | "bind")
                             )
-                    })
+                        })
                     && !iteration_source_function(file, call.callee, lookup)
                 {
                     return true;

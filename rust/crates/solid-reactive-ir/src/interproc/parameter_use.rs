@@ -230,10 +230,7 @@ pub(super) fn local_dispatch_suffixes(
 /// one of those.
 pub(super) fn value_may_be_invoked(file: &solid_facts::FileFacts, span: Span) -> bool {
     let callee_or_argument = |span: Span| {
-        file.ast
-            .calls
-            .iter()
-            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == span)
+        file.ast.calls_with_peeled_callee(span).next().is_some()
             || file.ast.arguments_containing(span).any(|(call, index)| {
                 file.ast.peel_ts_sugar_span(call.arguments[index].span) == span
             })

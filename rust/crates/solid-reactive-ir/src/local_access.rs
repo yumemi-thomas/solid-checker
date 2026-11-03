@@ -867,17 +867,25 @@ impl LocalAccessContext<'_, '_> {
             cache
                 .files
                 .retain(|path, _| current_paths.contains(path.as_str()));
+            // Each kept chunk's proof is checked on the workers: a check
+            // reads only its own entry and this build's lookup, and one at a
+            // time it was most of the stage on a large project.
+            let kept = &cache.files;
+            let files = &self.facts.files;
+            let reusable = parallel_slice_results(files, |file| {
+                exact_typescript_delta
+                    && kept.get(file.path.as_str()).is_some_and(|cached| {
+                        self.cached_matches(
+                            file,
+                            cached,
+                            unchanged_paths.contains(file.path.as_str()),
+                            &changed_dependencies,
+                        )
+                    })
+            });
             let mut recompute = Vec::new();
-            for file in &self.facts.files {
-                if let Some(cached) = cache.files.get(file.path.as_str())
-                    && exact_typescript_delta
-                    && self.cached_matches(
-                        file,
-                        cached,
-                        unchanged_paths.contains(file.path.as_str()),
-                        &changed_dependencies,
-                    )
-                {
+            for (file, reusable) in files.iter().zip(reusable) {
+                if reusable {
                     reused_files += 1;
                     continue;
                 }
@@ -3686,9 +3694,9 @@ impl LocalAccessContext<'_, '_> {
             && property == Some("ref")
             && file
                 .ast
-                .calls
-                .iter()
-                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+                .calls_with_peeled_callee(member.span)
+                .next()
+                .is_some()
         {
             return;
         }
@@ -5010,11 +5018,9 @@ pub(crate) fn hand_off_at(
     use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
     let ast = &file.ast;
     let call_with_callee = |callee: solid_facts::core::Span| {
-        lookup.call_by_callee(file, callee).or_else(|| {
-            ast.calls
-                .iter()
-                .find(|call| ast.peel_ts_sugar_span(call.callee) == callee)
-        })
+        lookup
+            .call_by_callee(file, callee)
+            .or_else(|| ast.calls_with_peeled_callee(callee).next())
     };
     if call_with_callee(at).is_some_and(|call| call.direct_callee) {
         return HandOff::Call;

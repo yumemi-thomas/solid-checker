@@ -1794,6 +1794,15 @@ impl AstFacts {
         Self::at_span(&self.members, span, |fact| fact.span)
     }
 
+    /// Every member expression at exactly `span`, in `members` order: what
+    /// `members.iter().filter(|member| member.span == span)` yields.
+    pub fn members_at(&self, span: Span) -> impl Iterator<Item = &MemberFact> + '_ {
+        let first = self.members.partition_point(|fact| fact.span < span);
+        self.members[first..]
+            .iter()
+            .take_while(move |fact| fact.span == span)
+    }
+
     /// The links of the member chain at `member` past its root: every object
     /// below `member` that is itself a member, outermost first, each as
     /// written (`store.a.b` and `store.a` in `store.a.b.c`; `store.n!` in
