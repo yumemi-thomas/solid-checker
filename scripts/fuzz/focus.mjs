@@ -76,7 +76,7 @@ export const GRIDS = {
 /** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall ones. */
 export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall"));
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
-export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal"];
+export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 
 /** One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. */
 export function readGrid(out) {

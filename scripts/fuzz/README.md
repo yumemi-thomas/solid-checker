@@ -184,7 +184,8 @@ The fuzzer above hunts a checker that is too loud (false positives) or silent wh
 
 | column | meaning |
 | --- | --- |
-| typed-away | tsc rejects the program; not evidence |
+| typed-away | tsc rejects the program; not evidence of recall |
+| tsc-overlap | tsc rejects the program and a checker violation covers the rejected code (`tsc-overlap.mjs`): a candidate breach of invariant 1, never dropped |
 | harness | the checker or runtime run failed; not evidence |
 | not-fired | the program type-checks and the runtime did not report the code at the site: a generator problem |
 | agree | runtime-confirmed, and a violation of a rule that claims the code covers the site |
@@ -192,7 +193,9 @@ The fuzzer above hunts a checker that is too loud (false positives) or silent wh
 | recall-gap | runtime-confirmed, and only an uncertifiable finding covers the site |
 | false-clean | runtime-confirmed, and no finding covers the site |
 
-Only runtime-confirmed programs (agree + wrong-rule + recall-gap + false-clean) count in the checker columns. The matrix measures the `defect-claimed` codes only: an advisory code has no cells, and a baseline cell of a code that has become advisory is reported as `retired` by the gate, never as a regression (`ASYNC_OUTSIDE_LOADING_BOUNDARY`'s three cells, 60 programs).
+Only runtime-confirmed programs (agree + wrong-rule + recall-gap + false-clean) count in the checker columns.
+
+**Typed-away programs and tsc overlap.** The grids (`matrix.mjs`, `legal.mjs`) run the checker on a program `tsrs` rejects too, and never its runtime (`checkTypedAway` after each chunk's evaluation; the Rust executor stops at a failed type check, so the checker runs in a second call, as for a type-check spot check; outside pipeline.mjs, so no runtime-cache key moves). A violation of any rule whose line range holds a line tsrs rejected in App.tsx, or a violation of a rule claiming the cell's code anywhere when the rejected line is the site's own, makes the program `tsc-overlap` in either grid (`typedAwayVerdict`): invariant 1 says the checker stays silent on what tsc reports, so the pair (the TS error, the violation) is surfaced, in `focus.mjs` PROBLEMS, the smoke ranks and the gate (entering it fails, from a typed-away baseline too). It is a candidate, not a verdict: "a different claim about the same code (ownership, timing) is allowed", so the owner either deletes the rule's case (recorded in fixtures/tsc-oracle) or records the pair in `ACCEPTED` with its reason. A violation elsewhere in a typed-away file is listed (`detail.elsewhere`) and not judged. The finished grids of the 644bd1a81 run held no typed-away program, so the change costs a checker run per typed-away program and nothing else; the typed-away templates below are what it judges. The matrix measures the `defect-claimed` codes only: an advisory code has no cells, and a baseline cell of a code that has become advisory is reported as `retired` by the gate, never as a regression (`ASYNC_OUTSIDE_LOADING_BOUNDARY`'s three cells, 60 programs).
 
 ```sh
 node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 --confirm-with-chrome --shrink --checker-label <commit>
@@ -232,6 +235,7 @@ The gate compares the baseline's programs: a program only the current run has (a
 ## The legal-context matrix
 
 `node scripts/fuzz/legal.mjs --out <fresh> [--per-cell N | --grid] [--confirm-with-chrome]` is the misuse matrix's twin for false positives. Each template's `legal` contexts (misuse.mjs) place the same call where it is correct Solid: a write in a handler, a timer or an effect apply; `onCleanup`, `createEffect`, `useContext` and `onSettled` in an owned body; a strict read in a memo, a compute, JSX or `untrack`; `flush`, `resolve` and an action call in a handler; and a store write through its draft or through the read proxy inside its own setter (`legalVariants`). A program is judged at its site:
+- `typed-away` or `tsc-overlap`: as in the misuse matrix (a violation on code tsrs rejects is `tsc-overlap`);
 - `not-legal`: the runtime reports the code, so the template is wrong there;
 - `false-positive`: a violation covers a site the hit ledger shows ran, and the runtime reports none of its rule's codes;
 - `unexecuted`: the site never ran;
@@ -405,7 +409,7 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 
 * The fast path runs in Chrome (ADR 0512), with the fast runner's driving, not the oracle's (`feedback run`): the runtime differential (`--runtime-diff`) measures the two against each other per stratum, and the oracle still judges candidates. With `--fast-host happy-dom`, a false positive the fast path does not produce is not looked for in Chrome.
 * One component per case, plus the parents and `helpers.ts` of the mount and source axes; no event handler passed by name (containers).
-* A program `tsrs` rejects is dropped (invariant 1), so a defect the published typings catch is out of reach by design: the matrix records such codes as `typed-away` (`MISSING_EFFECT_FN` has no template).
+* A program `tsrs` rejects is no recall evidence (invariant 1), so a defect the published typings catch is out of reach by design: the matrix records such programs as `typed-away`, and as `tsc-overlap` when the checker reports a violation on the rejected code. `twins.mjs` and `mutation.mjs` still skip them unchecked.
 * A site that never ran, or ran without landing its witness, is `inconclusive` or an unexecuted candidate, never agreement. Sites in containers that never ran, programs that throw or halt reactivity, and diagnostics Chrome cannot place on a line limit what a run can say.
 * `ASYNC_OUTSIDE_LOADING_BOUNDARY` is reported from the render root (`placeless`), and it is advisory: neither the matrix nor `run.mjs` counts the checker's silence on it.
 * The instrumentation hides the read in `(f(), m1()())` from the checker; the counters avoid the form, and the gap is the checker's (see Neutrality).

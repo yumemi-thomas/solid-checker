@@ -4,6 +4,8 @@
 // write through its draft or inside its own setter), judged at its site:
 //
 //   typed-away        tsc rejects the program (not evidence)
+//   tsc-overlap       tsc rejects the program and a checker violation covers the rejected code (tsc-overlap.mjs): a candidate breach of
+//                     invariant 1 for a person to read
 //   harness           the checker or the runtime run failed (not evidence)
 //   not-legal         the runtime reports the code anyway: the template is not legal there, a generator problem to fix
 //   disturbed         the program threw, halted or could not be driven, and the checker reports a violation there: not judgeable
@@ -23,7 +25,8 @@ import { runChrome } from "./chrome.mjs";
 import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
-import { codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { checkTypedAway, typedAwayVerdict } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -43,7 +46,7 @@ import { keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
-export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
+export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean", "tsc-overlap"];
 
 const inLines = (finding, lines) => lines.some((line) => finding.line <= line && line <= finding.endLine);
 
@@ -55,7 +58,8 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
 export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false }) {
-  if (typed && typed.ok === false) return { outcome: "typed-away", detail: { error: typed.errors?.[0] } };
+  // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
+  if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
   const events = runtimeEvents(runtime);
@@ -90,7 +94,7 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
 }
 
 /** Outcomes from worst to best: a combination program takes its worst site's. */
-const WORST_FIRST = ["false-positive", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
+const WORST_FIRST = ["false-positive", "tsc-overlap", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
 
 /**
  * Judges a legal program: at its site, or, for a combination program (`--combine`, misuse.mjs `buildCombo`), at every use, each with
@@ -177,6 +181,8 @@ export async function runLegal(options) {
       const stage = await next;
       next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
       const results = await finishEntries(stage, run);
+      // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
+      await checkTypedAway(results, run);
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);
         const site = siteOf(built);
@@ -191,7 +197,7 @@ export async function runLegal(options) {
     profile.add("evaluate", Date.now() - started);
     console.error(`legal: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
     assertFindingsMapped();
-    const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length);
+    const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away" || row.outcome === "tsc-overlap").length, rows.length);
     if (refusal) throw new Error(refusal);
     const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
     if (broken) throw new Error(broken);

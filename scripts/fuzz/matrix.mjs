@@ -4,6 +4,8 @@
 //
 //   programs         generated for the cell
 //   typed-away       tsc rejects the program (invariant 1: the checker stays silent; not a gap)
+//   tsc-overlap      tsc rejects the program and a checker violation covers the rejected code (tsc-overlap.mjs): a candidate breach
+//                    of invariant 1 for a person to read, counted as a problem (focus.mjs PROBLEMS) and by the gate
 //   harness          the checker or the runtime run failed (not evidence)
 //   not-fired        the program type-checks and the runtime did not report the code at the site: a generator problem, not the checker's
 //   confirmed        the runtime reported the code at the site (the only programs that count in the checker columns)
@@ -48,9 +50,10 @@ import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
+import { checkTypedAway, typedAwayVerdict } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean"];
+export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "tsc-overlap"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -66,7 +69,8 @@ export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line)
  * @returns {{ outcome: string, detail?: object }}
  */
 export function judge({ code, site, typecheck: typed, checker, runtime, others = [] }) {
-  if (typed && typed.ok === false) return { outcome: "typed-away", detail: { error: typed.errors?.[0] } };
+  // A program tsc rejects is no evidence of recall, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
+  if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
   const region = regionOf(site);
@@ -408,13 +412,13 @@ export function markdown(matrix, statuses) {
   const lines = [];
   lines.push(`# Misuse recall matrix`, "");
   lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.sampling === "grid" ? "one program per shape (variant, binding, layer)" : `${matrix.perCell} programs per cell`}. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
-  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
+  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`T\` tsc-overlap, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
   lines.push(`| code | ${contexts.join(" | ")} |`, `| --- | ${contexts.map(() => "---").join(" | ")} |`);
   for (const code of codes) {
     const cells = contexts.map((context) => {
       const cell = matrix.cells[`${code}|${context}`];
       if (!cell) return "";
-      const extras = [["W", cell["wrong-rule"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
+      const extras = [["W", cell["wrong-rule"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
       // A dagger: Chrome did not reproduce any of the sampled programs of this cell (the fast path's evidence stands alone).
       const unconfirmed = cell.chrome && cell.chrome.checked > 0 && cell.chrome.same === 0 ? " †" : "";
       return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}${unconfirmed}`;
@@ -495,7 +499,7 @@ export function gate(baseline, current) {
   for (const [side, matrix] of [["baseline", baseline], ["current", current]]) if (matrix.gridSample) return { ok: false, refused: `the ${side} matrix is a sample (--grid-sample ${matrix.gridSample.fraction}): the gate compares whole grids`, ...empty };
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
-  const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
+  const unjudged = (now["typed-away"] ?? 0) + (now["tsc-overlap"] ?? 0) + (now.harness ?? 0);
   if (all && unjudged / all > TYPE_ERROR_REFUSAL_SHARE) return { ok: false, refused: `${unjudged} of ${all} programs of the current run are typed-away or harness: it judged nothing (the limit is ${TYPE_ERROR_REFUSAL_SHARE * 100}%)`, ...empty };
   const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = []; const retired = []; const newPrograms = [];
   for (const [key, base] of Object.entries(baseline.cells)) {
@@ -512,6 +516,9 @@ export function gate(baseline, current) {
     const gained = list((was, is) => is === "false-clean" && was !== "false-clean" && !UNJUDGED.has(was));
     if (lost.length) regressions.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}`, programs: lost });
     if (gained.length) regressions.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}`, programs: gained });
+    // A violation on code tsc rejects (tsc-overlap.mjs) fails from any baseline, a typed-away one included: it is new evidence.
+    const overlapping = list((was, is) => is === "tsc-overlap" && was !== "tsc-overlap");
+    if (overlapping.length) regressions.push({ cell: key, why: `tsc-overlap ${base["tsc-overlap"] ?? 0} -> ${cell["tsc-overlap"]}`, programs: overlapping });
     const fromUnjudged = list((was, is) => UNJUDGED.has(was) && is !== was);
     if (fromUnjudged.length) baselineUnjudged.push({ cell: key, programs: fromUnjudged });
     const intoUnjudged = list((was, is) => UNJUDGED.has(is) && !UNJUDGED.has(was));
@@ -672,6 +679,8 @@ async function sweep(options, config, out) {
     const stage = await next;
     next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
     const results = await finishEntries(stage, run);
+    // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
+    await checkTypedAway(results, run);
     const at = number * CHUNK;
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
@@ -689,7 +698,8 @@ async function sweep(options, config, out) {
   profile.add("evaluate", Date.now() - started);
   console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
-  const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
+  const typeRejected = (row) => row.outcome === "typed-away" || row.outcome === "tsc-overlap";
+  const refusal = typeErrorRefusal(rows.filter(typeRejected).length, rows.length, { first: rows.find(typeRejected)?.detail?.error });
   if (refusal) throw new Error(refusal);
   const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
   if (broken) throw new Error(broken);
