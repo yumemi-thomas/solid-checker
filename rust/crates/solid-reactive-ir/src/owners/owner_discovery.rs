@@ -603,6 +603,61 @@ pub(crate) fn discover_owner_file(
             });
         }
     }
+    // ADR 0562: an arrow written as a prop of a same-file project component
+    // that only ever calls the prop (ADR 0538's proof,
+    // `component_prop_invocations`) runs at each such call, under the owner
+    // of the component's body, as a direct call there would. Only a call
+    // written in the component's own body or its JSX: one in a nested
+    // function (a handler, an `onSettled` callback) runs under that
+    // function's owner, which this does not follow. A forwarded, spread,
+    // defaulted or copied prop is not followed, and a component in another
+    // file is not either (the edge would rest on another file's facts).
+    for literal in &file.ast.functions {
+        if literal.kind != solid_facts::ast::FunctionKind::Arrow {
+            continue;
+        }
+        let Some((element, _)) = crate::execution_role::component_prop_literal(file, literal.span)
+        else {
+            continue;
+        };
+        let Some((callee_file, calls)) =
+            crate::execution_role::component_prop_invocations(file, literal, lookup)
+        else {
+            continue;
+        };
+        let Some((_, component)) = lookup.function_called_at(file.path.as_str(), element.name.span)
+        else {
+            continue;
+        };
+        if callee_file.path != file.path {
+            continue;
+        }
+        for at in calls {
+            let Some(call) = file.ast.call_at(at) else {
+                continue;
+            };
+            if owner_at(call.span) != Some(component.span) {
+                continue;
+            }
+            let in_list = list_site(call.span);
+            let source = owner_at(call.span)
+                .filter(|_| !in_list)
+                .map(|span| OwnerSource {
+                    path: file.path.to_string(),
+                    span,
+                });
+            let kind = if in_list {
+                OwnerEdgeKind::MayBeUnowned
+            } else {
+                call_owner_edge(file, call.callee, lookup)
+            };
+            edges.push(SymbolicOwnerEdge {
+                source,
+                target: OwnerTarget::LocalSpan(literal.span),
+                kind,
+            });
+        }
+    }
     // ADR 0561: a tagged template calls its tag in place, on the caller's
     // stack, as a direct call does.
     for template in &file.ast.tagged_templates {

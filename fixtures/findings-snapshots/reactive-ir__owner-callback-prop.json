@@ -1,0 +1,115 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 547,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 768,
+      "end": 778,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 1005,
+      "end": 1017,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 1654,
+      "end": 1664,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 1918,
+      "end": 1928,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 2075,
+      "end": 2084,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 2254,
+      "end": 2264,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 2586,
+      "end": 2596,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 2666,
+      "end": 2675,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 2829,
+      "end": 2839,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-callback-prop/remote.ts",
+      "start": 104,
+      "end": 181,
+      "fixes": 0
+    }
+  ]
+}

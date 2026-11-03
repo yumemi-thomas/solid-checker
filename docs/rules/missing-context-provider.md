@@ -32,7 +32,14 @@ a component creates, or a function called from one. A function a reviewed
 standard-library carrier runs before it returns (`[1].forEach(hf)`, `map`,
 `sort`, `Array.from`'s map function, `Reflect.apply`) or a tagged template's tag
 counts as called there (ADR 0561); a same-named project or local `forEach` does
-not. A read with no owner is
+not. So does an arrow written as a prop of a same-file component that only ever
+calls the prop, at each call written in the component's own body or JSX
+(`<Kid run={() => useContext(Ctx)} />` with `props.run()` or `({ run }) => run()`
+in `Kid`; ADR 0562). A forwarded, spread, defaulted or copied prop, a call in
+the child's handler or `onSettled` callback, and a child in another file are
+not followed. A read in a function stored on a member (`o.m = …`,
+`this.m = …`, a factory's returned object, an object literal's slot) or handed
+to a project wrapper and called later stays SC4001's obligation. A read with no owner is
 `missing-owner` (SC4001), which throws `NoOwnerError` instead. A read whose owner
 is uncertain is SC4001's uncertifiable result.
 

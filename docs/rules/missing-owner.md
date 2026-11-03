@@ -309,6 +309,12 @@ A package function whose same-operation creation calls cover every exit between 
   it is a violation, in a component body it is owned. A generator handed there
   runs nothing and stays uncertifiable; so does a carrier in the owner's own
   JSX or an instance field.
+- **A callback prop runs where the child calls it (ADR 0562).** An arrow
+  written as a prop of a same-file project component that reaches nothing but
+  calls (ADR 0538's proof) runs at each call the component writes in its own
+  body or JSX, under the component's owner: an `onCleanup` there is owned.
+  A call in the child's handler or `onSettled` callback, a forwarded, spread,
+  defaulted or copied prop, and a child in another file stay as before.
 - **A helper that calls its callback runs it at the call (ADR 0474).** An
   `onCleanup` (or another owner-requiring call) in a callback handed to a
   project helper that calls it is placed at the helper's call: in a timer, a
