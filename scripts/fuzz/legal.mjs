@@ -41,7 +41,7 @@ import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
-import { gridShardOptions, shardEntries, shardLine } from "./shard.mjs";
+import { gridShardOptions, shardEntries, shardLine, shardOf } from "./shard.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
 export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
@@ -118,12 +118,14 @@ export const legalShapes = (code, mounts = ["root"], sources = ["local"], contex
 export const recallLegalShapes = (code, context) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true });
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
+/** A legal program's id, from its cell and its shape or index alone (before it is generated): `--grid-shard` picks by it. */
+export const legalId = ({ code, context }, { index, shape }) => `lg-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape ? `${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}` : String(index)}`;
+
 export function generateLegal(options, { code, context }, { index, shape }) {
   const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}` : `legal/${code}/${context}`;
   const seed = programSeed((Number(options.seed) ^ fnv(key)) >>> 0, shape ? 0 : index);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, legal: true, ...(shape ?? {}) } });
-  const suffix = shape ? `${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}` : String(index);
-  return { program, built: buildCase(program, { id: `lg-${code.toLowerCase().replaceAll("_", "-")}-${context}-${suffix}` }) };
+  return { program, built: buildCase(program, { id: legalId({ code, context }, { index, shape }) }) };
 }
 
 const tally = (rows) => Object.fromEntries(LEGAL_OUTCOMES.map((outcome) => [outcome, rows.filter((row) => row.outcome === outcome).length]));
@@ -143,27 +145,33 @@ export async function runLegal(options) {
     const phaseStart = performance.now();
     const cells = legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) }).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
     let entries = [];
+    // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (matrix.mjs `sweep`).
+    const sharding = gridShardOptions(options);
+    const sampling = gridSampleOptions(options);
+    const early = sharding && options.grid && !options.ids && !sampling ? sharding : null;
+    let planned = 0;
     for (const cell of cells) {
       const shapes = options.recall ? recallLegalShapes(cell.code, cell.context) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
-      if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => {
+        planned += 1;
+        if (early && shardOf(legalId(cell, { shape }), early.count) !== early.index) return;
+        entries.push({ cell, index, ...generateLegal(options, cell, { shape }) });
+      });
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
     if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
     // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; legal.json records it.
-    const sampling = gridSampleOptions(options);
     let gridSample = null;
     if (sampling) {
       ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
       console.error(`legal: ${sampleLine(gridSample)}`);
     }
     // `--grid-shard i/N` (shard.mjs): one part of a grid split across processes; legal.json records it.
-    const sharding = gridShardOptions(options);
     let gridShard = null;
-    if (sharding) {
-      ({ entries, summary: gridShard } = shardEntries(entries, sharding));
-      console.error(`legal: ${shardLine(gridShard)}`);
-    }
+    if (early) gridShard = { index: early.index, count: early.count, kept: entries.length, of: planned };
+    else if (sharding) ({ entries, summary: gridShard } = shardEntries(entries, sharding));
+    if (gridShard) console.error(`legal: ${shardLine(gridShard)}`);
     // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
     const selected = entries.length;
     profile.add("generate", performance.now() - phaseStart);

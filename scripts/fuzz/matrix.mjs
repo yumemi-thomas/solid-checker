@@ -47,7 +47,7 @@ import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
-import { gridShardOptions, shardEntries, shardKey, shardLine } from "./shard.mjs";
+import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
@@ -248,11 +248,13 @@ export const combined = (shapes, combine) => (combine ? shapes.map((shape) => ({
 /** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
 export const shapeSeed = (base, code, context, shape) => programSeed((Number(base) ^ fnv(`${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}`)) >>> 0, 0);
 
+/** A grid program's id, from its cell and shape alone (before it is generated): `--grid-shard` picks by it. */
+export const shapeId = ({ code, context }, shape) => `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}`;
+
 export function generateShape(options, { code, context }, shape, index) {
   const seed = shapeSeed(options.seed, code, context, shape);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, ...shape } });
-  const id = `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}`;
-  return { program, built: buildCase(program, { id }), index };
+  return { program, built: buildCase(program, { id: shapeId({ code, context }, shape) }), index };
 }
 
 export function generateCell(options, { code, context }, index) {
@@ -644,24 +646,32 @@ async function sweep(options, config, out) {
   const sources = sourcesOption(options.sources);
   // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs.
   const shapesOf = (cell) => (options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context, mounts, sources));
-  if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
+  // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (their ids are known from the shapes),
+  // the same programs as generating the whole grid and keeping the shard; `planned` counts the whole grid's.
+  const sharding = gridShardOptions(options);
+  const sampling = gridSampleOptions(options);
+  const early = sharding && options.grid && !options.ids && !sampling ? sharding : null;
+  let planned = 0;
+  if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => {
+    if (!layerKept(shape)) return;
+    planned += 1;
+    if (early && shardOf(shapeId(cell, shape), early.count) !== early.index) return;
+    entries.push({ cell, ...generateShape(options, cell, shape, index) });
+  });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
   if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
   // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; matrix.json records it.
-  const sampling = gridSampleOptions(options);
   let gridSample = null;
   if (sampling) {
     ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
     console.error(`matrix: ${sampleLine(gridSample)}`);
   }
   // `--grid-shard i/N` (shard.mjs): one part of a grid split across processes; matrix.json records it.
-  const sharding = gridShardOptions(options);
   let gridShard = null;
-  if (sharding) {
-    ({ entries, summary: gridShard } = shardEntries(entries, sharding));
-    console.error(`matrix: ${shardLine(gridShard)}`);
-  }
+  if (early) gridShard = { index: early.index, count: early.count, kept: entries.length, of: planned };
+  else if (sharding) ({ entries, summary: gridShard } = shardEntries(entries, sharding));
+  if (gridShard) console.error(`matrix: ${shardLine(gridShard)}`);
   // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
   const selected = entries.length;
   profile.add("generate", performance.now() - phaseStart);

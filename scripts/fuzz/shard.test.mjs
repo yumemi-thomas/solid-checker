@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "./focus.mjs";
-import { gate } from "./matrix.mjs";
+import { cellList, combined, gate, generateShape, gridShapes, recallShapes, shapeId } from "./matrix.mjs";
+import { generateLegal, legalCells, legalId, legalShapes } from "./legal.mjs";
 import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
 
 // Grid entries as matrix.mjs and legal.mjs hold them: a cell and the built case's id.
@@ -57,5 +58,21 @@ describe("the grid shard", () => {
     for (const bad of ["16/16", "x", "1/0"]) expect(() => parse(["--codes", "all", "--shard", bad])).toThrow(/--shard takes i\/N/);
     expect(() => parse(["--smoke", "--shard", "0/2"])).toThrow(/--smoke/);
     expect(parse(["--codes", "all"]).shard).toBeUndefined();
+  });
+
+  // A shard generates only its own programs by picking on the id before generation (matrix.mjs `sweep`, legal.mjs): that is the
+  // same pick as generating the whole grid and keeping the shard only if the id known from the shape is the generated program's id.
+  it("picks by the same id before generation as after it, on the misuse, recall and legal grids", () => {
+    const options = { seed: "1" };
+    const misuse = cellList({ codes: ["FLUSH_IN_ACTION"] }).flatMap((cell) => combined(gridShapes(cell.code, cell.context, ["root", "child"]), false).slice(0, 6).map((shape) => [cell, shape]));
+    const recall = cellList({ codes: ["NO_OWNER_CONTEXT"], recall: true }).flatMap((cell) => recallShapes(cell.code, cell.context).slice(0, 3).map((shape) => [cell, shape]));
+    expect(misuse.length).toBeGreaterThan(0);
+    expect(recall.length).toBeGreaterThan(0);
+    for (const [cell, shape] of [...misuse, ...recall]) expect(generateShape(options, cell, shape, 0).built.id).toBe(shapeId(cell, shape));
+    const legal = legalCells({ codes: ["FLUSH_IN_ACTION"] }).flatMap((cell) => legalShapes(cell.code, ["root"], ["local"], cell.context).slice(0, 6).map((shape) => [cell, shape]));
+    expect(legal.length).toBeGreaterThan(0);
+    for (const [cell, shape] of legal) expect(generateLegal(options, cell, { shape }).built.id).toBe(legalId(cell, { shape }));
+    const [cell] = legalCells({ codes: ["FLUSH_IN_ACTION"] });
+    expect(generateLegal(options, cell, { index: 3 }).built.id).toBe(legalId(cell, { index: 3 }));
   });
 });
