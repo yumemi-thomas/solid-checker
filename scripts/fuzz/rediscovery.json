@@ -1457,29 +1457,30 @@
   "outside": "no grid generates an empty or unknown-length receiver yet (the proposed handoff-foreach-empty and handoff-foreach-var layers belong to claude/fuzz-pattern-coverage, which owns scripts/fuzz now); fixture after-await-carrier-runs holds the shapes, and the 30 direct-binding agree programs of the inline-carrier layers keep their violation locally"
  },
  {
-  "finding": "CONTEXT_NOT_FOUND: a context created `createContext<number | undefined>(undefined)` is default-less (rc.17 getContext: an undefined default throws ContextNotFoundError), and useContext with no provider is a certified clean (no finding in the file)",
+  "finding": "CONTEXT_NOT_FOUND: useContext of a `createContext<number | undefined>(undefined)` context with no provider was a certified clean; rc.17 getContext treats an undefined default as none (ADR 0575)",
   "found": "fuzz-pattern-coverage (2026-11-03): the `default-undefined` recall variant, 14 of 14 sampled programs certified false cleans on the debug checker, 2 confirmed in Chrome",
-  "fixed": null,
-  "open": "checker: missing-context-provider treats any createContext argument as a default (fc-signals-docs report section 0)",
+  "fixed": "ADR 0575",
   "grid": "mx-recall",
   "code": "CONTEXT_NOT_FOUND",
   "ids": [
    "mx-context-not-found-body-default-undefined-direct-none",
    "mx-context-not-found-jsx-default-undefined-direct-none",
    "mx-context-not-found-root-default-undefined-direct-helper"
-  ]
+  ],
+  "rediscovered": "pending (VM); locally the 210 regenerated programs (seed 1) are each SC4002 violations on the fix build"
  },
  {
-  "finding": "a violation at a site in a `createMemo(fn, { lazy: true })` nobody reads, which never runs (ADR 0458: an unexecuted violation is a false positive): SC2001, SC2002 and SC4002 report there",
+  "finding": "a violation in a `createMemo(fn, { lazy: true })` nobody reads, which never runs: SC2001, SC2002 and SC4002 reported there (ADR 0458 class; ADR 0576)",
   "found": "fuzz-pattern-coverage (2026-11-03): the `memo-lazy-unread` legal recall context, 16 of 16 sampled SC2001/SC2002/SC4002 programs `unexecuted`, 3 confirmed in Chrome (the site's counter stays 0)",
-  "fixed": null,
-  "open": "checker: the memo's compute is taken to run at creation whatever its `lazy` option",
+  "fixed": "ADR 0576",
   "grid": "lg-recall",
   "code": "CONTEXT_NOT_FOUND",
   "ids": [
    "lg-context-not-found-memo-lazy-unread-x-direct-none",
-   "lg-context-not-found-memo-lazy-unread-x-direct-helper"
-  ]
+   "lg-context-not-found-memo-lazy-unread-x-direct-helper",
+   "lg-context-not-found-memo-lazy-unread-x-wrapper-none"
+  ],
+  "rediscovered": "pending (VM); locally the 30 regenerated programs are uncertifiable on the fix build"
  },
  {
   "finding": "SC5001 (pending-async-unsuspendable-read) proves a pending read of a parent's async memo handed by prop or by context to a component the parent mounts later (`<Show when={on()}>`, on() set by a button): the memo settled before the mount, rc.17 reports no pending code (a strict read in a body)",
@@ -1493,5 +1494,31 @@
    "lg-pending-async-untracked-read-body-x-direct-none-m-show-later-s-async-context",
    "lg-pending-async-untracked-read-root-x-direct-none-m-show-later-s-async-prop"
   ]
+ },
+ {
+  "finding": "missing-owner reported a handler's NoOwnerError at a context read whose body run throws ContextNotFoundError first, before the button exists (wrong rule; ADR 0577)",
+  "found": "fuzz-pattern-coverage (2026-11-03): mx-recall `handler-mixed`, 30 wrong-rule programs, Chrome halts before the click",
+  "fixed": "ADR 0577",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-handler-mixed-x-direct-none",
+   "mx-context-not-found-handler-mixed-x-wrapper-helper"
+  ],
+  "rediscovered": "pending (VM); locally the 30 regenerated programs are SC4002 violations with an SC4001 obligation"
+ },
+ {
+  "finding": "SC4002 proven in an unexported module-scope wrapper called only from dead code (`if (false)`, after `return`, `false &&`, a component never rendered); ADR 0458 took every module-scope function to run (ADR 0578)",
+  "found": "fuzz-pattern-coverage (2026-11-03): lg-recall `dead-*` x `wrapper`, 24 unexecuted programs, 10/10 sampled confirmed in Chrome",
+  "fixed": "ADR 0578",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-dead-if-x-wrapper-none",
+   "lg-context-not-found-dead-after-return-x-wrapper-none",
+   "lg-context-not-found-dead-and-false-x-wrapper-none",
+   "lg-context-not-found-dead-comp-never-x-wrapper-none"
+  ],
+  "rediscovered": "pending (VM); locally the 24 regenerated programs are uncertifiable on the fix build"
  }
 ]

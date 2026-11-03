@@ -661,6 +661,8 @@ pub(crate) fn push_owner_requirement(
             component_uncertain: status.component_uncertain,
             unplaced_callback: status.unplaced_callback,
             provider_open: status.provider_open,
+            default_unproven: status.default_unproven,
+            owned_run_throws: status.owned_run_throws,
             after_await: status.after_await,
             after_yield: status.after_yield,
             missing_jsx_census,

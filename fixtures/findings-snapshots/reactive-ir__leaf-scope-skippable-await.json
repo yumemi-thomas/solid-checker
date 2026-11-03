@@ -147,16 +147,6 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
-      "start": 445,
-      "end": 460,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
       "start": 733,
       "end": 748,
       "fixes": 0

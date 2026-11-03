@@ -211,6 +211,8 @@ impl Finding {
         let unplaced_callback = requirement.unplaced_callback;
         let missing_jsx_census = requirement.missing_jsx_census;
         let provider_open = requirement.provider_open;
+        let default_unproven = requirement.default_unproven;
+        let owned_run_throws = requirement.owned_run_throws;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
         // row with no explicit reason as caller uncertainty.
         let through_dependency = requirement.through_dependency.as_ref();
@@ -223,7 +225,9 @@ impl Finding {
                 && !component_uncertain
                 && !unplaced_callback
                 && !missing_jsx_census
-                && !provider_open);
+                && !provider_open
+                && !default_unproven
+                && !owned_run_throws);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
         if missing_jsx_census {
@@ -313,6 +317,19 @@ impl Finding {
             );
             hint.push_str(
                 " Declare the program closed (`--program-boundary closed`) when every entry is analyzed, so the provider census can decide it.",
+            );
+        }
+        if default_unproven {
+            message.push_str(
+                "; but the context was created with a default the analysis cannot prove is not `undefined`, and Solid treats an `undefined` default as no default, so this is not proven",
+            );
+            hint.push_str(
+                " Give the context a default that is visibly not `undefined` (a literal, `null`, or a `const` holding one), or render a provider above this reader.",
+            );
+        }
+        if owned_run_throws {
+            message.push_str(
+                "; but this read also runs under an owner, where the context has no provider and Solid throws `ContextNotFoundError` first (missing-context-provider), and a run with no owner is not proven to be reached after that",
             );
         }
         if runtime_uncertain {

@@ -1989,6 +1989,20 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// rc.17 `computed(fn, options)` (`@solidjs/signals` `dist/dev-shared.js`)
+    /// runs `!options?.lazy && recompute(self, true)`: with a truthy `lazy` it
+    /// computes on the first read only. `createMemo(compute, options)` and the
+    /// function forms of `createSignal`/`createOptimistic` hand their options
+    /// to it unchanged (`dist/dev.js` `createMemo`, `createSignal`,
+    /// `createOptimistic`; `solid-js` passes them through).
+    fn lazy_option_argument(&self, primitive: Primitive) -> Option<usize> {
+        matches!(
+            primitive,
+            Primitive::CreateMemo | Primitive::CreateSignal | Primitive::CreateOptimistic
+        )
+        .then_some(1)
+    }
+
     /// `render`/`hydrate` run their code callback once and never again, and
     /// `lazy`'s loader runs once from the wrapper component body, so a
     /// reactive read in any of them is a likely dependency bug — the same

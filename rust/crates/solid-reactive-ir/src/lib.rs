@@ -1244,6 +1244,16 @@ pub struct OwnerRequirement {
     /// the read is an obligation, never a proven `ContextNotFoundError`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub provider_open: bool,
+    /// ADR 0575: a context read the provider census finds no provider for,
+    /// whose context has a default the syntax does not prove is not
+    /// `undefined`: the read is an obligation, never a proven throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub default_unproven: bool,
+    /// ADR 0577: a provider-free context read whose function also runs under
+    /// an owner, where it throws `ContextNotFoundError` (SC4002): an unowned
+    /// run is not proven to be reached past that throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub owned_run_throws: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.
@@ -1454,6 +1464,10 @@ pub struct UnreachedSite {
     /// callback (ADR 0475).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refused_creation: bool,
+    /// ADR 0576: not proven to run: the site runs only in a lazy computation
+    /// (`createMemo(fn, { lazy: true })`) that no proven read computes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lazy_unread: bool,
     /// ADR 0560: the query stopped at its depth limit or work bound before
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -2609,7 +2623,7 @@ pub(crate) fn owned_write_option(
 /// What `call`'s syntax proves about the boolean option `key` in its
 /// `argument`-th argument. See [`solid_dialect::OptionLiteral`] for the four
 /// answers; everything not proven is `Unknown`.
-fn call_option_literal(
+pub(crate) fn call_option_literal(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     argument: usize,

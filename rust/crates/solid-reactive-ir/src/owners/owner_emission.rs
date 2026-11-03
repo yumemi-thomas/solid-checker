@@ -29,8 +29,9 @@ use typefacts::Location;
 pub(crate) struct Emission {
     pub(super) requirements: Vec<OwnerRequirement>,
     pub(super) gates: Vec<((String, u64, u64), LeafGateDecision)>,
-    /// The provider-free verdict of each context a `useContext` read named.
-    pub(super) provider: Vec<(Location, bool)>,
+    /// The provider-free verdict of each context a `useContext` read named
+    /// (`Some(proven)`: provider-free, its lack of a default proven or not).
+    pub(super) provider: Vec<(Location, Option<bool>)>,
     /// Each `onSettled` cleanup's resolved callback node and its file's hash.
     pub(super) callbacks: Vec<(OwnerTarget, Option<NodeId>, Option<SourceHash>)>,
 }
@@ -39,7 +40,7 @@ pub(super) struct EmissionInputs<'a, 'f, 'i> {
     pub(super) facts: &'a ProjectFacts,
     pub(super) lookup: &'a SemanticLookup<'f>,
     pub(super) indexes: &'a ProjectIndexes<'i>,
-    pub(super) provider_free: &'a HashSet<Location>,
+    pub(super) provider_free: &'a HashMap<Location, bool>,
 }
 
 impl EmissionInputs<'_, '_, '_> {
@@ -48,7 +49,7 @@ impl EmissionInputs<'_, '_, '_> {
         emission
             .provider
             .iter()
-            .all(|(key, free)| self.provider_free.contains(key) == *free)
+            .all(|(key, free)| self.provider_free.get(key).copied() == *free)
             && emission.callbacks.iter().all(|(target, node, hash)| {
                 graph.resolve_target(pid, target) == *node
                     && self.callback_hash(graph, *node) == *hash
@@ -319,14 +320,18 @@ pub(super) fn emit_file(
         }
         // A read of a provider-free context under an owner throws
         // `ContextNotFoundError` (ADR 0352).
-        let provider_free_read = candidate.operation == "context-read"
-            && candidate.context_argument.is_some_and(|argument| {
-                context_key_at(lookup, file, argument).is_some_and(|key| {
-                    let free = inputs.provider_free.contains(&key);
-                    emission.provider.push((key, free));
-                    free
-                })
+        let provider_verdict = (candidate.operation == "context-read")
+            .then_some(candidate.context_argument)
+            .flatten()
+            .and_then(|argument| context_key_at(lookup, file, argument))
+            .and_then(|key| {
+                let free = inputs.provider_free.get(&key).copied();
+                emission.provider.push((key, free));
+                free
             });
+        let provider_free_read = provider_verdict.is_some();
+        // ADR 0575: a default the syntax does not prove is not `undefined`.
+        let default_unproven = provider_verdict == Some(false);
         // A JSX boundary keeps the answer by detaching bits alone (ADR 0534
         // scopes the proven-run requirement to the operations that can be
         // obligations).
@@ -341,6 +346,16 @@ pub(super) fn emit_file(
         // A providing region owns its reads, so a provider-free read there is
         // a provider finding, not an owner question (ADR 0352).
         let provider = provider_free_read && (root_owned || owned_on_every_path(context));
+        // ADR 0577: a provider-free read whose function runs under an owner
+        // on some path and with none on another throws `ContextNotFoundError`
+        // on every owned run. That is SC4002's claim; SC4001's unowned run is
+        // not proven to be reached past it (a body call that throws before the
+        // component's JSX, and so its handlers, exists).
+        let owned_run_throws = provider_free_read
+            && !provider
+            && !after_await
+            && possible_continuation.is_none()
+            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0;
         if root_owned && !provider {
             crate::role_log::owner(
                 candidate.operation,
@@ -458,6 +473,7 @@ pub(super) fn emit_file(
         // ADR 0517: in an open program a provider outside the analyzed code
         // may supply the context; the census proves only what it sees.
         let provider_open = provider && !inputs.lookup.program_closed;
+        let default_unproven = provider && default_unproven;
         let unplaced_callback = unplaced_callback && !proven_unowned;
         let uncertain = runtime_uncertain
             || conditional_owner
@@ -465,7 +481,49 @@ pub(super) fn emit_file(
             || caller_uncertain
             || component_uncertain
             || unplaced_callback
-            || provider_open;
+            || provider_open
+            || default_unproven
+            || owned_run_throws;
+        if owned_run_throws {
+            // ADR 0577: the owned runs' claim, beside the owner obligation.
+            let provider_open = !inputs.lookup.program_closed;
+            let default_unproven = provider_verdict == Some(false);
+            let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
+                || owner.is_some_and(|(node, _)| node.component_uncertain);
+            let uncertain =
+                runtime_uncertain || component_uncertain || provider_open || default_unproven;
+            crate::role_log::owner(
+                "context-provider",
+                path,
+                candidate.operation_span,
+                arm_id!("owner_emission.owned-run-throws"),
+                context,
+                false,
+            );
+            push_owner_requirement(
+                &mut emission.requirements,
+                &mut seen,
+                "context-provider",
+                file,
+                candidate.operation_span,
+                OwnerRequirementStatus {
+                    uncertain,
+                    runtime_uncertain,
+                    caller_uncertain: false,
+                    unplaced_callback: false,
+                    conditional_owner: false,
+                    later_run_unowned: false,
+                    component_uncertain,
+                    provider_open,
+                    default_unproven,
+                    owned_run_throws: false,
+                    after_await: false,
+                    after_yield: false,
+                    report: true,
+                },
+                lookup,
+            );
+        }
         // A cleanup in a leaf that is not owned is reported; in an owned leaf
         // it is SC3001's claim (ADR 0347 amendment).
         let report = report_hit
@@ -495,6 +553,8 @@ pub(super) fn emit_file(
                 later_run_unowned,
                 component_uncertain,
                 provider_open,
+                default_unproven,
+                owned_run_throws,
                 after_await: after_await && !after_yield,
                 after_yield,
                 report,
