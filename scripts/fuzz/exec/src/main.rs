@@ -292,10 +292,21 @@ struct Checker {
     warmed: Mutex<std::collections::BTreeSet<String>>,
 }
 
+/// One worker for each of a check's own fan-outs (ADR 0564): the reactive IR's, the Type Facts producer's per-file passes and the
+/// tsrs pool the producer parses on. The executor already runs a check per core, so a check that spreads over the cores only adds
+/// thread starts and wake-ups (a third of a warm check's CPU). Answers do not depend on the worker counts. A value the executor's
+/// caller set is kept; the executor's own type checks are not the checker's and keep theirs.
+const CHECK_WORKERS: [(&str, &str); 3] = [("SOLID_CHECKER_IR_WORKERS", "1"), ("SOLID_TYPEFACTS_PER_FILE_WORKERS", "1"), ("RAYON_NUM_THREADS", "1")];
+
 impl Checker {
     fn command(&self, dir: &str, args: &[&str], daemon: bool, program: Option<&str>) -> Command {
         let mut command = Command::new(&self.bin);
         command.arg("--project").arg(format!("{dir}/tsconfig.json")).args(args).current_dir(dir);
+        for (key, value) in CHECK_WORKERS {
+            if std::env::var_os(key).is_none() && !self.env.iter().any(|(given, _)| given == key) {
+                command.env(key, value);
+            }
+        }
         for (key, value) in &self.env {
             command.env(key, value);
         }
@@ -1536,6 +1547,23 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("App.tsx")).unwrap(), "b");
         assert_eq!(std::fs::metadata(dir.join("main.tsx")).unwrap().modified().unwrap(), main);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_check_runs_its_own_fan_outs_on_one_worker_unless_told_otherwise() {
+        let env_of = |checker: &Checker| {
+            let command = checker.command("/tmp/x", &[], true, None);
+            command.get_envs().map(|(key, value)| (key.to_string_lossy().into_owned(), value.map(|v| v.to_string_lossy().into_owned()))).collect::<HashMap<_, _>>()
+        };
+        let set = |pairs: &[(&str, &str)]| Checker { bin: "checker".into(), env: pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), warm: Warm::On, warmed: Mutex::new(Default::default()) };
+        let env = env_of(&set(&[]));
+        for (key, value) in CHECK_WORKERS {
+            if std::env::var_os(key).is_none() {
+                assert_eq!(env.get(key), Some(&Some(value.to_string())), "{key}");
+            }
+        }
+        let env = env_of(&set(&[("RAYON_NUM_THREADS", "4")]));
+        assert_eq!(env.get("RAYON_NUM_THREADS"), Some(&Some("4".to_string())));
     }
 
     #[test]
