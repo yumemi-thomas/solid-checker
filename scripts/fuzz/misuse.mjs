@@ -15,7 +15,7 @@
 import {
   walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
-  CBP_CALLS, CBP_FORMS, cbProp,
+  CBP_CALLS, CBP_FORMS, cbProp, namedButton,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -537,7 +537,8 @@ const FLOW_PLACEMENT = {
  * a pending read in JSX or onSettled for PENDING_ASYNC_UNTRACKED_READ (another code fires there, so neither misuse nor legal).
  */
 export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
-const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.includes(/^cbp-([a-z]+)/.exec(context)[1]));
+// `attached` (CBP_CALLS): the child's intrinsic runs `props.run` itself as its click handler, as `handler` does through an arrow.
+const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.flatMap((call) => (call === "handler" ? ["handler", "attached"] : [call])).includes(/^cbp-([a-z]+)/.exec(context)[1]));
 const CBP_PLACEMENT = {
   REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
   ACTION_CALLED_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
@@ -641,6 +642,24 @@ const THUNK_PLACEMENT = {
   NO_OWNER_CLEANUP: { legal: THUNK_CONTEXTS },
   NO_OWNER_EFFECT: { legal: THUNK_CONTEXTS },
 };
+/**
+ * The later fire sites, named handlers and never-run code (`--recall` only, base shapes only; Fable's report 2026-11-03, R2-R4): each
+ * is equivalent at run time to the base context it names (a function a helper defers to a timer runs as a timer callback does), so a
+ * code takes it as a misuse cell where that context is one of its misuse contexts and as a legal cell where it is legal; measured on
+ * the fast runtime before (2026-11-03). `handler-mixed` (a named handler the body also calls) is a misuse where either caller is.
+ */
+export const FIRE_CONTEXTS = { "fire-helper-timer": "timer", "fire-helper-micro": "micro", "fire-helper-then": "then", "fire-store-handler": "handler", "fire-store-body": "body", "fire-store-timer": "timer", "fire-return-handler": "handler", "fire-return-body": "body" };
+export const HANDLER_CONTEXTS = { "handler-named-const": "handler", "handler-named-function": "handler", "handler-tuple": "handler" };
+export const DEAD_CONTEXTS = ["dead-if", "dead-after-return", "dead-and-false", "dead-comp-never"];
+const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
+  const spec = SPEC[code];
+  const placed = (kind) => Object.entries({ ...FIRE_CONTEXTS, ...HANDLER_CONTEXTS }).filter(([, base]) => (kind === "misuse" ? spec.contexts : spec.legal ?? []).includes(base)).map(([context]) => context);
+  const mixed = spec.contexts.includes("body") || spec.contexts.includes("handler") ? "misuse" : (spec.legal ?? []).includes("body") && (spec.legal ?? []).includes("handler") ? "legal" : null;
+  return [code, { misuse: [...placed("misuse"), ...(mixed === "misuse" ? ["handler-mixed"] : [])], legal: [...placed("legal"), ...(mixed === "legal" ? ["handler-mixed"] : []), ...DEAD_CONTEXTS] }];
+}));
+/** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
+export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS];
+
 /** The lazy-memo and deferred-apply contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
 export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun"];
 /**
@@ -665,7 +684,7 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1029,6 +1048,38 @@ function recallContext(context, stmts, kit) {
       const t = trigger();
       return { body: [expr({ ...prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }), defer: true })], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
+    // FIRE_CONTEXTS: the site's function is written in the body and run elsewhere, later: handed to a project helper that defers it
+    // (a timer, a microtask, a promise callback), kept in the object a helper returns and fired from a handler, the body or a timer,
+    // or returned by a helper and called from a handler or the body.
+    case "fire-helper-timer": return { body: [expr(call(ref(kit.ensureHelper("timerCb")), [fn(stmts)]))], view: [] };
+    case "fire-helper-micro": return { body: [expr(call(ref(kit.ensureHelper("microCb")), [fn(stmts)]))], view: [] };
+    case "fire-helper-then": return { body: [expr(call(ref(kit.ensureHelper("thenCb")), [fn(stmts)]))], view: [] };
+    case "fire-store-handler": case "fire-store-body": case "fire-store-timer": {
+      const box = kit.name("box");
+      const fire = expr(call(memberOf(ref(box), "cb")));
+      const kept = decl(box, call(ref(kit.ensureHelper("storeCb")), [fn(stmts)]));
+      if (context === "fire-store-handler") return { body: [kept], view: [button(kit.name("b"), [fire])] };
+      if (context === "fire-store-body") return { body: [kept, fire], view: [] };
+      return { body: [kept, expr(prim("timer", fn([fire])))], view: [] };
+    }
+    case "fire-return-handler": case "fire-return-body": {
+      const run = kit.name("run");
+      const kept = decl(run, call(ref(kit.ensureHelper("returnCb")), [fn(stmts)]));
+      return context === "fire-return-body" ? { body: [kept, expr(call(ref(run)))], view: [] } : { body: [kept], view: [button(kit.name("b"), [expr(call(ref(run)))])] };
+    }
+    // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
+    case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {
+      const h = kit.name("h");
+      const handler = decl(h, context === "handler-named-function" ? fn(stmts, { form: "function" }) : fn(stmts));
+      return { body: context === "handler-mixed" ? [handler, expr(call(ref(h)))] : [handler], view: [namedButton(kit.name("b"), ref(h), { tuple: context === "handler-tuple" })] };
+    }
+    // DEAD_CONTEXTS: code rc.17 never runs (model.mjs CONTAINER_KINDS): under `if (false)`, after a `return`, after `false &&`, in a
+    // component never rendered. Legal for every code: a violation there is an unexecuted one (ADR 0458).
+    case "dead-if": return { body: [contain("dead-if", 9, stmts)], view: [] };
+    case "dead-after-return": return { body: [contain("dead-after-return", 9, stmts)], view: [] };
+    // The block form (`false && (() => { …; return 1; })()`): a lone assignment after `false &&` would not parse.
+    case "dead-and-false": return { body: [contain("and-false", 9, [...stmts, ret(num(1))])], view: [] };
+    case "dead-comp-never": return { body: [contain("comp-never", 9, [...stmts, ret(jsx())])], view: [] };
     case "tracked-rerun": {
       const t = trigger();
       return { body: [expr(prim("tracked", fn([expr(read(t.name)), ...stmts])))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };

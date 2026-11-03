@@ -1,5 +1,6 @@
 // Run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/fuzz/api-fire.test.mjs
-// The rc.17 API variants and the lazy-memo / deferred-apply contexts (misuse.mjs API_VARIANTS, API_CONTEXTS) do what their cells say on
+// The rc.17 API variants, the lazy-memo / deferred-apply contexts (misuse.mjs API_VARIANTS, API_CONTEXTS), and the later-fire,
+// named-handler, never-run and attached-callback-prop contexts (FIRE_CONTEXTS, HANDLER_CONTEXTS, DEAD_CONTEXTS) do what their cells say on
 // the fast runtime: a misuse cell reports its code at the site, a legal cell reports no defect code (and its site ran, or, for a site
 // rc.17 never runs, did not run).
 import { mkdtempSync, rmSync } from "node:fs";
@@ -14,10 +15,12 @@ import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
 import { legalCells } from "./legal.mjs";
 import { cellList, judge, recallShapes, siteOf } from "./matrix.mjs";
-import { API_CONTEXTS, API_VARIANTS, SPEC, recallVariantsOf } from "./misuse.mjs";
+import { API_CONTEXTS, API_VARIANTS, BASE_ONLY_CONTEXTS, CBP_CONTEXTS, DEAD_CONTEXTS, SPEC, recallVariantsOf } from "./misuse.mjs";
 import { recallLegalShapes } from "./legal.mjs";
 
-const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer"];
+const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONTEXTS];
+/** The contexts of the later-fire, named-handler, never-run and attached-callback-prop cells: one program a (code, context). */
+const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context)), ...CBP_CONTEXTS.filter((context) => context.startsWith("cbp-attached"))]);
 
 /** One program per (code, context, variant) the recall grids hold for the API variants and contexts, direct, no layer. */
 function plans() {
@@ -26,7 +29,7 @@ function plans() {
     for (const cell of cells) {
       const variants = new Set((API_VARIANTS[cell.code] ?? []).filter((variant) => kind === "legal" ? recallVariantsOf(cell.code, { legal: true }).includes(variant) : recallVariantsOf(cell.code).includes(variant)));
       const shapes = shapesOf(cell.code, cell.context).filter((shape) => !shape.mount && !shape.source && !shape.callback && shape.layer === "none" && shape.binding === "direct");
-      const wanted = shapes.filter((shape) => variants.has(shape.variant) || API_CONTEXTS.includes(cell.context));
+      const wanted = shapes.filter((shape) => variants.has(shape.variant) || API_CONTEXTS.includes(cell.context) || EQUIVALENT.has(cell.context)).slice(0, EQUIVALENT.has(cell.context) ? 1 : Infinity);
       const seen = new Set();
       for (const shape of wanted) if (!seen.has(shape.variant)) { seen.add(shape.variant); out.push({ kind, ...cell, variant: shape.variant ?? null }); }
     }
@@ -42,7 +45,7 @@ describe("the API variants and contexts on the fast runtime", () => {
         const program = generateProgram(5000 + index, { profile: "misuse", misusePlan: { code: plan.code, context: plan.context, variant: plan.variant, binding: "direct", layer: "none", legal: plan.kind === "legal" } });
         return { plan, built: buildCase(program, { id: `api-${index}` }) };
       });
-      expect(entries.length).toBeGreaterThan(150);
+      expect(entries.length).toBeGreaterThan(450);
       const records = await runFast(entries.map(({ built }) => ({ id: built.id, dir: writeCase(join(root, built.id), built), variant: "run" })), { install: DEFAULT_FAST_INSTALL, workers: 4 });
       const wrong = [];
       for (const { plan, built } of entries) {

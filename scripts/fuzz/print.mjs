@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -501,6 +501,7 @@ function render(program, instrument) {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
       }
+      case "hbutton": return [`${ind(depth)}<button data-act="${item.id}" onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
       case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
@@ -564,6 +565,7 @@ function render(program, instrument) {
       case "apply": used.add("createEffect"); body = [`createEffect(() => 1, () => { ${run}; });`, `return ${element};`]; break;
       case "settled": used.add("onSettled"); body = [`onSettled(() => { ${run}; });`, `return ${element};`]; break;
       case "never": body = [`return ${element};`]; break;
+      case "attached": body = [`return <button data-act="k${n}" onClick={${item.form === "destructured" ? "run" : "props.run"}}>go</button>;`]; break;
       default: throw new Error(`unknown callback prop call ${item.call}`);
     }
     const lines = [`function Kid${n}(${item.form === "destructured" ? `{ run }: ${type}` : `props: ${type}`}) {`, ...body.map((line) => `${INDENT}${line}`), "}", ""];
@@ -854,6 +856,8 @@ function helperText(helper) {
     case "returnCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}return cb;`, "}"];
     case "storeCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}return { cb };`, "}"];
     case "timerCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}setTimeout(cb, 0);`, `${INDENT}return 1;`, "}"];
+    case "microCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}queueMicrotask(() => { cb(); });`, `${INDENT}return 1;`, "}"];
+    case "thenCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}Promise.resolve().then(cb);`, `${INDENT}return 1;`, "}"];
     default: throw new Error(`unknown helper form ${helper.form}`);
   }
 }
@@ -864,9 +868,9 @@ export function drivingPlan(program) {
   // A parent that mounts its child later (mounts.mjs LATER_MOUNTS) does so on its button, before the child's own buttons exist.
   program.components.filter((c) => c.mount).forEach((component, index) => { if (LATER_MOUNTS.includes(component.mount)) clicks.push(`pm${index + 1}`); });
   for (const { node } of walk(program)) {
-    if (node.k === "button") clicks.push(node.id);
-    // A callback prop called from its child's handler (model.mjs `cbProp`): the child's button.
-    if (node.k === "cbprop" && node.call === "handler") clicks.push(`k${node.id.replace(/^\D+/, "")}`);
+    if (node.k === "button" || node.k === "hbutton") clicks.push(node.id);
+    // A callback prop called from its child's handler (model.mjs `cbProp`), or attached as it (`attached`): the child's button.
+    if (node.k === "cbprop" && (node.call === "handler" || node.call === "attached")) clicks.push(`k${node.id.replace(/^\D+/, "")}`);
   }
   return { clicks, settleMs: 400 };
 }
