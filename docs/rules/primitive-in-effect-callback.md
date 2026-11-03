@@ -41,7 +41,9 @@ The marker is one global: an effect run synchronously inside the callback
 claim is a violation only when no call runs in the apply before the creating
 call (or tagged template): in the apply and in each layer the walk crosses, and
 in a helper's own body before it calls its callback (ADR 0495); after one it is
-uncertifiable. A `createRenderEffect` apply (its first run is owned, its later
+uncertifiable. The tag of a template the walk climbs through
+(``hf`x` ``) is the call that runs the path, not an earlier one; a call in its
+substitutions is (ADR 0586). A `createRenderEffect` apply (its first run is owned, its later
 runs are not) and a cleanup an apply returns (a rerun runs it in the phase, a
 disposal outside it) are uncertifiable, never violations (ADR 0541). Only
 rc.17's bytes were read: other releases are not claimed.
