@@ -1392,9 +1392,9 @@ fn local_identity(
     if function.name.is_none()
         && file
             .ast
-            .calls
-            .iter()
-            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == function.span)
+            .calls_with_peeled_callee(function.span)
+            .next()
+            .is_some()
     {
         return Ok(Some(No));
     }

@@ -72,9 +72,7 @@ pub(crate) fn unclassified_callback_reaches_modelled_consumer(
             // An IIFE runs where it is written.
             let Some(call) = file
                 .ast
-                .calls
-                .iter()
-                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+                .calls_with_peeled_callee(literal.span)
                 .min_by_key(|call| call.span.end - call.span.start)
             else {
                 return false;
@@ -273,9 +271,8 @@ pub(super) fn named_helper_runs_during_body(
         let omits_argument = default_parameter.is_none_or(|index| {
             caller
                 .ast
-                .calls
-                .iter()
-                .find(|call| caller.ast.peel_ts_sugar_span(call.callee) == *callee)
+                .calls_with_peeled_callee(*callee)
+                .next()
                 .is_some_and(|call| {
                     call.arguments.len() <= index && !call.arguments.iter().any(|a| a.spread)
                 })

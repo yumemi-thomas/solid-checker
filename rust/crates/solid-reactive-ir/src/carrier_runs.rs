@@ -155,9 +155,7 @@ pub(crate) fn carrier_run_unproven(
         };
         // An immediately invoked literal runs where it is written.
         if let Some(call) = ast
-            .calls
-            .iter()
-            .filter(|call| ast.peel_ts_sugar_span(call.callee) == function.span)
+            .calls_with_peeled_callee(function.span)
             .min_by_key(|call| call.span.end - call.span.start)
         {
             span = call.span;

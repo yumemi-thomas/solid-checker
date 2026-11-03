@@ -101,9 +101,7 @@ pub(super) fn runs_in_unproven_stored_literal(
         }
         if let Some(call) = file
             .ast
-            .calls
-            .iter()
-            .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+            .calls_with_peeled_callee(literal.span)
             .min_by_key(|call| call.span.end - call.span.start)
         {
             span = call.span;

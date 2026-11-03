@@ -3686,9 +3686,9 @@ impl LocalAccessContext<'_, '_> {
             && property == Some("ref")
             && file
                 .ast
-                .calls
-                .iter()
-                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+                .calls_with_peeled_callee(member.span)
+                .next()
+                .is_some()
         {
             return;
         }
@@ -5010,11 +5010,9 @@ pub(crate) fn hand_off_at(
     use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
     let ast = &file.ast;
     let call_with_callee = |callee: solid_facts::core::Span| {
-        lookup.call_by_callee(file, callee).or_else(|| {
-            ast.calls
-                .iter()
-                .find(|call| ast.peel_ts_sugar_span(call.callee) == callee)
-        })
+        lookup
+            .call_by_callee(file, callee)
+            .or_else(|| ast.calls_with_peeled_callee(callee).next())
     };
     if call_with_callee(at).is_some_and(|call| call.direct_callee) {
         return HandOff::Call;

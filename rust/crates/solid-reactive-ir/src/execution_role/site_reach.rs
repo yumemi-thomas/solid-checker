@@ -324,10 +324,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                 class_of_member(file, function).and_then(|class| class_declaration(file, class)),
             );
             for declaration in declarations {
-                for reference in file.ast.identifiers.iter().filter(|identifier| {
-                    identifier.role == solid_facts::ast::IdentifierRole::Reference
-                        && file.ast.reference_declaration(identifier.span) == Some(declaration)
-                }) {
+                for reference in file.ast.reference_identifiers_to(declaration) {
                     if let Some(owner) = crate::owners::owning_function(&file.ast, reference.span) {
                         sites.push((file, owner.span));
                     }
@@ -505,12 +502,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     /// discarded result.
     fn references_unreached(&self, file: &solid_facts::FileFacts, declaration: Span) -> bool {
         file.ast
-            .identifiers
-            .iter()
-            .filter(|identifier| {
-                identifier.role == solid_facts::ast::IdentifierRole::Reference
-                    && file.ast.reference_declaration(identifier.span) == Some(declaration)
-            })
+            .reference_identifiers_to(declaration)
             .all(|reference| {
                 file.ast
                     .type_queries
@@ -724,14 +716,13 @@ impl SiteReach<'_, '_> {
         let Some(accessor) = accessor else {
             return false;
         };
-        file.ast.identifiers.iter().any(|identifier| {
-            identifier.role == solid_facts::ast::IdentifierRole::Reference
-                && file.ast.reference_declaration(identifier.span) == Some(accessor.span)
-                && file.ast.calls.iter().any(|read| {
+        file.ast
+            .reference_identifiers_to(accessor.span)
+            .any(|identifier| {
+                file.ast.calls.iter().any(|read| {
                     !read.construct && file.ast.peel_ts_sugar_span(read.callee) == identifier.span
-                })
-                && self.reached(file, identifier.span)
-        })
+                }) && self.reached(file, identifier.span)
+            })
     }
 }
 
@@ -794,9 +785,8 @@ fn returned_by_discarded_iife(file: &solid_facts::FileFacts, value: Span) -> boo
             .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == value)
     };
     let function = ast
-        .returns
-        .iter()
-        .find(|returned| returned_by(returned))
+        .returns_with_peeled_argument(value)
+        .next()
         .and_then(|returned| crate::owners::containing_body_function(ast, returned.span))
         .or_else(|| {
             ast.functions
@@ -825,14 +815,8 @@ pub(super) fn function_declaration_span(
     if function.kind == solid_facts::ast::FunctionKind::Declaration {
         function.name.as_ref().map(|name| name.span)
     } else {
-        ast.bindings
-            .iter()
-            .find(|binding| {
-                binding.shape == solid_facts::ast::BindingShape::Identifier
-                    && binding.initializer.is_some_and(|initializer| {
-                        ast.peel_ts_sugar_span(initializer) == function.span
-                    })
-            })
+        ast.bindings_with_peeled_initializer(function.span)
+            .find(|binding| binding.shape == solid_facts::ast::BindingShape::Identifier)
             .and_then(|binding| binding.names.first().map(|name| name.span))
     }
 }

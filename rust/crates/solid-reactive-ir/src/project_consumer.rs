@@ -517,9 +517,8 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
     ) -> Option<Uses> {
         if let Some(call) = file
             .ast
-            .calls
-            .iter()
-            .find(|c| !c.construct && file.ast.peel_ts_sugar_span(c.callee) == value)
+            .calls_with_peeled_callee(value)
+            .find(|c| !c.construct)
         {
             return self.context(file, function, call.span, 0);
         }
@@ -772,10 +771,7 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
 }
 
 fn member_is_invoked(file: &solid_facts::FileFacts, member: Span) -> bool {
-    file.ast
-        .calls
-        .iter()
-        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member)
+    file.ast.calls_with_peeled_callee(member).next().is_some()
         || file
             .ast
             .tagged_template_tags

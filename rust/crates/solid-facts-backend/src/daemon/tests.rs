@@ -259,18 +259,70 @@ fn the_feedback_facts_mode_is_its_own_daemon() {
 #[test]
 fn the_running_executable_has_a_loaded_identity() {
     let identity = super::loaded_implementation_identity().unwrap();
-    let digest = identity
-        .strip_prefix(if cfg!(target_os = "macos") {
-            "macho-uuid:"
-        } else {
-            "sha256:"
-        })
-        .unwrap();
-    assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    let (digest, length) = if cfg!(target_os = "macos") {
+        (identity.strip_prefix("macho-uuid:").unwrap(), Some(32))
+    } else if let Some(build_id) = identity.strip_prefix("gnu-build-id:") {
+        (build_id, None)
+    } else {
+        (identity.strip_prefix("sha256:").unwrap(), Some(64))
+    };
+    assert!(!digest.is_empty() && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    if let Some(length) = length {
+        assert_eq!(digest.len(), length);
+    }
+}
+
+/// A 64-bit little-endian ELF image with one `PT_NOTE` segment holding
+/// `notes`.
+fn elf_with_notes(notes: &[(u32, &[u8], &[u8])]) -> Vec<u8> {
+    let mut segment = Vec::new();
+    for (kind, name, desc) in notes {
+        segment.extend(u32::try_from(name.len()).unwrap().to_le_bytes());
+        segment.extend(u32::try_from(desc.len()).unwrap().to_le_bytes());
+        segment.extend(kind.to_le_bytes());
+        segment.extend(*name);
+        segment.resize(segment.len().div_ceil(4) * 4, 0);
+        segment.extend(*desc);
+        segment.resize(segment.len().div_ceil(4) * 4, 0);
+    }
+    let mut image = vec![0u8; 64];
+    image[..4].copy_from_slice(b"\x7fELF");
+    image[4] = 2;
+    image[5] = 1;
+    image[0x20..0x28].copy_from_slice(&64_u64.to_le_bytes());
+    image[0x36..0x38].copy_from_slice(&56_u16.to_le_bytes());
+    image[0x38..0x3a].copy_from_slice(&1_u16.to_le_bytes());
+    let mut program = vec![0u8; 56];
+    program[..4].copy_from_slice(&4_u32.to_le_bytes());
+    program[8..16].copy_from_slice(&120_u64.to_le_bytes());
+    program[0x20..0x28].copy_from_slice(&(segment.len() as u64).to_le_bytes());
+    program[0x30..0x38].copy_from_slice(&4_u64.to_le_bytes());
+    image.extend(program);
+    image.extend(segment);
+    image
+}
+
+#[test]
+fn an_elf_identity_is_its_one_gnu_build_id() {
+    let id = |image: Vec<u8>| super::elf_build_id(&mut std::io::Cursor::new(image));
+    let abi: (u32, &[u8], &[u8]) = (1, b"GNU\0", &[0, 0, 0, 0, 3, 0, 0, 0]);
+    let build: (u32, &[u8], &[u8]) = (3, b"GNU\0", &[0xa6, 0x92, 0x65, 0x01]);
     assert_eq!(
-        digest.len(),
-        if cfg!(target_os = "macos") { 32 } else { 64 }
+        id(elf_with_notes(&[abi, build])).as_deref(),
+        Some("a6926501")
     );
+    // No build id, two of them, an empty one, another owner's: none.
+    assert!(id(elf_with_notes(&[abi])).is_none());
+    assert!(id(elf_with_notes(&[build, build])).is_none());
+    assert!(id(elf_with_notes(&[(3, b"GNU\0", &[])])).is_none());
+    assert!(id(elf_with_notes(&[(3, b"Go\0\0", &[1, 2])])).is_none());
+    // Not an ELF image, or one cut short.
+    assert!(
+        id(b"MZ not an elf image at all, but long enough to be read whole....".to_vec()).is_none()
+    );
+    let mut cut = elf_with_notes(&[build]);
+    cut.truncate(130);
+    assert!(id(cut).is_none());
 }
 
 #[test]

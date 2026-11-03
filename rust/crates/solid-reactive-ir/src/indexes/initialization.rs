@@ -357,13 +357,16 @@ impl<'a> SemanticLookup<'a> {
                     if listed {
                         continue;
                     }
-                    for &(mention, declaration) in &file.ast.reference_declarations {
-                        if binding.names.iter().any(|name| name.span == declaration)
-                            && binding.names.iter().all(|name| name.span != mention)
-                        {
-                            let entry = rejected.entry(path.to_owned()).or_default();
-                            entry.0.insert(mention);
-                            entry.1.insert(mention);
+                    // The file's mentions resolved to one of the binding's
+                    // names (sets: the order the binder lists them in is not
+                    // read).
+                    for name in &binding.names {
+                        for &mention in file.ast.references_to(name.span) {
+                            if binding.names.iter().all(|name| name.span != mention) {
+                                let entry = rejected.entry(path.to_owned()).or_default();
+                                entry.0.insert(mention);
+                                entry.1.insert(mention);
+                            }
                         }
                     }
                 }

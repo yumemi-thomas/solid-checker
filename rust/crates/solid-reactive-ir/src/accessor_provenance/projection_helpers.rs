@@ -525,23 +525,13 @@ pub(super) fn mutation_parameter_inputs(
         .iter()
         .filter(|(_, d)| *d == declaration)
     {
-        let direct = file
-            .ast
-            .calls
-            .iter()
-            .find(|c| file.ast.peel_ts_sugar_span(c.callee) == *reference);
+        let direct = file.ast.calls_with_peeled_callee(*reference).next();
         let member = file.ast.members.iter().find(|m| {
             file.ast.peel_ts_sugar_span(m.object) == *reference
                 && !file.ast.computed_members.contains(&m.span)
         });
-        let call = direct.or_else(|| {
-            member.and_then(|m| {
-                file.ast
-                    .calls
-                    .iter()
-                    .find(|c| file.ast.peel_ts_sugar_span(c.callee) == m.span)
-            })
-        });
+        let call = direct
+            .or_else(|| member.and_then(|m| file.ast.calls_with_peeled_callee(m.span).next()));
         let Some(call) = call else {
             // A method holder may also have ordinary data member reads. They
             // are checked when that projected receiver is proved separately.

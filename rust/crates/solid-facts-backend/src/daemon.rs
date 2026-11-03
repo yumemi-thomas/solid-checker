@@ -340,6 +340,15 @@ fn implementation_identity() -> Result<&'static str, Box<dyn Error>> {
 #[cfg(target_os = "linux")]
 fn loaded_implementation_identity() -> Result<String, String> {
     // /proc/self/exe opens the executing inode even after unlink/replacement.
+    // The linker's build id (`NT_GNU_BUILD_ID`, a digest of the linked
+    // output) names the image as the whole file's digest does, from a few
+    // hundred bytes instead of the 40 MB every client used to read and hash
+    // before it could ask its daemon. An image without exactly one is hashed.
+    if let Ok(mut image) = fs::File::open("/proc/self/exe")
+        && let Some(build_id) = elf_build_id(&mut image)
+    {
+        return Ok(format!("gnu-build-id:{build_id}"));
+    }
     let digest = hash_file(Path::new("/proc/self/exe")).map_err(|error| error.to_string())?;
     Ok(format!(
         "sha256:{}",
@@ -362,6 +371,135 @@ fn loaded_implementation_identity() -> Result<String, String> {
 fn loaded_implementation_identity() -> Result<String, String> {
     // A fresh one-shot check remains available; never reuse an unidentified actor.
     Err("immutable loaded checker identity is unavailable on this platform".into())
+}
+
+/// The hex of the image's one GNU build id note (`NT_GNU_BUILD_ID` in a
+/// `PT_NOTE` segment), read from its ELF and program headers; `None` for no
+/// ELF image, no such note, more than one, or an empty one.
+#[cfg(any(target_os = "linux", test))]
+fn elf_build_id(image: &mut (impl io::Read + io::Seek)) -> Option<String> {
+    use io::SeekFrom;
+    const PT_NOTE: u64 = 4;
+    const NT_GNU_BUILD_ID: u64 = 3;
+    const NOTE_LIMIT: u64 = 1 << 16;
+    let mut header = [0u8; 64];
+    image.read_exact(&mut header[..52]).ok()?;
+    if header[..4] != *b"\x7fELF" {
+        return None;
+    }
+    let wide = match header[4] {
+        1 => false,
+        2 => true,
+        _ => return None,
+    };
+    let little = match header[5] {
+        1 => true,
+        2 => false,
+        _ => return None,
+    };
+    if wide {
+        image.read_exact(&mut header[52..64]).ok()?;
+    }
+    let u16_at = |bytes: &[u8], at: usize| -> Option<u64> {
+        let raw: [u8; 2] = bytes.get(at..at + 2)?.try_into().ok()?;
+        Some(u64::from(if little {
+            u16::from_le_bytes(raw)
+        } else {
+            u16::from_be_bytes(raw)
+        }))
+    };
+    let u32_at = |bytes: &[u8], at: usize| -> Option<u64> {
+        let raw: [u8; 4] = bytes.get(at..at + 4)?.try_into().ok()?;
+        Some(u64::from(if little {
+            u32::from_le_bytes(raw)
+        } else {
+            u32::from_be_bytes(raw)
+        }))
+    };
+    let u64_at = |bytes: &[u8], at: usize| -> Option<u64> {
+        let raw: [u8; 8] = bytes.get(at..at + 8)?.try_into().ok()?;
+        Some(if little {
+            u64::from_le_bytes(raw)
+        } else {
+            u64::from_be_bytes(raw)
+        })
+    };
+    let (phoff, phentsize, phnum) = if wide {
+        (
+            u64_at(&header, 0x20)?,
+            u16_at(&header, 0x36)?,
+            u16_at(&header, 0x38)?,
+        )
+    } else {
+        (
+            u32_at(&header, 0x1c)?,
+            u16_at(&header, 0x2a)?,
+            u16_at(&header, 0x2c)?,
+        )
+    };
+    let entry = usize::try_from(phentsize).ok()?;
+    if entry < if wide { 56 } else { 32 } {
+        return None;
+    }
+    let mut table = vec![0u8; entry.checked_mul(usize::try_from(phnum).ok()?)?];
+    image.seek(SeekFrom::Start(phoff)).ok()?;
+    image.read_exact(&mut table).ok()?;
+    let mut found = None;
+    for program in table.chunks_exact(entry) {
+        if u32_at(program, 0)? != PT_NOTE {
+            continue;
+        }
+        let (offset, size, align) = if wide {
+            (
+                u64_at(program, 8)?,
+                u64_at(program, 0x20)?,
+                u64_at(program, 0x30)?,
+            )
+        } else {
+            (
+                u32_at(program, 4)?,
+                u32_at(program, 0x10)?,
+                u32_at(program, 0x1c)?,
+            )
+        };
+        if size > NOTE_LIMIT {
+            return None;
+        }
+        let align = if align == 8 { 8 } else { 4 };
+        let pad = |length: u64| length.div_ceil(align) * align;
+        let mut notes = vec![0u8; usize::try_from(size).ok()?];
+        image.seek(SeekFrom::Start(offset)).ok()?;
+        image.read_exact(&mut notes).ok()?;
+        let mut at = 0u64;
+        while at + 12 <= size {
+            let start = usize::try_from(at).ok()?;
+            let name_size = u32_at(&notes, start)?;
+            let desc_size = u32_at(&notes, start + 4)?;
+            let kind = u32_at(&notes, start + 8)?;
+            let name_at = at + 12;
+            let desc_at = name_at + pad(name_size);
+            let next = desc_at + pad(desc_size);
+            if next > size {
+                return None;
+            }
+            let name = &notes
+                [usize::try_from(name_at).ok()?..usize::try_from(name_at + name_size).ok()?];
+            if kind == NT_GNU_BUILD_ID && name == b"GNU\0" {
+                if found.is_some() || desc_size == 0 {
+                    return None;
+                }
+                let desc = &notes
+                    [usize::try_from(desc_at).ok()?..usize::try_from(desc_at + desc_size).ok()?];
+                found = Some(
+                    desc.iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>(),
+                );
+            }
+            at = next;
+        }
+    }
+    found
 }
 
 #[cfg(any(target_os = "macos", test))]

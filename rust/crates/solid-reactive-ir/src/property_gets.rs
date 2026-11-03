@@ -473,10 +473,7 @@ fn parameter_get(file: &solid_facts::FileFacts, reference: Span) -> Option<(Span
         || ast.optional_members.binary_search(&member.span).is_ok()
         || key.contains('\\')
         || key.starts_with('#')
-        || ast
-            .calls
-            .iter()
-            .any(|call| ast.peel_ts_sugar_span(call.callee) == member.span)
+        || ast.calls_with_peeled_callee(member.span).next().is_some()
         || ast
             .tagged_template_tags
             .iter()

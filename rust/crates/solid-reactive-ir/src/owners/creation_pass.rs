@@ -131,9 +131,8 @@ fn hook_call<'a>(
             .iter()
             .any(|element| element.name.span == *callee)
             || !ast
-                .calls
-                .iter()
-                .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == *callee)
+                .calls_with_peeled_callee(*callee)
+                .any(|call| !call.construct)
         {
             return None;
         }

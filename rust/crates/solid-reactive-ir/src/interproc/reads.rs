@@ -731,14 +731,23 @@ pub(super) fn interprocedural_reads(
     fixed_points.callback_forwarding = step_started.elapsed();
     let graph = phase_started.elapsed();
     phase_started = Instant::now();
-    let (direct_index, direct_references, direct_summaries) = add_direct_reference_summaries(
-        context,
-        interprocedural_result_cache.as_deref_mut(),
-        nodes,
-        nodes_by_path,
-        &mut summaries,
-        phase_started,
-    );
+    // What the direct references decide is the result view's (summary rows,
+    // compared by value where a result chunk reads them): their reads join
+    // the graph chunks', not the result chunks' stage proof. Recorded there,
+    // an edit that moved any function's span moved the stage proof, and every
+    // file's result chunk reran.
+    let ((direct_index, direct_references, direct_summaries), direct_reads) =
+        crate::base::reads::record_detached(|| {
+            add_direct_reference_summaries(
+                context,
+                interprocedural_result_cache.as_deref_mut(),
+                nodes,
+                nodes_by_path,
+                &mut summaries,
+                phase_started,
+            )
+        });
+    chunk_reads.push(direct_reads);
     phase_started = Instant::now();
     let ReturnedSummaries {
         mut returned,
@@ -787,28 +796,35 @@ pub(super) fn interprocedural_reads(
     // Binding dispatch rows arrive after the direct-reference layer climb.
     // Preserve them at each proven in-place caller too. Their summary edge
     // does not establish an unconditional read, so keep the new row undecided.
-    let mut layered = Vec::new();
-    for (owner, node) in nodes.iter().enumerate() {
-        // file_by_path records the slot; this assembly also records stage reads.
-        let Some(file) = lookup.file_by_path(&node.path) else {
-            continue;
-        };
-        for layer in in_place_layer_owners(context, nodes, nodes_by_path, file, node.body, owner) {
-            for (hops, read) in summaries[owner].rows() {
-                if summaries[layer.owner].rows().any(|(_, existing)| {
-                    existing.symbol == read.symbol && existing.origin == read.origin
-                }) {
-                    continue;
+    // The climb decides summary rows only, so its reads join the graph
+    // chunks' as the direct references' do.
+    let (layered, layered_reads) = crate::base::reads::record_detached(|| {
+        let mut layered = Vec::new();
+        for (owner, node) in nodes.iter().enumerate() {
+            let Some(file) = lookup.file_by_path(&node.path) else {
+                continue;
+            };
+            for layer in
+                in_place_layer_owners(context, nodes, nodes_by_path, file, node.body, owner)
+            {
+                for (hops, read) in summaries[owner].rows() {
+                    if summaries[layer.owner].rows().any(|(_, existing)| {
+                        existing.symbol == read.symbol && existing.origin == read.origin
+                    }) {
+                        continue;
+                    }
+                    let mut read = read.clone();
+                    read.owner = nodes[layer.owner].symbol.clone();
+                    read.origin_context = nodes[layer.owner].name.clone().unwrap_or_default();
+                    read.local |= layer.local;
+                    read.undecided = true;
+                    layered.push((layer.owner, hops, read));
                 }
-                let mut read = read.clone();
-                read.owner = nodes[layer.owner].symbol.clone();
-                read.origin_context = nodes[layer.owner].name.clone().unwrap_or_default();
-                read.local |= layer.local;
-                read.undecided = true;
-                layered.push((layer.owner, hops, read));
             }
         }
-    }
+        layered
+    });
+    chunk_reads.push(layered_reads);
     for (owner, hops, read) in layered {
         summaries[owner].insert(read, hops);
     }
@@ -2034,31 +2050,59 @@ fn collect_result_reads(
                 })
                 .map(|(dependency, _)| dependency.clone())
                 .collect::<HashSet<_>>();
-            for file in &facts.files {
-                if unchanged_paths.contains(file.path.as_str())
-                    && let Some(cached) = cache.files.get(file.path.as_str())
-                    && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                        || same_compiler_semantics(&cached.compiler, &file.compiler))
-                    && cached.dependencies.is_disjoint(&changed_dependencies)
-                    && cached.proof.holds(*lookup)
-                    && stage_proofs_hold
-                        .entry(Arc::as_ptr(&cached.stage_proof) as usize)
-                        .or_insert_with(|| {
-                            (
-                                Arc::clone(&cached.stage_proof),
-                                cached.stage_proof.holds(*lookup),
-                            )
+            // Which files keep their cached reads: decided first, in file
+            // order, before any entry is replaced (a check reads only its
+            // own file's entry and the stage proofs, which no recomputation
+            // changes). The rest are recomputed together, on the workers the
+            // first build uses: an edit that moves the stage's proof reruns
+            // every file, and one at a time that was most of the edit.
+            let reused = facts
+                .files
+                .iter()
+                .map(|file| {
+                    unchanged_paths.contains(file.path.as_str())
+                        && cache.files.get(file.path.as_str()).is_some_and(|cached| {
+                            (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                                || same_compiler_semantics(&cached.compiler, &file.compiler))
+                                && cached.dependencies.is_disjoint(&changed_dependencies)
+                                && cached.proof.holds(*lookup)
+                                && stage_proofs_hold
+                                    .entry(Arc::as_ptr(&cached.stage_proof) as usize)
+                                    .or_insert_with(|| {
+                                        (
+                                            Arc::clone(&cached.stage_proof),
+                                            cached.stage_proof.holds(*lookup),
+                                        )
+                                    })
+                                    .1
+                                && super::transport_reads::hold(
+                                    &cached.transport,
+                                    result_read_context,
+                                )
                         })
-                        .1
-                    && super::transport_reads::hold(&cached.transport, result_read_context)
-                {
+                })
+                .collect::<Vec<_>>();
+            let stale = facts
+                .files
+                .iter()
+                .zip(&reused)
+                .filter(|(_, reused)| !**reused)
+                .map(|(file, _)| file)
+                .collect::<Vec<_>>();
+            let mut recomputed =
+                crate::pipeline::parallel_balanced_results_from(2, &stale, |file| read_file(file))
+                    .into_iter();
+            for (file, reused) in facts.files.iter().zip(reused) {
+                if reused && let Some(cached) = cache.files.get(file.path.as_str()) {
                     result_reused_files += 1;
                     result.extend(cached.reads.iter().cloned());
                     dispatch_obligations.extend(cached.dispatch_obligations.iter().cloned());
                     continue;
                 }
                 result_recomputed_files += 1;
-                let ((reads, obligations, dependencies), (recorded, transport)) = read_file(file);
+                let ((reads, obligations, dependencies), (recorded, transport)) = recomputed
+                    .next()
+                    .expect("one recomputed result per stale file");
                 result.extend(reads.iter().cloned());
                 dispatch_obligations.extend(obligations.iter().cloned());
                 if let Some(previous) = cache.files.remove(file.path.as_str()) {
