@@ -57,6 +57,40 @@ export function SettledTwoCarriers() {
   return <div />;
 }
 
+// Violation (wrapper): the read is in `wrapUse`, which `hf` calls; a
+// running carrier runs `hf` in a named tracked callback handed twice.
+export function TrackedSharedWrapper() {
+  const a9 = createMemo(async () => 1);
+  const wrapUse = () => {
+    a9();
+  };
+  const cb = () => {
+    const hf = () => {
+      wrapUse();
+    };
+    [1].forEach(hf);
+  };
+  createTrackedEffect(cb);
+  createTrackedEffect(cb);
+  return <div />;
+}
+
+// Uncertifiable (wrapper): the same through an empty receiver.
+export function TrackedWrapperEmpty() {
+  const a10 = createMemo(async () => 1);
+  const wrapUse = () => {
+    a10();
+  };
+  const cb = () => {
+    const hf = () => {
+      wrapUse();
+    };
+    ([] as number[]).forEach(hf);
+  };
+  createTrackedEffect(cb);
+  return <div />;
+}
+
 // Uncertifiable: an empty receiver may run `hf` zero times.
 export function SettledNamedEmpty() {
   const a5 = createMemo(async () => 1);

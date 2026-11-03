@@ -2085,5 +2085,23 @@
    "mx-primitive-in-effect-callback-effect-apply-effect-wrapper-handoff-tagged-module-star"
   ],
   "rediscovered": "aa904eef0: missing-owner violation and primitive-in-effect-callback uncertifiable (644bd1a81: both uncertifiable); the fix: both violations"
+ },
+ {
+  "finding": "ADR 0580 amendment: a pending read in a wrapper (`wrapUse`) called from `hf`, which a running inline carrier runs in a named createTrackedEffect callback handed twice, had only an SC5003 obligation: the call-attributed walk asked the leaf owner at the call's own position",
+  "found": "mx-pairs VM recheck at 0f06bcd95 (origin/claude/fuzz-audit-fixes): 8 not-certified false cleans, tracked x wrapper x the 8 inline hand-offs x cb-shared",
+  "fixed": "ADR 0580 (amended)",
+  "grid": "mx-pairs",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-foreach-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-map-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-from-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-sort-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-call-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-apply-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-reflect-cb-shared",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-tagged-cb-shared"
+  ],
+  "rediscovered": "0f06bcd95: SC5003 uncertifiable only at the site; claude/fix-pair-wrapper: SC5001 violation at the site on all 8 (local debug checker, regenerated sources); VM focus pending"
  }
 ]

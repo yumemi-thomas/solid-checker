@@ -3155,13 +3155,17 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
-                let leaf_owner = containing_leaf_owner(
+                // ADR 0580: a position in a named function inline carriers
+                // run is under the leaf owner of the carrier that runs it.
+                let (leaf_owner, leaf_carrier_unproven) = carried_leaf_owner(
                     file,
                     position,
                     self.entities,
                     self.symbol_names,
                     self.lookup,
+                    CARRIED_LEAF_DEPTH,
                 );
+                let run_unproven = run_unproven || leaf_carrier_unproven;
                 // ADR 0490: a call that runs where a direct read is
                 // unsuspendable (a component body's strict-read window,
                 // module evaluation, a leaf owner) reads there, as the
