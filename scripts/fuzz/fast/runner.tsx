@@ -65,11 +65,12 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];
-  // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED is reported or the page has an uncaught error,
-  // a plan step whose element is missing ends on the marker, and the run is a partial one.
+  // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED or an error-severity diagnostic (thrown at its
+  // site, perhaps caught by an Errored boundary that never renders its children again) is reported or the page has an uncaught
+  // error, a plan step whose element is missing ends on the marker, and the run is a partial one.
   const uncaught = ['window-error', 'node-uncaught', 'render'];
   const missingStep = (selector: string) => {
-    if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
+    if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED' || d.severity === 'error') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
   };
   let hits: Record<string, number> | null = null, order: number[] = [], hitsDom: string | null = null, quiescent: boolean | null = null;
   (globalThis as any).__scHits = undefined; (globalThis as any).__scOrder = undefined;
@@ -96,7 +97,7 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   window.addEventListener('unhandledrejection', onRejection);
   const stop = OBSERVE!.diagnostics.subscribe((event: any) => {
     diagnostics.push({ code: event.code, message: event.message ?? null, loc: event.loc ?? null, siteKind: event.siteKind ?? null,
-      phase, stack: new Error(`diagnostic ${event.code}`).stack });
+      severity: event.severity ?? null, phase, stack: new Error(`diagnostic ${event.code}`).stack });
   });
   try {
     const plan = JSON.parse(readFileSync(join(caseDir, 'sites.json'), 'utf8'));
