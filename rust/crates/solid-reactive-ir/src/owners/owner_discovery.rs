@@ -247,6 +247,11 @@ pub(crate) fn discover_owner_file(
         if known_primitive(&call_primitives[call_index]).is_none()
             && invocation_runs_under_owner(file, call.span, owner)
         {
+            // ADR 0563: a carrier that may run its callback zero times (an
+            // empty or unknown-length receiver) proves no run: the possible
+            // unowned bit alone, so what the callback does stays an
+            // obligation, never a violation.
+            let runs = crate::carrier_runs::carrier_provably_runs(file, call.span, lookup);
             for index in inline_carrier_arguments(file, call, lookup) {
                 let argument = call.arguments[index].span;
                 if crate::owners::argument_may_be_generator(file, argument, lookup) {
@@ -255,7 +260,9 @@ pub(crate) fn discover_owner_file(
                 let Some(target) = callback_target(argument, false) else {
                     continue;
                 };
-                let (source, kind) = if unproven_handed_function(file, &target, argument, lookup) {
+                let (source, kind) = if !runs {
+                    (None, OwnerEdgeKind::MayBeUnowned)
+                } else if unproven_handed_function(file, &target, argument, lookup) {
                     may_run()
                 } else {
                     (source.clone(), kind)

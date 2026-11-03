@@ -28,6 +28,13 @@ body's strict-read window, at module scope, or in a leaf owner is reported at
 the call, as a direct read there is (ADR 0490); a call in an event handler or
 one that never runs is not.
 
+A read in a callback a standard-library carrier runs is proven only where the
+carrier provably runs it: `.call`/`.apply`, `Reflect.apply`, the `Promise`
+executor, a tagged template, a non-empty array literal receiver (two elements
+for `sort`, two or an initial value for `reduce`), `Array.from` of one. An
+empty or unknown-length receiver (`[].forEach(f)`, `props.xs.map(f)`, a `Set`)
+may run it zero times: uncertifiable (ADR 0563).
+
 A pending read in a callback a host API retains (an `addEventListener`
 listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation
 callback) written in a component body is also uncertifiable: invoked inside the

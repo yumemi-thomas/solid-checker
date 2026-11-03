@@ -31,9 +31,11 @@ The read must run under an owner on every path: a component body, a computation
 a component creates, or a function called from one. A function a reviewed
 standard-library carrier runs before it returns (`[1].forEach(hf)`, `map`,
 `sort`, `Array.from`'s map function, `Reflect.apply`) or a tagged template's tag
-counts as called there (ADR 0561); a same-named project or local `forEach` does
-not. So does an arrow written as a prop of a same-file component that only ever
-calls the prop, at each call written in the component's own body or JSX
+counts as called there (ADR 0561) where it provably runs it (a non-empty array
+literal, `Reflect.apply`; ADR 0563); a same-named project or local `forEach`
+does not, and an empty or unknown-length receiver leaves SC4001's obligation.
+An arrow written as a prop of a same-file component that only ever calls the
+prop also counts as called, at each call written in the component's own body or JSX
 (`<Kid run={() => useContext(Ctx)} />` with `props.run()` or `({ run }) => run()`
 in `Kid`; ADR 0562). A forwarded, spread, defaulted or copied prop, a call in
 the child's handler or `onSettled` callback, and a child in another file are

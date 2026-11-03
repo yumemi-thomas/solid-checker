@@ -1,3 +1,5 @@
 # leaf-scope-host-callbacks
 
 **Claim (ADR 0210).** A standard-library call in a leaf owner's callback runs the functions it is handed on the audited timing table's schedule: inline callbacks (`forEach`, `Promise` executor, setter updater, `call`) are walked like helpers, fresh-stack/deferred callbacks run after the call returns, `PromiseLike.then` and unaudited callables stay `SC9012`; merged-global timers/`fetch` join their default-library declarations (lookalikes uncertifiable); `Focus.tsx` (ADR 0318) certifies only audited optional DOM members. The setter takes an updater as `@solidjs/signals`' `Setter<T>`.
+
+ADR 0563: `items().forEach(…)` runs its callback once per element of a list whose length is not read, so `InlineIdentifier`, `InlineLiteral` and `InlineInHelper` are SC3001 obligations (with SC4001's), not violations.

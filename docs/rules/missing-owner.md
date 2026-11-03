@@ -308,7 +308,8 @@ A package function whose same-operation creation calls cover every exit between 
   runs on the caller's stack, under the caller's owner: in a handler or a timer
   it is a violation, in a component body it is owned. A generator handed there
   runs nothing and stays uncertifiable; so does a carrier in the owner's own
-  JSX or an instance field.
+  JSX or an instance field, and one that may run it zero times (an empty or
+  unknown-length receiver, ADR 0563).
 - **A callback prop runs where the child calls it (ADR 0562).** An arrow
   written as a prop of a same-file project component that reaches nothing but
   calls (ADR 0538's proof) runs at each call the component writes in its own
