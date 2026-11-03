@@ -169,6 +169,37 @@ export function AssignedThis() {
   return <p>{m()}</p>;
 }
 
+export function ClassMethod() {
+  const [r] = createSignal(3);
+  const m = createMemo(async () => {
+    await Promise.resolve();
+    class Holder {
+      m() {
+        r();
+      }
+    }
+    new Holder().m();
+    return 1;
+  });
+  return <p>{m()}</p>;
+}
+
+export function ShorthandEscaped() {
+  const [r] = createSignal(3);
+  const m = createMemo(async () => {
+    await Promise.resolve();
+    const ho = {
+      m() {
+        r();
+      },
+    };
+    const alias = ho;
+    alias.m();
+    return 1;
+  });
+  return <p>{m()}</p>;
+}
+
 export function LiteralHandOff() {
   const [r] = createSignal(3);
   const m = createMemo(async () => {

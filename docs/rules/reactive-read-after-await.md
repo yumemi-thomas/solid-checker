@@ -120,11 +120,11 @@ there, and the reads in it are then reported with the same two proofs:
 
 **A hand-off the walk does not follow is an obligation (ADR 0565).** A
 function the walk above does not place, handed whole to a project or
-unresolved call (`run(hf)`), copied, or written as a member's value or an
-object literal's slot (`ho.m = () => …`, `{ m: hf }`), may run on the
+unresolved call (`run(hf)`), copied, or written as a member's value, an
+object literal's slot or a method (`ho.m = () => …`, `{ m: hf }`), may run on the
 continuation's stack where that code calls it: its reads are
 **uncertifiable** when it is written after the await, handed on after it, or
-(a member's value or a slot) outlives a later await. A function the
+(a member's value, a slot or a method) outlives a later await. A function the
 computation returns, schedules on a fresh stack or never mentions stays
 silent. A same-file wrapper called by its plain name that calls the function
 (its parameter) on every completion of its own synchronous body runs it on

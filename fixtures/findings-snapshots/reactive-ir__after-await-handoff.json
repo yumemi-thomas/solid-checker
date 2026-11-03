@@ -297,8 +297,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3689,
-      "end": 3692,
+      "start": 3640,
+      "end": 3643,
       "fixes": 0
     },
     {
@@ -307,8 +307,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3689,
-      "end": 3690,
+      "start": 3640,
+      "end": 3641,
       "fixes": 0
     },
     {
@@ -317,8 +317,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3750,
-      "end": 3753,
+      "start": 3714,
+      "end": 3717,
       "fixes": 0
     },
     {
@@ -327,8 +327,68 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3946,
-      "end": 3949,
+      "start": 3898,
+      "end": 3901,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 3898,
+      "end": 3899,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 3989,
+      "end": 3992,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 4219,
+      "end": 4222,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 4219,
+      "end": 4220,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 4280,
+      "end": 4283,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 4476,
+      "end": 4479,
       "fixes": 0
     },
     {
@@ -337,8 +397,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3946,
-      "end": 3947,
+      "start": 4476,
+      "end": 4477,
       "fixes": 0
     },
     {
@@ -347,8 +407,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4036,
-      "end": 4039,
+      "start": 4566,
+      "end": 4569,
       "fixes": 0
     },
     {
@@ -357,8 +417,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4284,
-      "end": 4287,
+      "start": 4814,
+      "end": 4817,
       "fixes": 0
     },
     {
@@ -367,8 +427,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4284,
-      "end": 4285,
+      "start": 4814,
+      "end": 4815,
       "fixes": 0
     },
     {
@@ -377,8 +437,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4379,
-      "end": 4382,
+      "start": 4909,
+      "end": 4912,
       "fixes": 0
     },
     {
@@ -387,8 +447,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4564,
-      "end": 4567,
+      "start": 5094,
+      "end": 5097,
       "fixes": 0
     },
     {
@@ -397,8 +457,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4564,
-      "end": 4565,
+      "start": 5094,
+      "end": 5095,
       "fixes": 0
     },
     {
@@ -407,8 +467,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4652,
-      "end": 4655,
+      "start": 5182,
+      "end": 5185,
       "fixes": 0
     },
     {
@@ -417,8 +477,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4899,
-      "end": 4902,
+      "start": 5429,
+      "end": 5432,
       "fixes": 0
     },
     {
@@ -427,8 +487,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4967,
-      "end": 4970,
+      "start": 5497,
+      "end": 5500,
       "fixes": 0
     },
     {
@@ -437,8 +497,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5138,
-      "end": 5141,
+      "start": 5668,
+      "end": 5671,
       "fixes": 0
     },
     {
@@ -447,8 +507,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5183,
-      "end": 5186,
+      "start": 5713,
+      "end": 5716,
       "fixes": 0
     },
     {
@@ -457,8 +517,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5325,
-      "end": 5328,
+      "start": 5855,
+      "end": 5858,
       "fixes": 0
     },
     {
@@ -467,8 +527,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5415,
-      "end": 5418,
+      "start": 5945,
+      "end": 5948,
       "fixes": 0
     },
     {
@@ -477,8 +537,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5591,
-      "end": 5594,
+      "start": 6121,
+      "end": 6124,
       "fixes": 0
     },
     {
@@ -487,8 +547,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5652,
-      "end": 5655,
+      "start": 6182,
+      "end": 6185,
       "fixes": 0
     },
     {
@@ -497,8 +557,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5820,
-      "end": 5823,
+      "start": 6350,
+      "end": 6353,
       "fixes": 0
     },
     {
@@ -507,8 +567,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5873,
-      "end": 5876,
+      "start": 6403,
+      "end": 6406,
       "fixes": 0
     }
   ]

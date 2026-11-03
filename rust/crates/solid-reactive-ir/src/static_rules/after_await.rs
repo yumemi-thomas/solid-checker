@@ -1441,11 +1441,11 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// ADR 0565: a function the walk did not place (an argument it follows,
     /// a carrier, a helper call) and that is handed where nothing here follows
     /// it -- a project or unresolved call's whole argument, a member's value,
-    /// an object literal's slot, a copy (`run(hf)`, `ho.m = () => …`, `{ m:
-    /// hf }`) -- may run synchronously on the continuation. It may run there
+    /// an object literal's slot, a method, a copy (`run(hf)`, `ho.m = () =>
+    /// …`, `{ m: hf }`) -- may run synchronously on the continuation. It may run there
     /// when it is written in the member after one of its suspensions (it exists
     /// only on the continuation), when a reference hands it on after one, or,
-    /// as a member's value or a slot, when a suspension follows it. Its reads
+    /// as a member's value, a slot or a method, when a suspension follows it. Its reads
     /// are then proof obligations, never a silent clean. A function only
     /// called directly, scheduled on a fresh stack, kept by a host, returned
     /// by the member or never referenced is left to the arms that place it.
@@ -1511,7 +1511,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                 continue;
             }
             let created_after = suspended_before(candidate.span.start);
-            let unplaced = if crate::local_access::member_assigned(file, candidate)
+            // A method (a class's, an object literal's, an accessor, a
+            // constructor) runs wherever its member is reached, as a member's
+            // value does.
+            let unplaced = if candidate.method_name.is_some()
+                || crate::local_access::member_assigned(file, candidate)
                 || crate::local_access::object_slot_value(file, candidate)
             {
                 created_after || suspends_after(candidate.span.end)
