@@ -1,0 +1,235 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 830,
+      "end": 842,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 830,
+      "end": 842,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 891,
+      "end": 901,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 891,
+      "end": 901,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 963,
+      "end": 968,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1071,
+      "end": 1083,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1071,
+      "end": 1083,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1177,
+      "end": 1189,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1177,
+      "end": 1189,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1241,
+      "end": 1251,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1241,
+      "end": 1251,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1316,
+      "end": 1321,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1432,
+      "end": 1444,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1497,
+      "end": 1509,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1579,
+      "end": 1591,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1669,
+      "end": 1681,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1738,
+      "end": 1750,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1808,
+      "end": 1820,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1875,
+      "end": 1887,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1946,
+      "end": 1958,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 2021,
+      "end": 2033,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 2097,
+      "end": 2109,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 2146,
+      "end": 2158,
+      "fixes": 0
+    }
+  ]
+}

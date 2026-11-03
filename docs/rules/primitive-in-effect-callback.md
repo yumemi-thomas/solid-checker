@@ -17,6 +17,8 @@ child component only calls (ADR 0538; a hand-off nothing places is
 uncertifiable), and never through `runWithOwner`, `createRoot` or another call
 that sets an owner (ADR 0483). A `createReaction` callback, the apply of a
 deferred user effect, is claimed the same way (ADR 0541).
+An apply `defer: true` provably never runs (ADR 0302) claims nothing, in itself
+or in a function only it calls (ADR 0590).
 
 **Premise: read from the published bytes.** `@solidjs/signals@2.0.0-rc.17`
 runs an effect's apply from the flush with the `inEffectCallback` marker up and

@@ -583,6 +583,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source-integrity-r2-*/node_modules/**
 !fixtures/reactive-ir/deferred-effect-apply/node_modules/
 !fixtures/reactive-ir/deferred-effect-apply/node_modules/**
+!fixtures/reactive-ir/deferred-effect-apply-callees/node_modules/
+!fixtures/reactive-ir/deferred-effect-apply-callees/node_modules/**
+!fixtures/reactive-ir/deferred-effect-apply-callees-dynamic/node_modules/
+!fixtures/reactive-ir/deferred-effect-apply-callees-dynamic/node_modules/**
 !fixtures/reactive-ir/tuple-iteration-veto/node_modules/
 !fixtures/reactive-ir/tuple-iteration-veto/node_modules/**
 !fixtures/reactive-ir/leaf-source-call-targets/node_modules/

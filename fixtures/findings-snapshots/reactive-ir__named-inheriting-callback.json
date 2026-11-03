@@ -157,18 +157,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
-      "start": 2698,
-      "end": 2701,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
-      "start": 2853,
-      "end": 2856,
+      "start": 2711,
+      "end": 2714,
       "fixes": 0
     },
     {
