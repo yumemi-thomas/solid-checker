@@ -122,7 +122,11 @@ continuation's stack where that code calls it: its reads are
 **uncertifiable** when it is written after the await, handed on after it, or
 (a member's value or a slot) outlives a later await. A function the
 computation returns, schedules on a fresh stack or never mentions stays
-silent.
+silent. A same-file wrapper called by its plain name that calls the function
+(its parameter) on every completion of its own synchronous body runs it on
+this stack (`run(hf)` over `const run = (g) => { g(); }`), so its reads are
+reported as a literal's are (ADR 0485); a member wrapper (`api.run(hf)`) or
+one in another module stays uncertifiable.
 
 Each of these keeps it from applying:
 

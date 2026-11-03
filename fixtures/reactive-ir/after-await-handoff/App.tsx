@@ -3,7 +3,8 @@ import * as helpers from "./helpers";
 
 // ADR 0565: a function written after the await and run through a project hand-off.
 
-// A same-file wrapper that calls its parameter on every completion of its own synchronous body.
+// Violations: a same-file wrapper, called by its name, calls its parameter on every completion of its
+// own synchronous body (rc.17 warns UNTRACKED_READ_AFTER_AWAIT: the fuzzer's handoff-wrapper programs).
 function runNow(g: () => void): void {
   g();
 }
@@ -99,6 +100,24 @@ export function Namespace() {
       r();
     };
     helpers.run(hf);
+    return 1;
+  });
+  return <p>{m()}</p>;
+}
+
+export function MemberWrapper() {
+  const [r] = createSignal(3);
+  const api = {
+    run: (g: () => void) => {
+      g();
+    },
+  };
+  const m = createMemo(async () => {
+    await Promise.resolve();
+    const hf = () => {
+      r();
+    };
+    api.run(hf);
     return 1;
   });
   return <p>{m()}</p>;

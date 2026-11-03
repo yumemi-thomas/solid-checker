@@ -1184,6 +1184,51 @@ impl<'f, 'a> Reach<'f, 'a> {
                 in_place = true;
             }
         }
+        // ADR 0565: a function named whole at an argument that an exact
+        // same-file project function, called by its plain name, calls on every
+        // completion of its own synchronous body (`run(hf)` over `const run =
+        // (g) => { g(); }`) runs on this call's stack, as a literal there does
+        // (ADR 0485). A wrapper in another module or reached through a member,
+        // or one that calls it on some paths only, is ADR 0565's obligation.
+        if file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))
+            .is_none()
+        {
+            for (index, argument) in call.arguments.iter().enumerate() {
+                if argument.spread || argument.value != ArgumentValueKind::Identifier {
+                    continue;
+                }
+                let Some((function_file, function)) = self.named_function(file, argument.span)
+                else {
+                    continue;
+                };
+                if function.generator {
+                    continue;
+                }
+                let same_file_wrapper = crate::execution_role::project_callee_at_parameter(
+                    file,
+                    call,
+                    index,
+                    ctx.semantic_lookup,
+                )
+                .is_some_and(|(callee_file, callee, exact)| {
+                    exact && callee_file.path == file.path && callee.method_name.is_none()
+                });
+                if same_file_wrapper
+                    && crate::execution_role::helper_argument_run(
+                        file,
+                        call,
+                        index,
+                        ctx.semantic_lookup,
+                    )
+                    .is_some_and(|run| run.every_completion)
+                {
+                    self.report_prefix(draft, walk, function_file, function, depth);
+                    in_place = true;
+                }
+            }
+        }
         if in_place {
             return;
         }

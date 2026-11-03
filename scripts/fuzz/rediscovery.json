@@ -1105,7 +1105,7 @@
   "outside": "no grid generates an empty or unknown-length receiver yet: the layers handoff-foreach-empty (legal grid), handoff-foreach-var, handoff-timeout and handoff-void are proposed for the merge with claude/fuzz-pattern-coverage, which owns scripts/fuzz now; fixtures owner-carrier-provably-runs, async-carrier-provably-runs, leaf-carrier-provably-runs and async-carrier-call-attributed hold the shapes"
  },
  {
-  "finding": "a function written in an async computation after its await and run there through a project hand-off (`run(hf)`, `ho.m()` over `{ m: hf }`, `ho.m = () => …`, a parameter-filled or factory-returned object, `this.m` in a local class) had no SC1002 row and no obligation: the region walk follows literals, `.call`/`.apply`, standard inline carriers and exact helper calls only, and nothing pushed an obligation for the rest (ADR 0565)",
+  "finding": "a function written in an async computation after its await and run there through a project hand-off (`run(hf)`, `ho.m()` over `{ m: hf }`, `ho.m = () => \u2026`, a parameter-filled or factory-returned object, `this.m` in a local class) had no SC1002 row and no obligation: the region walk follows literals, `.call`/`.apply`, standard inline carriers and exact helper calls only, and nothing pushed an obligation for the rest (ADR 0565)",
   "found": "the full run on 644bd1a81 (full-main-644bd1a, mx-recall UNTRACKED_READ_AFTER_AWAIT), write-up carrier-provably-runs/await-fc.md 2026-11-03",
   "fixed": "ADR 0565",
   "grid": "mx-recall",
@@ -1448,6 +1448,6 @@
    "mx-untracked-read-after-await-effect-async-finally-x-tuple-handoff-assign-returned",
    "mx-untracked-read-after-await-effect-async-finally-x-tuple-handoff-assign-this"
   ],
-  "rediscovered": "local debug runs of 9 of the 336 (seed 1: the six layers, memo-async direct, plus loop, finally and for-await variants): 719b0e49a strict-read-untracked/uncertifiable only (false-clean); ADR 0565 reactive-read-after-await/uncertifiable at the read (recall gap); the VM fuzz-focus (old build fails, fix passes) is pending"
+  "rediscovered": "local debug runs (seed 1) of 98 of the 336: the 56 handoff-wrapper ids, the direct binding of the other five layers in all 8 contexts, and memo-async-finally alias member and memo-async-for-await hook assign: 719b0e49a strict-read-untracked/uncertifiable only (false-clean); ADR 0565 reactive-read-after-await/violation at the read for the 28 handoff-wrapper ids in memo-async, effect-async and their finally variants (agree), uncertifiable for the other 28 wrapper ids (loop, for-await) and for every member, assign, assign-param, assign-returned and assign-this id run (recall gap); the VM fuzz-focus (old build fails, fix passes) is pending"
  }
 ]
