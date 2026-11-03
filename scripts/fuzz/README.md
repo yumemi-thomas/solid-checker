@@ -421,6 +421,33 @@ A run refuses (exit 2) when more than half its programs fail to type-check or th
 
 A plan may list `edits` (`{ selector, text }`): the user types into an input before the clicks (the fast runner sets the value and fires `input`; Chrome `fill`s). `probes/uncommitted-input/` uses them: a stateful `value` binding rewritten over typed text by a sibling attribute's change (UNCOMMITTED_INPUT_OVERWRITTEN, which no rule claims; Chrome reports it unattributed, as its stack is all runtime frames), and two controls. Replay judges an unattributed diagnostic with no lines, and a code no rule claims as `unclaimed`.
 
+## Program counts
+
+Per grid at seed 1 (`hash-grids`-style enumeration of `cellList`/`legalCells` with each grid's focus arguments), before and after the pattern-coverage slices of 2026-11-03 (644bd1a81 and its successors); every program of the earlier column prints byte-identical after (all case files hashed), and so do 12,560 random-profile programs:
+
+| grid | 644bd1a81 | after | added by |
+| --- | --- | --- | --- |
+| mx-base, mx-src, mx-combo | 27,672, 48,060, 27,672 | the same | — |
+| lg-base, lg-src, lg-combo | 11,568, 17,964, 11,568 | the same | — |
+| mx-recall | 741,882 | 755,946 | MISSING_EFFECT_FN 4,884; typed-away variants 198; API variants and lazy/defer contexts 2,322; later fire, named handlers, attached callback props 6,660 |
+| lg-recall | 296,671 | 311,605 | typed-away 36; API variants and contexts 4,464; later fire, named handlers, never-run code, attached props 10,434 |
+| mx-pairs, lg-pairs (new, by name) | — | 178,422, 68,769 | mount × source, hand-off × file helper, callback × hand-off |
+| witness.mjs (its own run) | — | 29 | the stale-UI and style rules |
+
+At the VM's ~90 misuse and ~71 legal programs a second, the recall additions cost about 2.5 + 3.5 minutes, the pair grids about 33 + 16.
+
+## Not built (design notes)
+
+What the 2026-11-03 reports proposed and these slices leave out, with the reason:
+
+* **Server host (SC7005, SC7006, SC7007, SC5003's `ssrSource: "client"`, rc.17's SSR codes).** No browser can judge them: a Node host would render through `@solidjs/web`'s pinned `server.dev.js` (`renderToString`/`renderToStream`) and read the response head (SC7005: the status or header present or not, with the shell flush forced before or after the boundary settles; LATE_HEADER_WRITE covers only a direct `headers.set` and no rule claims it), the pinned compiler's directive pass would be SC7006's oracle (its refusal is the defect), and the client transport's `isJSONSafe` SC7007's. Each is a host of its own (days of work, its own profile, no Chrome); the program counts are small (about 800). Not tractable as a slice beside the grids.
+* **Lifecycle histories** (initial pending, settled before the mount, refresh, disposal before resolution, same and distinct flights). The settled-before-mount history is built (the pair grids' `show-later` × `async-*`, which found ADR 0518's family on a later mount); the others need controlled promise resolution in the driver (`oracle.json` steps that resolve a promise on a button), which the fast runner and the oracle do not share yet.
+* **Package topologies as grid layers** (project barrel to package, package to package, conditional exports). The packages profile's machinery exists (package.mjs), but a package program is checked without `--feedback-facts` and its records are not the grids' (the executor's slot directories assume no `node_modules`): a grid layer needs the executor's `ordinary` path per program and a per-code census; left to the packages profile.
+* **Multi-instance mounts** (`for-2`, the component rendered twice). The driver's selectors must match exactly one element (every `data-act` and witness is unique), so two instances need instance-numbered ids through the whole printer.
+* **`<Ctx value={undefined}>`** (a provider element; the model has none) and **`createSignal(0, { unobserved })`** (its callback's owner is unmeasured): the `default-undefined` variant measures the same CONTEXT_NOT_FOUND silence.
+* **Depth ladders per bounded walk** (helper chain 6, callback-prop forwarding 8, async helper chain 4, hook pass-through 4, leaf chain 3) and **open-boundary replay**: each needs the bound's exact value read from the checker's source per walk; the IIFE ladder (`DEPTH_FORMS`) stays the only one.
+* **Fable's F0** (a declining rule in `judge` for CONTEXT_NOT_FOUND's owner obligations): another branch's work (`claude/context-fc-owner-handoff`).
+
 ## Known limits
 
 * The fast path runs in Chrome (ADR 0512), with the fast runner's driving, not the oracle's (`feedback run`): the runtime differential (`--runtime-diff`) measures the two against each other per stratum, and the oracle still judges candidates. With `--fast-host happy-dom`, a false positive the fast path does not produce is not looked for in Chrome.
