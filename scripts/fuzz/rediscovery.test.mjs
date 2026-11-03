@@ -53,5 +53,6 @@ describe("rediscovery.json", () => {
         expect(entry.ids.filter((id) => !held.has(id))).toEqual([]);
       }
     }
-  }, 120000);
+    // 114 s alone at 644bd1a81 (two whole recall grids' ids, generated): the old 120 s limit failed under a parallel test run.
+  }, 300000);
 });

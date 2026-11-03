@@ -33,7 +33,7 @@ import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, 
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
-  CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
+  API_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
 } from "./misuse.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -179,11 +179,14 @@ export function cellList({ codes, contexts, recall = false } = {}) {
 export function recallAxes(code, context, base, variants, { legal = false } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
-  const takes = (variant) => !SPEC[code].recallVariantsNotIn?.[context]?.includes(variant);
+  // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
+  const only = legal ? SPEC[code].variantOnlyLegal?.[context] : null;
+  const takes = (variant) => !SPEC[code].recallVariantsNotIn?.[context]?.includes(variant) && (!only || only.includes(variant));
   const shapes = recallCell ? base.filter((shape) => takes(shape.variant)) : [];
   // A callback-prop context (misuse.mjs CBP_CONTEXTS) takes its base grid only: its own axis is the pass form (30 contexts a code),
-  // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold.
-  if (CBP_CONTEXTS.includes(context)) return shapes;
+  // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold. So does a lazy-memo or
+  // deferred-apply context (API_CONTEXTS): its question is the host's run, not the spelling around the site.
+  if (CBP_CONTEXTS.includes(context) || API_CONTEXTS.includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
     // axes are written on the local source, which it cannot take.

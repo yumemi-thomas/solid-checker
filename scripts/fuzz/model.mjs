@@ -179,6 +179,13 @@ export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe")
  * `leaf`: `a?: { b?: number }`, open-work.md's form (`s.a.b = 1`). */
 export const storeLinkSignal = (name, init, leaf = false) => ({ ...signal(name, init, "probe"), kind: leaf ? "store-link-leaf" : "store-link" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+/**
+ * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),
+ * `createOptimistic(init)` (`optimistic`), a writable memo `createSignal(() => init)` (`writable-memo`), `createOptimisticStore`
+ * (`optimistic-store`), a projection `createProjection((draft) => { draft.v = init; }, { v: init })` (no setter, `projection`), and
+ * `createDeferred(async () => 1)` (`deferred`, an async source like `async`).
+ */
+export const apiSignal = (name, init, kind, role = "probe") => ({ ...signal(name, init, role), kind });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 /** A `createReaction` tracker (`const track1 = createReaction(() => {})`); misuse.mjs NO_OWNER_EFFECT's `reaction-track` variants call it. */
 export const reactionSignal = (name) => ({ ...signal(name, 0, "src"), kind: "reaction" });

@@ -442,12 +442,14 @@ function render(program, instrument) {
   function primText(e, depth) {
     const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
-      case "memo": used.add("createMemo"); return `createMemo(${f})`;
+      // `lazy` (misuse.mjs `memo-lazy-*`): computed on its first read, not at creation.
+      case "memo": used.add("createMemo"); return `createMemo(${f}${e.lazy ? ", { lazy: true }" : ""})`;
       case "effect":
         used.add("createEffect");
         // `errorArm` (model.mjs): the compute throws once the signal reads 2; `fn` is the bundle's error handler.
         if (e.errorArm !== undefined) return `createEffect(() => { if (${e.errorArm}() === 2) throw new Error("x"); return 1; }, { effect: () => {}, error: ${f} })`;
-        return `createEffect(${f}, ${applyText(e.apply, depth)})`;
+        // `defer` (misuse.mjs `effect-apply-defer*`): the apply skips the first run and runs only when the compute reruns.
+        return `createEffect(${f}, ${applyText(e.apply, depth)}${e.defer ? ", { defer: true }" : ""})`;
       case "reaction":
         used.add("createReaction");
         // `errorArm` (misuse.mjs `reaction-error-arm`): `fn` is the bundle's error handler; the bundle's `effect` is empty.
@@ -494,7 +496,7 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list", "store-link", "store-link-leaf"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
@@ -726,6 +728,12 @@ function signalText(sig, signals, used) {
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
     case "store-list": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, items: [1, 2] });`;
     case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
+    case "owned": used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init}, { ownedWrite: true });`;
+    case "optimistic": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(${sig.init});`;
+    case "writable-memo": used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(() => ${sig.init});`;
+    case "optimistic-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore({ v: ${sig.init} });`;
+    case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;
+    case "deferred": used.add("createDeferred"); return `const ${sig.name} = createDeferred(async () => 1);`;
     case "store-link": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { v: number } }>({ v: ${sig.init} });`;
     case "store-link-leaf": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { b?: number } }>({ v: ${sig.init} });`;
     default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
@@ -737,9 +745,11 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
+    case "projection": return [[sig.name, "{ v: number }"]];
+    case "deferred": return [[sig.name, "Accessor<number>"]];
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
     case "async": case "async-dep": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];

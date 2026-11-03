@@ -433,5 +433,30 @@
   "found": "follow-up of ADR 0549's open-work misses",
   "fixed": "ADR 0551",
   "outside": "the generator's reaction-track variant takes the tracker from helpers.ts's top level or a component; no template makes it inside a hook called from a handler. Fixture reaction-creation-owner (HookCalls) holds it (f31337fa8 and 4215de157: silent; ADR 0551: a violation at the handler's track(), the hook-made creation an obligation)"
+ },
+ {
+  "finding": "CONTEXT_NOT_FOUND: a context created `createContext<number | undefined>(undefined)` is default-less (rc.17 getContext: an undefined default throws ContextNotFoundError), and useContext with no provider is a certified clean (no finding in the file)",
+  "found": "fuzz-pattern-coverage (2026-11-03): the `default-undefined` recall variant, 14 of 14 sampled programs certified false cleans on the debug checker, 2 confirmed in Chrome",
+  "fixed": null,
+  "open": "checker: missing-context-provider treats any createContext argument as a default (fc-signals-docs report section 0)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-default-undefined-direct-none",
+   "mx-context-not-found-jsx-default-undefined-direct-none",
+   "mx-context-not-found-root-default-undefined-direct-helper"
+  ]
+ },
+ {
+  "finding": "a violation at a site in a `createMemo(fn, { lazy: true })` nobody reads, which never runs (ADR 0458: an unexecuted violation is a false positive): SC2001, SC2002 and SC4002 report there",
+  "found": "fuzz-pattern-coverage (2026-11-03): the `memo-lazy-unread` legal recall context, 16 of 16 sampled SC2001/SC2002/SC4002 programs `unexecuted`, 3 confirmed in Chrome (the site's counter stays 0)",
+  "fixed": null,
+  "open": "checker: the memo's compute is taken to run at creation whatever its `lazy` option",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-memo-lazy-unread-x-direct-none",
+   "lg-context-not-found-memo-lazy-unread-x-direct-helper"
+  ]
  }
 ]
