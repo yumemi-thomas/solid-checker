@@ -309,6 +309,49 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.named-callback-write", role);
         }
     } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
+        // ADR 0585: a closure nested in a named tracked callback that is
+        // handed on to a call not proven to invoke it there, stored, or
+        // written as an attribute value runs when something calls it, which
+        // may be the callback's own tracking pass (`[1].forEach(hf)`, an
+        // unknown `run(hf)`): unplaced, as the inline callback's nested
+        // closure is (`tracked-callback-unrun-closure` below), never a proven
+        // deferral. One the in-place layers run at a call written in the
+        // callback's own body (`const run = (g) => g(); run(hf)`) runs in the
+        // callback's pass, if at all: the callback's tracked role, as the
+        // inline callback's (`tracked-callback` below).
+        if role == ExecutionRole::DeferredCallback
+            && let Some(callback) =
+                super::named_callbacks::named_callback_containing(file, span, lookup)
+        {
+            let entry = lookup.named_callback_roles(file).get(callback.span);
+            if !(entry.tracked || entry.effect_compute) {
+                return role_arm!("callee_roles.named-callback", role);
+            }
+            if attribute_function_within(file, callback.span, span, lookup)
+                || unrun_closure_within(file, callback.span, span, entities, symbol_names, lookup)
+            {
+                return role_arm!(
+                    "callee_roles.named-callback-unrun-closure",
+                    ExecutionRole::Unknown
+                );
+            }
+            if entry.tracked
+                && super::write_roles::climb_in_place_layers(file, span, lookup).is_some_and(
+                    |climb| {
+                        !climb.exhausted
+                            && climb.suspended.is_none()
+                            && !climb.in_list
+                            && crate::owners::owning_function(&file.ast, climb.at)
+                                .is_some_and(|function| function.span == callback.span)
+                    },
+                )
+            {
+                return role_arm!(
+                    "callee_roles.named-callback-in-place",
+                    ExecutionRole::TrackedJsx
+                );
+            }
+        }
         return role_arm!("callee_roles.named-callback", role);
     }
     if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
