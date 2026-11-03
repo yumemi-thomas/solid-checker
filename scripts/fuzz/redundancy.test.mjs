@@ -29,3 +29,11 @@ describe("the demotion evidence (redundancy.mjs) and --recall-lean", () => {
     expect(full.filter((shape) => !LEAN_DEMOTED.mounts.includes(shape.mount) && !LEAN_DEMOTED.callbacks.includes(shape.callback))).toEqual(lean);
   });
 });
+
+describe("redundancy --against <mount>", () => {
+  it("pairs a recall mount's program with the same shape under the reference mount", () => {
+    expect(twinOf("mx-a-body-x-direct-none-m-portal", { against: "show-signal" })).toEqual({ axis: "mount:portal", twin: "mx-a-body-x-direct-none-m-show-signal" });
+    expect(twinOf("mx-a-body-x-direct-none-m-show-signal", { against: "show-signal" })).toBeNull();
+    expect(twinOf("mx-a-memo-x-direct-none-cb-const", { against: "show-signal" })).toEqual({ axis: "callback:const", twin: "mx-a-memo-x-direct-none" });
+  });
+});

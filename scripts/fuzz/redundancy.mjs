@@ -5,7 +5,9 @@
 // and the same findings, on a full run, adds nothing the base grid does not measure, and `--recall-lean` (matrix.mjs LEAN_DEMOTED)
 // may leave it out. One that differs anywhere keeps its place.
 //
-//   node scripts/fuzz/redundancy.mjs <run dir with mx-base/ and mx-recall/ (and lg-*)> [--out <redundancy.json>]
+//   node scripts/fuzz/redundancy.mjs <run dir with mx-base/ and mx-recall/ (and lg-*)> [--out <redundancy.json>] [--against <mount>]
+// `--against <mount>` pairs each recall mount's program with the same shape under that mount instead of the root one: whether two
+// recall mounts answer alike (a value redundant with another, not with the base grid).
 // A run dir as focus.mjs writes it: `<grid>/programs.jsonl`, or `<grid>/<unit>/programs.jsonl` with --split-codes.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -19,9 +21,10 @@ export function gridRows(dir) {
 }
 
 /** A recall row's axis value and its twin's id: `-m-<mount>` and `-cb-<form>` cut from the id (matrix.mjs `mountSuffix`). */
-export function twinOf(id) {
+export function twinOf(id, { against } = {}) {
   const mount = /-m-([a-z-]+)$/.exec(id);
-  if (mount && !id.includes("-s-")) return { axis: `mount:${mount[1]}`, twin: id.slice(0, -mount[0].length) };
+  // `against`: a mount's twin is the same shape under that mount (are two mounts alike?), not the root program.
+  if (mount && !id.includes("-s-")) return against ? (mount[1] === against ? null : { axis: `mount:${mount[1]}`, twin: `${id.slice(0, -mount[0].length)}-m-${against}` }) : { axis: `mount:${mount[1]}`, twin: id.slice(0, -mount[0].length) };
   const callback = /-cb-([a-z]+)$/.exec(id);
   if (callback) return { axis: `callback:${callback[1]}`, twin: id.slice(0, -callback[0].length) };
   return null;
@@ -31,11 +34,11 @@ export function twinOf(id) {
 const answerOf = (row) => `${row.outcome}|${(row.detail?.findings ?? []).map((finding) => finding.replace(/@\d+$/, "")).sort().join(",")}`;
 
 /** Per axis value: programs with a twin, alike, differing (with up to five examples), and programs whose twin the run lacks. */
-export function redundancy(rows) {
+export function redundancy(rows, { against } = {}) {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const out = {};
   for (const row of rows) {
-    const twin = twinOf(row.id);
+    const twin = twinOf(row.id, { against });
     if (!twin) continue;
     const slot = (out[twin.axis] ??= { programs: 0, alike: 0, differ: 0, noTwin: 0, examples: [] });
     slot.programs += 1;
@@ -49,11 +52,13 @@ export function redundancy(rows) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [run, ...rest] = process.argv.slice(2);
-  if (!run) { console.error("usage: node scripts/fuzz/redundancy.mjs <run dir> [--out <redundancy.json>]"); process.exit(2); }
+  if (!run) { console.error("usage: node scripts/fuzz/redundancy.mjs <run dir> [--out <redundancy.json>] [--against <mount>]"); process.exit(2); }
   const report = {};
+  const againstAt = rest.indexOf("--against");
+  const againstMount = againstAt >= 0 ? rest[againstAt + 1] : undefined;
   for (const [kind, grids] of [["misuse", ["mx-base", "mx-recall"]], ["legal", ["lg-base", "lg-recall"]]]) {
     const rows = grids.flatMap((grid) => gridRows(join(resolve(run), grid)));
-    if (rows.length) report[kind] = redundancy(rows);
+    if (rows.length) report[kind] = redundancy(rows, { against: againstMount });
   }
   const at = rest.indexOf("--out");
   if (at >= 0) writeFileSync(rest[at + 1], `${JSON.stringify(report, null, 2)}\n`);
