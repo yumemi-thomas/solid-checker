@@ -317,6 +317,21 @@ oracle_provision_lane() {
   bun scripts/tsc-oracle.mjs provision --dialect all
 }
 
+# The differential fuzzer's own unit tests (scripts/fuzz/*.test.mjs, ~700 tests), which `scripts/*.test.mjs` does not match. They
+# were outside verify and CI, and a duplicate role-log arm id (roles.test.mjs fails it) reached main. They need the fuzzer's two
+# pinned installs and the pinned Playwright headless shell: provisioned first, like the tsc oracle (scripts/fuzz/provision.mjs:
+# idempotent, milliseconds on a provisioned machine, `npm ci` from the lockfiles on one that is not; a failure names the command).
+# test-lane.mjs then fails on a skipped test (only the three tsrs-only files may skip, named in the output, when no tsrs binary
+# exists). The tests build nothing and need no checker, so the lane runs in the first step, beside the builds: ~3.5 minutes there
+# against a step bound by the WASM package build (~7 minutes), where it was the longest lane of the gates step (+~2 minutes) when
+# it ran beside the gates.
+fuzz_tests_lane() {
+  lane_step fuzz-provision
+  bun scripts/fuzz/provision.mjs
+  lane_step fuzz-tests
+  bun scripts/fuzz/test-lane.mjs
+}
+
 step builds-and-suites
 lane rust rust_lane
 lane typefacts typefacts_lane
@@ -325,6 +340,7 @@ if [ "$run_wasm" = 1 ]; then
   lane wasm-build wasm_build_lane
 fi
 lane oracle-provision oracle_provision_lane
+lane fuzz-tests fuzz_tests_lane
 lanes_wait
 
 # ---------------------------------------------------------------------------

@@ -257,5 +257,14 @@ jobs:
       # tsc-oracle.test.mjs drives it.
       - run: bun scripts/tsc-oracle.mjs provision --dialect typescript
       - run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/*.test.mjs
+      # The differential fuzzer's own tests (scripts/fuzz/*.test.mjs), which the glob above does not match. They run under Node (the
+      # fuzzer is Node tooling; ssr.mjs needs node:module's stripTypeScriptTypes), on the repository's Node pin. provision.mjs installs
+      # their two pinned installs and the pinned Playwright headless shell from the lockfiles; test-lane.mjs fails on a skipped test
+      # (only the tsrs-only files may skip, listed in its output, and CI has no tsrs binary).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - run: bun scripts/fuzz/provision.mjs
+      - run: bun scripts/fuzz/test-lane.mjs
       - run: jq empty schema/*.json
       - run: make test-cli
