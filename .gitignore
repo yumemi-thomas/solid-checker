@@ -796,3 +796,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/effect-phase-windows/node_modules/**
 !fixtures/reactive-ir/undecided-flush-callback/node_modules/
 !fixtures/reactive-ir/undecided-flush-callback/node_modules/**
+!fixtures/reactive-ir/undecided-flush-closure/node_modules/
+!fixtures/reactive-ir/undecided-flush-closure/node_modules/**
