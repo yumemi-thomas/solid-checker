@@ -176,7 +176,16 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  * A recall context (a cell only `--recall` lists) takes its base grid as well. `base` is the cell's base grid (`gridShapes`, or the
  * legal grid's `legalShapes`); `variants` its variants.
  */
-export function recallAxes(code, context, base, variants, { legal = false } = {}) {
+/**
+ * `--recall-lean` (off by default; Fable's report 2026-11-03, R0.3, a proposal until a full run's `redundancy.mjs` table shows every
+ * program of each value answering as its twin): the recall mounts and callback forms whose counts matched their twins' on the
+ * 644bd1a81 run, left out of the recall grids. 12 mounts x 38,370 + 4 forms x 8,688 programs (about 1.5 VM hours).
+ */
+export const LEAN_DEMOTED = {
+  mounts: ["show-signal", "show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
+  callbacks: ["const", "function", "named", "let"],
+};
+export function recallAxes(code, context, base, variants, { legal = false, lean = false } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
   // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
@@ -201,13 +210,13 @@ export function recallAxes(code, context, base, variants, { legal = false } = {}
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
   for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context)).filter(takes)) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
   const local = base.filter((shape) => !shape.mount && !shape.source && takes(shape.variant));
-  if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
+  if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS.filter((form) => !lean || !LEAN_DEMOTED.callbacks.includes(form))) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's
   // strict-read window never opens there: rc.17 is silent on a stale body read, and a pending one re-runs the body without end.
   const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
   // A mount a recall-only context's code cannot take (`recallMountsNotIn`: there Solid reports nothing).
   const mountTakes = (mount) => !SPEC[code].recallMountsNotIn?.[context]?.includes(mount);
-  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount)) for (const shape of local) shapes.push({ ...shape, mount });
+  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount) && !(lean && LEAN_DEMOTED.mounts.includes(mount))) for (const shape of local) shapes.push({ ...shape, mount });
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
@@ -258,7 +267,7 @@ const THROWN = new Set(thrownCodes.map(([, code]) => code));
 const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
 /** The misuse grid's recall shapes of a cell (`--recall`). */
-export const recallShapes = (code, context) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)));
+export const recallShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -424,7 +433,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
-    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), checker: header, total,
+    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
     byFeature: featureTable(rows), typedAway, cells: out,
@@ -540,6 +549,7 @@ export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
   // A pair grid (`--pairs`) holds other programs than the grid it sits beside: compared only with a pair grid of the same sets.
   if (JSON.stringify(baseline.pairs ?? null) !== JSON.stringify(current.pairs ?? null)) return { ok: false, refused: `the matrices differ in pairs (${baseline.pairs ?? "none"} vs ${current.pairs ?? "none"})`, ...empty };
+  if (Boolean(baseline.recallLean) !== Boolean(current.recallLean)) return { ok: false, refused: "one matrix is --recall-lean and the other is not: they hold other programs", ...empty };
   for (const field of ["seed", "perCell", "generator", "sampling"]) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
@@ -697,7 +707,7 @@ async function sweep(options, config, out) {
   const sources = sourcesOption(options.sources);
   // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs. `--pairs` (pairShapes): the pair grid's.
   const pairs = options.pairs ? pairsOption(options.pairs) : null;
-  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context, mounts, sources));
+  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : gridShapes(cell.code, cell.context, mounts, sources));
   if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
@@ -864,7 +874,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

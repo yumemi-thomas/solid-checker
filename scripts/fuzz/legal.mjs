@@ -125,7 +125,7 @@ export function pairLegalCells({ codes } = {}) {
 export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** `--recall`: the shapes the recall axes add to a legal cell (matrix.mjs `recallAxes`), on the legal grid's base shapes. */
-export const recallLegalShapes = (code, context) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true });
+export const recallLegalShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true, lean });
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 export function generateLegal(options, { code, context }, { index, shape }) {
@@ -156,7 +156,7 @@ export async function runLegal(options) {
     let entries = [];
     for (const cell of cells) {
       // `--pairs` (matrix.mjs pairShapes): the pair grid's shapes of a legal cell.
-      const shapes = options.pairs ? pairShapes(cell.code, cell.context, { legal: true, sets: pairsOption(options.pairs) }) : options.recall ? recallLegalShapes(cell.code, cell.context) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
+      const shapes = options.pairs ? pairShapes(cell.code, cell.context, { legal: true, sets: pairsOption(options.pairs) }) : options.recall ? recallLegalShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
       if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
@@ -259,7 +259,7 @@ export async function runLegal(options) {
       cell[row.outcome] += 1;
       cell.verdicts[String(row.seed)] = row.outcome;
     }
-    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(gridSample ? { gridSample } : {}), ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
+    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), ...(gridSample ? { gridSample } : {}), ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
       falsePositives: candidates.map(({ id, code, context, variant, binding, layer, detail, chrome }) => ({ id, code, context, variant, binding, layer, rules: detail.rules, chrome })),
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -290,7 +290,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
