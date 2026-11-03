@@ -1740,5 +1740,69 @@
   "found": "claude/fix-pair-falsecleans investigation",
   "fixed": "ADR 0580",
   "outside": "no grid layer hands a named function to an empty-receiver carrier inside a leaf callback; fixture async-carried-leaf-owner (SettledInlineEmpty, SettledNamedEmpty) holds it"
+ },
+ {
+  "finding": "ADR 0581: an object literal arrow slot whose text spells `this` (a nested class writing this.m) resolved to no function, so SC1002 (memo-async, effect-async) had nothing at the site",
+  "found": "full run full-fixes-447a070 (2026-11-03), mx-pairs callback-handoff set: 14 false cleans, handoff-assign-this x cb-bundle",
+  "fixed": "ADR 0581",
+  "grid": "mx-pairs",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-memo-async-x-direct-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-memo-async-x-alias-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-memo-async-x-destructured-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-memo-async-x-wrapper-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-memo-async-x-hook-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-memo-async-x-hook-member-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-memo-async-x-tuple-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-direct-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-alias-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-destructured-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-wrapper-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-hook-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-hook-member-handoff-assign-this-cb-bundle",
+   "mx-untracked-read-after-await-effect-async-x-tuple-handoff-assign-this-cb-bundle"
+  ],
+  "rediscovered": "447a07050: nothing of the rule at the site; claude/fix-pair-falsecleans: the rule's obligation at the site on all 14 (local debug checker); VM focus pending"
+ },
+ {
+  "finding": "ADR 0581: an object literal arrow slot whose text spells `this` (a nested class writing this.m) resolved to no function, so SC2008 (effect-apply) had nothing at the site",
+  "found": "full run full-fixes-447a070 (2026-11-03), mx-pairs callback-handoff set: 5 false cleans, handoff-assign-this x cb-bundle",
+  "fixed": "ADR 0581",
+  "grid": "mx-pairs",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-effect-apply-x-direct-handoff-assign-this-cb-bundle",
+   "mx-flush-in-effect-callback-effect-apply-x-namespace-handoff-assign-this-cb-bundle",
+   "mx-flush-in-effect-callback-effect-apply-x-alias-handoff-assign-this-cb-bundle",
+   "mx-flush-in-effect-callback-effect-apply-x-destructured-handoff-assign-this-cb-bundle",
+   "mx-flush-in-effect-callback-effect-apply-x-wrapper-handoff-assign-this-cb-bundle"
+  ],
+  "rediscovered": "447a07050: nothing of the rule at the site; claude/fix-pair-falsecleans: the rule's obligation at the site on all 5 (local debug checker); VM focus pending"
+ },
+ {
+  "finding": "ADR 0581: an object literal arrow slot whose text spells `this` (a nested class writing this.m) resolved to no function, so SC6002 (effect-apply, memo/effect/root/signal variants) had nothing at the site",
+  "found": "full run full-fixes-447a070 (2026-11-03), mx-pairs callback-handoff set: 15 false cleans, handoff-assign-this x cb-bundle",
+  "fixed": "ADR 0581",
+  "grid": "mx-pairs",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-effect-apply-memo-direct-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-memo-namespace-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-memo-alias-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-memo-destructured-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-memo-wrapper-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-root-direct-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-root-namespace-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-root-alias-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-root-destructured-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-root-wrapper-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-effect-direct-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-effect-namespace-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-effect-alias-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-effect-destructured-handoff-assign-this-cb-bundle",
+   "mx-primitive-in-effect-callback-effect-apply-effect-wrapper-handoff-assign-this-cb-bundle"
+  ],
+  "rediscovered": "447a07050: nothing of the rule at the site; claude/fix-pair-falsecleans: the rule's obligation at the site on all 15 (local debug checker); VM focus pending"
  }
 ]
