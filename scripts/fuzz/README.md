@@ -68,6 +68,12 @@ for one code, under a minute when the cache holds its programs. The full grids, 
 (`--split-codes`: one grid process per code, so mx-recall's 277k programs stay within a heap and a hang costs one code;
 `--prune-cases`: each grid's `cases/` deleted once its rows are read; `--grid-timeout <minutes>`, default 120, kills and reports a
 grid process that hangs; `--heap-mb`, default 12000 for the recall grids; each grid's output streams to `<grid>.log` as it runs).
+A grid process that stops before writing `programs.jsonl` (a killed executor, a refusal, an uncaught error: `matrix: stopped: …`,
+`legal: stopped: …`) is a harness failure that needs a look, never `0 programs {}`: the unit prints `STOPPED, N programs judged
+before`, gives the reason from its log, and keeps the rows judged so far (`programs.partial.jsonl`, appended per chunk; partial.mjs).
+The executor drains the Vite helper's stdout after its ready line and the helper ignores `EPIPE` (a pipe closed after that line killed
+the helper 112,050 programs into an mx-recall grid, 2026-11-03); a helper or browser that exits is still restarted, its in-flight
+programs `harness` rows (main.rs `MAX_RESTARTS`).
 
 **Sampling the big codes while iterating.** STORE_WRITE_OUTSIDE_SETTER and REACTIVE_WRITE_IN_OWNED_SCOPE are about 40% of a full
 run. `focus.mjs --sample-big <fraction>` passes `--grid-sample` to every grid (`matrix.mjs`, `legal.mjs`; sample.mjs): each (code,

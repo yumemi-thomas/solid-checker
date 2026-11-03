@@ -51,6 +51,7 @@ import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
 import { linkRoleLog } from "./scratch.mjs";
+import { PARTIAL, readPartial, stopReason } from "./partial.mjs";
 import { BIG_CODES, sampleLine } from "./sample.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 import { cpus, platform, totalmem } from "node:os";
@@ -81,17 +82,20 @@ export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith(
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
 export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 
-/** One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. */
+/**
+ * One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. A grid process that
+ * stopped before writing programs.jsonl gives the rows it judged before (partial.mjs) and `partial: true`; `partial: false` when it
+ * left neither.
+ */
 export function readGrid(out) {
   const programs = join(out, "programs.jsonl");
   const outcomes = {};
   const flagged = [];
-  if (existsSync(programs)) {
-    for (const line of readFileSync(programs, "utf8").split("\n").filter(Boolean)) {
-      const row = JSON.parse(line);
-      outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
-      if (PROBLEMS.includes(row.outcome)) flagged.push({ id: row.id, outcome: row.outcome, detail: row.detail });
-    }
+  const complete = existsSync(programs);
+  const rows = complete ? readFileSync(programs, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : readPartial(out);
+  for (const row of rows ?? []) {
+    outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
+    if (PROBLEMS.includes(row.outcome)) flagged.push({ id: row.id, outcome: row.outcome, detail: row.detail });
   }
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
@@ -99,7 +103,23 @@ export function readGrid(out) {
   // A sampled grid (`--sample-big`) says so in its report.
   const report = ["matrix.json", "legal.json"].map((name) => join(out, name)).find((path) => existsSync(path));
   const gridSample = report ? JSON.parse(readFileSync(report, "utf8")).gridSample ?? null : null;
-  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample };
+  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample, ...(complete ? {} : { partial: rows !== null }) };
+}
+
+/**
+ * What a finished grid process needs a look for, beyond its rows: a deadline it missed, an exit it failed, rows it never wrote (a
+ * harness failure, with the reason its log gives and the rows it judged before it stopped), a run that judged nothing.
+ */
+export function unitProblems(label, { run, grid, total, log, logPath, timeoutMinutes }) {
+  const problems = [];
+  const tail = () => log.trim().split("\n").slice(-3).join(" | ").slice(0, 400);
+  if (run.timedOut) problems.push(`${label}: killed after ${timeoutMinutes} minutes (${logPath}): ${tail()}`);
+  else if (run.status !== 0) problems.push(`${label}: exited ${run.status ?? run.signal} (${logPath}): ${tail()}`);
+  // No programs.jsonl: the grid process stopped (a crashed host, a killed executor, a refusal), whatever its exit said.
+  if (grid.partial !== undefined) problems.push(`${label}: harness: the grid process stopped before writing its rows (${grid.partial ? `${total} judged before it stopped, kept in ${PARTIAL}` : "none judged"}): ${stopReason(log)}`);
+  // A run that judged nothing is no clean grid (a full disk, a crashed host).
+  else if (total === 0) problems.push(`${label}: no program was judged (${logPath})`);
+  return problems;
 }
 
 /**
@@ -237,18 +257,17 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...budgetArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
-      const { outcomes, flagged, oracle, behaviour, gridSample } = readGrid(unit.dir);
+      const read = readGrid(unit.dir);
+      const { outcomes, flagged, oracle, behaviour, gridSample } = read;
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
       const summary = oracle ? `oracle ${oracle.compared} compared, ${oracle.behaviour} behaviour, ${oracle.attributionOnly} attribution, ${oracle.inconclusive ?? 0} inconclusive` : "no oracle sample";
-      console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${total} programs ${JSON.stringify(outcomes)}  ${summary}`);
+      const counted = read.partial !== undefined ? `STOPPED, ${total} programs judged before` : `${total} programs`;
+      console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${counted} ${JSON.stringify(outcomes)}  ${summary}`);
       if (gridSample) { console.log(`           ${sampleLine(gridSample)}`); sampledUnits.push(unit.label); }
-      const tail = () => readFileSync(logPath, "utf8").trim().split("\n").slice(-3).join(" | ").slice(0, 400);
-      if (run.timedOut) attention.push(`${unit.label}: killed after ${options.gridTimeout ?? 120} minutes (${logPath}): ${tail()}`);
-      else if (run.status !== 0) attention.push(`${unit.label}: exited ${run.status ?? run.signal} (${logPath}): ${tail()}`);
-      // A run that judged nothing is no clean grid (a full disk, a crashed host).
-      if (total === 0) attention.push(`${unit.label}: no program was judged (${logPath})`);
+      const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+      attention.push(...unitProblems(unit.label, { run, grid: read, total, log, logPath, timeoutMinutes: options.gridTimeout ?? 120 }));
       // An executor that cannot start fails every grid the same way: the rest of the run would only repeat it.
-      if (total === 0 && /the executor did not start/.test(readFileSync(logPath, "utf8"))) throw new FocusStop(`${unit.label}: the executor did not start (${tail()})`);
+      if (total === 0 && /the executor did not start/.test(log)) throw new FocusStop(`${unit.label}: the executor did not start (${log.trim().split("\n").slice(-3).join(" | ").slice(0, 400)})`);
       for (const row of flagged.slice(0, 10)) attention.push(`${unit.label}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       if (flagged.length > 10) attention.push(`${unit.label}: ... ${flagged.length - 10} more (${join(unit.dir, "programs.jsonl")})`);
       for (const result of behaviour.slice(0, 10)) attention.push(`${unit.label}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);

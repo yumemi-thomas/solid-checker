@@ -18,7 +18,7 @@ describe("readGrid", () => {
     expect(grid.outcomes).toEqual({ agree: 1, "false-clean": 1, "recall-gap": 1, "false-positive": 1 });
     expect(grid.flagged.map((row) => row.id)).toEqual(["b", "d"]);
     expect(grid.behaviour.map((result) => result.id)).toEqual(["x", "y"]);
-    expect(readGrid(join(out, "missing"))).toEqual({ outcomes: {}, flagged: [], oracle: null, behaviour: [], gridSample: null });
+    expect(readGrid(join(out, "missing"))).toEqual({ outcomes: {}, flagged: [], oracle: null, behaviour: [], gridSample: null, partial: false });
     // A sampled grid (`--sample-big`) says so in its report.
     writeFileSync(join(out, "legal.json"), JSON.stringify({ gridSample: { fraction: 0.1, kept: 5, of: 50 } }));
     expect(readGrid(out).gridSample).toEqual({ fraction: 0.1, kept: 5, of: 50 });
