@@ -61,6 +61,8 @@ test("each table row claims its own owner's paths", () => {
     ["apps/solid-typefacts/testdata/forms/tsconfig.json", ["typefacts"]],
     ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
     ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
+    ["scripts/fuzz/focus.mjs", ["fuzz-tests"]],
+    ["scripts/fuzz/roles.test.mjs", ["fuzz-tests"]],
   ];
   for (const [path, checks] of expected) {
     assert.deepEqual(classify(path)?.checks, checks, path);
