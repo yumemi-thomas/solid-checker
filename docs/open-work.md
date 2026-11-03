@@ -191,7 +191,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 - Named callbacks (ADR 0517): a `createRoot`/`runWithOwner` callback with another entry than its sole by-name position, and a write under several `untrack` positions with no rejection, are uncertifiable; so is SC5001 there. Open programs: SC4002 is uncertifiable.
 
-- A library callback that may run zero times (`none.forEach(() => s())`) is crossed by SC1001/SC2001's inline arms (rc.17 is silent on an empty array), not by `resolve`/`until` or ADR 0517's climbs. Conflicting `export *` (TS2308) resolve to the binder's winner.
+- A library callback that may run zero times (`none.forEach(() => s())`) is crossed by SC1001/SC2001's inline arms and by ADR 0561's owner edges (SC4001, SC4002) (rc.17 is silent on an empty array), not by `resolve`/`until` or ADR 0517's climbs. Conflicting `export *` (TS2308) resolve to the binder's winner.
 - ADR 0531: a named function handed where nothing follows it (a project helper's argument, `addEventListener`, `bind`, a stored, returned or exported value, a `defineProperty` getter) has its direct reads reported as obligations where they were silent; a `const` copy too. Legal f25-shaped readers handed to project schedulers or stored without invocation pay this obligation cost. A reader handed only to a reviewed fresh-stack scheduler, a handler or a memo compute stays clean.
 
 ## 4. Open questions and live approximations

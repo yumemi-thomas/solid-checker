@@ -28,7 +28,11 @@ can provide the context:
   naming it.
 
 The read must run under an owner on every path: a component body, a computation
-a component creates, or a function called from one. A read with no owner is
+a component creates, or a function called from one. A function a reviewed
+standard-library carrier runs before it returns (`[1].forEach(hf)`, `map`,
+`sort`, `Array.from`'s map function, `Reflect.apply`) or a tagged template's tag
+counts as called there (ADR 0561); a same-named project or local `forEach` does
+not. A read with no owner is
 `missing-owner` (SC4001), which throws `NoOwnerError` instead. A read whose owner
 is uncertain is SC4001's uncertifiable result.
 

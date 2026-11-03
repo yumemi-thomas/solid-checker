@@ -301,6 +301,14 @@ A callback passed to a primitive, a handler or a ref is the function the argumen
 
 A package function whose same-operation creation calls cover every exit between them (`if (c) createEffect(…); else createRenderEffect(…);`) requires an owner as one fact (ADR 0359). Any exit without a creation, async/generator bodies, try, loops, `never` calls and member/namespace callees keep the requirement uncertifiable.
 
+- **A standard-library carrier runs its callback at the call (ADR 0561).** A
+  function handed whole to a reviewed inline carrier (`forEach`, `map`,
+  `sort`, `Array.from`'s map function, `Reflect.apply`; the compiler-selected
+  standard-library declaration, never the spelling) or used as a template tag
+  runs on the caller's stack, under the caller's owner: in a handler or a timer
+  it is a violation, in a component body it is owned. A generator handed there
+  runs nothing and stays uncertifiable; so does a carrier in the owner's own
+  JSX or an instance field.
 - **A helper that calls its callback runs it at the call (ADR 0474).** An
   `onCleanup` (or another owner-requiring call) in a callback handed to a
   project helper that calls it is placed at the helper's call: in a timer, a
