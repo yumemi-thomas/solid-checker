@@ -26,7 +26,10 @@ user(); }`), whose binding is never written, is read where a call of that
 function runs, through up to four such functions. A call in the component
 body's strict-read window, at module scope, or in a leaf owner is reported at
 the call, as a direct read there is (ADR 0490); a call in an event handler or
-one that never runs is not.
+one that never runs is not. A named function no named-callback role places is
+climbed out of, never given its lexical role, and its inline carriers
+(`[1].forEach(f)`, `f.call(null)`, `` f`x` ``) are followed: the finding sits at
+the carrier (ADR 0564).
 
 A read in a callback a standard-library carrier runs is proven only where the
 carrier provably runs it: `.call`/`.apply`, `Reflect.apply`, the `Promise`

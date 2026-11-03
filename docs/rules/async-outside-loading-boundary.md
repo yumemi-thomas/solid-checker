@@ -26,7 +26,9 @@ A read written directly in a named local function (`const wrapUse = () =>
 { user(); }`) is rendered where a call of that function sits in rendered JSX,
 through up to four such functions. The finding sits at that call and is
 uncertifiable, never proven: nothing shows the read runs pending while the
-call renders (ADR 0462). A read in a callback a
+call renders (ADR 0462). A call in a named function no named-callback role
+places (a closure in a `<For>` child handed to a timer, or never called) is not
+rendered by the JSX around it (ADR 0564). A read in a callback a
 standard-library carrier may run zero times (`{[].map(() => user())}`, an
 unknown-length receiver) is uncertifiable (ADR 0563). An exact `const` alias of the accessor (`const read =
 user`, `const { read } = { read: user }`) is the accessor (ADR 0463).

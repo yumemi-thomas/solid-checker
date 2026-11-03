@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
-      "start": 1137,
-      "end": 1146,
+      "start": 1167,
+      "end": 1171,
       "fixes": 0
     },
     {
