@@ -77,6 +77,23 @@ const timed = (phase, work) => {
  * classifies (steps 2 and 3). Apart, a caller can overlap one batch's checker work with the previous batch's fast path (matrix.mjs); the
  * halves are `evaluate`'s, so the records and classifications are the same.
  */
+/**
+ * The prepared stage of each chunk, in order, with `ahead` more chunks already preparing (ADR 0597): `stageOf(k)` starts chunks k to
+ * k + ahead and hands back chunk k's stage. Waiting for chunk k's preparation before starting chunk k + 1's let the executor's queue run
+ * dry at every chunk's end (its workers idle until the slowest check of the chunk answered, and its slots took whatever program came
+ * last). Each chunk's stage is the one `prepare` gives it either way.
+ */
+export function preparedAhead(chunks, prepare, ahead = 2) {
+  const stages = new Map();
+  const start = (number) => { if (number < chunks.length && !stages.has(number)) stages.set(number, prepare(chunks[number])); };
+  return (number) => {
+    for (let next = number; next <= number + ahead; next += 1) start(next);
+    const stage = stages.get(number);
+    stages.delete(number);
+    return stage;
+  };
+}
+
 export async function prepareEntries(entries, config, deps = {}) {
   // Type checks of this call share `tsrs -b` processes (as many at a time as the pool runs), unless a test injects one or the run
   // asks for one process each.

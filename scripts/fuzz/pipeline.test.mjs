@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { EntryCache } from "./cache.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
-import { evaluate, finishEntries, judgeEntries, lazyControl, prepareEntries, runtimeCached, signaturesOf } from "./pipeline.mjs";
+import { evaluate, finishEntries, judgeEntries, lazyControl, preparedAhead, prepareEntries, runtimeCached, signaturesOf } from "./pipeline.mjs";
 
 // The wiring with fakes for the three expensive steps: the type checker, the checker, the Happy DOM batch.
 const entry = (seed) => { const program = generateProgram(seed, { profile: "in-place" }); return { program, built: buildCase(program, { id: `fuzz-${seed}` }) }; };
@@ -366,5 +366,21 @@ describe("evaluate: the runtime cache's spot checks", () => {
     const third = deps(quiet);
     await evaluate([edited], { ...config(), ...bothCaches(dir) }, third.deps);
     expect(third.calls.typecheck).toBe(1);   // the clean project missed; the twin's bytes did not move
+  });
+});
+
+describe("preparedAhead", () => {
+  it("hands back each chunk's own stage in order, with the next two already preparing", async () => {
+    const started = [];
+    const stageOf = preparedAhead(["a", "b", "c", "d"], (chunk) => { started.push(chunk); return Promise.resolve(`stage ${chunk}`); });
+    expect(started).toEqual([]);
+    expect(await stageOf(0)).toBe("stage a");
+    expect(started).toEqual(["a", "b", "c"]);
+    expect(await stageOf(1)).toBe("stage b");
+    expect(started).toEqual(["a", "b", "c", "d"]);
+    expect(await stageOf(2)).toBe("stage c");
+    expect(await stageOf(3)).toBe("stage d");
+    // Each chunk is prepared once.
+    expect(started).toEqual(["a", "b", "c", "d"]);
   });
 });

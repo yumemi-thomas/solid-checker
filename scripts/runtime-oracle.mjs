@@ -220,8 +220,11 @@ void exercise();
 `;
 const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div><p id="ready">running</p><script type="module" src="/main.tsx"></script></body></html>\n`;
 // `"haltMarker": true` in oracle.json (the differential fuzzer's cases): a second page module, loaded before the entry, appends
-// `<output id="sc-halted">` outside #root when Solid reports REACTIVITY_HALTED or the page has an uncaught error (a component whose
-// render threw never mounts its elements). Nothing renders after a halt, so a step that waits for an
+// `<output id="sc-halted">` outside #root when Solid reports REACTIVITY_HALTED or an error-severity diagnostic, or the page has an
+// uncaught error (a component whose render threw never mounts its elements). An error-severity diagnostic is thrown at its site
+// (rc.17 `dev.js` emits it, then throws), and an Errored boundary that catches the throw shows its fallback with no error event:
+// the elements below it never render again (a click that swapped the fuzzer's `errored` mount to its fallback waited 12 s for its
+// own button before; Fuzz audit run 41696018194). Nothing renders after a halt, so a step that waits for an
 // element can name the marker as its alternative (`X, body:not(:has(X)) > #sc-halted`, scripts/fuzz/hits.mjs `haltable`) and end
 // at once instead of after the scenario's 12 s timeout; a run that took the marker is a partial run (scripts/fuzz/chrome.mjs
 // chromeRuntime), never read as silence. The module observes the diagnostics channel and the window's error event only (listeners
@@ -231,7 +234,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div
 // place an event at the same application frame (scripts/fuzz/runtime-diff.mjs).
 const haltModule = `Error.stackTraceLimit = 41;
 import { OBSERVE } from "solid-js";
-OBSERVE?.diagnostics.subscribe((event) => { if (event.code === "REACTIVITY_HALTED") mark(); });
+OBSERVE?.diagnostics.subscribe((event) => { if (event.code === "REACTIVITY_HALTED" || event.severity === "error") mark(); });
 window.addEventListener("error", () => mark());
 function mark() {
   if (document.getElementById("sc-halted")) return;

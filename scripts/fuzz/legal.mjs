@@ -31,20 +31,21 @@ import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } fr
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
-import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf } from "./matrix.mjs";
+import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf, writeOracleCandidates } from "./matrix.mjs";
 import { budgetOf } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
-import { axesKey, cellList, combined, mountSuffix, mountsOption, pairShapes, pairsOption, recallAxes, shapeAxes } from "./matrix.mjs";
+import { axesKey, cellList, combined, mountSuffix, mountsOption, pairShapes, pairsOption, recallAxes, recallLeanOf, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
-import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { finishEntries, formatPhaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
-import { keepIds } from "./smoke.mjs";
+import { idFilter, keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
+import { gridShardOptions, shardEntries, shardLine, shardOf } from "./shard.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
 export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean", "tsc-overlap"];
@@ -126,15 +127,17 @@ export function pairLegalCells({ codes } = {}) {
 export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** `--recall`: the shapes the recall axes add to a legal cell (matrix.mjs `recallAxes`), on the legal grid's base shapes. */
-export const recallLegalShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true, lean });
+export const recallLegalShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true, lean });
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
+/** A legal program's id, from its cell and its shape or index alone (before it is generated): `--grid-shard` picks by it. */
+export const legalId = ({ code, context }, { index, shape }) => `lg-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape ? `${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}` : String(index)}`;
+
 export function generateLegal(options, { code, context }, { index, shape }) {
   const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}` : `legal/${code}/${context}`;
   const seed = programSeed((Number(options.seed) ^ fnv(key)) >>> 0, shape ? 0 : index);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, legal: true, ...(shape ?? {}) } });
-  const suffix = shape ? `${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}` : String(index);
-  return { program, built: buildCase(program, { id: `lg-${code.toLowerCase().replaceAll("_", "-")}-${context}-${suffix}` }) };
+  return { program, built: buildCase(program, { id: legalId({ code, context }, { index, shape }) }) };
 }
 
 const tally = (rows) => Object.fromEntries(LEGAL_OUTCOMES.map((outcome) => [outcome, rows.filter((row) => row.outcome === outcome).length]));
@@ -155,21 +158,39 @@ export async function runLegal(options) {
     // `--pairs`: the legal cells, and the misuse cells a settled pair is legal in (matrix.mjs pairShapes).
     const cells = (options.pairs ? pairLegalCells({ codes: options.codes?.split(",") }) : legalCells({ codes: options.codes?.split(","), recall: Boolean(options.recall) })).filter((cell) => !options.contexts || options.contexts.split(",").includes(cell.context));
     let entries = [];
+    // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (matrix.mjs `sweep`).
+    const sharding = gridShardOptions(options);
+    const sampling = gridSampleOptions(options);
+    const early = sharding && options.grid && !options.ids && !sampling ? sharding : null;
+    // `--ids <manifest>` (smoke.mjs): on a grid, the programs it names picked by id before generation.
+    const ids = options.ids && options.grid ? idFilter(options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
+    let planned = 0;
     for (const cell of cells) {
       // `--pairs` (matrix.mjs pairShapes): the pair grid's shapes of a legal cell.
-      const shapes = options.pairs ? pairShapes(cell.code, cell.context, { legal: true, sets: pairsOption(options.pairs) }) : options.recall ? recallLegalShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
-      if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      const shapes = options.pairs ? pairShapes(cell.code, cell.context, { legal: true, sets: pairsOption(options.pairs) }) : options.recall ? recallLegalShapes(cell.code, cell.context, { lean: recallLeanOf(options) }) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
+      if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => {
+        planned += 1;
+        if (early && shardOf(legalId(cell, { shape }), early.count) !== early.index) return;
+        if (ids && !ids.keep(legalId(cell, { shape }))) return;
+        entries.push({ cell, index, ...generateLegal(options, cell, { shape }) });
+      });
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
-    // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-    if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+    if (ids) ids.check(entries);
+    else if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
     // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; legal.json records it.
-    const sampling = gridSampleOptions(options);
     let gridSample = null;
     if (sampling) {
       ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
       console.error(`legal: ${sampleLine(gridSample)}`);
     }
+    // `--grid-shard i/N` (shard.mjs): one part of a grid split across processes; legal.json records it.
+    let gridShard = null;
+    if (early) gridShard = { index: early.index, count: early.count, kept: entries.length, of: planned };
+    else if (sharding) ({ entries, summary: gridShard } = shardEntries(entries, sharding));
+    if (gridShard) console.error(`legal: ${shardLine(gridShard)}`);
+    // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
+    const selected = entries.length;
     profile.add("generate", performance.now() - phaseStart);
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
@@ -187,11 +208,10 @@ export async function runLegal(options) {
     const chunks = [];
     for (let at = 0; at < entries.length; at += 150) chunks.push(entries.slice(at, at + 150));
     const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
-    let next = chunks.length ? prepare(chunks[0]) : null;
+    const stageOf = preparedAhead(chunks, prepare);
     for (const [number, chunk] of chunks.entries()) {
       const at = number * 150;
-      const stage = await next;
-      next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
+      const stage = await stageOf(number);
       const results = await finishEntries(stage, run);
       // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
       await checkTypedAway(results, run);
@@ -252,6 +272,7 @@ export async function runLegal(options) {
     if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
     const perStratum = parsePerStratum(options.runtimeDiff);
     if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "legal"));
+    if (options.oracleCandidates !== undefined) console.error(`legal: ${writeOracleCandidates(rows, values, parsePerStratum(options.oracleCandidates), options, out)} oracle candidates`);
     const writePhase = performance.now();
     const checked = rows.filter((row) => row.chrome);
     const chrome = checked.length ? Object.fromEntries(["confirmed", "not-confirmed", "same", "differs", "chrome-inconclusive"].map((status) => [status, checked.filter((row) => row.chrome.status === status).length])) : null;
@@ -263,7 +284,7 @@ export async function runLegal(options) {
       cell[row.outcome] += 1;
       cell.verdicts[String(row.seed)] = row.outcome;
     }
-    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), ...(gridSample ? { gridSample } : {}), ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
+    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recall ? { recallLean: recallLeanOf(options) } : {}), ...(gridSample ? { gridSample } : {}), ...(gridShard ? { gridShard } : {}), selected, ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
       falsePositives: candidates.map(({ id, code, context, variant, binding, layer, detail, chrome }) => ({ id, code, context, variant, binding, layer, rules: detail.rules, chrome })),
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -287,7 +308,7 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine] [--recall]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine] [--recall [--recall-full]]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
   [--chrome-concurrency N]   Chrome pages at a time (default the oracle's: at most 8)
   [--runtime-diff <N|all> [--runtime-diff-axes a,b]]   compare Happy DOM's runtime record with Chrome's on up to N programs per stratum, or all
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]
@@ -296,7 +317,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   guardGridExit("legal");
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

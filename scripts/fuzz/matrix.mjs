@@ -39,7 +39,7 @@ import {
 } from "./misuse.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS } from "./mounts.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
-import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { programSeed } from "./rng.mjs";
@@ -48,8 +48,9 @@ import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
-import { keepIds } from "./smoke.mjs";
+import { idFilter, keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
+import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
@@ -178,18 +179,18 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  * legal grid's `legalShapes`); `variants` its variants.
  */
 /**
- * `--recall-lean` (off by default; Fable's report 2026-11-03, R0.3): the recall mounts and callback forms whose every program answered
- * as a kept one's on the 644bd1a81 full run (`redundancy.mjs`, 2026-11-03): ten mounts as `show-signal`'s program of the same shape
- * (`--against show-signal`; show-keyed's two legal differences were harness rows, a Chrome call with no response), `loading` as the
- * root program, `function` and `let` as `const` (`--against-callback const`). Kept: `show-signal` and `const` (each differs from the
- * base program: 240 and 824 misuse programs), `named` (310 differ from `const`), `for-item` (4), `dynamic`, `show-later`. That run had
- * no role log, so whether a demoted value adds an arm is unmeasured: the flag stays off by default.
+ * The recall grids are lean by default (README "Demoting saturated recall values"; Fable's report 2026-11-03, R0.3): the recall mounts
+ * and callback forms whose every program answered as a kept one's on a full run (`redundancy.mjs`, cd08cd408, seed 1): ten mounts as
+ * `show-signal`'s program of the same shape (`--against show-signal`), `loading` as the root program, `function` and `let` as `const`
+ * (`--against-callback const`). Kept: `show-signal` and `const` (each differs from the base program), `named`, `for-item`, `dynamic`,
+ * `show-later`. `--recall-full` brings every value back (the weekly full run, a probe of a demoted value); `--recall-lean` is the
+ * default, accepted as a no-op.
  */
 export const LEAN_DEMOTED = {
   mounts: ["show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
   callbacks: ["function", "let"],
 };
-export function recallAxes(code, context, base, variants, { legal = false, lean = false } = {}) {
+export function recallAxes(code, context, base, variants, { legal = false, lean = true } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
   // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
@@ -270,8 +271,10 @@ export function pairsOption(value) {
 const THROWN = new Set(thrownCodes.map(([, code]) => code));
 const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
-/** The misuse grid's recall shapes of a cell (`--recall`). */
-export const recallShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
+/** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
+export const recallLeanOf = (options) => Boolean(options.recall) && !options.recallFull;
+/** The misuse grid's recall shapes of a cell (`--recall`); `lean: false` is `--recall-full`. */
+export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -311,11 +314,13 @@ export const combined = (shapes, combine) => (combine ? shapes.map((shape) => ({
 /** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
 export const shapeSeed = (base, code, context, shape) => programSeed((Number(base) ^ fnv(`${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}`)) >>> 0, 0);
 
+/** A grid program's id, from its cell and shape alone (before it is generated): `--grid-shard` picks by it. */
+export const shapeId = ({ code, context }, shape) => `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}`;
+
 export function generateShape(options, { code, context }, shape, index) {
   const seed = shapeSeed(options.seed, code, context, shape);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, ...shape } });
-  const id = `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}`;
-  return { program, built: buildCase(program, { id }), index };
+  return { program, built: buildCase(program, { id: shapeId({ code, context }, shape) }), index };
 }
 
 export function generateCell(options, { code, context }, index) {
@@ -437,7 +442,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
-    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), checker: header, total,
+    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recall ? { recallLean: recallLeanOf(options) } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
     byFeature: featureTable(rows), typedAway, cells: out,
@@ -553,13 +558,15 @@ export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
   // A pair grid (`--pairs`) holds other programs than the grid it sits beside: compared only with a pair grid of the same sets.
   if (JSON.stringify(baseline.pairs ?? null) !== JSON.stringify(current.pairs ?? null)) return { ok: false, refused: `the matrices differ in pairs (${baseline.pairs ?? "none"} vs ${current.pairs ?? "none"})`, ...empty };
-  if (Boolean(baseline.recallLean) !== Boolean(current.recallLean)) return { ok: false, refused: "one matrix is --recall-lean and the other is not: they hold other programs", ...empty };
+  if (Boolean(baseline.recallLean) !== Boolean(current.recallLean)) return { ok: false, refused: "one matrix is a lean recall grid and the other a full one (--recall-full): they hold other programs", ...empty };
   for (const field of ["seed", "perCell", "generator", "sampling"]) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
   }
   // A sampled grid (`--grid-sample`) is for iterating, never a gate: the gate compares whole grids.
   for (const [side, matrix] of [["baseline", baseline], ["current", current]]) if (matrix.gridSample) return { ok: false, refused: `the ${side} matrix is a sample (--grid-sample ${matrix.gridSample.fraction}): the gate compares whole grids`, ...empty };
+  // A shard (`--grid-shard`) is compared with the same shard of the baseline only: the same programs.
+  if (shardKey(baseline) !== shardKey(current)) return { ok: false, refused: `the matrices are different parts of the grid (baseline ${shardKey(baseline)}, current ${shardKey(current)}): the gate compares the same programs`, ...empty };
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
   const unjudged = (now["typed-away"] ?? 0) + (now["tsc-overlap"] ?? 0) + (now.harness ?? 0);
@@ -644,6 +651,19 @@ export async function runtimeDifferential(rows, values, perStratum, config, opti
   return summary;
 }
 
+/**
+ * `--oracle-candidates <N|all>` (audit.mjs): the programs the runtime differential would take from these rows (up to N per stratum of
+ * `--runtime-diff-axes`, the rows with a fast record, in the order of `fnv(id)`), written to `oracle-candidates.jsonl` instead of run.
+ * A shard's sample of a stratum is the N smallest of its own rows, so the N smallest of every shard's candidates are the whole grid's
+ * sample (audit.mjs `pickOracle`): the Chrome work runs once, on the programs a whole run would compare.
+ */
+export function writeOracleCandidates(rows, values, perStratum, options, out) {
+  const axes = parseAxes(options.runtimeDiffAxes);
+  const picked = sampleStrata(rows, perStratum, (row) => Boolean(values.get(row.id)?.runtime), axes);
+  writeFileSync(join(out, "oracle-candidates.jsonl"), picked.map((row) => JSON.stringify({ id: row.id, stratum: stratumOf(row, axes), rank: fnv(String(row.id)) })).join("\n") + (picked.length ? "\n" : ""));
+  return picked.length;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Main
 
@@ -661,6 +681,8 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
                                         async parent (misuse.mjs SOURCES; axis or source names; default local)
   [--recall]                            with --grid, only the recall axes' shapes (matrix.mjs recallAxes): the recall bindings, callee forms,
                                         layers, callback forms, mounts and file sources, each across the base grid, and the recall contexts
+  [--recall-full]                       with --recall, every recall mount and callback form; without it the grid is lean (matrix.mjs
+                                        LEAN_DEMOTED left out; --recall-lean says so and is the default)
   [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
                                         other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
   [--scratch <dir>]                     cases/ and chrome-cases/ in <dir> behind links (scratch.mjs; focus.mjs passes the VM's tmpfs)
@@ -711,18 +733,38 @@ async function sweep(options, config, out) {
   const sources = sourcesOption(options.sources);
   // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs. `--pairs` (pairShapes): the pair grid's.
   const pairs = options.pairs ? pairsOption(options.pairs) : null;
-  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : gridShapes(cell.code, cell.context, mounts, sources));
-  if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
-  else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
-  // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-  if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
-  // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; matrix.json records it.
+  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: recallLeanOf(options) }) : gridShapes(cell.code, cell.context, mounts, sources));
+  // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (their ids are known from the shapes),
+  // the same programs as generating the whole grid and keeping the shard; `planned` counts the whole grid's.
+  const sharding = gridShardOptions(options);
   const sampling = gridSampleOptions(options);
+  const early = sharding && options.grid && !options.ids && !sampling ? sharding : null;
+  // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them; on a grid, picked by id before generation.
+  const ids = options.ids && options.grid ? idFilter(options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
+  let planned = 0;
+  if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => {
+    if (!layerKept(shape)) return;
+    planned += 1;
+    if (early && shardOf(shapeId(cell, shape), early.count) !== early.index) return;
+    if (ids && !ids.keep(shapeId(cell, shape))) return;
+    entries.push({ cell, ...generateShape(options, cell, shape, index) });
+  });
+  else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
+  if (ids) ids.check(entries);
+  else if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
+  // `--grid-sample <fraction>` (sample.mjs): a stratified sample of the grid's programs, for iterating; matrix.json records it.
   let gridSample = null;
   if (sampling) {
     ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
     console.error(`matrix: ${sampleLine(gridSample)}`);
   }
+  // `--grid-shard i/N` (shard.mjs): one part of a grid split across processes; matrix.json records it.
+  let gridShard = null;
+  if (early) gridShard = { index: early.index, count: early.count, kept: entries.length, of: planned };
+  else if (sharding) ({ entries, summary: gridShard } = shardEntries(entries, sharding));
+  if (gridShard) console.error(`matrix: ${shardLine(gridShard)}`);
+  // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
+  const selected = entries.length;
   profile.add("generate", performance.now() - phaseStart);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
@@ -735,15 +777,14 @@ async function sweep(options, config, out) {
   if (run !== config) console.error(`matrix: every program's runtime is cached; checker concurrency ${run.concurrency} (${config.concurrency} + the ${config.workers} idle workers)`);
   // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
   if (run !== config) await setExecutorChecks(run);
-  // Chunk k's fast path runs while chunk k+1 is type-checked and checked: one checker pool and one Vitest batch at a time, as before, but
-  // never one waiting on the other. Each chunk's records and verdicts are what `evaluate` gives it.
+  // Chunk k's fast path runs while chunks k+1 and k+2 are type-checked and checked (preparedAhead): one checker pool and one Vitest batch
+  // at a time, as before, but never one waiting on the other, and the checker pool never idle at a chunk's end. Each chunk's records and verdicts are what `evaluate` gives it.
   const chunks = [];
   for (let at = 0; at < entries.length; at += CHUNK) chunks.push(entries.slice(at, at + CHUNK));
   const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
-  let next = chunks.length ? prepare(chunks[0]) : null;
+  const stageOf = preparedAhead(chunks, prepare);
   for (const [number, chunk] of chunks.entries()) {
-    const stage = await next;
-    next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
+    const stage = await stageOf(number);
     const results = await finishEntries(stage, run);
     // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
     await checkTypedAway(results, run);
@@ -815,6 +856,7 @@ async function sweep(options, config, out) {
   if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
   const perStratum = parsePerStratum(options.runtimeDiff);
   if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "matrix"));
+  if (options.oracleCandidates !== undefined) console.error(`matrix: ${writeOracleCandidates(rows, values, parsePerStratum(options.oracleCandidates), options, out)} oracle candidates`);
   const shrinkPhase = performance.now();
 
   // Shrink one representative per false-clean cell (the smallest program that Chrome did not refute).
@@ -857,7 +899,7 @@ async function sweep(options, config, out) {
   }
 
   const header = { label: options.checkerLabel ?? null, bin: options.checkerBin ? "release build" : null };
-  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values), ...(gridSample ? { gridSample } : {}) };
+  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values), ...(gridSample ? { gridSample } : {}), ...(gridShard ? { gridShard } : {}), selected };
   const statuses = codeStatuses(matrix);
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
@@ -883,7 +925,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
