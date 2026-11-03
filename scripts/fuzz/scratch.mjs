@@ -1,10 +1,11 @@
 // A grid's ephemeral directories in a scratch directory (`focus.mjs --scratch`, the VM's tmpfs): a grid writes a directory per program
-// (`cases/`, `chrome-cases/`) and its checkers a role log of up to gigabytes, all deleted once the grid is folded (`--prune-cases`). On
-// the VM's disk every one of those writes is a write to a disk image in the host's home directory, which the host's fseventsd follows
-// (scripts/fuzz/README.md, The Linux VM). Each lives in the scratch directory and is reached through a link at its usual path, so every
-// path a grid reads or records (a finding's `repro`, roles.json's `log`) is the one it had on disk; only the bytes move.
+// (`cases/`, `chrome-cases/`), all deleted once the grid is folded (`--prune-cases`). On the VM's disk every one of those writes is a
+// write to a disk image in the host's home directory, which the host's fseventsd follows (scripts/fuzz/README.md, The Linux VM). Each
+// lives in the scratch directory and is reached through a link at its usual path, so every path a grid reads or records (a finding's
+// `repro`) is the one it had on disk; only the bytes move. The role log is not here: it is one file of up to gigabytes (7.5 GB on a
+// full lg-recall, which filled the VM's 16 GB tmpfs), so focus.mjs writes it beside the grid output, on the data disk.
 import { existsSync, lstatSync, mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 /** A grid directory's ephemeral subdirectories (what `--prune-cases` deletes): the program cases and Chrome's copies of the sampled ones. */
 export const SCRATCH_DIRS = ["cases", "chrome-cases"];
@@ -28,21 +29,7 @@ export function linkScratch(dir, scratch) {
   }
 }
 
-/**
- * Links a grid's role log `<dir>.roles.jsonl` (next to the grid directory, which focus.mjs leaves for the grid to create) into
- * `scratch`. Returns the log's path there: the checkers write it there and the fold reads it through the link.
- */
-export function linkRoleLog(dir, scratch) {
-  mkdirSync(scratch, { recursive: true });
-  mkdirSync(dirname(dir), { recursive: true });
-  const log = join(scratch, "roles.jsonl");
-  removeLinked(`${dir}.roles.jsonl`);
-  rmSync(log, { force: true });
-  symlinkSync(log, `${dir}.roles.jsonl`);
-  return log;
-}
-
-/** Deletes `path` and, when it is a link, what it points at (a scratch directory or log). */
+/** Deletes `path` and, when it is a link, what it points at (a scratch directory). */
 export function removeLinked(path) {
   if (isLink(path)) {
     let target = null;

@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_GRIDS, GRIDS, parse, readGrid, roomAt, runGridProcess } from "./focus.mjs";
+import { spawnSync } from "node:child_process";
+import { DEFAULT_GRIDS, GRIDS, diskFilled, noRoom, parse, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces } from "./focus.mjs";
 
 describe("readGrid", () => {
   it("tallies the outcomes, flags what needs a look, and counts every difference from the oracle as behaviour", () => {
@@ -64,4 +65,60 @@ describe("roomAt", () => {
     expect(roomAt("/x", { statfs: disk({ ffree: 10 }) })).toMatch(/10 of 1000 inodes free/);
     expect(roomAt("/x", { statfs: () => { throw new Error("no such dir"); } })).toBeNull();
   });
+});
+
+describe("where a unit's files go, and whether they fit", () => {
+  const GIB = 2 ** 30;
+  /** A statfs over a map of path prefix to free GiB: the longest prefix that exists answers; the others throw (not created yet). */
+  const disks = (free, exist = Object.keys(free)) => (path) => {
+    const key = exist.filter((name) => path === name || path.startsWith(`${name}/`)).sort((a, b) => b.length - a.length)[0];
+    if (!key) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    return { bavail: free[key] * GIB / 4096, bsize: 4096, files: 1000, ffree: 900 };
+  };
+
+  it("puts the role log beside the grid output, on its disk, whatever the scratch is", () => {
+    expect(roleLogPath("/data/runs/lg-recall/CODE")).toBe("/data/runs/lg-recall/CODE.roles.jsonl");
+    expect(roleLogPath("/data/runs/lg-base")).toBe("/data/runs/lg-base.roles.jsonl");
+  });
+
+  it("checks the output's disk (where the role log goes) and the scratch, naming the one that is full", () => {
+    const places = unitPlaces({ unitDir: "/data/runs/lg-recall/CODE", scratch: "/ram/scratch/focus-1", roleLog: true });
+    expect(places).toEqual([["grid output and role log", "/data/runs/lg-recall"], ["scratch", "/ram/scratch/focus-1"]]);
+    expect(unitPlaces({ unitDir: "/d/g", roleLog: false })).toEqual([["grid output", "/d"]]);
+    const statfs = disks({ "/data": 100, "/ram": 16 });
+    expect(noRoom(places, { statfs })).toBeNull();
+    // A tmpfs the role log had filled: the reason names the scratch and its path.
+    expect(noRoom(places, { statfs: disks({ "/data": 100, "/ram": 1.5 }) })).toBe("scratch (/ram/scratch/focus-1): 1.5 GiB free");
+    expect(noRoom(places, { statfs: disks({ "/data": 2, "/ram": 1.5 }) })).toBe("grid output and role log (/data/runs/lg-recall): 2.0 GiB free");
+    // The floor is a parameter: 20 GiB is met by the data disk and missed by the 16 GiB tmpfs.
+    expect(noRoom(places, { statfs: disks({ "/data": 100, "/ram": 16 }), minGiB: 20 })).toBe("scratch (/ram/scratch/focus-1): 16.0 GiB free");
+  });
+
+  it("measures a directory not created yet at its nearest existing ancestor, and nothing it cannot find", () => {
+    const places = unitPlaces({ unitDir: "/data/runs/lg-recall/CODE", scratch: "/ram/scratch/focus-1", roleLog: true });
+    // Neither /data/runs nor /ram/scratch/focus-1 exists on the first unit: the disks are /data's and /ram's.
+    const statfs = disks({ "/data": 1, "/ram": 16 }, ["/data", "/ram"]);
+    expect(noRoom(places, { statfs })).toBe("grid output and role log (/data/runs/lg-recall): 1.0 GiB free");
+    expect(roomAt("/nowhere/at/all", { statfs: disks({}) })).toBeNull();
+  });
+
+  it("recognises a disk that filled during a unit, in its log or in its rows", () => {
+    expect(diskFilled({ log: "matrix: stopped: ENOSPC: no space left on device, open 'cases/oracle.json'" })).toBe(true);
+    expect(diskFilled({ log: "", flagged: [{ outcome: "harness", detail: { error: "ENOSPC: no space left on device, write" } }] })).toBe(true);
+    expect(diskFilled({ log: "ok", flagged: [{ outcome: "harness", detail: { error: "Chrome exited" } }] })).toBe(false);
+  });
+
+  it("stops a run before its first unit when the scratch or output has no room, with a reason and no harness rows", () => {
+    const root = mkdtempSync(join(tmpdir(), "fuzz-focus-room-"));
+    try {
+      const out = join(root, "out");
+      const run = spawnSync(process.execPath, [resolve(import.meta.dirname, "focus.mjs"), "--codes", "NO_OWNER_CLEANUP", "--grids", "mx-base", "--role-log", "--scratch", join(root, "scratch"), "--out", out],
+        { encoding: "utf8", env: { ...process.env, SOLID_CHECKER_FUZZ_MIN_FREE_GIB: "1000000000", SOLID_CHECKER_FUZZ_PERF: "0" } });
+      expect(run.status).toBe(2);
+      expect(run.stdout).toMatch(/needs a look \(1\):/);
+      expect(run.stdout).toMatch(/stopped: mx-base: not started, grid output and role log \(.*\): .* GiB free/);
+      expect(run.stdout).not.toMatch(/harness/);
+      expect(() => readFileSync(join(out, "mx-base.log"))).toThrow();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }, 60_000);
 });
