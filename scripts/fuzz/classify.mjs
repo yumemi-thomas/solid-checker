@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCode } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
 import { STATUS as UNEXECUTED_STATUS, unexecutedCandidate } from "./unexecuted.mjs";
 
@@ -204,7 +204,7 @@ export function diagnosticItems(events, findings, registrationLines = () => []) 
     const placeless = isPlacelessCode(event.code);
     // A placeless code has no line of its own whatever frames the fast path attaches: it is judged by file.
     const attributed = placeless ? [] : event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
-    const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
+    const claims = (finding) => coversCode(event.code, finding);
     if (!attributed.length) {
       if (!placeless && event.positions.length) continue;
       const claiming = findings.filter(claims);

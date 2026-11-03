@@ -2911,7 +2911,7 @@ impl LocalAccessContext<'_, '_> {
                 let handed = (inside_non_component_function(file, call.callee, self.lookup)
                     || nested_named_function(file, call.callee, self.lookup))
                 .then(|| {
-                    handed_read_role(
+                    handed_async_read_role(
                         file,
                         call.callee,
                         &allowed,
@@ -3026,6 +3026,10 @@ impl LocalAccessContext<'_, '_> {
     /// uncertifiable, never proven. A reference that is not a direct call, a
     /// function whose binding is written, a generator, or a site that may not
     /// run during its function's call stops the walk (no row, as before).
+    /// ADR 0564: a call in a named nested function no named-callback role
+    /// places climbs into it (its lexical role is no proof), and a function
+    /// holding a call of the reader is also run at each inline carrier it is
+    /// handed to by name, whose run ADR 0563's predicate decides.
     fn push_call_attributed_async_reads(
         &self,
         file: &solid_facts::FileFacts,
@@ -3083,25 +3087,61 @@ impl LocalAccessContext<'_, '_> {
             {
                 continue;
             }
-            for reference in file.ast.identifiers.iter().filter(|identifier| {
-                identifier.role == solid_facts::ast::IdentifierRole::Reference
-                    && file.ast.reference_declaration(identifier.span) == Some(binding.span)
-            }) {
-                let Some(call) = file.ast.calls.iter().find(|call| {
-                    call.direct_callee
-                        && !call.construct
-                        && file.ast.peel_ts_sugar_span(call.callee) == reference.span
-                }) else {
-                    continue;
-                };
-                if crate::execution_role::discarded_region_contains(file, call.span)
-                    || pending_accessor_probe(file, call.span, self.lookup)
+            // The positions that run the function: each direct call of its
+            // binding (the role and anchor are the call's), and (ADR 0563)
+            // each inline carrier it is handed to by name (`[1].forEach(f)`,
+            // `f.call(null)`, `` f`x` ``), which runs it before returning:
+            // the role and anchor are the carrier's. The read's own function
+            // is placed at its carriers by the read's row (ADR 0531), so only
+            // a function holding a call of the reader is followed there.
+            let calls = file
+                .ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    identifier.role == solid_facts::ast::IdentifierRole::Reference
+                        && file.ast.reference_declaration(identifier.span) == Some(binding.span)
+                })
+                .filter_map(|reference| {
+                    file.ast.calls.iter().find(|call| {
+                        call.direct_callee
+                            && !call.construct
+                            && file.ast.peel_ts_sugar_span(call.callee) == reference.span
+                    })
+                })
+                .map(|call| (call.callee, call.span, false));
+            let carriers = if depth > 0 {
+                inline_carriers(file, function, self.lookup)
+            } else {
+                Vec::new()
+            }
+            .into_iter()
+            .map(|carrier| (carrier, carrier, true));
+            for (position, anchor, carrier) in calls.chain(carriers).collect::<Vec<_>>() {
+                if crate::execution_role::discarded_region_contains(file, anchor)
+                    || pending_accessor_probe(file, anchor, self.lookup)
                 {
                     continue;
                 }
+                // ADR 0563: a position in a named function no named-callback
+                // role places (or in a function written as a member's value)
+                // runs where that function runs, never at its lexical role
+                // (a flow component's child around it): climb into it, as
+                // the direct read's placement does (ADR 0531/0535).
+                if nested_named_function(file, position, self.lookup)
+                    || escapes_nested(file, position, self.lookup)
+                {
+                    sites.push((anchor, depth + 1, every && !carrier, first && !carrier));
+                    continue;
+                }
+                // ADR 0563: a carrier that may run the function zero times,
+                // or one around the position, proves no read.
+                let run_unproven = (carrier
+                    && !crate::carrier_runs::carrier_provably_runs(file, anchor, self.lookup))
+                    || crate::carrier_runs::carrier_run_unproven(file, position, self.lookup);
                 let execution = semantic_execution_role(
                     file,
-                    call.callee,
+                    position,
                     allowed,
                     self.entities,
                     self.symbol_names,
@@ -3109,15 +3149,15 @@ impl LocalAccessContext<'_, '_> {
                 );
                 let execution = async_read_role(
                     file,
-                    call.callee,
-                    async_execution_role(file, call.callee, execution),
+                    position,
+                    async_execution_role(file, position, execution),
                     self.entities,
                     self.symbol_names,
                     self.lookup,
                 );
                 let leaf_owner = containing_leaf_owner(
                     file,
-                    call.callee,
+                    position,
                     self.entities,
                     self.symbol_names,
                     self.lookup,
@@ -3131,7 +3171,7 @@ impl LocalAccessContext<'_, '_> {
                     || (execution == ExecutionRole::UntrackedRendering
                         && nested_literal_runs_during_body(
                             file,
-                            call.callee,
+                            position,
                             self.entities,
                             self.symbol_names,
                             self.lookup,
@@ -3140,17 +3180,18 @@ impl LocalAccessContext<'_, '_> {
                 // proven to meet the source pending reads it there.
                 if every
                     && first
+                    && !carrier
                     && !options.declared_loading
                     && !options.opaque
                     && let Some(apply) = crate::execution_role::pending_apply_first_read_from(
                         file,
-                        call.span,
+                        anchor,
                         read.span,
                         declaration,
                         self.lookup,
                     )
                 {
-                    let call_location = location(file.path.shared(), call.span);
+                    let call_location = location(file.path.shared(), anchor);
                     if !result
                         .async_reads
                         .iter()
@@ -3166,6 +3207,7 @@ impl LocalAccessContext<'_, '_> {
                             mount_unresolved: false,
                             settle_unproven: false,
                             call_attributed: true,
+                            carrier_run_unproven: run_unproven,
                             apply_first_run_pending: true,
                             pending_origin: Some(location(file.path.shared(), read.span)),
                             pending_apply: Some(location(file.path.shared(), apply)),
@@ -3184,10 +3226,10 @@ impl LocalAccessContext<'_, '_> {
                 if execution != ExecutionRole::TrackedJsx && !unsuspendable {
                     // The call may itself sit in a named local function a
                     // rendered call runs.
-                    sites.push((call.span, depth + 1, every, first));
+                    sites.push((anchor, depth + 1, every && !carrier, first && !carrier));
                     continue;
                 }
-                let call_location = location(file.path.shared(), call.span);
+                let call_location = location(file.path.shared(), anchor);
                 if result
                     .async_reads
                     .iter()
@@ -3195,7 +3237,7 @@ impl LocalAccessContext<'_, '_> {
                 {
                     continue;
                 }
-                let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
+                let cover = read_loading_cover(self.lookup, file, position, self.symbol_names);
                 result.async_reads.push(Arc::new(AsyncRead {
                     accessor: format!("{name}()").into(),
                     location: call_location,
@@ -3206,6 +3248,7 @@ impl LocalAccessContext<'_, '_> {
                     mount_unresolved: cover == LoadingCover::Unresolved,
                     settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                     call_attributed: true,
+                    carrier_run_unproven: run_unproven,
                     apply_first_run_pending: false,
                     pending_origin: None,
                     pending_apply: None,
@@ -3216,13 +3259,13 @@ impl LocalAccessContext<'_, '_> {
                     server_rendering_unresolved: options.server_rendering_unresolved,
                     host_callback_timing: host_callback_timing(
                         file,
-                        call.callee,
+                        position,
                         execution,
                         self.lookup,
                     ),
                     callee_callback_timing: callee_callback_timing(
                         file,
-                        call.callee,
+                        position,
                         execution,
                         self.lookup,
                     ),
@@ -3367,6 +3410,15 @@ impl LocalAccessContext<'_, '_> {
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                 call_attributed: false,
+                // ADR 0563: the carrier that places the read, and every
+                // carrier around it, must run it.
+                carrier_run_unproven: placed_at.is_some_and(|carrier| {
+                    !crate::carrier_runs::carrier_provably_runs(file, carrier, self.lookup)
+                }) || crate::carrier_runs::carrier_run_unproven(
+                    file,
+                    timing_at,
+                    self.lookup,
+                ),
                 // The proof climbs from the read to the apply itself, so a
                 // read in a closure the apply calls (its own role the body's)
                 // is placed there too.
@@ -3880,6 +3932,11 @@ impl LocalAccessContext<'_, '_> {
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                 call_attributed: false,
+                carrier_run_unproven: crate::carrier_runs::carrier_run_unproven(
+                    file,
+                    member.span,
+                    self.lookup,
+                ),
                 apply_first_run_pending: false,
                 pending_origin: None,
                 pending_apply: None,
@@ -4063,6 +4120,7 @@ impl LocalAccessContext<'_, '_> {
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                 call_attributed: false,
+                carrier_run_unproven: false,
                 apply_first_run_pending: false,
                 pending_origin: None,
                 pending_apply: None,
@@ -4957,6 +5015,32 @@ pub(crate) fn handed_read_role(
         file,
         span,
         lookup,
+        false,
+        |at| read_execution_role(file, at, allowed, entities, symbol_names, lookup),
+        ExecutionRole::reports_untracked_read,
+    )
+}
+
+/// ADR 0563: [`handed_read_role`] for an async source read. Each finding about
+/// it (a pending read that throws, a missing boundary) is a claim about a read
+/// that happens, so only a carrier that provably runs the function
+/// ([`crate::carrier_runs::carrier_provably_runs`]) proves its role; one that
+/// may run it zero times at a reporting position leaves the read unplaced (an
+/// obligation). SC1001's strict reads keep [`handed_read_role`], whose
+/// zero-run trade `docs/open-work.md` records.
+pub(crate) fn handed_async_read_role(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
+    handed_role(
+        file,
+        span,
+        lookup,
+        true,
         |at| read_execution_role(file, at, allowed, entities, symbol_names, lookup),
         ExecutionRole::reports_untracked_read,
     )
@@ -5531,6 +5615,7 @@ fn handed_write_role(
         file,
         span,
         lookup,
+        false,
         |at| {
             semantic_write_execution_role(
                 file,
@@ -5548,11 +5633,14 @@ fn handed_write_role(
 
 /// The placement shared by [`handed_read_role`] and [`handed_write_role`]:
 /// `role_at` is the role of an operation written at a carrier, `reports`
-/// whether that role is a proven defect.
+/// whether that role is a proven defect. With `require_run`, a carrier that
+/// may run the function zero times proves nothing at a reporting position
+/// (ADR 0563).
 fn handed_role(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
+    require_run: bool,
     role_at: impl Fn(solid_facts::core::Span) -> ExecutionRole,
     reports: impl Fn(ExecutionRole) -> bool,
 ) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
@@ -5595,7 +5683,13 @@ fn handed_role(
                 } else {
                     role_at(at)
                 };
-                if role == ExecutionRole::Unknown {
+                // ADR 0563: with `require_run`, a carrier that may run the
+                // function zero times proves nothing where the role reports.
+                if role == ExecutionRole::Unknown
+                    || (reports(role)
+                        && require_run
+                        && !crate::carrier_runs::carrier_provably_runs(file, at, lookup))
+                {
                     unplaced = true;
                 } else if reports(role) {
                     return Some((role, Some(at)));

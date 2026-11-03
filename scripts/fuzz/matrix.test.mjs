@@ -55,6 +55,13 @@ describe("judge", () => {
     // A claiming finding elsewhere in the file still makes it a gap.
     expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable"), finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
   });
+  it("a declining rule's uncertifiable finding is a recall gap; its violation stays a wrong rule (codes.mjs `declining`)", () => {
+    const ctx = (findings) => judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([event("CONTEXT_NOT_FOUND", 10)]) });
+    expect(ctx([finding("missing-owner", "uncertifiable")]).outcome).toBe("recall-gap");
+    expect(ctx([finding("missing-owner", "violation")]).outcome).toBe("wrong-rule");
+    // Only for the code that lists it: SC4001's obligation does not decline a flush code.
+    expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "uncertifiable")] } }).outcome).toBe("false-clean");
+  });
   it("marks a false clean certified when the file has no uncertifiable finding at all (a fail-closed break)", () => {
     expect(verdict({}).detail.certified).toBe(true);
     expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "violation", 30)] } }).detail.certified).toBe(true);

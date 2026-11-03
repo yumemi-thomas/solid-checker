@@ -44,6 +44,7 @@ mod base;
 mod boundary_defects;
 mod cache;
 mod callback_return;
+mod carrier_runs;
 mod cleanup;
 mod development_feedback;
 mod directives;
@@ -1364,6 +1365,13 @@ pub struct AsyncRead {
     /// are uncertifiable, never proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub call_attributed: bool,
+    /// ADR 0563: the read runs in a callback a standard-library carrier may run
+    /// zero times (`[].forEach(f)`, `xs.map(f)`, a `Set`'s `forEach`;
+    /// [`crate::carrier_runs::carrier_provably_runs`]). Every async-read
+    /// finding is a claim about a read that happens, so each is uncertifiable,
+    /// never proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub carrier_run_unproven: bool,
     /// ADR 0504: the read is in the first run of an effect apply that is
     /// proven to run while its async source is still pending
     /// ([`crate::execution_role::pending_apply_first_read`]), so rc.17 throws

@@ -1212,6 +1212,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0563: every async-read finding is a claim about a read that
+            // happens; a carrier that may run the read's callback zero times
+            // (an empty or unknown-length receiver) proves none.
+            if read.carrier_run_unproven {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the standard-library call that runs this read's callback may run it zero times (its receiver may be empty), so whether this read runs is not proven; if it does: {}",
+                    finding.message
+                );
+            }
             // A missing boundary is proven only for a function whose every
             // render chain was followed to a mount root. Where a chain ends at
             // a function the project never renders, the boundary above it may

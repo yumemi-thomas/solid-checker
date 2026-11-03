@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { codeOfThrown, codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -102,7 +102,7 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
   // A combination program's other uses are legal sites of other codes: a finding on their lines is theirs, never this site's.
   const elsewhere = (finding) => others.some((lines) => inLines(finding, lines)) && !inLines(finding, region);
   const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && !elsewhere(finding));
-  const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
+  const claims = (finding) => coversCode(code, finding);
   const covering = relevant.filter((finding) => inLines(finding, region));
   // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
   // line itself. In a one-site program a claiming finding anywhere is this misuse's: it is an agree (or a gap) with `remote` set.
@@ -119,7 +119,7 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
     .map((event) => event.code))]
     .map((other) => [other, relevant.some((finding) => finding.kind === "violation" && codeRules[other].includes(finding.rule))
       ? "agree"
-      : relevant.some((finding) => codeRules[other].includes(finding.rule)) ? "recall-gap" : "false-clean"])
+      : relevant.some((finding) => codeRules[other].includes(finding.rule) || declinesCode(other, finding)) ? "recall-gap" : "false-clean"])
     .filter(([, verdict]) => verdict !== "agree"));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
@@ -130,7 +130,7 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
   const wrong = violations.filter((finding) => !corroborated(finding));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
-  // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims it (or a withholding) at the site.
+  // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
   if (covering.some(claims)) return { outcome: "recall-gap", detail };
   const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};

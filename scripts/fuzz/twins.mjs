@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
 import { EntryCache, cacheDirectory, cacheableTypecheck, typecheckDigest, typecheckEnvironmentKey } from "./cache.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
 import { assertFindingsMapped, materializeForChecker, runChecker } from "./checker.mjs";
-import { codeRules, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
+import { codeRules, declinesCode, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { generateLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
 import { axesKey, cellList, generateShape, gridShapes, recallShapes } from "./matrix.mjs";
 import { CONTROL_LAYERS, FILE_LAYERS, LAYERS, PAIR_LAYERS, RECALL_LAYERS } from "./misuse.mjs";
@@ -81,8 +81,8 @@ export const ALLOWED = [];
 export const TWIN_CODES = Object.keys(codeRules).filter((code) => policyOf(code)?.disposition?.startsWith("defect")).sort();
 
 /**
- * A program's answer per code: a violation of a rule that claims it anywhere in the file, else a declining finding of such a rule or
- * of a withholding rule (codes.mjs `withholdingRules`: the checker withheld an answer, which covers any code, as the grids count it),
+ * A program's answer per code: a violation of a rule that claims it anywhere in the file, else a declining finding of such a rule, an
+ * uncertifiable finding of a rule that declines the code (codes.mjs `decliningRules`), or a finding of a withholding rule (codes.mjs `withholdingRules`: the checker withheld an answer, which covers any code, as the grids count it),
  * else none.
  */
 export function answersOf(findings) {
@@ -90,7 +90,7 @@ export function answersOf(findings) {
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const withheld = relevant.some((finding) => withholdingRules.includes(finding.rule));
   for (const code of TWIN_CODES) {
-    const mine = relevant.filter((finding) => codeRules[code].includes(finding.rule));
+    const mine = relevant.filter((finding) => codeRules[code].includes(finding.rule) || declinesCode(code, finding));
     out[code] = mine.some((finding) => finding.kind === "violation") ? "violation" : mine.length || withheld ? "uncertifiable" : "none";
   }
   return out;

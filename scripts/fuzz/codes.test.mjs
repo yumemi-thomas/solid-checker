@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules } from "./codes.mjs";
+import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCode, decliningRules, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules } from "./codes.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 /** The source text of a top-level `const name = [...]` or `{...}` literal in the oracle. */
@@ -23,6 +23,16 @@ describe("tables copied from scripts/runtime-oracle.mjs", () => {
     const theirs = new Function(`return (${literal("thrownCodes")});`)();
     expect(thrownCodes.map(([pattern, code]) => [String(pattern), code])).toEqual(theirs.map(([pattern, code]) => [String(pattern), code]));
   });
+  it("decliningRules matches the oracle's", () => {
+    expect(oracle).toContain(`const decliningRules = ${JSON.stringify(decliningRules)};`);
+  });
+
+  it("a declining rule's violation is not a recall gap, its uncertifiable finding covers the code", () => {
+    expect(coversCode("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "uncertifiable" })).toBe(true);
+    expect(coversCode("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "violation" })).toBe(false);
+    expect(coversCode("NO_OWNER_CLEANUP", { rule: "missing-context-provider", kind: "uncertifiable" })).toBe(false);
+  });
+
   it("withholdingRules matches the oracle's", () => {
     expect(oracle).toContain(`const withholdingRules = ${JSON.stringify(withholdingRules)};`);
   });
