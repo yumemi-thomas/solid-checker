@@ -3395,19 +3395,22 @@ impl LocalAccessContext<'_, '_> {
                     )
                 })
                 .flatten();
+            // ADR 0580: a read in a named function run by inline carriers
+            // is under the leaf owner of the carrier that runs it.
+            let (leaf_owner, leaf_carrier_unproven) = carried_leaf_owner(
+                file,
+                call.callee,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+                CARRIED_LEAF_DEPTH,
+            );
             result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!("{name}()").into(),
                 location: location(file.path.shared(), call.span),
                 declaration: declaration.clone(),
                 execution: async_execution,
-                leaf_owner: containing_leaf_owner(
-                    file,
-                    call.callee,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                )
-                .map(Into::into),
+                leaf_owner: leaf_owner.map(Into::into),
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 settle_unproven: self.lookup.module_census().may_settle_before_mount(),
@@ -3415,13 +3418,11 @@ impl LocalAccessContext<'_, '_> {
                 // ADR 0563: the carrier that places the read, and every
                 // carrier around it, must run it.
                 creation_pass_unproven: false,
-                carrier_run_unproven: placed_at.is_some_and(|carrier| {
-                    !crate::carrier_runs::carrier_provably_runs(file, carrier, self.lookup)
-                }) || crate::carrier_runs::carrier_run_unproven(
-                    file,
-                    timing_at,
-                    self.lookup,
-                ),
+                carrier_run_unproven: leaf_carrier_unproven
+                    || placed_at.is_some_and(|carrier| {
+                        !crate::carrier_runs::carrier_provably_runs(file, carrier, self.lookup)
+                    })
+                    || crate::carrier_runs::carrier_run_unproven(file, timing_at, self.lookup),
                 // The proof climbs from the read to the apply itself, so a
                 // read in a closure the apply calls (its own role the body's)
                 // is placed there too.
@@ -4572,6 +4573,50 @@ pub(crate) fn escapes_nested(
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         !lookup.function_may_be_component(file, function) && member_assigned(file, function)
     })
+}
+
+/// ADR 0580: how many named functions [`carried_leaf_owner`] follows out
+/// through their inline carriers.
+const CARRIED_LEAF_DEPTH: usize = 4;
+
+/// ADR 0580: the leaf owner a read at `span` runs under, and whether a
+/// carrier on the way may run it zero times. A read written in a named
+/// function its binding hands to inline carriers (`[1].forEach(hf)`,
+/// `hf.call(null)`, `` hf`x` ``) runs where those carriers run, so the
+/// first carrier under a leaf owner answers, its run decided by ADR 0563's
+/// [`crate::carrier_runs::carrier_provably_runs`]: a named callback the
+/// function is nested in (`onSettled(cb)`, whose leaf owner the read's own
+/// position never shows) is found, and a carrier that may run it zero
+/// times (`[].forEach(hf)` inside an `onSettled` literal) proves nothing.
+/// Otherwise the read's own position answers ([`containing_leaf_owner`]).
+fn carried_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> (Option<String>, bool) {
+    if depth > 0
+        && let Some(function) = containing_ast_function(&file.ast, span)
+        && !function.generator
+        && !lookup.function_may_be_component(file, function)
+    {
+        for carrier in inline_carriers(file, function, lookup) {
+            if let (Some(owner), unproven) =
+                carried_leaf_owner(file, carrier, entities, symbol_names, lookup, depth - 1)
+            {
+                return (
+                    Some(owner),
+                    unproven || !crate::carrier_runs::carrier_provably_runs(file, carrier, lookup),
+                );
+            }
+        }
+    }
+    (
+        containing_leaf_owner(file, span, entities, symbol_names, lookup),
+        false,
+    )
 }
 
 /// ADR 0537: the inline carriers `function`'s binding is handed to by name

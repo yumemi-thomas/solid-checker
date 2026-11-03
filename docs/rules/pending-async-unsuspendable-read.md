@@ -38,6 +38,13 @@ for `sort`, two or an initial value for `reduce`), `Array.from` of one. An
 empty or unknown-length receiver (`[].forEach(f)`, `props.xs.map(f)`, a `Set`)
 may run it zero times: uncertifiable (ADR 0563).
 
+A read in a named function its binding hands to such carriers is under the
+leaf owner of the carrier that runs it, not of the read's own position: the
+named callback of `onSettled(cb)` or `createTrackedEffect(cb)` runs `hf` under
+that owner through `[1].forEach(hf)`, and an `onSettled` literal around
+`[].forEach(hf)` proves nothing, since the carrier may never run `hf`
+(ADR 0580).
+
 A pending read in a callback a host API retains (an `addEventListener`
 listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation
 callback) written in a component body is also uncertifiable: invoked inside the
