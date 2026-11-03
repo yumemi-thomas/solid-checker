@@ -1,0 +1,92 @@
+name: Fuzz trial
+
+# A trial of the differential fuzzer on a GitHub-hosted runner: one focus run
+# (scripts/fuzz/focus.mjs) for the codes and grids below, to see whether the
+# harness works on Linux outside the Colima VM and how fast a runner goes.
+# Provisioning mirrors scripts/fuzz/vm.sh setup and sync.
+
+on:
+  push:
+    branches: [claude/gha-fuzz-trial]
+  workflow_dispatch:
+    inputs:
+      codes:
+        description: Codes for focus.mjs --codes
+        default: NO_OWNER_CLEANUP
+      grids:
+        description: Grids for focus.mjs --grids
+        default: mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo
+
+permissions:
+  contents: read
+
+jobs:
+  focus:
+    # ubuntu-22.04 x64 so the release dependency cache main's rust-package job
+    # writes (shared-key release-ubuntu-22.04-x64) restores here.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      CODES: ${{ inputs.codes || 'NO_OWNER_CLEANUP' }}
+      GRIDS: ${{ inputs.grids || 'mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.13.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - name: Machine
+        run: |
+          nproc; free -g; df -h . /tmp; df -i . | tail -1
+          echo "TSRS_REV=$(sed -n 's/^tsrs_core = .*rev = "\([0-9a-f]*\)".*/\1/p' apps/solid-typefacts/Cargo.toml)" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: release-ubuntu-22.04-x64
+          save-if: false
+      # Producer with build id dev, the id cargo's [env] gives the checker below.
+      - uses: ./.github/actions/typefacts
+      # The type checker the fuzzer requires (never tsc from node_modules).
+      - id: tsrs-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/tsrs-bin
+          key: tsrs-cli-${{ env.TSRS_REV }}-rust-1.99.1-ubuntu-22.04
+      - name: Build tsrs CLI
+        if: steps.tsrs-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone -q https://github.com/yumemi-thomas/tsrs "$RUNNER_TEMP/tsrs"
+          git -C "$RUNNER_TEMP/tsrs" checkout -q --detach "$TSRS_REV"
+          (cd "$RUNNER_TEMP/tsrs" && cargo +1.99.1 build --release -q -p tsrs_cli)
+          mkdir -p ~/tsrs-bin && cp "$RUNNER_TEMP/tsrs/target/release/tsrs" ~/tsrs-bin/
+      - name: Build the release checker
+        run: |
+          start=$(date +%s)
+          cargo +1.99.1 build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
+          echo "checker build: $(( $(date +%s) - start )) s"
+      - name: Installs and Chrome
+        run: |
+          (cd scripts/fuzz/install && npm ci --silent)
+          (cd scripts/runtime-oracle-install && npm ci --silent)
+          (cd packages/cli && bun install --frozen-lockfile --silent)
+          (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
+      - name: Focus run
+        env:
+          SOLID_CHECKER_TSRS_BIN: /home/runner/tsrs-bin/tsrs
+        run: |
+          start=$(date +%s)
+          node scripts/fuzz/focus.mjs --codes "$CODES" --grids "$GRIDS" --prune-cases \
+            --out "$RUNNER_TEMP/fuzz-out" \
+            --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts"
+          echo "focus run: $(( $(date +%s) - start )) s"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-out
+          path: |
+            ${{ runner.temp }}/fuzz-out/**/*.json
+            ${{ runner.temp }}/fuzz-out/**/*.log
+          if-no-files-found: warn
