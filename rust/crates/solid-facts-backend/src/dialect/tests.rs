@@ -130,6 +130,7 @@ fn catalog_prose_program() -> Program {
             mount_unresolved: false,
             settle_unproven: false,
             call_attributed: false,
+            creation_pass_unproven: false,
             carrier_run_unproven: false,
             apply_first_run_pending: false,
             pending_origin: None,

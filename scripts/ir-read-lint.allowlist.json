@@ -237,6 +237,9 @@
     "facts.files": 3,
     "hashmap-iteration": 1
   },
+  "rust/crates/solid-reactive-ir/src/owners/creation_pass.rs": {
+    "file_by_path": 1
+  },
   "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
     "facts.files": 1,
     "file_by_path": 4,
@@ -274,7 +277,7 @@
   },
   "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
     "facts.files": 1,
-    "file_by_path": 3
+    "file_by_path": 4
   },
   "rust/crates/solid-reactive-ir/src/route_components.rs": {
     "facts.files": 3

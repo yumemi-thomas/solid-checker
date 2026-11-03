@@ -1382,6 +1382,14 @@ pub struct AsyncRead {
     /// never proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub carrier_run_unproven: bool,
+    /// ADR 0570: the read is not proven to run in the synchronous pass that
+    /// created its source ([`crate::owners::read_in_creation_pass`]): a
+    /// parent's memo handed by prop or context, or a module-scope one, read by
+    /// a component a `<Show>` or a button may mount later, when the source has
+    /// settled. A settled read neither throws (SC5001) nor needs a boundary
+    /// (SC5003), so both are uncertifiable, never proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub creation_pass_unproven: bool,
     /// ADR 0504: the read is in the first run of an effect apply that is
     /// proven to run while its async source is still pending
     /// ([`crate::execution_role::pending_apply_first_read`]), so rc.17 throws

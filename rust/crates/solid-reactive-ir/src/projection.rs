@@ -1233,6 +1233,22 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0570: a read not proven to run in the pass that created
+            // its source may run after it settled (a component a `<Show>`
+            // mounts on a click); the same exemptions as ADR 0518's.
+            if read.creation_pass_unproven
+                && !read.apply_first_run_pending
+                && ((finding.id == "SC5003"
+                    && !read.ssr_client_hole
+                    && !read.server_rendering_unresolved)
+                    || finding.id == "SC5001")
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the component holding this read is not proven to run in the same pass that created the source (it may mount later, from a <Show> or a click), and a settled read neither throws nor needs a boundary; if it is still pending: {}",
+                    finding.message
+                );
+            }
             // ADR 0518: a top-level `await` may settle the source before the
             // read runs; a settled read neither needs a boundary (SC5003) nor
             // throws (SC5001). SC5003's `ssrSource: "client"` wording throws
