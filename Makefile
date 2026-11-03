@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-twins
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -204,6 +204,12 @@ fuzz-focus: build-checker-release
 	@test -n "$(CODES)" || { echo "make fuzz-focus CODES=A[,B]: the codes the change touches"; exit 2; }
 	node scripts/fuzz/focus.mjs --codes "$(CODES)" $(if $(FUZZ_GRIDS),--grids "$(FUZZ_GRIDS)") \
 	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
+
+# The fuzzer's own unit tests (scripts/fuzz/*.test.mjs), a lane of `make verify` and CI: provisions the pinned installs and the pinned
+# headless shell first (idempotent), then runs them with no silent skip (scripts/fuzz/test-lane.mjs). `make fuzz-test ARGS=scripts/fuzz/focus.test.mjs`
+# runs one file.
+fuzz-test:
+	$(BUN) scripts/fuzz/test-lane.mjs --provision $(ARGS)
 
 # The fuzzer's smoke set (scripts/fuzz/smoke.mjs): every grid restricted to its manifest (scripts/fuzz/smoke/), a few
 # programs covering every behaviour and axis pair of the full grids; after any checker change. Exits 1 on anything to look at.

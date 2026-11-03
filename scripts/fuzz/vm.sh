@@ -76,11 +76,13 @@ place_storage() {
 # The per-program work directories (the checker's, the fast runtime's, Chrome's) on tmpfs. A grid creates and deletes a directory
 # per program, about a million a full run: on the VM's disk each one is a write to a disk image in the host's home directory, which
 # kept the host's fseventsd at a full core (2026-11-02). In RAM they cost the host nothing and never reach the image. So do TMPDIR (a
-# producer's transition arena per process, Chrome's profiles) and a focus run's scratch (each grid's cases/, chrome-cases/ and role
-# log until --prune-cases deletes them), at $root/ram. Grid outputs and the runtime cache stay on the data disk: TMPDIR's cache and
-# focus-output directories are links to $root/tmp. Sizes are ceilings, not reservations (FUZZ_VM_SCRATCH_GIB, FUZZ_VM_RAM_GIB; a
-# recall code's cases take ~3 GiB of pages and its role log ~1 GiB, and a grid's heap up to 12 GiB of the VM's 32). Idempotent: a
-# mounted directory is left as it is; a reboot empties them, which loses nothing.
+# producer's transition arena per process, Chrome's profiles) and a focus run's scratch (each grid's cases/ and chrome-cases/ until
+# --prune-cases deletes them), at $root/ram. Grid outputs and the runtime cache stay on the data disk: TMPDIR's cache and
+# focus-output directories are links to $root/tmp. The role log (--role-log) is NOT scratch: it is written beside the grid output on
+# the data disk (7.5 GB on a full lg-recall filled the 16 GB tmpfs and got a run OOM-killed), and focus.mjs checks the free space of
+# the output and of $root/ram/scratch before every unit. Sizes are ceilings, not reservations (FUZZ_VM_SCRATCH_GIB, FUZZ_VM_RAM_GIB;
+# a recall code's cases take ~3 GiB of pages, and a grid's heap up to 12 GiB of the VM's 32). Idempotent: a mounted directory is left
+# as it is; a reboot empties them, which loses nothing.
 scratch_in_ram() {
   vm "set -euo pipefail
     for d in $clone/scripts/runtime-oracle-install/.solid-checker-fuzz $clone/scripts/runtime-oracle-install/.solid-checker-fuzz-chrome $clone/scripts/fuzz/install/.solid-checker-fuzz-fast; do

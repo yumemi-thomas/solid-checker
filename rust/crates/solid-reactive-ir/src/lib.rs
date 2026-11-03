@@ -866,6 +866,55 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
+/// ADR 0595: why an SC1002 read after an await is a proof obligation rather
+/// than a violation. The first reason a walk records stands: the innermost
+/// one (the hand-off, the carrier) is recorded before an enclosing member's.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "reason")]
+pub enum AfterAwaitObligation {
+    /// Something before the first suspension may already have read the
+    /// source (`pre_await::Tracking::Possible`): a dependency is not warned
+    /// about.
+    MayBeTracked,
+    /// A `dispose` function can reach the computation's owner, which may be
+    /// gone when the continuation resumes.
+    OwnerMayBeDisposed,
+    /// The function holding the read is handed on where the walk does not
+    /// follow it (ADR 0565): `via` is the callee text of the call that takes
+    /// it, or none for a member, an object slot, a method or a copy.
+    HandOffNotFollowed { via: Option<String> },
+    /// A carrier that may run the function zero times (ADR 0566), or only
+    /// for some contents (a comparator, a reducer without an initial value,
+    /// a replacer): `carrier` is its callee text.
+    CarrierMayNotRun { carrier: String },
+    /// A promise handler that runs only on one settlement, or on a receiver
+    /// not proven to hold the computation's flight.
+    HandlerMayNotRun,
+    /// An `async` function returned without `await` whose first await is not
+    /// proven pending: its continuation may run before the computation holds
+    /// its promise.
+    ContinuationMayRunFirst,
+    /// The chain runs on an intrinsic a visible write may have replaced
+    /// (ADR 0349).
+    IntrinsicMayBeReplaced,
+    /// A suspension the flow facts do not place (`for await`, a loop's back
+    /// edge, an unlisted async compute, a try head whose operand is no
+    /// longer the resolved function).
+    SuspensionUnplaced,
+    /// A generator's body, run by stepping its iterator, which nothing
+    /// follows (ADR 0516).
+    GeneratorStepped,
+    /// `runWithOwner` with an owner the analysis cannot see through: a read
+    /// there warns or stays silent depending on that owner.
+    OwnerUnresolved,
+    /// A composite callee (`a || b`, `c ? a : b`) not every operand of which
+    /// is proven to be this accessor.
+    CalleeInexact,
+    /// A prop read whose signal backing is not proven: the component's call
+    /// sites cannot be enumerated, or the prop's use is unknown.
+    PropBackingUnproven { callers_unenumerable: bool },
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -875,6 +924,10 @@ pub enum StaticDefectKind {
     },
     ReactiveReadAfterAwait {
         accessor: String,
+        /// Why the read is a proof obligation (`StaticDefect::uncertain`),
+        /// when it is one: the dialect words the reason (ADR 0595).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        obligation: Option<AfterAwaitObligation>,
     },
     /// A call after an await whose callee reads `accessor` in its own body
     /// (`await load(); return byUser(posts)`): that read runs after the await,

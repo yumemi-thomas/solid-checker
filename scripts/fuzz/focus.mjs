@@ -16,8 +16,13 @@
 // a directory of files: three full runs filled a VM disk's inodes); `--grid-timeout`: a grid process that runs longer is killed and
 // reported (default 120 minutes; a stalled Chrome or a paused VM once hung a run for hours); `--heap-mb`: the grid process's heap
 // (default 12000 for the recall grids, Node's default otherwise). Each grid's output streams to `<grid>.log` while it runs.
-// `--scratch` (default $SOLID_CHECKER_FUZZ_SCRATCH, which vm.sh points at the VM's tmpfs): each grid's `cases/`, `chrome-cases/` and
-// role log live there behind links at their usual paths (scratch.mjs), so the per-program writes never reach a disk.
+// `--scratch` (default $SOLID_CHECKER_FUZZ_SCRATCH, which vm.sh points at the VM's tmpfs): each grid's `cases/` and `chrome-cases/`
+// live there behind links at their usual paths (scratch.mjs), so the per-program writes never reach a disk. The role log does not: it
+// is one file that grows to gigabytes (7.5 GB on a full lg-recall, which filled the VM's 16 GB tmpfs and got a 103k-program run
+// OOM-killed), so it is written beside the grid output, on the data disk.
+// Before every unit the free space of the grid output (where the role log goes) and of the scratch is checked (`roomAt`): a unit that
+// would not fit stops the run with a "needs a look" reason, never as `harness` rows of ENOSPC; a unit whose log shows the disk filled
+// stops it too.
 // `--role-log` (ADR 0533): each grid's checkers append the role log to `<grid>.roles.jsonl` (one file: a directory would take an inode
 // per program); it is folded into `<grid>/roles.json` and the run's
 // `<out>/roles.json` (roles.mjs: arms hit and never hit, yield, new arms against `--roles-against`, silent-by-default decisions).
@@ -50,7 +55,7 @@ import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
-import { linkRoleLog } from "./scratch.mjs";
+import { PARTIAL, readPartial, stopReason } from "./partial.mjs";
 import { BIG_CODES, sampleLine } from "./sample.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 import { cpus, platform, totalmem } from "node:os";
@@ -81,17 +86,20 @@ export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith(
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
 export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 
-/** One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. */
+/**
+ * One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. A grid process that
+ * stopped before writing programs.jsonl gives the rows it judged before (partial.mjs) and `partial: true`; `partial: false` when it
+ * left neither.
+ */
 export function readGrid(out) {
   const programs = join(out, "programs.jsonl");
   const outcomes = {};
   const flagged = [];
-  if (existsSync(programs)) {
-    for (const line of readFileSync(programs, "utf8").split("\n").filter(Boolean)) {
-      const row = JSON.parse(line);
-      outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
-      if (PROBLEMS.includes(row.outcome)) flagged.push({ id: row.id, outcome: row.outcome, detail: row.detail });
-    }
+  const complete = existsSync(programs);
+  const rows = complete ? readFileSync(programs, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : readPartial(out);
+  for (const row of rows ?? []) {
+    outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
+    if (PROBLEMS.includes(row.outcome)) flagged.push({ id: row.id, outcome: row.outcome, detail: row.detail });
   }
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
@@ -100,7 +108,31 @@ export function readGrid(out) {
   // selected (null in a report from before it was recorded, or with no report).
   const path = ["matrix.json", "legal.json"].map((name) => join(out, name)).find((candidate) => existsSync(candidate));
   const report = path ? JSON.parse(readFileSync(path, "utf8")) : {};
-  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample: report.gridSample ?? null, gridShard: report.gridShard ?? null, selected: report.selected ?? null };
+  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample: report.gridSample ?? null, gridShard: report.gridShard ?? null, selected: report.selected ?? null, ...(complete ? {} : { partial: rows !== null }) };
+}
+
+/**
+ * A run that judged nothing is no clean grid (a full disk, a crashed host), unless the grid finished and its report says it selected
+ * no program: a code with no shape on the grid's axes (no source shape on mx-src, say), or a shard that got none. `--split-codes`
+ * still flags a code that no grid had a program for.
+ */
+export function emptyByDesign({ run, grid, total }) {
+  return total === 0 && grid.selected === 0 && grid.partial === undefined && run.status === 0 && !run.timedOut;
+}
+
+/**
+ * What a finished grid process needs a look for, beyond its rows: a deadline it missed, an exit it failed, rows it never wrote (a
+ * harness failure, with the reason its log gives and the rows it judged before it stopped), a run that judged nothing.
+ */
+export function unitProblems(label, { run, grid, total, log, logPath, timeoutMinutes }) {
+  const problems = [];
+  const tail = () => log.trim().split("\n").slice(-3).join(" | ").slice(0, 400);
+  if (run.timedOut) problems.push(`${label}: killed after ${timeoutMinutes} minutes (${logPath}): ${tail()}`);
+  else if (run.status !== 0) problems.push(`${label}: exited ${run.status ?? run.signal} (${logPath}): ${tail()}`);
+  // No programs.jsonl: the grid process stopped (a crashed host, a killed executor, a refusal), whatever its exit said.
+  if (grid.partial !== undefined) problems.push(`${label}: harness: the grid process stopped before writing its rows (${grid.partial ? `${total} judged before it stopped, kept in ${PARTIAL}` : "none judged"}): ${stopReason(log)}`);
+  else if (total === 0 && !emptyByDesign({ run, grid, total })) problems.push(`${label}: no program was judged (${logPath})`);
+  return problems;
 }
 
 /**
@@ -110,14 +142,49 @@ export function readGrid(out) {
 /** Stops a focus run: what follows would fail the same way (no room, no executor). */
 export class FocusStop extends Error {}
 
-/** Why `dir`'s disk cannot hold another grid (under 5 GiB or 5% of the inodes free), or null. */
-export function roomAt(dir, { statfs = statfsSync } = {}) {
+/**
+ * Why `dir`'s disk cannot hold another grid (under 5 GiB, `SOLID_CHECKER_FUZZ_MIN_FREE_GIB`, or 5% of the inodes free), or null. A `dir` that does not exist yet (a
+ * grid's output before its first unit, the scratch before the first link) is measured at its nearest existing ancestor, which is the
+ * disk it will be created on; one with no existing ancestor is not measured (null).
+ */
+export function roomAt(dir, { statfs = statfsSync, minGiB = Number(process.env.SOLID_CHECKER_FUZZ_MIN_FREE_GIB) || 5 } = {}) {
   let stats;
-  try { stats = statfs(dir); } catch { return null; }
+  for (let at = resolve(dir); ; at = dirname(at)) {
+    try { stats = statfs(at); break; } catch { if (dirname(at) === at) return null; }
+  }
   const freeBytes = Number(stats.bavail) * Number(stats.bsize);
-  if (freeBytes < 5 * 2 ** 30) return `${(freeBytes / 2 ** 30).toFixed(1)} GiB free`;
+  if (freeBytes < minGiB * 2 ** 30) return `${(freeBytes / 2 ** 30).toFixed(1)} GiB free`;
   if (Number(stats.files) > 0 && Number(stats.ffree) / Number(stats.files) < 0.05) return `${stats.ffree} of ${stats.files} inodes free`;
   return null;
+}
+
+/** A grid's role log: beside the grid directory, on the output's disk, never in the scratch (which is the VM's tmpfs). */
+export function roleLogPath(unitDir) {
+  return `${unitDir}.roles.jsonl`;
+}
+
+/**
+ * The places a unit writes that can run out: the grid output (programs, logs, the role log) and, when there is one, the scratch
+ * (`cases/`, `chrome-cases/`). Each is `[what, path]`.
+ */
+export function unitPlaces({ unitDir, scratch, roleLog }) {
+  return [[roleLog ? "grid output and role log" : "grid output", dirname(unitDir)], ...(scratch ? [["scratch", scratch]] : [])];
+}
+
+/** The first of `places` (`unitPlaces`) without room, as a sentence, or null when every one has it. */
+export function noRoom(places, options = {}) {
+  for (const [what, path] of places) {
+    const why = roomAt(path, options);
+    if (why) return `${what} (${path}): ${why}`;
+  }
+  return null;
+}
+
+const FULL_DISK = /ENOSPC|no space left on device/i;
+
+/** Whether a unit's log or flagged rows say the disk filled while it ran (what its `harness` rows would otherwise be read as). */
+export function diskFilled({ log, flagged = [] }) {
+  return FULL_DISK.test(log) || flagged.some((row) => FULL_DISK.test(JSON.stringify(row.detail ?? {})));
 }
 
 export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runtime = NODE, env = process.env }) {
@@ -232,7 +299,9 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
       // sync only; a run of many codes writes a directory per program).
-      const room = roomAt(dirname(unit.dir));
+      // The role log is on that disk, and the scratch (a tmpfs on the VM) holds the cases: both are checked.
+      const unitScratch = scratchRoot ? join(scratchRoot, unit.label) : null;
+      const room = noRoom(unitPlaces({ unitDir: unit.dir, scratch: scratchRoot, roleLog: options.roleLog }));
       if (room) throw new FocusStop(`${unit.label}: not started, ${room} (prune cases/ with --prune-cases or free the disk)`);
       const started = Date.now();
       const select = [...(unit.codes ? ["--codes", unit.codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
@@ -240,37 +309,34 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const logPath = `${unit.dir}.log`;
       // The role log: one file per grid that every checker process appends whole lines to (role_log.rs), folded once the grid's rows
       // are written; a line two processes interleaved is counted as malformed, never folded.
-      const roles = options.roleLog ? `${unit.dir}.roles.jsonl` : null;
-      // With a scratch directory the checkers write the log there and the fold reads it through `roles`, a link (scratch.mjs).
-      const unitScratch = scratchRoot ? join(scratchRoot, unit.label) : null;
-      const written = roles && unitScratch ? linkRoleLog(unit.dir, unitScratch) : roles;
-      if (roles && !unitScratch) rmSync(roles, { force: true });
-      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: written } : process.env;
+      // On the output's disk even with a scratch directory: it grows to gigabytes and would fill the scratch's tmpfs.
+      const roles = options.roleLog ? roleLogPath(unit.dir) : null;
+      if (roles) { mkdirSync(dirname(roles), { recursive: true }); rmSync(roles, { force: true }); }
+      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
       const unitSampled = sampled.length && (!unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
       const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
-      const { outcomes, flagged, oracle, behaviour, gridSample, gridShard, selected } = readGrid(unit.dir);
+      const read = readGrid(unit.dir);
+      const { outcomes, flagged, oracle, behaviour, gridSample, gridShard } = read;
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
       const summary = oracle ? `oracle ${oracle.compared} compared, ${oracle.behaviour} behaviour, ${oracle.attributionOnly} attribution, ${oracle.inconclusive ?? 0} inconclusive` : "no oracle sample";
-      console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${total} programs ${JSON.stringify(outcomes)}  ${summary}`);
+      const counted = read.partial !== undefined ? `STOPPED, ${total} programs judged before` : `${total} programs`;
+      console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${counted} ${JSON.stringify(outcomes)}  ${summary}`);
       if (gridSample) { console.log(`           ${sampleLine(gridSample)}`); sampledUnits.push(unit.label); }
-      const tail = () => readFileSync(logPath, "utf8").trim().split("\n").slice(-3).join(" | ").slice(0, 400);
-      if (run.timedOut) attention.push(`${unit.label}: killed after ${options.gridTimeout ?? 120} minutes (${logPath}): ${tail()}`);
-      else if (run.status !== 0) attention.push(`${unit.label}: exited ${run.status ?? run.signal} (${logPath}): ${tail()}`);
-      // A run that judged nothing is no clean grid (a full disk, a crashed host), unless the grid finished and its report says it
-      // selected no program: a code with no shape on the grid's axes (no source shape on mx-src, say), or a shard that got none.
-      // `--split-codes` still flags a code that no grid had a program for, below.
-      const emptyByDesign = total === 0 && selected === 0 && run.status === 0 && !run.timedOut;
-      if (emptyByDesign) console.log(`           no programs: the grid has none for ${unit.codes ? unit.codes.join(",") : "these codes"}${gridShard ? ` in shard ${gridShard.index}/${gridShard.count}` : ""}`);
-      else if (total === 0) attention.push(`${unit.label}: no program was judged (${logPath})`);
+      const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+      attention.push(...unitProblems(unit.label, { run, grid: read, total, log, logPath, timeoutMinutes: options.gridTimeout ?? 120 }));
+      if (emptyByDesign({ run, grid: read, total })) console.log(`           no programs: the grid has none for ${unit.codes ? unit.codes.join(",") : "these codes"}${gridShard ? ` in shard ${gridShard.index}/${gridShard.count}` : ""}`);
       if (unit.codes?.length === 1) judgedByCode.set(unit.codes[0], (judgedByCode.get(unit.codes[0]) ?? 0) + total);
       runTotal += total;
       // An executor that cannot start fails every grid the same way: the rest of the run would only repeat it.
-      if (total === 0 && /the executor did not start/.test(readFileSync(logPath, "utf8"))) throw new FocusStop(`${unit.label}: the executor did not start (${tail()})`);
+      if (total === 0 && /the executor did not start/.test(log)) throw new FocusStop(`${unit.label}: the executor did not start (${log.trim().split("\n").slice(-3).join(" | ").slice(0, 400)})`);
       for (const row of flagged.slice(0, 10)) attention.push(`${unit.label}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       if (flagged.length > 10) attention.push(`${unit.label}: ... ${flagged.length - 10} more (${join(unit.dir, "programs.jsonl")})`);
+      // A full disk shows as `harness` rows; name the cause and stop, for the next unit would fail the same way.
+      const filled = diskFilled({ log, flagged });
+      if (filled) attention.push(`${unit.label}: the disk filled while the unit ran (ENOSPC in ${logPath} or its rows); its harness rows are that, not the checker. ${noRoom(unitPlaces({ unitDir: unit.dir, scratch: scratchRoot, roleLog: options.roleLog })) ?? "free space is back now"}`);
       for (const result of behaviour.slice(0, 10)) attention.push(`${unit.label}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
       // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
       if (options.smoke && existsSync(join(unit.dir, "programs.jsonl"))) {
@@ -309,6 +375,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
         }));
       } else recordPerf(null);
       if (oracle?.inconclusive) attention.push(`${unit.label}: ${oracle.inconclusive} oracle runs inconclusive (${join(unit.dir, "runtime-diff.jsonl")})`);
+      if (filled) throw new FocusStop(`${unit.label}: the disk filled, the units after it would fail the same way`);
     };
     try {
     for (const grid of options.grids.split(",")) {

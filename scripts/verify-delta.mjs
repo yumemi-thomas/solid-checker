@@ -183,6 +183,13 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
+  "fuzz-tests": {
+    why:
+      "the differential fuzzer's own tests (scripts/fuzz/*.test.mjs) are a verify lane; it provisions the pinned " +
+      "installs and the pinned headless shell the way verify's first step does, and fails on any skipped test " +
+      "(only the tsrs-only files may skip, when no tsrs binary exists)",
+    command: ["bun", "scripts/fuzz/test-lane.mjs", "--provision"],
+  },
   "ir-tools-test": {
     why: "the lint and the harness are scripts with their own unit tests",
     command: [
@@ -376,13 +383,13 @@ export const ROWS = [
     owner: "the IR incrementality tools (lint and random-edit harness)",
     checks: ["ir-tools-test", "ir-read-lint", "ir-edit-fuzz"],
   })),
-  // The differential fuzzer is operator tooling, deliberately outside `make verify`
-  // (scripts/fuzz/README.md): its pure modules have vitest tests the author runs, and nothing the
-  // checker, the gates or a package reads depends on it.
+  // The differential fuzzer is operator tooling, but its own unit tests are a lane of `make verify` and CI (scripts/fuzz/test-lane.mjs):
+  // they were outside both, and a duplicate role-log arm id reached main. Nothing the checker, the gates or a package reads depends on
+  // it, so a change here selects only that lane (which provisions the installs it needs).
   {
     prefix: "scripts/fuzz/",
-    owner: "the differential fuzzer (operator tooling outside make verify)",
-    checks: [],
+    owner: "the differential fuzzer (operator tooling; its unit tests are a verify lane)",
+    checks: ["fuzz-tests"],
   },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
@@ -455,7 +462,7 @@ export function planFor(paths) {
       selected.has(id)
     ),
     ...["coverage", "ownership-gate", "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
-    ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz"].filter((id) => selected.has(id)),
+    ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -673,6 +680,8 @@ export const LANES = {
   "ir-edit-fuzz": "gates",
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
+  // Builds nothing and needs no checker; ~3 minutes, so a preflight-lane neighbour would delay the gates: its own lane.
+  "fuzz-tests": "fuzz",
   // The CLI launcher falls back to `make build-rust` when it finds no
   // checker, so the suite queues with the other `rust/target` users.
   "bun-test-cli": "rust",

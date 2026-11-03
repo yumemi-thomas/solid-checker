@@ -115,8 +115,24 @@ settled data.
   describe; they stay out.
 - **Indirect calls.** Only calls lexically in a component's body (or in JSX)
   are attributed to that component; a helper called from below a boundary is
-  not traced. Dominance crosses exactly one component boundary: the
-  component's own JSX, and the call sites that render it.
+  not traced. Dominance follows rendering through any number of component
+  boundaries (ADR 0596): a component that boundary content renders, at any
+  depth, is boundary content.
+
+## Measured on the pinned runtime
+
+The fuzzer's SSR host (`scripts/fuzz/ssr.mjs`) renders each template with
+rc.17's `renderToStream` and `createSSRResponse` in Node and reads the head.
+A declaration that runs after a pending read below the boundary (in the
+component's body, through a prop, in a JSX hole, two components down) is
+dropped; one in the shell or the fallback, under a boundary with no pending
+source, after a source that settles in a microtask, or below a
+`deferStream: true` source created outside the boundary is applied. Two
+facts the hint above does not spell out: a declaration in a boundary
+child's body *before* its pending read runs at shell time and applies (the
+rule still reports it, an obligation), and `deferStream: true` on a source
+created inside the boundary does not hold the shell (the declaration is
+dropped): mark the source where it is created above the boundary.
 
 ## Related
 

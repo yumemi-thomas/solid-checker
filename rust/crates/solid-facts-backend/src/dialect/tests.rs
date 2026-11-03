@@ -29,6 +29,7 @@ fn catalog_prose_program() -> Program {
         },
         StaticDefectKind::ReactiveReadAfterAwait {
             accessor: "sampleAccessor".into(),
+            obligation: None,
         },
         StaticDefectKind::ComponentReturnsConditionally,
         StaticDefectKind::PackageBehaviorUnavailable {

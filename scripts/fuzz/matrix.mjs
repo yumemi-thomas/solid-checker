@@ -21,6 +21,7 @@
 //   node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--chrome-sample 3] [--shrink] [--baseline matrix.json] [--checker-label <commit>] [--all-cores]
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { guardGridExit, partialRows } from "./partial.mjs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -763,6 +764,8 @@ async function sweep(options, config, out) {
   profile.add("generate", performance.now() - phaseStart);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
+  // The rows judged so far, chunk by chunk (partial.mjs): what a grid process that dies before programs.jsonl leaves for focus.mjs.
+  const partial = partialRows(out, { project: (row) => ({ ...row, site: undefined, region: regionOf(row.site) }) });
   const started = Date.now();
   // With every program's runtime cached no Vitest batch runs, so the workers' share of the machine goes to the checker: the same budget.
   const plain = (list) => list.map(({ program, built }) => ({ program, built }));
@@ -791,6 +794,7 @@ async function sweep(options, config, out) {
       rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
       values.set(built.id, value);
     }
+    partial.append(rows.slice(at));
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
   }
 
@@ -896,6 +900,7 @@ async function sweep(options, config, out) {
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
   writeFileSync(join(out, "matrix.md"), markdown(matrix, statuses));
+  partial.finish();
   if (config.runtimeCache || config.typecheckCache) {
     // Beside the matrix, not in it: a cached run's matrix.json is the uncached run's, byte for byte.
     writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
@@ -909,6 +914,7 @@ async function sweep(options, config, out) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  guardGridExit("matrix");
   try {
     const argv = process.argv.slice(2);
     if (argv[0] === "--gate") {
@@ -922,7 +928,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       else process.exitCode = await runMatrix(options);
     }
   } catch (error) {
-    console.error(`matrix: ${error.message}`);
+    console.error(`matrix: stopped: ${error.message}`);
     process.exitCode = 2;
   }
 }

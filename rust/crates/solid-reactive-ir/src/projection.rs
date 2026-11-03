@@ -71,7 +71,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 )
             }
         }
-        StaticDefectKind::ReactiveReadAfterAwait { accessor } => (
+        StaticDefectKind::ReactiveReadAfterAwait { accessor, .. } => (
             format!(
                 "reactive accessor {accessor:?} is read after an await; dependency tracking ends at the first await, so this read registers no dependency and the computation never re-runs when {accessor:?} changes"
             ),

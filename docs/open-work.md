@@ -144,6 +144,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
+- `http-response-after-flush` (SC7005, ADR 0596) reports by placement only: a boundary child's declaration before its pending read, under a boundary with no pending source, or below a `deferStream` source created outside it is applied at runtime (the SSR host's `l-*` templates) and stays an obligation.
 - `missing-owner` (ADR 0534): unplaced callbacks, object members and module declarations are uncertain when `SiteReach` cannot prove dormancy.
 - A summary consumer's call inside a class member's body (`wrapUse()` or a hook's returned accessor in a constructor or method) is an uncertifiable `strict-read-untracked` wherever the class is constructed or called, in the body (rc.17 warns) as in a handler or a tracked attribute (rc.17 silent): the construction and member call are followed by nothing (ADRs 0516, 0522).
 - Instance field initializer: a violation whose primary location is in one is demoted to uncertifiable, whichever rule claimed it (`diagnostics.rs`, `site_in_instance_field`). Static fields and static blocks keep theirs.

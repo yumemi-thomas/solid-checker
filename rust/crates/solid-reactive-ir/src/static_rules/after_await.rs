@@ -50,7 +50,7 @@ use crate::indexes::mentions_word;
 use crate::owners::written_directly_in;
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
-use crate::{StaticDefect, StaticDefectKind, location};
+use crate::{AfterAwaitObligation, StaticDefect, StaticDefectKind, location};
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
 use solid_facts::ast::{
@@ -82,8 +82,9 @@ struct Member {
     /// The member's continuation may run before anything holds a reaction on
     /// its promise: an `async` function returned, not awaited, whose first
     /// await is on a promise not proven still pending. Its reads, and the
-    /// reads of everything it continues into, are proof obligations.
-    conditional: bool,
+    /// reads of everything it continues into, are proof obligations, for
+    /// the reason held here (ADR 0595).
+    conditional: Option<AfterAwaitObligation>,
 }
 
 /// What one member's walk has recorded so far.
@@ -192,7 +193,8 @@ pub(super) fn run<'a>(
             // An owner a `dispose` function can reach may be gone when the
             // continuation resumes: the runtime then reads in a disposed
             // computation and stays silent, so every read is an obligation.
-            let conditional = owner_may_be_disposed(ctx, &reach.files, &function);
+            let conditional = owner_may_be_disposed(ctx, &reach.files, &function)
+                .then_some(AfterAwaitObligation::OwnerMayBeDisposed);
             let mut queue = vec![Member {
                 function: Rc::clone(&function),
                 context,
@@ -302,7 +304,10 @@ fn unlisted_async_computations(
                     continue;
                 };
                 draft.push_defect(StaticDefect {
-                    kind: StaticDefectKind::ReactiveReadAfterAwait { accessor: name },
+                    kind: StaticDefectKind::ReactiveReadAfterAwait {
+                        accessor: name,
+                        obligation: Some(AfterAwaitObligation::SuspensionUnplaced),
+                    },
                     location: location(file.path.shared(), read.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -542,13 +547,29 @@ enum Handler {
     Unproven,
 }
 
-/// Turns the reads reported since `mark` into proof obligations.
-fn mark_uncertain(draft: &mut ProgramDraft, mark: usize) {
+/// Turns the reads reported since `mark` into proof obligations for `reason`;
+/// a read that is one already keeps its own (inner) reason (ADR 0595).
+fn mark_uncertain(draft: &mut ProgramDraft, mark: usize, reason: &AfterAwaitObligation) {
     for defect in &mut draft.static_defects[mark..] {
-        if matches!(defect.kind, StaticDefectKind::ReactiveReadAfterAwait { .. }) {
+        if let StaticDefectKind::ReactiveReadAfterAwait { obligation, .. } = &mut defect.kind {
             defect.uncertain = true;
+            obligation.get_or_insert_with(|| reason.clone());
         }
     }
+}
+
+/// A callee's source text, as a finding quotes it.
+fn callee_text(file: &FileFacts, callee: Span) -> String {
+    file.source_text(file.ast.peel_ts_sugar_span(callee))
+        .map_or_else(
+            || "a call".to_owned(),
+            |text| text.chars().take(80).collect(),
+        )
+}
+
+/// The reason a read's pre-await tracking leaves it an obligation, if any.
+fn tracking_obligation(tracking: Tracking) -> Option<AfterAwaitObligation> {
+    (tracking == Tracking::Possible).then_some(AfterAwaitObligation::MayBeTracked)
 }
 
 /// How a call's promise reaches the computation's flight.
@@ -801,6 +822,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             draft.push_defect(StaticDefect {
                 kind: StaticDefectKind::ReactiveReadAfterAwait {
                     accessor: display.to_string(),
+                    obligation: tracking_obligation(tracking),
                 },
                 location: typefacts::Location {
                     path: call.path.clone(),
@@ -885,7 +907,12 @@ impl<'f, 'a> Reach<'f, 'a> {
                     .get(symbol)
                     .map_or_else(|| symbol.to_string(), |(name, _)| name.to_string());
                 draft.push_defect(StaticDefect {
-                    kind: StaticDefectKind::ReactiveReadAfterAwait { accessor: name },
+                    kind: StaticDefectKind::ReactiveReadAfterAwait {
+                        accessor: name,
+                        obligation: (!exact)
+                            .then_some(AfterAwaitObligation::CalleeInexact)
+                            .or_else(|| tracking_obligation(tracking)),
+                    },
                     location: callee,
                     analysis_context: member.context.clone(),
                     fixes: vec![],
@@ -969,15 +996,15 @@ impl<'f, 'a> Reach<'f, 'a> {
                             ctx.semantic_lookup,
                         )
                     {
-                        mark_uncertain(draft, before);
+                        mark_uncertain(draft, before, &AfterAwaitObligation::SuspensionUnplaced);
                     }
                 }
             }
             self.after_implicit_suspension(draft, &mut walk, mark, file, ast_function);
             self.report_unplaced_functions(draft, &mut walk, file, ast_function);
         }
-        if member.conditional {
-            mark_uncertain(draft, mark);
+        if let Some(reason) = &member.conditional {
+            mark_uncertain(draft, mark, reason);
         }
     }
 
@@ -1073,7 +1100,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 self.visit_template(draft, walk, file, template, 0);
             }
         }
-        mark_uncertain(draft, mark);
+        mark_uncertain(draft, mark, &AfterAwaitObligation::SuspensionUnplaced);
     }
 
     /// The callbacks a call runs inline: an immediately invoked function
@@ -1112,7 +1139,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             let mark = draft.static_defects.len();
             self.report_prefix(draft, walk, file, function, depth);
             if function.generator {
-                mark_uncertain(draft, mark);
+                mark_uncertain(draft, mark, &AfterAwaitObligation::GeneratorStepped);
             }
             return;
         }
@@ -1146,7 +1173,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 owner.value,
                 ArgumentValueKind::Null | ArgumentValueKind::Undefined
             ) {
-                mark_uncertain(draft, mark);
+                mark_uncertain(draft, mark, &AfterAwaitObligation::OwnerUnresolved);
             }
             return;
         }
@@ -1303,7 +1330,10 @@ impl<'f, 'a> Reach<'f, 'a> {
                                 )
                             ))) =>
                 {
-                    self.report_conditional_region(draft, walk, file, callback, depth);
+                    let carrier = AfterAwaitObligation::CarrierMayNotRun {
+                        carrier: callee_text(file, call.callee),
+                    };
+                    self.report_conditional_region(draft, walk, file, callback, depth, &carrier);
                 }
                 // ADR 0566 (ADR 0563's predicate): an inline row is a timing
                 // claim, not a count. Where the carrier may run the callback
@@ -1317,7 +1347,17 @@ impl<'f, 'a> Reach<'f, 'a> {
                             ctx.semantic_lookup,
                         ) =>
                 {
-                    self.report_conditional_region(draft, walk, callback_file, callback, depth);
+                    let carrier = AfterAwaitObligation::CarrierMayNotRun {
+                        carrier: callee_text(file, call.callee),
+                    };
+                    self.report_conditional_region(
+                        draft,
+                        walk,
+                        callback_file,
+                        callback,
+                        depth,
+                        &carrier,
+                    );
                 }
                 Some((file, callback)) if !callback.generator => {
                     self.report_prefix(draft, walk, file, callback, depth);
@@ -1514,25 +1554,36 @@ impl<'f, 'a> Reach<'f, 'a> {
             // A method (a class's, an object literal's, an accessor, a
             // constructor) runs wherever its member is reached, as a member's
             // value does.
+            // The hand-off, when there is one: `Some(via)`, `via` the callee text of
+            // the call that takes the function (ADR 0595), none for a member, an
+            // object slot, a method or a copy.
+            let taking_call = |at: Span| {
+                ast.arguments_containing(at)
+                    .find(|(call, index)| ast.peel_ts_sugar_span(call.arguments[*index].span) == at)
+                    .map(|(call, _)| callee_text(file, call.callee))
+            };
             let unplaced = if candidate.method_name.is_some()
                 || crate::local_access::member_assigned(file, candidate)
                 || crate::local_access::object_slot_value(file, candidate)
             {
-                created_after || suspends_after(candidate.span.end)
+                (created_after || suspends_after(candidate.span.end)).then_some(None)
             } else if let Some(references) =
                 crate::local_access::function_reference_hand_offs(file, candidate, lookup)
             {
                 // A copy or a whole argument of a call nothing follows.
-                references.into_iter().any(|(at, hand_off)| {
-                    hand_off == HandOff::Unfollowed
-                        && !returned(at)
-                        && (created_after || suspended_before(at.start))
-                })
+                references
+                    .into_iter()
+                    .find(|(at, hand_off)| {
+                        *hand_off == HandOff::Unfollowed
+                            && !returned(*at)
+                            && (created_after || suspended_before(at.start))
+                    })
+                    .map(|(at, _)| taking_call(at))
             } else {
                 // A literal that is the whole argument of such a call. A
                 // primitive's callback is the primitive's (its own owner and
                 // tracking).
-                created_after
+                (created_after
                     && ast
                         .arguments_containing(candidate.span)
                         .any(|(call, index)| {
@@ -1542,10 +1593,18 @@ impl<'f, 'a> Reach<'f, 'a> {
                                 && lookup.primitive_at_call(file, call.span).is_none()
                         })
                     && crate::local_access::hand_off_at(file, candidate.span, lookup)
-                        == HandOff::Unfollowed
+                        == HandOff::Unfollowed)
+                    .then(|| taking_call(candidate.span))
             };
-            if unplaced {
-                self.report_conditional_region(draft, walk, file, candidate, 0);
+            if let Some(via) = unplaced {
+                self.report_conditional_region(
+                    draft,
+                    walk,
+                    file,
+                    candidate,
+                    0,
+                    &AfterAwaitObligation::HandOffNotFollowed { via },
+                );
             }
         }
     }
@@ -1687,10 +1746,11 @@ impl<'f, 'a> Reach<'f, 'a> {
         file: &'f FileFacts,
         callback: &'f FunctionFact,
         depth: usize,
+        reason: &AfterAwaitObligation,
     ) {
         let mark = draft.static_defects.len();
         self.report_prefix(draft, walk, file, callback, depth);
-        mark_uncertain(draft, mark);
+        mark_uncertain(draft, mark, reason);
     }
 
     /// The accessor read a call written in a region performs.
@@ -1755,6 +1815,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         draft.push_defect(StaticDefect {
             kind: StaticDefectKind::ReactiveReadAfterAwait {
                 accessor: display.to_string(),
+                obligation: tracking_obligation(tracking),
             },
             location: location(file.path.shared(), call.callee),
             analysis_context: walk.member.context.clone(),
@@ -1819,7 +1880,13 @@ impl<'f, 'a> Reach<'f, 'a> {
             let previous = std::mem::replace(&mut walk.untracked, true);
             match function {
                 Some((function_file, function)) if function.r#async && !function.generator => {
-                    self.enqueue(walk, queue, function_file, function, uncertain);
+                    self.enqueue(
+                        walk,
+                        queue,
+                        function_file,
+                        function,
+                        uncertain.then_some(AfterAwaitObligation::OwnerUnresolved),
+                    );
                 }
                 Some((function_file, function)) if !function.generator => {
                     let mark = draft.static_defects.len();
@@ -1827,7 +1894,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                         self.expand(draft, walk, queue, function_file, inner, depth + 1);
                     }
                     if uncertain {
-                        mark_uncertain(draft, mark);
+                        mark_uncertain(draft, mark, &AfterAwaitObligation::OwnerUnresolved);
                     }
                 }
                 _ => draft.push_defect(StaticDefect {
@@ -1847,7 +1914,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         if let Some((helper_file, helper)) = async_helper(ctx, file, call) {
-            self.enqueue(walk, queue, helper_file, helper, false);
+            self.enqueue(walk, queue, helper_file, helper, None);
             return;
         }
         let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
@@ -1885,7 +1952,14 @@ impl<'f, 'a> Reach<'f, 'a> {
                             if let Some(callback) = callback_argument_literal(file, argument.span)
                                 && !callback.generator
                             {
-                                self.report_conditional_region(draft, walk, file, callback, depth);
+                                self.report_conditional_region(
+                                    draft,
+                                    walk,
+                                    file,
+                                    callback,
+                                    depth,
+                                    &AfterAwaitObligation::IntrinsicMayBeReplaced,
+                                );
                             }
                         }
                     }
@@ -1923,7 +1997,12 @@ impl<'f, 'a> Reach<'f, 'a> {
                     // Inside an aggregate whose premise is withdrawn (ADR 0349),
                     // the element's flight is unproven as well.
                     if rejection_only || !fulfills || !on_flight || walk.unproven {
-                        self.report_conditional_region(draft, walk, file, callback, depth);
+                        let reason = if rejection_only || !fulfills || !on_flight {
+                            AfterAwaitObligation::HandlerMayNotRun
+                        } else {
+                            AfterAwaitObligation::IntrinsicMayBeReplaced
+                        };
+                        self.report_conditional_region(draft, walk, file, callback, depth, &reason);
                     } else {
                         self.report_region(draft, walk, file, callback, depth);
                     }
@@ -2009,10 +2088,13 @@ impl<'f, 'a> Reach<'f, 'a> {
         // ADR 0566: a receiver that may be empty runs no helper, so the members
         // `map` adds are conditional (their reads are obligations).
         let unproven_run =
-            !crate::carrier_runs::carrier_provably_runs(file, mapped.span, ctx.semantic_lookup);
+            (!crate::carrier_runs::carrier_provably_runs(file, mapped.span, ctx.semantic_lookup))
+                .then(|| AfterAwaitObligation::CarrierMayNotRun {
+                    carrier: callee_text(file, mapped.callee),
+                });
         if let Some(callback) = callback_argument_literal(file, argument.span) {
             if callback.r#async && !callback.generator {
-                self.enqueue(walk, queue, file, callback, unproven_run);
+                self.enqueue(walk, queue, file, callback, unproven_run.clone());
             }
         } else if let Some((helper_file, helper)) = ctx.semantic_lookup.function_called_at(
             file.path.as_str(),
@@ -2035,7 +2117,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         queue: &mut Vec<Member>,
         file: &FileFacts,
         function: &FunctionFact,
-        uncertain: bool,
+        uncertain: Option<AfterAwaitObligation>,
     ) {
         // A function with no `await` carries no producer fact: nothing is
         // dominated by a suspension in it, but its returned promises still
@@ -2063,10 +2145,19 @@ impl<'f, 'a> Reach<'f, 'a> {
         // caller one job after the call returns. Its own continuation, queued
         // by an await on a settled value, runs before that: only a first
         // await on a promise proven still pending leaves a reaction in place.
-        let conditional = walk.member.conditional
-            || uncertain
-            || walk.unproven
-            || (walk.carried == Carried::Adopted && !self.awaits_pending(file, function));
+        let conditional = walk
+            .member
+            .conditional
+            .clone()
+            .or(uncertain)
+            .or_else(|| {
+                walk.unproven
+                    .then_some(AfterAwaitObligation::IntrinsicMayBeReplaced)
+            })
+            .or_else(|| {
+                (walk.carried == Carried::Adopted && !self.awaits_pending(file, function))
+                    .then_some(AfterAwaitObligation::ContinuationMayRunFirst)
+            });
         queue.push(Member {
             function: fact,
             context: walk.member.context.clone(),

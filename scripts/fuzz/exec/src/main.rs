@@ -574,13 +574,22 @@ fn http_post(base: &str, path: &str, body: &str) -> Res<String> {
     Ok(body.to_string())
 }
 
-/// The first line `reader` prints, within `limit`; EOF or the deadline is an error (the reading thread is left to end with the pipe).
-fn read_line_within(reader: impl Read + Send + 'static, limit: Duration) -> Res<String> {
+/// The first line `reader` prints, within `limit`; EOF or the deadline is an error. The reading thread then drains the pipe to its end,
+/// each later line logged to stderr under `name`: a pipe closed after the first line made the helper's next write to its stdout fail
+/// (an unhandled `EPIPE` killed the Vite helper 112,050 programs into an mx-recall grid, 2026-11-03).
+fn read_line_within(reader: impl Read + Send + 'static, limit: Duration, name: &'static str) -> Res<String> {
     let (line, read) = channel();
     thread::spawn(move || {
+        let mut reader = BufReader::new(reader);
         let mut text = String::new();
-        let outcome = BufReader::new(reader).read_line(&mut text).map(|n| (n, text));
+        let outcome = reader.read_line(&mut text).map(|n| (n, text));
+        let open = matches!(outcome, Ok((n, _)) if n > 0);
         let _ = line.send(outcome);
+        let mut later = String::new();
+        while open && reader.read_line(&mut later).is_ok_and(|n| n > 0) {
+            eprintln!("fuzz-exec: {name} printed: {}", later.trim_end().chars().take(400).collect::<String>());
+            later.clear();
+        }
     });
     match read.recv_timeout(limit) {
         Ok(Ok((0, _))) => Err("exited before it was ready".into()),
@@ -643,7 +652,7 @@ impl Chrome {
         let mut vite = spawn(Command::new(text("node")?).arg(text("viteHost")?).arg(settings.to_string()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::inherit()))
             .map_err(|e| format!("vite helper: {e}"))?;
         let helper_out = vite.stdout.take().unwrap();
-        let line = read_line_within(helper_out, Duration::from_secs(120)).map_err(|e| {
+        let line = read_line_within(helper_out, Duration::from_secs(120), "the Vite helper").map_err(|e| {
             let _ = vite.kill();
             let _ = vite.wait();
             format!("vite helper: {e}")
@@ -1502,14 +1511,23 @@ mod tests {
     fn a_startup_line_that_never_comes_fails_at_its_deadline() {
         let mut child = Command::new("sleep").arg("5").stdout(Stdio::piped()).spawn().unwrap();
         let started = Instant::now();
-        let error = read_line_within(child.stdout.take().unwrap(), Duration::from_millis(300)).unwrap_err();
+        let error = read_line_within(child.stdout.take().unwrap(), Duration::from_millis(300), "a test child").unwrap_err();
         assert!(error.contains("not ready"), "{error}");
         assert!(started.elapsed() < Duration::from_secs(2));
         let _ = child.kill();
         let _ = child.wait();
         let mut quiet = Command::new("true").stdout(Stdio::piped()).spawn().unwrap();
-        assert!(read_line_within(quiet.stdout.take().unwrap(), Duration::from_secs(2)).unwrap_err().contains("exited"));
+        assert!(read_line_within(quiet.stdout.take().unwrap(), Duration::from_secs(2), "a test child").unwrap_err().contains("exited"));
         let _ = quiet.wait();
+    }
+
+    #[test]
+    fn a_helper_that_prints_after_its_startup_line_keeps_running() {
+        // Before, the pipe closed after the first line and the helper's next write failed: `sh` dies of SIGPIPE, Node of an unhandled
+        // EPIPE (the Vite helper's death in an mx-recall grid).
+        let mut child = Command::new("sh").arg("-c").arg("echo ready; sleep 0.3; echo later; echo again; exit 7").stdout(Stdio::piped()).spawn().unwrap();
+        assert_eq!(read_line_within(child.stdout.take().unwrap(), Duration::from_secs(5), "a test child").unwrap().trim(), "ready");
+        assert_eq!(child.wait().unwrap().code(), Some(7));
     }
 
     fn dirs() -> Vec<String> {
