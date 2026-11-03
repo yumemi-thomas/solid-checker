@@ -18,10 +18,13 @@ describe("readGrid", () => {
     expect(grid.outcomes).toEqual({ agree: 1, "false-clean": 1, "recall-gap": 1, "false-positive": 1 });
     expect(grid.flagged.map((row) => row.id)).toEqual(["b", "d"]);
     expect(grid.behaviour.map((result) => result.id)).toEqual(["x", "y"]);
-    expect(readGrid(join(out, "missing"))).toEqual({ outcomes: {}, flagged: [], oracle: null, behaviour: [], gridSample: null });
-    // A sampled grid (`--sample-big`) says so in its report.
-    writeFileSync(join(out, "legal.json"), JSON.stringify({ gridSample: { fraction: 0.1, kept: 5, of: 50 } }));
-    expect(readGrid(out).gridSample).toEqual({ fraction: 0.1, kept: 5, of: 50 });
+    expect(readGrid(join(out, "missing"))).toEqual({ outcomes: {}, flagged: [], oracle: null, behaviour: [], gridSample: null, gridShard: null, selected: null });
+    // A sampled grid (`--sample-big`) and a shard (`--shard`) say so in their report, with the programs the grid selected.
+    writeFileSync(join(out, "legal.json"), JSON.stringify({ gridSample: { fraction: 0.1, kept: 5, of: 50 }, gridShard: { index: 1, count: 4, kept: 2, of: 5 }, selected: 2 }));
+    expect(readGrid(out)).toMatchObject({ gridSample: { fraction: 0.1, kept: 5, of: 50 }, gridShard: { index: 1, count: 4, kept: 2, of: 5 }, selected: 2 });
+    // A grid with no shape for its codes still writes its report: selected 0, which is not a report that is missing.
+    writeFileSync(join(out, "legal.json"), JSON.stringify({ selected: 0 }));
+    expect(readGrid(out).selected).toBe(0);
   });
 
   it("runs the six grids of the full run by default, the recall grids by name", () => {

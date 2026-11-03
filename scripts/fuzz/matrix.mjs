@@ -47,6 +47,7 @@ import { setExecutorChecks } from "./exec.mjs";
 import { linkScratch } from "./scratch.mjs";
 import { keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
+import { gridShardOptions, shardEntries, shardKey, shardLine } from "./shard.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
@@ -493,6 +494,8 @@ export function gate(baseline, current) {
   }
   // A sampled grid (`--grid-sample`) is for iterating, never a gate: the gate compares whole grids.
   for (const [side, matrix] of [["baseline", baseline], ["current", current]]) if (matrix.gridSample) return { ok: false, refused: `the ${side} matrix is a sample (--grid-sample ${matrix.gridSample.fraction}): the gate compares whole grids`, ...empty };
+  // A shard (`--grid-shard`) is compared with the same shard of the baseline only: the same programs.
+  if (shardKey(baseline) !== shardKey(current)) return { ok: false, refused: `the matrices are different parts of the grid (baseline ${shardKey(baseline)}, current ${shardKey(current)}): the gate compares the same programs`, ...empty };
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
   const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
@@ -652,6 +655,15 @@ async function sweep(options, config, out) {
     ({ entries, summary: gridSample } = sampleEntries(entries, sampling));
     console.error(`matrix: ${sampleLine(gridSample)}`);
   }
+  // `--grid-shard i/N` (shard.mjs): one part of a grid split across processes; matrix.json records it.
+  const sharding = gridShardOptions(options);
+  let gridShard = null;
+  if (sharding) {
+    ({ entries, summary: gridShard } = shardEntries(entries, sharding));
+    console.error(`matrix: ${shardLine(gridShard)}`);
+  }
+  // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
+  const selected = entries.length;
   profile.add("generate", performance.now() - phaseStart);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
@@ -779,7 +791,7 @@ async function sweep(options, config, out) {
   }
 
   const header = { label: options.checkerLabel ?? null, bin: options.checkerBin ? "release build" : null };
-  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values), ...(gridSample ? { gridSample } : {}) };
+  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values), ...(gridSample ? { gridSample } : {}), ...(gridShard ? { gridShard } : {}), selected };
   const statuses = codeStatuses(matrix);
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
@@ -803,7 +815,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

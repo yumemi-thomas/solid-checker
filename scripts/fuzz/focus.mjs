@@ -93,10 +93,11 @@ export function readGrid(out) {
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
   const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind)));
-  // A sampled grid (`--sample-big`) says so in its report.
-  const report = ["matrix.json", "legal.json"].map((name) => join(out, name)).find((path) => existsSync(path));
-  const gridSample = report ? JSON.parse(readFileSync(report, "utf8")).gridSample ?? null : null;
-  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample };
+  // A sampled grid (`--sample-big`) and a shard (`--shard`) say so in their report, and so does the number of programs the grid
+  // selected (null in a report from before it was recorded, or with no report).
+  const path = ["matrix.json", "legal.json"].map((name) => join(out, name)).find((candidate) => existsSync(candidate));
+  const report = path ? JSON.parse(readFileSync(path, "utf8")) : {};
+  return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour, gridSample: report.gridSample ?? null, gridShard: report.gridShard ?? null, selected: report.selected ?? null };
 }
 
 /**
@@ -167,7 +168,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
       if (key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
-      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
@@ -180,6 +181,11 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       if (!(Number(options.sampleBig) > 0 && Number(options.sampleBig) <= 1)) throw new Error(`focus.mjs: --sample-big takes a fraction in (0, 1], not ${options.sampleBig}`);
     } else if (options.sampleCodes || options.sampleBigSeed || options.sampleBigMin) throw new Error("focus.mjs: --sample-codes, --sample-big-seed and --sample-big-min need --sample-big");
     if (options.perfThreshold && !options.perfAgainst) throw new Error("focus.mjs: --perf-threshold needs --perf-against");
+    if (options.shard !== undefined) {
+      if (options.smoke) throw new Error("focus.mjs: --shard does not apply to --smoke (a smoke manifest names its programs)");
+      const [index, count] = String(options.shard).split("/").map(Number);
+      if (!/^\d+\/\d+$/.test(options.shard) || !(count >= 1) || !(index < count)) throw new Error(`focus.mjs: --shard takes i/N with 0 <= i < N, not ${options.shard}`);
+    }
     for (const key of ["budgetMs", "budgetMb", "idleStretchS", "perfThreshold"]) if (options[key] !== undefined && !(Number(options[key]) >= 0)) throw new Error(`focus.mjs: --${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} takes a non-negative number`);
     for (const grid of options.grids.split(",")) if (!GRIDS[grid]) throw new Error(`focus.mjs: no grid ${grid} (${Object.keys(GRIDS).join(", ")})`);
     return options;
@@ -195,6 +201,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     // `--sample-big`: the grids' stratified sample of the big codes (sample.mjs); the others stay whole.
     const sampleCodes = options.sampleCodes ? options.sampleCodes.split(",") : BIG_CODES;
     const sampled = options.sampleBig === undefined ? [] : ["--grid-sample", options.sampleBig, "--grid-sample-codes", sampleCodes.join(","), "--grid-sample-seed", options.sampleBigSeed ?? "1", "--grid-sample-min", options.sampleBigMin ?? "1"];
+    // `--shard i/N`: every grid keeps its part i of N (shard.mjs); the N parts of a run are the whole run.
+    const shardArgs = options.shard === undefined ? [] : ["--grid-shard", options.shard];
     const budgetArgs = [...(options.budgetMs ? ["--budget-ms", options.budgetMs] : []), ...(options.budgetMb ? ["--budget-mb", options.budgetMb] : [])];
     // The self-profile: the machine sampler (null off Linux or with SOLID_CHECKER_FUZZ_PERF=0) and each unit's record.
     const perfOn = process.env.SOLID_CHECKER_FUZZ_PERF !== "0";
@@ -207,8 +215,11 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const folded = [];
     const pending = [];
     const sampledUnits = [];
+    // Programs judged per code (with `--split-codes`) and in the whole run: a code no grid had a program for needs a look.
+    const judgedByCode = new Map();
+    let runTotal = 0;
     const against = options.rolesAgainst ? { ...JSON.parse(readFileSync(resolve(options.rolesAgainst), "utf8")), path: resolve(options.rolesAgainst) } : null;
-    console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}${sampled.length ? `; SAMPLED: ${options.sampleBig} of every stratum of ${sampleCodes.join(", ")} (seed ${options.sampleBigSeed ?? "1"}, at least ${options.sampleBigMin ?? "1"} each), not a full run` : ""}`);
+    console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}${sampled.length ? `; SAMPLED: ${options.sampleBig} of every stratum of ${sampleCodes.join(", ")} (seed ${options.sampleBigSeed ?? "1"}, at least ${options.sampleBigMin ?? "1"} each), not a full run` : ""}${options.shard === undefined ? "" : `; SHARD ${options.shard} of every grid, one part of the run`}`);
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
@@ -231,10 +242,10 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: written } : process.env;
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
       const unitSampled = sampled.length && (!unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
-      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...budgetArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
+      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
-      const { outcomes, flagged, oracle, behaviour, gridSample } = readGrid(unit.dir);
+      const { outcomes, flagged, oracle, behaviour, gridSample, gridShard, selected } = readGrid(unit.dir);
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
       const summary = oracle ? `oracle ${oracle.compared} compared, ${oracle.behaviour} behaviour, ${oracle.attributionOnly} attribution, ${oracle.inconclusive ?? 0} inconclusive` : "no oracle sample";
       console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${total} programs ${JSON.stringify(outcomes)}  ${summary}`);
@@ -242,8 +253,14 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const tail = () => readFileSync(logPath, "utf8").trim().split("\n").slice(-3).join(" | ").slice(0, 400);
       if (run.timedOut) attention.push(`${unit.label}: killed after ${options.gridTimeout ?? 120} minutes (${logPath}): ${tail()}`);
       else if (run.status !== 0) attention.push(`${unit.label}: exited ${run.status ?? run.signal} (${logPath}): ${tail()}`);
-      // A run that judged nothing is no clean grid (a full disk, a crashed host).
-      if (total === 0) attention.push(`${unit.label}: no program was judged (${logPath})`);
+      // A run that judged nothing is no clean grid (a full disk, a crashed host), unless the grid finished and its report says it
+      // selected no program: a code with no shape on the grid's axes (no source shape on mx-src, say), or a shard that got none.
+      // `--split-codes` still flags a code that no grid had a program for, below.
+      const emptyByDesign = total === 0 && selected === 0 && run.status === 0 && !run.timedOut;
+      if (emptyByDesign) console.log(`           no programs: the grid has none for ${unit.codes ? unit.codes.join(",") : "these codes"}${gridShard ? ` in shard ${gridShard.index}/${gridShard.count}` : ""}`);
+      else if (total === 0) attention.push(`${unit.label}: no program was judged (${logPath})`);
+      if (unit.codes?.length === 1) judgedByCode.set(unit.codes[0], (judgedByCode.get(unit.codes[0]) ?? 0) + total);
+      runTotal += total;
       // An executor that cannot start fails every grid the same way: the rest of the run would only repeat it.
       if (total === 0 && /the executor did not start/.test(readFileSync(logPath, "utf8"))) throw new FocusStop(`${unit.label}: the executor did not start (${tail()})`);
       for (const row of flagged.slice(0, 10)) attention.push(`${unit.label}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
@@ -265,7 +282,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
         recorded = true;
         const cache = existsSync(join(unit.dir, "cache.json")) ? cacheState(JSON.parse(readFileSync(join(unit.dir, "cache.json"), "utf8"))) : "none";
         const machine = sampler ? machineWindow(sampler.samples(started, ended), stretchOptions) : null;
-        const perf = { ...unitPerf({ label: unit.label, dir: unit.dir, startedAt: started, endedAt: ended, programs: total, machine, fold, cache, gridSample }), startedAt: started, endedAt: ended };
+        const perf = { ...unitPerf({ label: unit.label, dir: unit.dir, startedAt: started, endedAt: ended, programs: total, machine, fold, cache, gridSample, gridShard }), startedAt: started, endedAt: ended };
         if (existsSync(unit.dir)) writeFileSync(join(unit.dir, "perf.json"), `${JSON.stringify(perf, null, 2)}\n`);
         perfUnits.push(perf);
         console.log(`  ${perfLine(perf)}`);
@@ -299,6 +316,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const units = options.splitCodes ? [...new Set(cells.map((cell) => cell.code))].map((code) => ({ codes: [code], dir: join(out, grid, code), label: `${grid}/${code}` })) : [{ codes, dir: join(out, grid), label: grid }];
       for (const unit of units) runUnit(grid, script, shape, unit, manifest);
     }
+    if (options.splitCodes) for (const [code, judged] of judgedByCode) if (judged === 0) attention.push(`${code}: no grid of the run judged a program of it`);
+    if (runTotal === 0) attention.push("the run judged no program");
   } catch (error) {
     if (!(error instanceof FocusStop)) throw error;
     attention.push(`stopped: ${error.message}`);

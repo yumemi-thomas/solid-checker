@@ -78,6 +78,19 @@ many, strata) in matrix.json or legal.json, the focus summary prints it and ends
 gate refuses a sampled matrix on either side. A run without the flag is complete: the full run before a PR (above) never takes it.
 Measured on the VM (2026-11-02, `--sample-big 0.1 --runtime-diff 0`, runtime cache cold): STORE_WRITE_OUTSIDE_SETTER's mx-recall kept 33,216 of 254,112 programs (15,438 strata, so the floor of one each lifts 10% to 13%) in 393 s; REACTIVE_WRITE_IN_OWNED_SCOPE's mx-recall 12,756 of 110,712 (4,068 strata) in 162 s and its lg-recall 9,240 of 79,746 (3,060 strata) in 142 s. On lg-recall FLUSH_IN_EFFECT_CALLBACK (`--sample-codes`), a sampled run's 672 rows each equal the full run's, two sampled runs pick the same 672, and the run without the flag keeps all 5,034, equal to the run before the option existed.
 
+**Splitting a run across machines.** `focus.mjs --shard i/N` passes `--grid-shard i/N` to every grid (shard.mjs): each
+grid keeps the programs whose `fnv("shard:<id>") mod N` is i, so the N shards partition the run (every program in exactly one, the
+pick fixed by the program ids alone), and the N shard runs together are the full run, unlike a sample. Each shard grid records
+`gridShard` (i, N, kept of how many) in matrix.json or legal.json and the focus header says so; the matrix gate compares a shard only
+with the same i/N of the baseline, and perf-compare treats a different shard as not comparable. Each shard takes its own oracle sample
+over its own programs, so N shards compare more programs in Chrome than one whole run. With `--split-codes`, a GitHub-hosted runner
+(4 vCPU) judges about 8 programs a second, so a code of 250k programs needs about 20 shards to stay inside a 6-hour job.
+
+A grid writes `selected` (the programs it kept after `--ids`, the sample and the shard) in its report. A unit that judged no program
+is flagged unless its process finished and `selected` is 0: a code with no shape on the grid's axes (no source shape on mx-src, say)
+or a shard that got none is printed as `no programs`, not as a problem; with `--split-codes` a code that no grid of the run judged a
+program of still needs a look, and so does a run that judged none.
+
 Rediscovery (AGENTS.md): a defect found any way is closed when the grids generate its shape and the build that had it fails `make
 fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
 generator cannot express it); the smoke set always holds them, and `rediscovery.test.mjs` fails when a grid stops generating one.
