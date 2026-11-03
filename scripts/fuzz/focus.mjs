@@ -100,6 +100,8 @@ export function readGrid(out) {
   for (const row of rows ?? []) {
     outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
     if (PROBLEMS.includes(row.outcome)) flagged.push({ id: row.id, outcome: row.outcome, detail: row.detail });
+    // Another code Chrome reports on the site's lines, missed in a certified file (matrix.mjs `judge`, `secondary`): a false clean too.
+    else if (Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified")) flagged.push({ id: row.id, outcome: "secondary-false-clean", detail: row.detail });
   }
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;

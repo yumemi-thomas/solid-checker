@@ -25,7 +25,7 @@ import { browserExecutionCache, cacheStats, withRuntimeCache } from "./cache.mjs
 import { runChrome } from "./chrome.mjs";
 import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
-import { disturbances, runtimeEvents } from "./classify.mjs";
+import { disturbances, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
@@ -80,10 +80,14 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   // A run-claiming violation anywhere (a call attributed the read in a closure) whose codes the runtime never reports (ADR 0504 review).
   const claimedRuns = violations.filter((finding) => RUN_CLAIMING_RULES.includes(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
   if (claimedRuns.length && !disturbances(runtime, plan ?? { clicks: [] }).length) return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(claimedRuns.map((finding) => finding.rule))], at: claimedRuns.map((finding) => finding.line) } };
-  if (!atSite.length) {
-    return relevant.some((finding) => finding.kind === "uncertifiable" && inLines(finding, region)) ? { outcome: "uncertifiable", detail } : { outcome: "clean", detail };
-  }
   const disturbed = disturbances(runtime, plan ?? { clicks: [] });
+  if (!atSite.length) {
+    if (relevant.some((finding) => finding.kind === "uncertifiable" && inLines(finding, region))) return { outcome: "uncertifiable", detail };
+    // A run a throw, a halt or an unplaced diagnostic disturbed before the site ran (its counter is not above zero) never let the site
+    // report its code: the checker's silence is not agreement then (the template's legality went unobserved). A site that ran was observed.
+    const observed = hitCount(runtime.hits ?? null, site.hit) > 0;
+    return disturbed.length && !observed ? { outcome: "disturbed", detail: { ...detail, why: disturbed[0], checker: "clean" } } : { outcome: "clean", detail };
+  }
   if (disturbed.length) return { outcome: "disturbed", detail: { ...detail, why: disturbed[0] } };
   // A violation of a rule the runtime can contradict, none of whose codes the runtime reports anywhere.
   const contradicted = atSite.filter((finding) => ruleHasRuntimeCounterpart(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
@@ -102,12 +106,34 @@ const WORST_FIRST = ["false-positive", "tsc-overlap", "not-legal", "disturbed", 
  * Judges a legal program: at its site, or, for a combination program (`--combine`, misuse.mjs `buildCombo`), at every use, each with
  * its own code (every use there is legal), taking the worst; `detail.sites` lists each use's outcome.
  */
-export function judgeLegalProgram({ built, ...input }) {
+export function judgeLegalProgram({ built, program, ...input }) {
   const uses = built.sites.filter((site) => site.code);
-  if (!uses.some((site) => site.primary)) return judgeLegal({ ...input, site: siteOf(built) });
+  const combo = uses.some((site) => site.primary);
+  const verdict = combo ? judgeUses(built, uses, input) : judgeLegal({ ...input, site: siteOf(built) });
+  return withOffSite(verdict, combo ? uses : [siteOf(built)], { built, program, ...input });
+}
+
+function judgeUses(built, uses, input) {
   const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true }) }));
   const worst = verdicts.reduce((a, b) => (WORST_FIRST.indexOf(b.outcome) < WORST_FIRST.indexOf(a.outcome) ? b : a));
   return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
+}
+
+/**
+ * The violations away from every use (a decoy's line, a parent's, a helper call's), judged as the matrix grid judges them (classify.mjs
+ * `offSiteVerdicts`): one whose lines ran where the runtime reported no code of its rule anywhere makes a program that was otherwise
+ * `clean`, `uncertifiable` or `unexecuted` a `false-positive` (`detail.primary` keeps the uses' own outcome).
+ */
+function withOffSite(verdict, uses, { built, program, checker, runtime, plan }) {
+  if (!checker?.ok || !runtime || !["clean", "uncertifiable", "unexecuted", "false-positive"].includes(verdict.outcome)) return verdict;
+  const regions = uses.map(regionOf);
+  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !regions.some((region) => inLines(finding, region)));
+  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: plan ?? built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
+  if (!judged.length) return verdict;
+  const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.why ? `(${row.why})` : ""}`) };
+  const wrong = judged.filter((row) => row.verdict === "false-positive");
+  if (!wrong.length || verdict.outcome === "false-positive") return { outcome: verdict.outcome, detail };
+  return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
 }
 
 /** The cells: every code with legal contexts, each legal context; `recall` adds the contexts only the recall grids list (`recallLegal`). */
@@ -218,7 +244,7 @@ export async function runLegal(options) {
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);
         const site = siteOf(built);
-        const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judgeLegalProgram({ code: cell.code, built, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan }));
+        const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judgeLegalProgram({ code: cell.code, built, program, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan }));
         const misuse = program.components[0].misuse;
         rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo } : {}), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);

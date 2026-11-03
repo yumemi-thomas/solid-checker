@@ -26,8 +26,8 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes } from "./codes.mjs";
-import { runtimeEvents } from "./classify.mjs";
+import { codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
 import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, sampleStrata, stratumOf, summarize } from "./runtime-diff.mjs";
@@ -55,8 +55,8 @@ import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "tsc-overlap"];
-const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean"];
+export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "false-positive", "tsc-overlap"];
+const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Judging one program at its site
@@ -67,10 +67,29 @@ const inLines = (finding, lines) => lines.some((line) => finding.line <= line &&
 export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line) => Number.isInteger(line));
 
 /**
- * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object }} input
+ * `built` (the program as printed: its sites, glue and plan; `program`, its tree, for registration lines) lets the violations away from the site be judged too (classify.mjs
+ * `offSiteVerdicts`): one that ran where the runtime reported no code of its rule turns an `agree` or a `recall-gap` into a
+ * `false-positive` (`detail.primary` keeps the site's own outcome). A remote claiming violation stays the site's agreement.
+ * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, built?: object }} input
  * @returns {{ outcome: string, detail?: object }}
  */
-export function judge({ code, site, typecheck: typed, checker, runtime, others = [] }) {
+export function judge(input) {
+  const verdict = judgeSite(input);
+  const { site, checker, runtime, built, program } = input;
+  if (!built || !checker?.ok || !runtime || !["agree", "recall-gap", "not-fired", "wrong-rule", "false-clean"].includes(verdict.outcome)) return verdict;
+  const region = regionOf(site);
+  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !inLines(finding, region));
+  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
+  if (!judged.length) return verdict;
+  const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.why ? `(${row.why})` : ""}`) };
+  const wrong = judged.filter((row) => row.verdict === "false-positive");
+  // A false clean or a wrong rule at the site is already a problem: the off-site false positive is listed beside it. A `not-fired`
+  // program judged nothing at its site (a generator problem): its off-site rows are listed only.
+  if (!wrong.length || !["agree", "recall-gap"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
+  return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
+}
+
+function judgeSite({ code, site, typecheck: typed, checker, runtime, others = [] }) {
   // A program tsc rejects is no evidence of recall, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
@@ -121,7 +140,10 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
     .map((event) => event.code))]
     .map((other) => [other, relevant.some((finding) => finding.kind === "violation" && codeRules[other].includes(finding.rule))
       ? "agree"
-      : relevant.some((finding) => codeRules[other].includes(finding.rule) || declinesCode(other, finding)) ? "recall-gap" : "false-clean"])
+      : relevant.some((finding) => codeRules[other].includes(finding.rule) || declinesCode(other, finding)) ? "recall-gap"
+      // In a file with no uncertifiable finding the checker claims it proved everything: a certified false clean (invariant 2), which
+      // focus.mjs fails like the target's own (`secondary-false-clean`).
+      : checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable") ? "false-clean" : "false-clean-certified"])
     .filter(([, verdict]) => verdict !== "agree"));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
@@ -134,10 +156,13 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
-  if (covering.some(claims)) return { outcome: "recall-gap", detail };
+  // `declinedBy` says which mechanism declined (codes.mjs): the claiming rule's own obligation, a withholding rule (SC9012 on the line
+  // covers any code and can hide another mechanism's miss), or a declining rule. The saturation and `certified` reads split by it.
+  const mechanism = (finding) => ((codeRules[code] ?? []).includes(finding.rule) ? "claiming" : withholdingRules.includes(finding.rule) ? "withholding" : "declining");
+  if (covering.some(claims)) return { outcome: "recall-gap", detail: { ...detail, declinedBy: mechanism(covering.find(claims)) } };
   const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
   const claimingElsewhere = relevant.find((finding) => claims(finding));
-  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
+  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: mechanism(claimingElsewhere), remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
   // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
@@ -347,9 +372,9 @@ async function chromeRecords(values, config, options, out, { withClean = true } 
 }
 
 /** Chrome's outcome for a program, and whether it equals the fast path's. */
-function judgeChrome(row, record) {
+function judgeChrome(row, record, built) {
   if (!record || record.runtime?.failure || !record.checker?.ok || record.checker.perturbed?.length) return { status: "chrome-inconclusive", why: record?.runtime?.failure?.message ?? record?.checker?.error ?? record?.checker?.perturbed?.[0] ?? "no record" };
-  const { outcome, detail } = judge({ code: row.code, site: row.site, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, others: row.others });
+  const { outcome, detail } = judge({ code: row.code, site: row.site, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, others: row.others, built });
   return { status: outcome === row.outcome ? "same" : outcome === "not-fired" ? "not-fired-in-chrome" : "differs", outcome, detail };
 }
 
@@ -367,7 +392,7 @@ async function shrinkRepresentative(row, value, config, options, out) {
   const holds = ({ built, value: result }) => {
     const site = siteOf(built);
     if (!site || !result?.checker) return false;
-    const verdict = judge({ code: target.code, site, typecheck: result.typecheck, checker: result.checker, runtime: result.runtime, others: otherRegions(built) });
+    const verdict = judge({ code: target.code, site, typecheck: result.typecheck, checker: result.checker, runtime: result.runtime, others: otherRegions(built), built });
     return verdict.outcome === "false-clean";
   };
   const judgeBatch = async (programs) => (await evaluateAll(programs, "fc")).map(holds);
@@ -423,6 +448,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
       code: cell.code, context: cell.context, programs: cell.rows.length, ...counts, confirmed,
       agreeRemote: cell.rows.filter((row) => row.outcome === "agree" && row.detail?.remote).length,
       falseCleanCertified: cell.rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
+      recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, cell.rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
       byBinding: by("binding"), byLayer: by("layer"),
       chrome: chromeSummary(cell.rows),
       verdicts: Object.fromEntries(cell.rows.map((row) => [String(row.seed), row.outcome])),
@@ -436,7 +462,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   // Second codes Chrome reported at a site that the checker missed or declined, per code and verdict.
   const secondary = {};
   for (const row of rows) for (const [other, verdict] of Object.entries(row.detail?.secondary ?? {})) {
-    const entry = (secondary[other] ??= { "false-clean": [], "recall-gap": [] });
+    const entry = (secondary[other] ??= { "false-clean": [], "false-clean-certified": [], "recall-gap": [] });
     entry[verdict].push(row.id);
   }
   return {
@@ -445,6 +471,9 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recall ? { recallLean: recallLeanOf(options) } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
+    recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
+    // The violations away from the site, by verdict (`judge`, classify.mjs `offSiteVerdicts`): `unconnected` ones are the next lead.
+    offSite: Object.fromEntries(["false-positive", "unconnected", "unexecuted", "unjudged"].map((verdict) => [verdict, rows.flatMap((row) => row.detail?.offSite ?? []).filter((label) => label.split(":")[1].startsWith(verdict)).length])),
     byFeature: featureTable(rows), typedAway, cells: out,
   };
 }
@@ -483,7 +512,7 @@ export function markdown(matrix, statuses) {
     const cells = contexts.map((context) => {
       const cell = matrix.cells[`${code}|${context}`];
       if (!cell) return "";
-      const extras = [["W", cell["wrong-rule"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
+      const extras = [["W", cell["wrong-rule"]], ["P", cell["false-positive"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
       // A dagger: Chrome did not reproduce any of the sampled programs of this cell (the fast path's evidence stands alone).
       const unconfirmed = cell.chrome && cell.chrome.checked > 0 && cell.chrome.same === 0 ? " †" : "";
       return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}${unconfirmed}`;
@@ -515,6 +544,12 @@ export function markdown(matrix, statuses) {
   if (wr.length) {
     lines.push(`## Wrong-rule cells`, "");
     for (const cell of wr) lines.push(`- ${cell.code} / ${cell.context}: ${cell["wrong-rule"]} of ${cell.confirmed}`);
+    lines.push("");
+  }
+  const fp = keys.filter((cell) => cell["false-positive"]);
+  if (fp.length) {
+    lines.push(`## Off-site false-positive cells (a violation away from the site, run with no code of its rule)`, "");
+    for (const cell of fp) lines.push(`- ${cell.code} / ${cell.context}: ${cell["false-positive"]} of ${cell.confirmed}`);
     lines.push("");
   }
   return `${lines.join("\n")}\n`;
@@ -587,6 +622,13 @@ export function gate(baseline, current) {
     if (lost.length) regressions.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}`, programs: lost });
     if (gained.length) regressions.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}`, programs: gained });
     // A violation on code tsc rejects (tsc-overlap.mjs) fails from any baseline, a typed-away one included: it is new evidence.
+    // A program the runtime stopped firing (a template that drifted, a runtime that changed) leaves the measure: from agree that is a
+    // lost agree above; from a false clean or a recall gap it would hide the miss, so it fails too.
+    const silenced = list((was, is) => is === "not-fired" && !["agree", "not-fired"].includes(was) && !UNJUDGED.has(was));
+    if (silenced.length) regressions.push({ cell: key, why: `not-fired ${base["not-fired"] ?? 0} -> ${cell["not-fired"]}`, programs: silenced });
+    // A violation off the site that the runtime contradicts (`judge`'s off-site rows) fails from any judged baseline.
+    const contradicted = list((was, is) => is === "false-positive" && was !== "false-positive" && !UNJUDGED.has(was));
+    if (contradicted.length) regressions.push({ cell: key, why: `false-positive ${base["false-positive"] ?? 0} -> ${cell["false-positive"]}`, programs: contradicted });
     const overlapping = list((was, is) => is === "tsc-overlap" && was !== "tsc-overlap");
     if (overlapping.length) regressions.push({ cell: key, why: `tsc-overlap ${base["tsc-overlap"] ?? 0} -> ${cell["tsc-overlap"]}`, programs: overlapping });
     const fromUnjudged = list((was, is) => UNJUDGED.has(was) && is !== was);
@@ -792,7 +834,7 @@ async function sweep(options, config, out) {
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
       const site = siteOf(built);
-      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built) }));
+      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built), built, program }));
       const misuse = program.components[0].misuse;
       const others = otherRegions(built);
       rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
@@ -823,7 +865,7 @@ async function sweep(options, config, out) {
     // Chrome fires is a Happy DOM gap; a recall gap Chrome does not reproduce is a fast-path artefact). Every cell with a false clean or
     // a wrong rule is thereby confirmed in Chrome.
     const other = options.chromeOther ?? 2;
-    const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity, "recall-gap": other, "not-fired": other };
+    const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity, "false-positive": Infinity, "recall-gap": other, "not-fired": other };
     for (const row of [...rows].sort((a, b) => (a.binding === "destructured") - (b.binding === "destructured") || a.lines - b.lines || a.index - b.index)) {
       if (!(row.outcome in limits)) continue;
       // `--chrome-strata`: per stratum (`--runtime-diff-axes`, default code, context, source, mount and outcome), so a source or a
@@ -840,12 +882,12 @@ async function sweep(options, config, out) {
     for (let at = 0; at < pick.length; at += CHROME_CHUNK) {
       const chunk = pick.slice(at, at + CHROME_CHUNK);
       const records = await chromeRecords(chunk.map((row) => values.get(row.id)), config, options, out);
-      for (const row of chunk) row.chrome = judgeChrome(row, records.get(row.id));
+      for (const row of chunk) row.chrome = judgeChrome(row, records.get(row.id), values.get(row.id)?.built);
       // A browser that would not close in time or a clean run that did not report is the machine's, not the program's: once more.
       const retry = chunk.filter((row) => row.chrome.status === "chrome-inconclusive" && /browser close|no clean reference|no record/.test(String(row.chrome.why)));
       if (retry.length) {
         const again = await chromeRecords(retry.map((row) => values.get(row.id)), config, options, out);
-        for (const row of retry) { const next = judgeChrome(row, again.get(row.id)); if (next.status !== "chrome-inconclusive") row.chrome = { ...next, retried: true }; }
+        for (const row of retry) { const next = judgeChrome(row, again.get(row.id), values.get(row.id)?.built); if (next.status !== "chrome-inconclusive") row.chrome = { ...next, retried: true }; }
       }
       console.error(`matrix: Chrome ${Math.min(at + CHROME_CHUNK, pick.length)}/${pick.length}, ${Math.round((Date.now() - chromeStarted) / 1000)}s`);
     }

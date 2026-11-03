@@ -14,6 +14,16 @@ describe("the matrix's secondary codes", () => {
       runtime: runtime(["STORE_WRITE_OUTSIDE_SETTER", "STRICT_READ_UNTRACKED"]),
     });
     expect(verdict.outcome).toBe("agree");
+    // No uncertifiable finding in the file: the checker certified it, so the miss is a certified false clean (focus.mjs fails it).
+    expect(verdict.detail.secondary).toEqual({ STRICT_READ_UNTRACKED: "false-clean-certified" });
+  });
+
+  it("calls the miss a plain false clean when the file has an uncertifiable finding elsewhere", () => {
+    const verdict = judge({
+      code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true },
+      checker: { ok: true, findings: [finding("no-store-mutation-outside-setter", "violation"), { rule: "flush-in-effect-callback", kind: "uncertifiable", line: 9, endLine: 9 }] },
+      runtime: runtime(["STORE_WRITE_OUTSIDE_SETTER", "STRICT_READ_UNTRACKED"]),
+    });
     expect(verdict.detail.secondary).toEqual({ STRICT_READ_UNTRACKED: "false-clean" });
   });
 
