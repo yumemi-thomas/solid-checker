@@ -4,6 +4,10 @@ name: Fuzz audit
 # scripts/fuzz/audit.mjs: the same programs and the same oracle sample as one local
 # `focus.mjs --codes all --grids <all eight>` run (scripts/fuzz/README.md, "The audit on CI").
 #
+# The recall grids are lean by default (matrix.mjs LEAN_DEMOTED, README "Demoting saturated recall values"): the nightly run
+# (16:00 UTC, Monday to Saturday) is lean, the Sunday one (and a manual run with `recall: full`) is full, every recall mount and callback
+# form. A report is compared with the latest earlier audit of the same mode, never across modes (audit.mjs `judge`).
+#
 #   build   the release checker, the Type Facts producer and tsrs, once; the latest earlier audit of this branch (else main)
 #   shard   one runner per shard: every grid restricted to shard i of N, no oracle; its oracle candidates
 #   pick    the whole run's oracle sample (one --ids manifest per grid) from every shard's candidates
@@ -17,9 +21,15 @@ name: Fuzz audit
 
 on:
   schedule:
-    - cron: "0 16 * * *" # 01:00 JST
+    - cron: "0 16 * * 1-6" # lean: 01:00 JST, Tuesday to Sunday
+    - cron: "0 16 * * 0" # full: 01:00 JST on Monday
   workflow_dispatch:
     inputs:
+      recall:
+        description: Recall grids (lean leaves out the demoted values, full runs every one)
+        type: choice
+        options: [lean, full]
+        default: lean
       shards:
         description: Shards (one runner each; at most 20 run at once)
         default: "40"
@@ -45,7 +55,11 @@ jobs:
       shards: ${{ steps.plan.outputs.shards }}
       count: ${{ steps.plan.outputs.count }}
       state-key: ${{ steps.plan.outputs.state-key }}
+      recall: ${{ steps.plan.outputs.recall }}
+      # The latest earlier audit of any mode (its warm state) and of this mode (its rows, in the artifact named).
       earlier: ${{ steps.earlier.outputs.run }}
+      earlier-rows: ${{ steps.earlier.outputs.rows-run }}
+      earlier-rows-name: ${{ steps.earlier.outputs.rows-name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,25 +69,42 @@ jobs:
       - id: plan
         run: |
           count="${{ inputs.shards || '40' }}"
+          # The Sunday schedule is the weekly full run; every other trigger is lean unless a manual run says full.
+          if [ "${{ github.event.schedule }}" = "0 16 * * 0" ]; then recall=full; else recall="${{ inputs.recall || 'lean' }}"; fi
+          echo "recall=$recall" >> "$GITHUB_OUTPUT"
+          echo "recall grids: $recall"
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "shards=$(node -e 'console.log(JSON.stringify([...Array(Number(process.argv[1])).keys()]))' "$count")" >> "$GITHUB_OUTPUT"
           key=$(cat scripts/fuzz/install/package-lock.json scripts/runtime-oracle-install/package-lock.json packages/cli/bun.lock | sha256sum | cut -c1-16)
           echo "state-key=$key-node$NODE_VERSION-$ImageOS" >> "$GITHUB_OUTPUT"
           echo "TSRS_REV=$(sed -n 's/^tsrs_core = .*rev = "\([0-9a-f]*\)".*/\1/p' apps/solid-typefacts/Cargo.toml)" >> "$GITHUB_ENV"
-      # The latest earlier audit that wrote a report, on this branch or else on main: its warm state and its rows.
+      # The latest earlier audit that wrote a report, on this branch or else on main: its warm state (any mode: the fuzzer's caches are
+      # keyed by program bytes) and, of this run's mode, its rows (audit-report-lean, audit-report-full; an `audit-report` from before
+      # the lean default is a full one).
       - id: earlier
         env:
           GH_TOKEN: ${{ github.token }}
+          RECALL: ${{ steps.plan.outputs.recall }}
         run: |
-          run=""
+          has() { gh api "repos/$GITHUB_REPOSITORY/actions/runs/$1/artifacts?name=$2" -q '.total_count' | grep -qv '^0$'; }
+          run=""; rows=""; name=""
           for branch in "${{ github.ref_name }}" main; do
-            for id in $(gh run list -R "$GITHUB_REPOSITORY" -w fuzz-audit.yml -b "$branch" -s completed -L 10 --json databaseId -q '.[].databaseId'); do
+            for id in $(gh run list -R "$GITHUB_REPOSITORY" -w fuzz-audit.yml -b "$branch" -s completed -L 20 --json databaseId -q '.[].databaseId'); do
               [ "$id" = "$GITHUB_RUN_ID" ] && continue
-              if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?name=audit-report" -q '.total_count' | grep -qv '^0$'; then run=$id; break 2; fi
+              if [ -z "$rows" ]; then
+                if has "$id" "audit-report-$RECALL"; then rows=$id; name="audit-report-$RECALL"
+                elif [ "$RECALL" = full ] && has "$id" audit-report; then rows=$id; name=audit-report; fi
+              fi
+              if [ -z "$run" ]; then
+                if [ "$rows" = "$id" ] || has "$id" audit-report-lean || has "$id" audit-report-full || has "$id" audit-report; then run=$id; fi
+              fi
+              [ -n "$run" ] && [ -n "$rows" ] && break 2
             done
           done
           echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "earlier audit: ${run:-none}"
+          echo "rows-run=$rows" >> "$GITHUB_OUTPUT"
+          echo "rows-name=$name" >> "$GITHUB_OUTPUT"
+          echo "earlier audit (warm state): ${run:-none}; earlier $RECALL audit (rows): ${rows:-none}"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -159,7 +190,7 @@ jobs:
           ( while sleep 180; do f=$(ls -t "$out"/*.log 2>/dev/null | head -1); [ -n "$f" ] && echo "[progress] $(basename "$f"): $(tail -1 "$f" | cut -c1-200)"; done ) &
           status=0
           node scripts/fuzz/audit.mjs shard --shard "${{ matrix.index }}/${{ needs.build.outputs.count }}" --out "$out" \
-            --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" --grid-timeout 300 \
+            --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" --grid-timeout 300 --recall "${{ needs.build.outputs.recall }}" \
             -- --cache-dir "$HOME/fuzz-cache" || status=$?
           echo "shard exit $status (the report job judges the run)"
           for f in "$out"/*/cache.json; do node -e 'const c=require(process.argv[1]); console.log(process.argv[1].split("/").at(-2), `runtime ${c.hits}/${c.hits + c.misses}, typecheck ${c.typecheck?.hits}/${(c.typecheck?.hits ?? 0) + (c.typecheck?.misses ?? 0)} hits`)' "$f"; done
@@ -278,14 +309,16 @@ jobs:
         with:
           pattern: oracle-*
           path: ${{ runner.temp }}/oracle-artifacts
+      # The earlier audit of this run's mode (build's `earlier-rows`), so a lean night is compared with a lean audit and the weekly
+      # full run with a full one; audit.mjs report also skips a recall grid whose earlier audit was the other mode.
       - id: earlier
-        if: needs.build.outputs.earlier != ''
+        if: needs.build.outputs.earlier-rows != ''
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: audit-report
+          name: ${{ needs.build.outputs.earlier-rows-name }}
           path: ${{ runner.temp }}/earlier
-          run-id: ${{ needs.build.outputs.earlier }}
+          run-id: ${{ needs.build.outputs.earlier-rows }}
           github-token: ${{ github.token }}
       - name: Report
         run: |
@@ -301,6 +334,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: audit-report
+          name: audit-report-${{ needs.build.outputs.recall }}
           path: ${{ runner.temp }}/report
           retention-days: 90

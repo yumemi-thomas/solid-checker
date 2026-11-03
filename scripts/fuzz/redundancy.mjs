@@ -2,8 +2,8 @@
 // The evidence for demoting recall axis values (Fable's report 2026-11-03, R0.3): per program, does a recall mount's or a callback
 // form's program answer as its twin without the axis (the same code, context, variant, binding and layer at the root, or with the
 // callback written inline)? Counts alike are not enough (the report's own caveat): a value whose every program has its twin's outcome
-// and the same findings, on a full run, adds nothing the base grid does not measure, and `--recall-lean` (matrix.mjs LEAN_DEMOTED)
-// may leave it out. One that differs anywhere keeps its place.
+// and the same findings, on a full run, adds nothing the base grid does not measure, and the lean recall grids (matrix.mjs LEAN_DEMOTED;
+// run this on a `--recall-full` run, a lean one has no demoted value to check) may leave it out. One that differs anywhere keeps its place.
 //
 //   node scripts/fuzz/redundancy.mjs <run dir with mx-base/ and mx-recall/ (and lg-*)> [--out <redundancy.json>] [--against <mount>]
 //     [--against-callback <form>]

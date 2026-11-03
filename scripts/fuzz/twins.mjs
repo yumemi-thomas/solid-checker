@@ -16,7 +16,7 @@
 // A flagged group is a counter-example for a person: Chrome and the grids say which twin is right. Differences the execution model
 // justifies are an explicit allow-list (ALLOWED, each with its reason), never a heuristic.
 //
-//   node scripts/fuzz/twins.mjs --out <fresh dir> [--codes A,B] [--contexts a,b] [--grids legal,misuse] [--recall]
+//   node scripts/fuzz/twins.mjs --out <fresh dir> [--codes A,B] [--contexts a,b] [--grids legal,misuse] [--recall [--recall-full]]
 //     [--sample <fraction of groups>] [--sample-seed N] [--checker-bin …] [--typefacts …] [--tsc …] [--concurrency N] [--limit N]
 //     [--cache-dir <dir>] [--no-cache] [--keep-work]
 //   node scripts/fuzz/twins.mjs --from <earlier --out> --out <fresh dir>   (judge a recorded run again; no checker)
@@ -150,7 +150,7 @@ export function twinPrograms(options) {
   const out = [];
   if (kinds.includes("legal")) {
     for (const cell of legalCells({ codes, recall: Boolean(options.recall) }).filter((c) => !contexts || contexts.includes(c.context))) {
-      const shapes = cellShapes(legalShapes(cell.code, ["root"], ["local"], cell.context), options.recall ? recallLegalShapes(cell.code, cell.context) : null);
+      const shapes = cellShapes(legalShapes(cell.code, ["root"], ["local"], cell.context), options.recall ? recallLegalShapes(cell.code, cell.context, { lean: !options.recallFull }) : null);
       for (const shape of shapes) out.push({ kind: "legal", cell, shape, group: groupKey("legal", cell.code, cell.context, shape), make: () => generateLegal(options, cell, { shape }).built });
     }
   }
@@ -158,7 +158,7 @@ export function twinPrograms(options) {
     for (const cell of cellList({ codes, contexts, recall: Boolean(options.recall) })) {
       // A shape's program as its grid generates it: the base grid's index for a base shape, the recall grid's for the others.
       const base = gridShapes(cell.code, cell.context);
-      const recall = options.recall ? recallShapes(cell.code, cell.context) : [];
+      const recall = options.recall ? recallShapes(cell.code, cell.context, { lean: !options.recallFull }) : [];
       const indexOf = new Map([...recall.map((shape, index) => [shape, index]), ...base.map((shape, index) => [shape, index])]);
       cellShapes(base, recall).forEach((shape) => out.push({ kind: "misuse", cell, shape, group: groupKey("misuse", cell.code, cell.context, shape), make: () => generateShape(options, cell, shape, indexOf.get(shape)).built }));
     }
@@ -278,7 +278,7 @@ function report(rows, { out, started, cache = null, ...options }) {
   };
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, "twins.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
-  writeFileSync(join(out, "twins.json"), `${JSON.stringify({ seed: options.seed, recall: Boolean(options.recall), grids: options.grids ?? "legal,misuse", codes: options.codes ?? null, contexts: options.contexts ?? null, summary, flagged, allowed }, null, 2)}\n`);
+  writeFileSync(join(out, "twins.json"), `${JSON.stringify({ seed: options.seed, recall: Boolean(options.recall), recallLean: Boolean(options.recall) && !options.recallFull, grids: options.grids ?? "legal,misuse", codes: options.codes ?? null, contexts: options.contexts ?? null, summary, flagged, allowed }, null, 2)}\n`);
   console.log(JSON.stringify({ ...summary, byCell: undefined, byViolatingLayer: undefined }));
   for (const flag of flagged.slice(0, 20)) console.log(`twins: flagged ${flag.group} ${flag.code} [${flag.rules.join(",")}]: violation in ${flag.violating.map(([l]) => l).join(",")}; ${flag.contradicting.map(([l, , a]) => `${l}=${a}`).join(",")}`);
   if (flagged.length > 20) console.log(`twins: ... ${flagged.length - 20} more (${join(out, "twins.json")})`);
@@ -297,7 +297,7 @@ export function parse(argv) {
   const options = { seed: "1" };
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (["recall", "keepWork", "noCache"].includes(key)) { options[key] = true; continue; }
+    if (["recall", "recallLean", "recallFull", "keepWork", "noCache"].includes(key)) { options[key] = true; continue; }
     if (!["out", "seed", "codes", "contexts", "grids", "sample", "sampleSeed", "checkerBin", "typefacts", "tsc", "concurrency", "limit", "install", "cacheDir", "from"].includes(key) || argv[index + 1] === undefined) throw new Error(`twins.mjs: unknown or empty option ${argv[index]}`);
     options[key] = argv[++index];
   }

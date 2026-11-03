@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { AUDIT_GRIDS, ORACLE_AXES, ORACLE_PER_STRATUM, judge, markdown, parseArgs, pickOracle, readShards } from "./audit.mjs";
+import { AUDIT_GRIDS, ORACLE_AXES, ORACLE_PER_STRATUM, judge, markdown, parseArgs, pickOracle, readShards, recallModeOf } from "./audit.mjs";
 import { fnv } from "./rng.mjs";
 import { parseAxes, sampleStrata, stratumOf } from "./runtime-diff.mjs";
 import { shardOf } from "./shard.mjs";
@@ -32,7 +32,7 @@ describe("the audit's oracle sample", () => {
 });
 
 // A run directory as the workflow lays it out: shards/<name>/<grid>/ and oracle/<grid>/, oracle/manifests/<grid>.json.
-function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, problem = false } = {}) {
+function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, problem = false, recall = "full", mixed = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "fuzz-audit-"));
   const all = Object.fromEntries(AUDIT_GRIDS.map((grid) => [grid, Array.from({ length: 10 }, (_, i) => ({ id: `${grid}-${i}`, outcome: problem && grid === "mx-base" && i === 3 ? "false-clean" : "agree" }))]));
   for (let index = 0; index < count; index += 1) {
@@ -42,7 +42,7 @@ function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, 
       mkdirSync(dir, { recursive: true });
       const mine = all[grid].filter((row) => shardOf(row.id, count) === index);
       writeFileSync(join(dir, "programs.jsonl"), mine.map((row) => JSON.stringify(row)).join("\n") + "\n");
-      writeFileSync(join(dir, grid.startsWith("mx") ? "matrix.json" : "legal.json"), JSON.stringify({ gridShard: { index, count, kept: mine.length, of: 10 }, selected: mine.length }));
+      writeFileSync(join(dir, grid.startsWith("mx") ? "matrix.json" : "legal.json"), JSON.stringify({ gridShard: { index, count, kept: mine.length, of: 10 }, selected: mine.length, ...(grid.endsWith("-recall") && (recall === "lean") !== (mixed && index === 1) ? { recallLean: true } : {}) }));
     }
   }
   for (const grid of AUDIT_GRIDS) {
@@ -57,6 +57,23 @@ function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, 
   }
   return root;
 }
+
+describe("the workflow's lean and full audits", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/fuzz-audit.yml", import.meta.url), "utf8");
+  it("runs lean Monday to Saturday and full on Sunday, and a manual run chooses", () => {
+    expect(workflow).toContain('cron: "0 16 * * 1-6"');
+    expect(workflow).toContain('cron: "0 16 * * 0"');
+    // The plan step reads the Sunday schedule as full, the same string the cron declares.
+    expect(workflow).toContain('[ "${{ github.event.schedule }}" = "0 16 * * 0" ]');
+    expect(workflow).toMatch(/recall:\n\s+description:[^\n]*\n\s+type: choice\n\s+options: \[lean, full\]\n\s+default: lean/);
+  });
+  it("gives the shards the mode, and files and fetches the report under it (the legacy audit-report is a full one)", () => {
+    expect(workflow).toContain('--recall "${{ needs.build.outputs.recall }}"');
+    expect(workflow).toContain("name: audit-report-${{ needs.build.outputs.recall }}");
+    expect(workflow).toContain("name: ${{ needs.build.outputs.earlier-rows-name }}");
+    expect(workflow).toContain('elif [ "$RECALL" = full ] && has "$id" audit-report;');
+  });
+});
 
 describe("the audit's verdict", () => {
   it("passes a whole run with nothing to look at, and counts every program once", () => {
@@ -94,7 +111,47 @@ describe("the audit's verdict", () => {
     expect(result.moves.kinds).toEqual({ "lg-base: recall-gap -> agree": 2 });
   });
 
+  it("is lean or full by what its shards' recall grids recorded, and a report from before the flag is full", () => {
+    const shardsOf = (root) => readShards(join(root, "shards")).shards;
+    expect(recallModeOf(shardsOf(run()))).toBe("full");
+    expect(recallModeOf(shardsOf(run({ recall: "lean" })))).toBe("lean");
+    expect(recallModeOf(shardsOf(run({ recall: "lean", mixed: true })))).toBe("mixed");
+    const lean = run({ recall: "lean" });
+    expect(judge({ shards: join(lean, "shards"), oracle: join(lean, "oracle") })).toMatchObject({ recall: "lean", attention: [] });
+    expect(markdown(judge({ shards: join(lean, "shards"), oracle: join(lean, "oracle") }))).toMatch(/lean recall grids/);
+    const mixed = run({ recall: "lean", mixed: true });
+    expect(judge({ shards: join(mixed, "shards"), oracle: join(mixed, "oracle") }).attention).toEqual(["the shards' recall grids are of both lean and full modes"]);
+  });
+
+  it("compares a lean night with the latest lean audit and a full one with a full one: the recall grids only like with like, the base grids always", () => {
+    // An earlier audit as the artifact lays it out: <dir>/audit.json beside <dir>/rows/<grid>.jsonl.gz (the earlier run's rows all agree).
+    const earlier = (mode) => {
+      const dir = mkdtempSync(join(tmpdir(), "fuzz-audit-earlier-"));
+      mkdirSync(join(dir, "rows"));
+      if (mode) writeFileSync(join(dir, "audit.json"), JSON.stringify({ recall: mode }));
+      for (const grid of AUDIT_GRIDS) writeFileSync(join(dir, "rows", `${grid}.jsonl.gz`), gzipSync(Array.from({ length: 10 }, (_, i) => JSON.stringify({ id: `${grid}-${i}`, outcome: grid === "lg-base" && i < 2 ? "recall-gap" : "agree" })).join("\n")));
+      return join(dir, "rows");
+    };
+    const judged = (recall, mode) => { const root = run({ recall }); return judge({ shards: join(root, "shards"), oracle: join(root, "oracle"), against: earlier(mode) }); };
+    // Same mode: every grid compared (the lg-base moves are the earlier rows').
+    expect(judged("lean", "lean").moves.kinds).toEqual({ "lg-base: recall-gap -> agree": 2 });
+    expect(judged("full", "full").moves.kinds).toEqual({ "lg-base: recall-gap -> agree": 2 });
+    // An earlier audit from before the flag (no audit.json, or none with `recall`) is a full one.
+    expect(judged("full", null).moves.kinds).toEqual({ "lg-base: recall-gap -> agree": 2 });
+    // Another mode: the two recall grids are not compared (and say so), the base grids still are.
+    for (const [now, was] of [["lean", "full"], ["lean", null], ["full", "lean"]]) {
+      expect(judged(now, was).moves.kinds).toEqual({
+        "lg-base: recall-gap -> agree": 2,
+        [`mx-recall: not compared (the earlier audit was ${was ?? "full"}, this one is ${now})`]: 1,
+        [`lg-recall: not compared (the earlier audit was ${was ?? "full"}, this one is ${now})`]: 1,
+      });
+      expect(judged(now, was).moves.moved).toBe(2);
+    }
+  });
+
   it("reads its phases' arguments", () => {
+    expect(parseArgs(["shard", "--shard", "0/4", "--recall", "full", "--out", "o", "--checker-bin", "c", "--typefacts", "t"]).options.recall).toBe("full");
+    expect(() => parseArgs(["shard", "--shard", "0/4", "--recall", "half", "--out", "o", "--checker-bin", "c", "--typefacts", "t"])).toThrow(/--recall is lean or full/);
     expect(parseArgs(["shard", "--shard", "0/4", "--out", "o", "--checker-bin", "c", "--typefacts", "t", "--", "--cache-dir", "x"])).toEqual({ phase: "shard", options: { shard: "0/4", out: "o", checkerBin: "c", typefacts: "t" }, extra: ["--cache-dir", "x"] });
     expect(() => parseArgs(["pick", "--shards", "s"])).toThrow(/--out is required/);
     expect(() => parseArgs(["oracle", "--grid", "nope", "--manifest", "m", "--out", "o", "--checker-bin", "c", "--typefacts", "t"])).toThrow(/no grid nope/);

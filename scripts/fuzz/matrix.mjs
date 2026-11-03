@@ -179,18 +179,18 @@ export function cellList({ codes, contexts, recall = false } = {}) {
  * legal grid's `legalShapes`); `variants` its variants.
  */
 /**
- * `--recall-lean` (off by default; Fable's report 2026-11-03, R0.3): the recall mounts and callback forms whose every program answered
- * as a kept one's on the 644bd1a81 full run (`redundancy.mjs`, 2026-11-03): ten mounts as `show-signal`'s program of the same shape
- * (`--against show-signal`; show-keyed's two legal differences were harness rows, a Chrome call with no response), `loading` as the
- * root program, `function` and `let` as `const` (`--against-callback const`). Kept: `show-signal` and `const` (each differs from the
- * base program: 240 and 824 misuse programs), `named` (310 differ from `const`), `for-item` (4), `dynamic`, `show-later`. That run had
- * no role log, so whether a demoted value adds an arm is unmeasured: the flag stays off by default.
+ * The recall grids are lean by default (README "Demoting saturated recall values"; Fable's report 2026-11-03, R0.3): the recall mounts
+ * and callback forms whose every program answered as a kept one's on a full run (`redundancy.mjs`, cd08cd408, seed 1): ten mounts as
+ * `show-signal`'s program of the same shape (`--against show-signal`), `loading` as the root program, `function` and `let` as `const`
+ * (`--against-callback const`). Kept: `show-signal` and `const` (each differs from the base program), `named`, `for-item`, `dynamic`,
+ * `show-later`. `--recall-full` brings every value back (the weekly full run, a probe of a demoted value); `--recall-lean` is the
+ * default, accepted as a no-op.
  */
 export const LEAN_DEMOTED = {
   mounts: ["show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
   callbacks: ["function", "let"],
 };
-export function recallAxes(code, context, base, variants, { legal = false, lean = false } = {}) {
+export function recallAxes(code, context, base, variants, { legal = false, lean = true } = {}) {
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
   // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
@@ -271,8 +271,10 @@ export function pairsOption(value) {
 const THROWN = new Set(thrownCodes.map(([, code]) => code));
 const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
-/** The misuse grid's recall shapes of a cell (`--recall`). */
-export const recallShapes = (code, context, { lean = false } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
+/** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
+export const recallLeanOf = (options) => Boolean(options.recall) && !options.recallFull;
+/** The misuse grid's recall shapes of a cell (`--recall`); `lean: false` is `--recall-full`. */
+export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -440,7 +442,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
-    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recallLean ? { recallLean: true } : {}), checker: header, total,
+    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recall ? { recallLean: recallLeanOf(options) } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
     byFeature: featureTable(rows), typedAway, cells: out,
@@ -556,7 +558,7 @@ export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
   // A pair grid (`--pairs`) holds other programs than the grid it sits beside: compared only with a pair grid of the same sets.
   if (JSON.stringify(baseline.pairs ?? null) !== JSON.stringify(current.pairs ?? null)) return { ok: false, refused: `the matrices differ in pairs (${baseline.pairs ?? "none"} vs ${current.pairs ?? "none"})`, ...empty };
-  if (Boolean(baseline.recallLean) !== Boolean(current.recallLean)) return { ok: false, refused: "one matrix is --recall-lean and the other is not: they hold other programs", ...empty };
+  if (Boolean(baseline.recallLean) !== Boolean(current.recallLean)) return { ok: false, refused: "one matrix is a lean recall grid and the other a full one (--recall-full): they hold other programs", ...empty };
   for (const field of ["seed", "perCell", "generator", "sampling"]) {
     // A matrix recorded before `sampling` existed drew at random.
     if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
@@ -679,6 +681,8 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
                                         async parent (misuse.mjs SOURCES; axis or source names; default local)
   [--recall]                            with --grid, only the recall axes' shapes (matrix.mjs recallAxes): the recall bindings, callee forms,
                                         layers, callback forms, mounts and file sources, each across the base grid, and the recall contexts
+  [--recall-full]                       with --recall, every recall mount and callback form; without it the grid is lean (matrix.mjs
+                                        LEAN_DEMOTED left out; --recall-lean says so and is the default)
   [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
                                         other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
   [--scratch <dir>]                     cases/ and chrome-cases/ in <dir> behind links (scratch.mjs; focus.mjs passes the VM's tmpfs)
@@ -729,7 +733,7 @@ async function sweep(options, config, out) {
   const sources = sourcesOption(options.sources);
   // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs. `--pairs` (pairShapes): the pair grid's.
   const pairs = options.pairs ? pairsOption(options.pairs) : null;
-  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: Boolean(options.recallLean) }) : gridShapes(cell.code, cell.context, mounts, sources));
+  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: recallLeanOf(options) }) : gridShapes(cell.code, cell.context, mounts, sources));
   // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (their ids are known from the shapes),
   // the same programs as generating the whole grid and keeping the shard; `planned` counts the whole grid's.
   const sharding = gridShardOptions(options);
@@ -921,7 +925,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

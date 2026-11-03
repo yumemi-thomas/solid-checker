@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { legalCells, recallLegalShapes, generateLegal } from "./legal.mjs";
-import { cellList, generateShape, gridShapes, recallShapes, shapeSeed } from "./matrix.mjs";
+import { LEAN_DEMOTED, cellList, generateShape, gridShapes, recallShapes, shapeSeed } from "./matrix.mjs";
 import {
   CALLBACK_CONTEXTS, CALLBACK_FORMS, CALLEE_FORMS, RECALL_API_BINDINGS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, RECALL_VALUE_BINDINGS, SOURCE_AXES,
   CBP_CONTEXTS, EFFECT_WINDOW_CONTEXTS, REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallLegalOf, recallVariantsOf,
@@ -26,7 +26,7 @@ describe("the recall axes are opt-in", () => {
   it("never repeats a base shape in a base cell, and keeps the base shapes' seeds", () => {
     const cell = { code: "FLUSH_IN_EFFECT_CALLBACK", context: "effect-apply" };
     const base = new Set(gridShapes(cell.code, cell.context).map((shape) => shapeSeed(1, cell.code, cell.context, shape)));
-    const recall = recallShapes(cell.code, cell.context).map((shape) => shapeSeed(1, cell.code, cell.context, shape));
+    const recall = recallShapes(cell.code, cell.context, FULL).map((shape) => shapeSeed(1, cell.code, cell.context, shape));
     expect(recall.filter((seed) => base.has(seed))).toEqual([]);
     expect(new Set(recall).size).toBe(recall.length);
   });
@@ -40,9 +40,23 @@ describe("the recall axes are opt-in", () => {
   });
 });
 
+// `--recall-full`: every recall value (the default grid is lean, matrix.mjs LEAN_DEMOTED).
+const FULL = { lean: false };
+
 describe("every axis value crosses the base grid", () => {
+  it("the lean grid reaches every value but the demoted ones, and --recall-full reaches them all", () => {
+    const seenIn = (options) => new Set(cellList({ recall: true }).flatMap((cell) => recallShapes(cell.code, cell.context, options).map(axisOf)));
+    const lean = seenIn({});
+    const full = seenIn(FULL);
+    for (const mount of RECALL_MOUNTS) expect(full).toContain(`m:${mount}`);
+    for (const form of CALLBACK_FORMS) expect(full).toContain(`cb:${form}`);
+    for (const mount of LEAN_DEMOTED.mounts) expect(lean, mount).not.toContain(`m:${mount}`);
+    for (const form of LEAN_DEMOTED.callbacks) expect(lean, form).not.toContain(`cb:${form}`);
+    const demoted = new Set([...LEAN_DEMOTED.mounts.map((mount) => `m:${mount}`), ...LEAN_DEMOTED.callbacks.map((form) => `cb:${form}`)]);
+    expect([...full].filter((value) => !demoted.has(value) && !lean.has(value))).toEqual([]);
+  });
   it("reaches each recall binding, callee form, layer, mount, callback form and file source", () => {
-    const seen = new Set(cellList({ recall: true }).flatMap((cell) => recallShapes(cell.code, cell.context).map(axisOf)));
+    const seen = new Set(cellList({ recall: true }).flatMap((cell) => recallShapes(cell.code, cell.context, FULL).map(axisOf)));
     for (const binding of [...RECALL_API_BINDINGS, ...RECALL_VALUE_BINDINGS, ...CALLEE_FORMS]) expect(seen).toContain(`b:${binding}`);
     for (const layer of RECALL_LAYERS) expect(seen).toContain(`l:${layer}`);
     for (const mount of RECALL_MOUNTS) expect(seen).toContain(`m:${mount}`);
@@ -51,14 +65,14 @@ describe("every axis value crosses the base grid", () => {
   });
   it("a callback form only in a context whose site is in a primitive's callback", () => {
     for (const cell of cellList({ recall: true })) {
-      const callbacks = recallShapes(cell.code, cell.context).filter((shape) => shape.callback);
+      const callbacks = recallShapes(cell.code, cell.context, FULL).filter((shape) => shape.callback);
       if (!CALLBACK_CONTEXTS.includes(cell.context)) expect(callbacks).toEqual([]);
     }
   });
   it("one program of each (cell, axis value) builds and validates", () => {
     for (const cell of cellList({ recall: true })) {
       const seen = new Set();
-      recallShapes(cell.code, cell.context).forEach((shape, index) => {
+      recallShapes(cell.code, cell.context, FULL).forEach((shape, index) => {
         if (seen.has(axisOf(shape))) return;
         seen.add(axisOf(shape));
         expect(() => generateShape({ seed: 1 }, cell, shape, index), `${cell.code}/${cell.context}/${axisOf(shape)}`).not.toThrow();
@@ -66,7 +80,7 @@ describe("every axis value crosses the base grid", () => {
     }
     for (const cell of legalCells()) {
       const seen = new Set();
-      for (const shape of recallLegalShapes(cell.code, cell.context)) {
+      for (const shape of recallLegalShapes(cell.code, cell.context, FULL)) {
         if (seen.has(axisOf(shape))) continue;
         seen.add(axisOf(shape));
         expect(() => generateLegal({ seed: 1 }, cell, { shape }), `${cell.code}/${cell.context}/${axisOf(shape)}`).not.toThrow();
@@ -117,8 +131,8 @@ const text = (code, context, shape) => generateShape({ seed: 1 }, { code, contex
 describe("shapes rc.17 cannot observe or tsc rejects", () => {
   it("no dynamic() mount for a body's strict-read or pending read, which dynamic() leaves unlabelled", () => {
     for (const code of ["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]) {
-      for (const context of ["body", "root"]) expect(recallShapes(code, context).filter((shape) => shape.mount === "dynamic"), `${code}/${context}`).toEqual([]);
-      expect(recallShapes(code, "effect-apply").some((shape) => shape.mount === "dynamic"), code).toBe(true);
+      for (const context of ["body", "root"]) expect(recallShapes(code, context, FULL).filter((shape) => shape.mount === "dynamic"), `${code}/${context}`).toEqual([]);
+      expect(recallShapes(code, "effect-apply", FULL).some((shape) => shape.mount === "dynamic"), code).toBe(true);
     }
   });
   it("a typed `.call` spelling for flush and useContext", () => {
@@ -152,7 +166,7 @@ describe("the recall axes and one-source variants", () => {
   it("never cross a variant one source carries (the settled async memo) with the local source", () => {
     for (const cell of cellList({ recall: true })) {
       const carried = SPEC[cell.code].variantSources ?? {};
-      for (const shape of recallShapes(cell.code, cell.context)) {
+      for (const shape of recallShapes(cell.code, cell.context, FULL)) {
         if (carried[shape.variant]) expect(carried[shape.variant]).toContain(shape.source);
       }
     }
