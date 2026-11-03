@@ -132,6 +132,12 @@ this stack (`run(hf)` over `const run = (g) => { g(); }`), so its reads are
 reported as a literal's are (ADR 0485); a member wrapper (`api.run(hf)`) or
 one in another module stays uncertifiable.
 
+An uncertifiable finding says which proof is missing (ADR 0595): the hand-off
+it runs through (`run`, `api.run`, a member or a copy), the carrier that may
+run it zero times (`xs.forEach`), a handler that may not run, a possibly
+tracked source, a disposable owner, an unplaced suspension. Only a prop read
+whose backing is unproven mentions call sites that cannot be enumerated.
+
 Each of these keeps it from applying:
 
 - a method that does not resolve to the built-in or standard declaration: a

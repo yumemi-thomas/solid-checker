@@ -550,6 +550,7 @@ pub(crate) fn reactive_read_after_await_through_calls<'a>(
     }
     let proven_identity = StaticDefectKind::ReactiveReadAfterAwait {
         accessor: String::new(),
+        obligation: None,
     }
     .dedup_identity();
     for typescript_file in ctx.facts.typescript.files() {
@@ -1304,7 +1305,7 @@ fn member_reads_after_await(
         };
         let store = ctx.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
             && ctx.accessors.contains_key(symbol);
-        let (name, uncertain) = if store {
+        let (name, obligation) = if store {
             let Some((name, _)) = ctx.accessors.get(symbol) else {
                 continue;
             };
@@ -1313,17 +1314,29 @@ fn member_reads_after_await(
             // either way.
             match store_tracking(symbol, store_path_text(file, member.span).as_deref()) {
                 pre_await::Tracking::Tracked => continue,
-                pre_await::Tracking::Possible => (name, true),
-                pre_await::Tracking::Untracked => (name, false),
+                pre_await::Tracking::Possible => {
+                    (name, Some(crate::AfterAwaitObligation::MayBeTracked))
+                }
+                pre_await::Tracking::Untracked => (name, None),
             }
         } else if let Some((name, declaration)) = ctx.prop_sources.get(symbol) {
             let property = file.source_text(member.property).unwrap_or_default();
             match ctx.props_reactivity.prop_use(declaration, property) {
                 crate::source_discovery::PropUse::Static => continue,
-                crate::source_discovery::PropUse::Reactive => {
-                    (name, ctx.uncertain_prop_sources.contains(symbol))
-                }
-                crate::source_discovery::PropUse::Unknown => (name, true),
+                crate::source_discovery::PropUse::Reactive => (
+                    name,
+                    ctx.uncertain_prop_sources.contains(symbol).then_some(
+                        crate::AfterAwaitObligation::PropBackingUnproven {
+                            callers_unenumerable: true,
+                        },
+                    ),
+                ),
+                crate::source_discovery::PropUse::Unknown => (
+                    name,
+                    Some(crate::AfterAwaitObligation::PropBackingUnproven {
+                        callers_unenumerable: ctx.uncertain_prop_sources.contains(symbol),
+                    }),
+                ),
             }
         } else {
             continue;
@@ -1340,8 +1353,12 @@ fn member_reads_after_await(
                     file.source_text(member.property).unwrap_or_default()
                 )
             });
+        let uncertain = obligation.is_some();
         draft.push_defect(StaticDefect {
-            kind: StaticDefectKind::ReactiveReadAfterAwait { accessor },
+            kind: StaticDefectKind::ReactiveReadAfterAwait {
+                accessor,
+                obligation,
+            },
             location: location(file.path.shared(), member.span),
             analysis_context: analysis_context.to_owned(),
             fixes: vec![],

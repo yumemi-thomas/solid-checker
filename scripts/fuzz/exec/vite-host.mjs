@@ -14,6 +14,12 @@ const settings = JSON.parse(process.argv[2] ?? "{}");
 // which would otherwise keep serving, and hold its port and work directory, until the machine restarts.
 const parent = process.ppid;
 setInterval(() => { if (process.ppid !== parent) process.exit(0); }, 1000).unref();
+// A write the executor no longer reads (its pipe closed, or a control client that hung up) is no reason to die: before, an unhandled
+// `EPIPE` on stdout ended the helper mid-grid (2026-11-03). The executor drains stdout now (main.rs `read_line_within`); this is the
+// helper's own half. Any other stream error is logged, not thrown.
+const quiet = (where) => (error) => { if (error?.code !== "EPIPE") try { process.stderr.write(`vite-host: ${where}: ${error?.message ?? error}\n`); } catch {} };
+process.stdout.on("error", quiet("stdout"));
+process.stderr.on("error", () => {});
 const vite = await startViteHost({ install: settings.install, oracleInstall: settings.oracleInstall });
 
 const routes = {
@@ -24,6 +30,8 @@ const routes = {
 };
 
 const control = http.createServer((request, response) => {
+  request.on("error", quiet("control request"));
+  response.on("error", quiet("control response"));
   const chunks = [];
   request.on("data", (chunk) => chunks.push(chunk));
   request.on("end", async () => {
@@ -41,6 +49,7 @@ const control = http.createServer((request, response) => {
     }
   });
 });
+control.on("clientError", (error, socket) => { quiet("control client")(error); socket.destroy(); });
 control.listen(0, "127.0.0.1", () => {
   process.stdout.write(`${JSON.stringify({ base: vite.base, work: vite.work, control: `http://127.0.0.1:${control.address().port}/` })}\n`);
 });

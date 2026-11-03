@@ -18,6 +18,7 @@
 //   node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid] [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--checker-bin …] [--typefacts …] [--tsc …] [--cache-dir <dir>] [--no-cache]
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { guardGridExit, partialRows } from "./partial.mjs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, cacheStats, withRuntimeCache } from "./cache.mjs";
@@ -173,6 +174,8 @@ export async function runLegal(options) {
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();
+    // The rows judged so far, chunk by chunk (partial.mjs): what a grid process that dies before programs.jsonl leaves for focus.mjs.
+    const partial = partialRows(out);
     const started = Date.now();
     // As matrix.mjs: with every runtime cached no Vitest batch runs, so the workers' share goes to the checker; and chunk k's fast
     // path runs while chunk k+1 is type-checked and checked. Each chunk's records and verdicts are what `evaluate` gives it.
@@ -200,6 +203,7 @@ export async function runLegal(options) {
         rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo } : {}), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);
       }
+      partial.append(rows.slice(at));
       console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
     }
     if (run !== config) await setExecutorChecks(config);
@@ -264,6 +268,7 @@ export async function runLegal(options) {
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync(join(out, "programs.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    partial.finish();
     if (config.runtimeCache || config.typecheckCache) {
       // Beside the grid's files, as matrix.mjs writes it: a cached run's rows are the uncached run's.
       writeFileSync(join(out, "cache.json"), `${JSON.stringify(cacheStats(config), null, 2)}\n`);
@@ -289,6 +294,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
   [--scratch <dir>]   cases/ and chrome-cases/ in <dir> behind links (scratch.mjs)`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  guardGridExit("legal");
   try {
     const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
@@ -296,7 +302,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
     else process.exitCode = await runLegal(options);
   } catch (error) {
-    console.error(`legal: ${error.message}`);
+    console.error(`legal: stopped: ${error.message}`);
     process.exitCode = 2;
   }
 }

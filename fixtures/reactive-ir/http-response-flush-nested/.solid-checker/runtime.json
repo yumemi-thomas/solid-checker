@@ -1,0 +1,5 @@
+{
+  "target": "node",
+  "rendering": "streaming-ssr",
+  "conditions": ["node", "import"]
+}

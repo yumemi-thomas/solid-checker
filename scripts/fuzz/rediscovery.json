@@ -2225,5 +2225,16 @@
    "lg-dynamic-static-promise-effect-apply-defer-x-wrapper-module-helper"
   ],
   "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "http-response-after-flush (SC7005) silent on a header or status declared two components below a <Loading> boundary after a pending read: the rule's Loading dominance crossed one component boundary, and rc.17's server runtime drops the declaration (ADR 0596)",
+  "found": "the SSR host's first run (scripts/fuzz/ssr.mjs, debug checker at 0a6d7de96): template m-nested, 2 false cleans",
+  "fixed": "ADR 0596",
+  "outside": "the SSR host (ssr.mjs) is its own run, not a grid: its programs rediscover it (ssrIds, pinned by ssr.test.mjs)",
+  "ssrIds": [
+   "ssr-m-nested-header",
+   "ssr-m-nested-status"
+  ],
+  "rediscovered": "locally: the build before ADR 0596 gives both false-clean, the fix build agree (ssr run 2026-11-03: 10 agree, 0 false clean)"
  }
 ]

@@ -733,6 +733,7 @@ packages/wasm/owned/
 /scripts/runtime-oracle-install/.solid-checker-fuzz/
 /scripts/fuzz/install/.solid-checker-fuzz-fast/
 /scripts/fuzz/install/.solid-checker-fuzz-chrome/
+/scripts/fuzz/install/.solid-checker-fuzz-ssr/
 /scripts/fuzz/exec/target/
 !fixtures/reactive-ir/destructured-binding-tdz/node_modules/
 !fixtures/reactive-ir/destructured-binding-tdz/node_modules/**

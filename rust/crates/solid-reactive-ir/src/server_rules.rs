@@ -180,11 +180,17 @@ fn call_under_loading_children(ctx: &AnalysisContext<'_>, file: &FileFacts, span
     })
 }
 
-/// The project functions rendered as JSX children of a `Loading` element —
-/// one component-boundary level deep, matching the dominance the async rules
-/// use. Fallback-position renders are excluded (shell content).
+/// The project functions rendered as JSX children of a `Loading` element,
+/// and (ADR 0596) every project function a JSX element in such a function's
+/// body renders, transitively: a component two levels below the boundary is
+/// boundary content as much as its parent (the SSR host measured the header
+/// of `<Loading><Inner /></Loading>`, `Inner` rendering `<Deep />`, dropped
+/// while SC7005 was silent). Fallback-position renders of the boundary
+/// itself are excluded (shell content). Every target is resolved exactly
+/// (`function_called_at`); the finding stays an obligation either way.
 fn loading_wrapped_components<'a>(ctx: &AnalysisContext<'a>) -> HashSet<(&'a str, Span)> {
     let mut hosts = HashSet::default();
+    let mut pending = Vec::new();
     for caller in &ctx.facts.files {
         for element in &caller.ast.jsx_elements {
             let Some((target_file, target)) = ctx
@@ -207,8 +213,27 @@ fn loading_wrapped_components<'a>(ctx: &AnalysisContext<'a>) -> HashSet<(&'a str
                         .iter()
                         .any(|child| child.contains(element.span))
             });
-            if wrapped {
-                hosts.insert((target_file.path.as_str(), target.span));
+            if wrapped && hosts.insert((target_file.path.as_str(), target.span)) {
+                pending.push((target_file, target.body));
+            }
+        }
+    }
+    // The closure: what a host's own JSX renders is below the same boundary.
+    while let Some((file, body)) = pending.pop() {
+        for element in file
+            .ast
+            .jsx_elements
+            .iter()
+            .filter(|element| body.contains(element.span))
+        {
+            let Some((target_file, target)) = ctx
+                .semantic_lookup
+                .function_called_at(file.path.as_str(), element.name.span)
+            else {
+                continue;
+            };
+            if hosts.insert((target_file.path.as_str(), target.span)) {
+                pending.push((target_file, target.body));
             }
         }
     }

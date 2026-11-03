@@ -751,6 +751,10 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
                 // enumerated, so the props sentence would describe a
                 // different obligation than the one raised.
                 | StaticDefectKind::ServerFunctionRichArgument { .. }
+                // ADR 0595: SC1002 words its own obligation (below); the
+                // through-call kind's message names its reason already.
+                | StaticDefectKind::ReactiveReadAfterAwait { .. }
+                | StaticDefectKind::ReactiveReadAfterAwaitThroughCall { .. }
         )
     {
         if defect.analysis_context == "draggable-default-uncertain" {
@@ -763,10 +767,42 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
             );
         }
     }
+    if defect.uncertain
+        && let StaticDefectKind::ReactiveReadAfterAwait { obligation, .. } = &defect.kind
+    {
+        message.push_str("; ");
+        message.push_str(&after_await_obligation(obligation.as_ref()));
+    }
     FindingWording::new(rule.metadata(), message, text.hint).with_evidence(vec![EvidenceStep {
         message: text.evidence.into(),
         location: Some(defect.location.clone()),
     }])
+}
+
+/// ADR 0595: why an SC1002 read after an await is a proof obligation, in the
+/// reason the walk recorded, and never the props sentence when the
+/// uncertainty is something else (a hand-off, a carrier, a disposed owner).
+fn after_await_obligation(reason: Option<&solid_reactive_ir::AfterAwaitObligation>) -> String {
+    use solid_reactive_ir::AfterAwaitObligation as Why;
+    const TAIL: &str = " — this finding is a proof obligation, not a proven runtime warning";
+    let why = match reason {
+        Some(Why::MayBeTracked) => "something before the first await may already have read this source (through a helper, a callback, a conditional or an aliased store path), and rc.17 does not warn for a source the computation already depends on".to_owned(),
+        Some(Why::OwnerMayBeDisposed) => "a dispose function can reach this computation's owner, so the computation may be disposed before the await resumes, and a disposed computation's read is not warned about".to_owned(),
+        Some(Why::HandOffNotFollowed { via: Some(via) }) => format!("the function holding this read runs through a hand-off the checker does not follow ({via}), so whether and when it runs after the await is not proven"),
+        Some(Why::HandOffNotFollowed { via: None }) => "the function holding this read is handed on as a member, an object slot, a method or a copy the checker does not follow, so whether and when it runs after the await is not proven".to_owned(),
+        Some(Why::CarrierMayNotRun { carrier }) => format!("the function holding this read is run by {carrier}, which may run it zero times (an empty or unknown receiver, too few elements for a comparator or a reducer, no match for a replacer), so whether the read runs at all is not proven"),
+        Some(Why::HandlerMayNotRun) => "the promise handler holding this read runs only if its promise settles that way, or on a promise not proven to be the computation's pending one, so whether it runs on this computation's flight is not proven".to_owned(),
+        Some(Why::ContinuationMayRunFirst) => "the async function holding this read is returned without being awaited and its first await is not proven to be on a pending promise, so its continuation may run before the computation holds its promise".to_owned(),
+        Some(Why::IntrinsicMayBeReplaced) => "the promise chain runs on a built-in a visible write may have replaced, so the native-promise premise is withdrawn".to_owned(),
+        Some(Why::SuspensionUnplaced) => "the suspension before this read (a `for await`, a loop's back edge, an async compute with no flow facts, or a guarded try head) is not placed by the flow facts, so whether the read runs after it on this computation's run is not proven".to_owned(),
+        Some(Why::GeneratorStepped) => "it is in a generator's body, which runs only as its iterator is stepped, and the checker does not follow the stepping".to_owned(),
+        Some(Why::OwnerUnresolved) => "it runs under runWithOwner with an owner the checker cannot resolve, and whether a read there warns depends on that owner".to_owned(),
+        Some(Why::CalleeInexact) => "the callee is a conditional, logical, comma or assignment expression not every operand of which is proven to be this accessor".to_owned(),
+        Some(Why::PropBackingUnproven { callers_unenumerable: true }) => "this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out".to_owned(),
+        Some(Why::PropBackingUnproven { callers_unenumerable: false }) => "whether this prop is signal-backed is not proven from its uses".to_owned(),
+        None => "whether this read runs untracked after the await on this computation's run is not proven".to_owned(),
+    };
+    format!("{why}{TAIL}")
 }
 
 const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
@@ -1005,5 +1041,88 @@ mod source_argument_evidence_tests {
             Some(&defect.location)
         );
         assert_eq!(finding.primary_location, defect.location);
+    }
+}
+
+#[cfg(test)]
+mod after_await_obligation_tests {
+    use solid_reactive_ir::{FindingSeed, StaticDefect, project_finding};
+
+    use super::Catalog;
+
+    fn sc1002(obligation: serde_json::Value, uncertain: bool) -> String {
+        let mut kind =
+            serde_json::json!({ "kind": "reactive-read-after-await", "accessor": "count" });
+        if !obligation.is_null() {
+            kind["obligation"] = obligation;
+        }
+        let defect: StaticDefect = serde_json::from_value(serde_json::json!({
+            "kind": kind,
+            "location": { "path": "App.tsx", "startByte": 10, "endByte": 15 },
+            "uncertain": uncertain,
+        }))
+        .unwrap();
+        let finding = project_finding(FindingSeed::StaticDefect(&defect), &Catalog);
+        assert_eq!(finding.id, "SC1002");
+        assert_eq!(
+            finding.kind,
+            if uncertain {
+                "uncertifiable"
+            } else {
+                "violation"
+            }
+        );
+        finding.message
+    }
+
+    /// ADR 0595: a hand-off or carrier obligation names its own reason, never
+    /// the props sentence about call sites that cannot be enumerated.
+    #[test]
+    fn an_after_await_obligation_says_why_and_only_a_prop_mentions_call_sites() {
+        let handed = sc1002(
+            serde_json::json!({ "reason": "hand-off-not-followed", "via": "api.run" }),
+            true,
+        );
+        assert!(
+            handed.contains("runs through a hand-off the checker does not follow (api.run)"),
+            "{handed}"
+        );
+        let member = sc1002(
+            serde_json::json!({ "reason": "hand-off-not-followed", "via": null }),
+            true,
+        );
+        assert!(
+            member.contains("handed on as a member, an object slot, a method or a copy"),
+            "{member}"
+        );
+        let carrier = sc1002(
+            serde_json::json!({ "reason": "carrier-may-not-run", "carrier": "props.xs.forEach" }),
+            true,
+        );
+        assert!(
+            carrier.contains("run by props.xs.forEach, which may run it zero times"),
+            "{carrier}"
+        );
+        for message in [&handed, &member, &carrier] {
+            assert!(
+                !message.contains("call sites cannot be enumerated"),
+                "{message}"
+            );
+            assert!(
+                message
+                    .ends_with("this finding is a proof obligation, not a proven runtime warning"),
+                "{message}"
+            );
+        }
+        let prop = sc1002(
+            serde_json::json!({ "reason": "prop-backing-unproven", "callers_unenumerable": true }),
+            true,
+        );
+        assert!(prop.contains("call sites cannot be enumerated"), "{prop}");
+        let unknown = sc1002(serde_json::Value::Null, true);
+        assert!(unknown.contains("is not proven"), "{unknown}");
+        assert!(!unknown.contains("call sites"), "{unknown}");
+        let proven = sc1002(serde_json::Value::Null, false);
+        assert!(!proven.contains("proof obligation"), "{proven}");
     }
 }
