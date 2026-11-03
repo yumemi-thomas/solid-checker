@@ -17,8 +17,11 @@ can provide the context:
   analysis cannot see, so a read the same census finds no provider for there
   is an uncertifiable obligation, never a violation (ADR 0517).
 - The context is a project binding, `const Ctx = createContext()` with no
-  argument, that is never written.
-- No `<Ctx value={…}>` element names the binding, and no other reference to it
+  argument or with `undefined` (rc.17 treats an `undefined` default as none;
+  ADR 0575), that is never written. A default the syntax does not prove is a
+  value (`createContext(maybe())`) makes the read an uncertifiable obligation.
+- No `<Ctx value={…}>` element names the binding (one passing the global
+  `undefined`, with no spread, provides nothing: ADR 0575), and no other reference to it
   escapes. An escape is any use that could hand the binding to code that
   provides it: an object literal, a call argument, a return, an assignment.
   Import and export specifiers do not escape; each importer's own uses are
@@ -43,7 +46,10 @@ not followed. A read in a function stored on a member (`o.m = …`,
 `this.m = …`, a factory's returned object, an object literal's slot) or handed
 to a project wrapper and called later stays SC4001's obligation. A read with no owner is
 `missing-owner` (SC4001), which throws `NoOwnerError` instead. A read whose owner
-is uncertain is SC4001's uncertifiable result.
+is uncertain is SC4001's uncertifiable result. A read in a function that runs
+both under an owner and with none (called in the body and handed to `onClick`)
+is reported here, since the owned run throws first, and SC4001's claim there is
+an obligation (ADR 0577).
 
 A default makes the read a value rather than a throw. A context with a provider
 above the reader is silent, since the provider is what the rule looks for.

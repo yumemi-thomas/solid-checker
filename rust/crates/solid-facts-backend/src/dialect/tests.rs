@@ -107,6 +107,8 @@ fn catalog_prose_program() -> Program {
             after_yield: false,
             missing_jsx_census: false,
             provider_open: false,
+            default_unproven: false,
+            owned_run_throws: false,
             through_dependency: None,
             report: true,
         }],

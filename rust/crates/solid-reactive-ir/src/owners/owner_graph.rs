@@ -488,6 +488,10 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) unplaced_callback: bool,
     /// ADR 0517: a provider-free read the census found in an open program.
     pub(crate) provider_open: bool,
+    /// ADR 0575: the provider-free context's default is not proven absent.
+    pub(crate) default_unproven: bool,
+    /// ADR 0577: the read's owned runs throw `ContextNotFoundError` first.
+    pub(crate) owned_run_throws: bool,
     /// The operation runs after an `await` ([`AwaitContinuations`]).
     pub(crate) after_await: bool,
     /// The operation runs after a promise-yielding `yield` of its action body

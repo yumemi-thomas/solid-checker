@@ -408,6 +408,8 @@ pub(crate) fn attribute_dependency_requirements(
                 component_uncertain: requirement.component_uncertain,
                 unplaced_callback: requirement.unplaced_callback,
                 provider_open: requirement.provider_open,
+                default_unproven: requirement.default_unproven,
+                owned_run_throws: requirement.owned_run_throws,
                 after_await: false,
                 after_yield: false,
                 report: true,

@@ -13,7 +13,11 @@ use solid_dialect::ContextRole;
 use solid_facts::ast::{BindingShape, ExportKind, IdentifierRole, ImportKind};
 use typefacts::Location;
 
-/// The project contexts, created with no default, that no provider can supply.
+/// The project contexts, created with no default, that no provider can supply,
+/// each with whether its lack of a default is proven (ADR 0575): `true` for
+/// `createContext()` and `createContext(undefined)` (rc.17 `getContext` treats
+/// an `undefined` default as none), `false` for a default whose value the
+/// syntax does not prove is not `undefined` (a read is then an obligation).
 ///
 /// In an open program the same census runs, and what it finds is an
 /// obligation rather than a proof (ADR 0517). A namespace import or export, `export *`,
@@ -31,17 +35,18 @@ pub(crate) fn provider_free_contexts(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> HashSet<Location> {
+) -> HashMap<Location, bool> {
     // ADR 0517: an open program is censused too. What the census finds
     // provider-free there may still be provided by code the analysis does not
     // see, so the read is an obligation (`owner_emission`), not silence.
-    let mut free = HashSet::default();
+    let mut free = HashMap::default();
     let entities = lookup.entities();
     // Candidates: `const Ctx = createContext()` with no argument, an exact,
     // unwritten identifier binding (ADR 0352). Dependency source is not the
     // project's to close.
-    // Each candidate's name, and whether its file exports it.
-    let mut candidates = HashMap::<Location, (String, bool)>::default();
+    // Each candidate's name, whether its file exports it, and whether its
+    // lack of a default is proven.
+    let mut candidates = HashMap::<Location, (String, bool, bool)>::default();
     for found in parallel_balanced_results(&facts.files, |file| {
         file_candidates(facts, lookup, symbol_names, entities, file)
     }) {
@@ -65,14 +70,14 @@ pub(crate) fn provider_free_contexts(
                 .any(|export| export.kind == ExportKind::All || export.namespace.is_some())
     });
     if reaches_unnamed {
-        candidates.retain(|_, (_, exported)| !*exported);
+        candidates.retain(|_, (_, exported, _)| !*exported);
     }
     if candidates.is_empty() {
         return free;
     }
     let candidate_names = candidates
         .values()
-        .map(|(name, _)| name.clone())
+        .map(|(name, _, _)| name.clone())
         .collect::<HashSet<_>>();
     let mut provided = HashSet::<Location>::default();
     // Escapes: any other reference that resolves to a candidate. A reference
@@ -94,11 +99,11 @@ pub(crate) fn provider_free_contexts(
         escaped.extend(census.escaped);
         blocked_names.extend(census.blocked);
     }
-    for (key, (name, _)) in &candidates {
+    for (key, (name, _, proven)) in &candidates {
         if escaped.contains(key) || provided.contains(key) || blocked_names.contains(name) {
             continue;
         }
-        free.insert(key.clone());
+        free.insert(key.clone(), *proven);
     }
     free
 }
@@ -110,18 +115,19 @@ fn file_candidates(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     entities: &EntitySymbols,
     file: &solid_facts::FileFacts,
-) -> Vec<(Location, (String, bool))> {
+) -> Vec<(Location, (String, bool, bool))> {
     let mut found = Vec::new();
     if facts.dependency_source_root(file.path.as_str()).is_some() {
         return found;
     }
     for call in &file.ast.calls {
-        if !call.arguments.is_empty()
-            || context_role_of(lookup, file, call, entities, symbol_names)
-                != Some(ContextRole::Create)
+        if context_role_of(lookup, file, call, entities, symbol_names) != Some(ContextRole::Create)
         {
             continue;
         }
+        let Some(proven) = default_absent(lookup, file, call) else {
+            continue;
+        };
         for binding in &file.ast.bindings {
             // A `const` cannot be assigned. The name-based redeclaration check of
             // `binding_written` would also count a shadowing declaration, which
@@ -143,11 +149,98 @@ fn file_candidates(
             });
             found.push((
                 location(file.path.shared(), binding.pattern),
-                (name.to_owned(), exported),
+                (name.to_owned(), exported, proven),
             ));
         }
     }
     found
+}
+
+/// Whether `createContext`'s call leaves the context with no default
+/// (ADR 0575). rc.17 `getContext` reads `context.defaultValue` when no
+/// provider stored a value and throws `ContextNotFoundError` when it is
+/// `undefined`, so an `undefined` default is none.
+///
+/// `Some(true)`: no argument, or the global `undefined` (through assertions
+/// and parentheses). `None`: a value the syntax proves is not `undefined` (a
+/// literal, `null`, a function, object or array literal, or a `const`
+/// initialized with one). `Some(false)`: anything else, which may be
+/// `undefined` at runtime.
+fn default_absent(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<bool> {
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    let Some(default) = call.arguments.first() else {
+        return Some(true);
+    };
+    if default.spread {
+        return Some(false);
+    }
+    let value = |kind: RuntimeValueKind| {
+        matches!(
+            kind,
+            RuntimeValueKind::Primitive
+                | RuntimeValueKind::Function
+                | RuntimeValueKind::Object
+                | RuntimeValueKind::Array
+        )
+    };
+    let peeled = file.ast.peel_ts_sugar_span(default.span);
+    match default.value {
+        ArgumentValueKind::Undefined => return Some(true),
+        ArgumentValueKind::Null => return None,
+        _ => {}
+    }
+    if default.runtime_value_kind == RuntimeValueKind::Nullish {
+        // Only `null` and the global `undefined` are nullish literals.
+        return if file.source_text(peeled) == Some("null") {
+            None
+        } else {
+            Some(true)
+        };
+    }
+    if value(default.runtime_value_kind) {
+        return None;
+    }
+    if default.value == ArgumentValueKind::Identifier
+        && let Some((_, binding, _)) = lookup.binding_at_reference(file.path.as_str(), peeled)
+        && binding.immutable
+        && binding.shape == BindingShape::Identifier
+        && value(binding.initializer_value_kind)
+    {
+        return None;
+    }
+    Some(false)
+}
+
+/// Whether the JSX element provides `undefined` and nothing else: one `value`
+/// attribute, the global `undefined`, and no spread. rc.17's provider stores
+/// `context.defaultValue` for it, so for a context with no default it is no
+/// provider (ADR 0575).
+fn provides_undefined(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    if !element.spreads.is_empty() {
+        return false;
+    }
+    let mut values = element.attributes.iter().filter(|attribute| {
+        attribute.namespace.is_none() && file.source_text(attribute.name) == Some("value")
+    });
+    let (Some(value), None) = (values.next(), values.next()) else {
+        return false;
+    };
+    value.expression.is_some_and(|expression| {
+        let expression = file.ast.peel_ts_sugar_span(expression);
+        file.source_text(expression) == Some("undefined")
+            && file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == expression
+                    && identifier.role == IdentifierRole::Reference
+                    && file.ast.reference_declaration(expression).is_none()
+            })
+    })
 }
 
 /// What one file adds to the census of the candidates.
@@ -169,7 +262,7 @@ fn file_census(
     lookup: &SemanticLookup<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     entities: &EntitySymbols,
-    candidates: &HashMap<Location, (String, bool)>,
+    candidates: &HashMap<Location, (String, bool, bool)>,
     candidate_names: &HashSet<String>,
     file: &solid_facts::FileFacts,
 ) -> FileCensus {
@@ -198,7 +291,9 @@ fn file_census(
             tag_names.insert(closing);
             closing_names.insert(closing);
         }
-        if let Some(key) = context_key_at(lookup, file, element.name.span) {
+        if let Some(key) = context_key_at(lookup, file, element.name.span)
+            && !provides_undefined(file, element)
+        {
             census.provided.push(key);
         }
     }

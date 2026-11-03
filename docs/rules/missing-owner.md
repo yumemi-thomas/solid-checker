@@ -239,7 +239,9 @@ A cleanup registered in a leaf whose leaf is itself owned runs in that leaf, whi
 
 A primitive no execution reaches (after a `return`, in a class declared there,
 in an async child nothing renders or names) is uncertifiable (ADR 0458,
-`fixtures/reactive-ir/dead-code-sites`).
+`fixtures/reactive-ir/dead-code-sites`). A context read whose function also runs under an owner, where
+the context has no provider, is SC4002's violation and an obligation here
+(ADR 0577).
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

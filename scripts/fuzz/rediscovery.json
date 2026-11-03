@@ -1103,5 +1103,32 @@
   "found": "research report pending-fc 2026-11-03 (probes p1, p5-p7) and the carrier-provably-runs slice's probes",
   "fixed": "ADR 0563",
   "outside": "no grid generates an empty or unknown-length receiver yet: the layers handoff-foreach-empty (legal grid), handoff-foreach-var, handoff-timeout and handoff-void are proposed for the merge with claude/fuzz-pattern-coverage, which owns scripts/fuzz now; fixtures owner-carrier-provably-runs, async-carrier-provably-runs, leaf-carrier-provably-runs and async-carrier-call-attributed hold the shapes"
+ },
+ {
+  "finding": "CONTEXT_NOT_FOUND: useContext of a `createContext<number | undefined>(undefined)` context with no provider was a certified clean; rc.17 getContext treats an undefined default as none (ADR 0575)",
+  "found": "fuzz-pattern-coverage (2026-11-03): mx-recall `default-undefined`, 210 certified false cleans, 28/28 sampled confirmed in Chrome",
+  "fixed": "ADR 0575",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-default-undefined-direct-none",
+   "mx-context-not-found-jsx-default-undefined-direct-none",
+   "mx-context-not-found-root-default-undefined-direct-helper"
+  ],
+  "outside": "the generating shapes (the `default-undefined` variant) are claude/fuzz-pattern-coverage's; at the merge fold this entry into that branch's entry for the finding (set `fixed`, drop this `outside`) so its ids are checked against the grid",
+  "rediscovered": "pending (VM); locally the 210 regenerated programs (seed 1) are each SC4002 violations on the fix build"
+ },
+ {
+  "finding": "missing-owner reported a handler's NoOwnerError at a context read whose body run throws ContextNotFoundError first, before the button exists (wrong rule; ADR 0577)",
+  "found": "fuzz-pattern-coverage (2026-11-03): mx-recall `handler-mixed`, 30 wrong-rule programs, Chrome halts before the click",
+  "fixed": "ADR 0577",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-handler-mixed-x-direct-none",
+   "mx-context-not-found-handler-mixed-x-wrapper-helper"
+  ],
+  "outside": "the generating shapes (the `handler-mixed` CONTEXT_NOT_FOUND cell) are claude/fuzz-pattern-coverage's; at the merge fold this entry into that branch's entry for the finding (set `fixed`, drop this `outside`) so its ids are checked against the grid",
+  "rediscovered": "pending (VM); locally the 30 regenerated programs are SC4002 violations with an SC4001 obligation"
  }
 ]

@@ -1244,6 +1244,16 @@ pub struct OwnerRequirement {
     /// the read is an obligation, never a proven `ContextNotFoundError`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub provider_open: bool,
+    /// ADR 0575: a context read the provider census finds no provider for,
+    /// whose context has a default the syntax does not prove is not
+    /// `undefined`: the read is an obligation, never a proven throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub default_unproven: bool,
+    /// ADR 0577: a provider-free context read whose function also runs under
+    /// an owner, where it throws `ContextNotFoundError` (SC4002): an unowned
+    /// run is not proven to be reached past that throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub owned_run_throws: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.
