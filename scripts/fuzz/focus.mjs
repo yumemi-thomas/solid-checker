@@ -8,7 +8,7 @@
 //   node scripts/fuzz/focus.mjs --codes A,B --checker-bin <solid-checker-rust> --typefacts <solid-typefacts>
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
-//     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]]
+//     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]] [--recall-full]
 //     [--scratch <dir>] [--sample-big <fraction> [--sample-codes A,B] [--sample-big-seed N] [--sample-big-min K]] [--warm-checker]
 //     [--budget-ms 1000] [--budget-mb 500] [--idle-stretch-s 10] [--perf-against <earlier run dir> [--perf-threshold 0.2]]
 // `--split-codes`: one grid process per code (`<grid>/<code>/`), so a large grid (mx-recall, 277k programs) stays within a heap and a
@@ -73,7 +73,7 @@ export const GRIDS = {
   "lg-base": ["legal.mjs", ...MOUNTS],
   "lg-src": ["legal.mjs", ...SOURCES],
   "lg-combo": ["legal.mjs", "--combine", ...MOUNTS],
-  // The recall axes (matrix.mjs recallAxes): asked for by name (`--grids mx-recall,lg-recall`), never by default; their false cleans
+  // The recall axes (matrix.mjs recallAxes): asked for by name (`--grids mx-recall,lg-recall`), never by default, and lean unless `--recall-full` (matrix.mjs LEAN_DEMOTED); their false cleans
   // are the measured known misses, not regressions.
   "mx-recall": ["matrix.mjs", "--recall"],
   "lg-recall": ["legal.mjs", "--recall"],
@@ -214,7 +214,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     return {
       version: 1, out,
       codes: options.codes, seed: options.seed,
-      selection: { grids: options.grids, splitCodes: Boolean(options.splitCodes), smoke: Boolean(options.smoke), ...(options.smoke ? { sample: options.sample, sampleSeed: options.sampleSeed } : {}), sampleBig: options.sampleBig ?? null, ...(options.sampleBig ? { sampleCodes: options.sampleCodes ?? null, sampleBigSeed: options.sampleBigSeed ?? "1", sampleBigMin: options.sampleBigMin ?? "1" } : {}), oracle: options.runtimeDiff === "0" ? null : { perStratum: options.runtimeDiff, axes: options.oracleAxes }, extra: options.extra },
+      selection: { grids: options.grids, ...(!options.recallFull && options.grids.split(",").some((grid) => grid.endsWith("-recall")) ? { recall: "lean" } : {}), splitCodes: Boolean(options.splitCodes), smoke: Boolean(options.smoke), ...(options.smoke ? { sample: options.sample, sampleSeed: options.sampleSeed } : {}), sampleBig: options.sampleBig ?? null, ...(options.sampleBig ? { sampleCodes: options.sampleCodes ?? null, sampleBigSeed: options.sampleBigSeed ?? "1", sampleBigMin: options.sampleBigMin ?? "1" } : {}), oracle: options.runtimeDiff === "0" ? null : { perStratum: options.runtimeDiff, axes: options.oracleAxes }, extra: options.extra },
       mode: { warmChecker: Boolean(options.warmChecker), roleLog: Boolean(options.roleLog) },
       budget: { ms: Number(options.budgetMs ?? 1000), mb: Number(options.budgetMb ?? 500) },
       host: { cpus: cpus().length, memGiB: Math.round(totalmem() / 2 ** 30), platform: platform(), checkerBin: options.checkerBin ?? null },
@@ -240,7 +240,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-      if (key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
+      if (key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
       if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
@@ -305,6 +305,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       if (room) throw new FocusStop(`${unit.label}: not started, ${room} (prune cases/ with --prune-cases or free the disk)`);
       const started = Date.now();
       const select = [...(unit.codes ? ["--codes", unit.codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
+      // A recall grid is lean unless `--recall-full` (matrix.mjs LEAN_DEMOTED); the flag is the recall grids' only, the others take none.
+      const recallArgs = options.recallFull && shape.includes("--recall") ? ["--recall-full"] : [];
       const heap = options.heapMb ?? (grid.endsWith("-recall") ? "12000" : undefined);
       const logPath = `${unit.dir}.log`;
       // The role log: one file per grid that every checker process appends whole lines to (role_log.rs), folded once the grid's rows
@@ -315,7 +317,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
       const unitSampled = sampled.length && (!unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
-      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
+      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
       const read = readGrid(unit.dir);

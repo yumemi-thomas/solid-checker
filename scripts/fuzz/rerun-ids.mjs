@@ -13,23 +13,24 @@ import { fileURLToPath } from "node:url";
 import { GRIDS } from "./focus.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 
-/** The units of a grid directory: itself, or one per code with --split-codes; each with its rows and its grid's seed. */
+/** The units of a grid directory: itself, or one per code with --split-codes; each with its rows, its grid's seed and whether it was a lean recall grid (`recallLean`). */
 export function gridUnits(dir) {
   const units = existsSync(join(dir, "programs.jsonl")) ? [dir] : existsSync(dir) ? readdirSync(dir).map((name) => join(dir, name)).filter((path) => existsSync(join(path, "programs.jsonl"))) : [];
   return units.map((unit) => {
     const report = ["matrix.json", "legal.json"].map((name) => join(unit, name)).find(existsSync);
-    const seed = report ? JSON.parse(readFileSync(report, "utf8")).seed : undefined;
-    return { unit, seed, rows: readFileSync(join(unit, "programs.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) };
+    const recorded = report ? JSON.parse(readFileSync(report, "utf8")) : {};
+    const seed = recorded.seed;
+    return { unit, seed, recallLean: recorded.recallLean === true, rows: readFileSync(join(unit, "programs.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) };
   });
 }
 
 /** Per (grid, code): the ids of the rows with one of `outcomes`, their contexts, and the grid's seed. */
 export function selectRerun(run, { outcomes = ["harness"], grids = Object.keys(GRIDS) } = {}) {
   const out = [];
-  for (const grid of grids) for (const { seed, rows } of gridUnits(join(run, grid))) {
+  for (const grid of grids) for (const { seed, recallLean, rows } of gridUnits(join(run, grid))) {
     const byCode = new Map();
     for (const row of rows.filter((r) => outcomes.includes(r.outcome))) {
-      const entry = byCode.get(row.code) ?? { grid, code: row.code, seed, ids: [], contexts: new Set(), why: [] };
+      const entry = byCode.get(row.code) ?? { grid, code: row.code, seed, ...(grid.endsWith("-recall") && !recallLean ? { recallFull: true } : {}), ids: [], contexts: new Set(), why: [] };
       entry.ids.push(row.id); entry.contexts.add(row.context); entry.why.push(`${row.id}: ${row.outcome} ${JSON.stringify(row.detail ?? {}).slice(0, 160)}`);
       byCode.set(row.code, entry);
     }
@@ -38,11 +39,14 @@ export function selectRerun(run, { outcomes = ["harness"], grids = Object.keys(G
   return out.map((entry) => ({ ...entry, contexts: [...entry.contexts].sort() }));
 }
 
-/** The command that generates a manifest's programs from its grid and judges them, Chrome included. */
+/**
+ * The command that generates a manifest's programs from its grid and judges them, Chrome included. A recall grid whose report did not
+ * say it was lean (a run from before the lean default, or `--recall-full`) is rerun with `--recall-full`: its ids may name a demoted value.
+ */
 export function rerunCommand(entry, manifest, rerunOut, extra = []) {
   const [script, ...args] = GRIDS[entry.grid];
   return ["node", `scripts/fuzz/${script}`, "--grid", ...args, "--seed", String(entry.seed ?? 1), "--codes", entry.code, "--contexts", entry.contexts.join(","), "--ids", manifest,
-    "--out", join(rerunOut, `${entry.grid}-${entry.code}`), "--confirm-with-chrome", ...extra].join(" ");
+    ...(entry.recallFull ? ["--recall-full"] : []), "--out", join(rerunOut, `${entry.grid}-${entry.code}`), "--confirm-with-chrome", ...extra].join(" ");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

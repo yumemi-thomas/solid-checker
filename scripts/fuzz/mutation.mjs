@@ -17,7 +17,7 @@
 // A `static-miss` is a candidate, not a false clean: the misuse grid (matrix.mjs, with the runtime) says whether Solid reports the
 // code there. A shape whose misuse never fires is `not-fired` there, and its static-miss says nothing.
 //
-//   node scripts/fuzz/mutation.mjs --out <fresh dir> [--seed 1] [--codes A,B] [--recall] [--checker-bin <solid-checker-rust>]
+//   node scripts/fuzz/mutation.mjs --out <fresh dir> [--seed 1] [--codes A,B] [--recall [--recall-full]] [--checker-bin <solid-checker-rust>]
 //     [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--concurrency N] [--limit N]
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
@@ -84,7 +84,7 @@ export async function runMutation(options) {
   const concurrency = Number(options.concurrency ?? Math.max(1, Math.floor(cpus().length / 2)));
   const pairs = [];
   for (const cell of cellList({ codes: options.codes?.split(","), recall: options.recall })) {
-    const shapes = options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context);
+    const shapes = options.recall ? recallShapes(cell.code, cell.context, { lean: !options.recallFull }) : gridShapes(cell.code, cell.context);
     shapes.forEach((shape, index) => {
       const partner = legalPartner(cell.code, shape);
       if (partner) pairs.push({ cell, shape, index, legalContext: partner.context, legalShape: { ...shape, variant: partner.variant } });
@@ -127,7 +127,7 @@ export async function runMutation(options) {
   const byCell = {};
   for (const row of rows) { const key = `${row.code}/${row.context}`; byCell[key] ??= Object.fromEntries(MUTATION_OUTCOMES.map((outcome) => [outcome, 0])); byCell[key][row.outcome] += 1; }
   writeFileSync(join(out, "mutation.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
-  writeFileSync(join(out, "mutation.json"), `${JSON.stringify({ seed: options.seed, recall: Boolean(options.recall), summary, byCell }, null, 2)}\n`);
+  writeFileSync(join(out, "mutation.json"), `${JSON.stringify({ seed: options.seed, recall: Boolean(options.recall), recallLean: Boolean(options.recall) && !options.recallFull, summary, byCell }, null, 2)}\n`);
   console.log(JSON.stringify(summary));
   return { summary, rows };
 }
@@ -136,7 +136,7 @@ function parse(argv) {
   const options = { seed: "1" };
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (["recall", "keepWork"].includes(key)) { options[key] = true; continue; }
+    if (["recall", "recallLean", "recallFull", "keepWork"].includes(key)) { options[key] = true; continue; }
     if (!["out", "seed", "codes", "checkerBin", "typefacts", "tsc", "concurrency", "limit", "install"].includes(key) || argv[index + 1] === undefined) throw new Error(`mutation.mjs: unknown or empty option ${argv[index]}`);
     options[key] = argv[++index];
   }
