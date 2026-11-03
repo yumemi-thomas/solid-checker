@@ -2103,5 +2103,127 @@
    "mx-pending-async-forbidden-scope-tracked-x-wrapper-handoff-tagged-cb-shared"
   ],
   "rediscovered": "0f06bcd95: SC5003 uncertifiable only at the site; claude/fix-pair-wrapper: SC5001 violation at the site on all 8 (local debug checker, regenerated sources); VM focus pending"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): SC6002 (primitive-in-effect-callback), with an SC4001 obligation proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 12 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "lg-no-owner-effect-effect-apply-defer-effect-wrapper-none",
+   "lg-no-owner-effect-effect-apply-defer-effect-wrapper-helper",
+   "lg-no-owner-effect-effect-apply-defer-effect-wrapper-module-helper",
+   "lg-no-owner-effect-effect-apply-defer-render-wrapper-none",
+   "lg-no-owner-effect-effect-apply-defer-render-wrapper-helper",
+   "lg-no-owner-effect-effect-apply-defer-render-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): SC6002 (primitive-in-effect-callback) proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 18 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "lg-primitive-in-effect-callback-effect-apply-defer-memo-wrapper-none",
+   "lg-primitive-in-effect-callback-effect-apply-defer-memo-wrapper-helper",
+   "lg-primitive-in-effect-callback-effect-apply-defer-memo-wrapper-module-helper",
+   "lg-primitive-in-effect-callback-effect-apply-defer-root-wrapper-none",
+   "lg-primitive-in-effect-callback-effect-apply-defer-root-wrapper-helper",
+   "lg-primitive-in-effect-callback-effect-apply-defer-root-wrapper-module-helper",
+   "lg-primitive-in-effect-callback-effect-apply-defer-effect-wrapper-none",
+   "lg-primitive-in-effect-callback-effect-apply-defer-effect-wrapper-helper",
+   "lg-primitive-in-effect-callback-effect-apply-defer-effect-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): SC6002 (primitive-in-effect-callback) proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 18 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-memo-wrapper-none",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-memo-wrapper-helper",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-memo-wrapper-module-helper",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-root-wrapper-none",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-root-wrapper-helper",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-root-wrapper-module-helper",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-effect-wrapper-none",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-effect-wrapper-helper",
+   "lg-primitive-in-forbidden-scope-effect-apply-defer-effect-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): SC6002 and sync-computation-received-async proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 12 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "lg-sync-node-received-async-effect-apply-defer-memo-wrapper-none",
+   "lg-sync-node-received-async-effect-apply-defer-memo-wrapper-helper",
+   "lg-sync-node-received-async-effect-apply-defer-memo-wrapper-module-helper",
+   "lg-sync-node-received-async-effect-apply-defer-effect-wrapper-none",
+   "lg-sync-node-received-async-effect-apply-defer-effect-wrapper-helper",
+   "lg-sync-node-received-async-effect-apply-defer-effect-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): flush-in-effect-callback proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 6 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "lg-flush-in-action-effect-apply-defer-x-wrapper-none",
+   "lg-flush-in-action-effect-apply-defer-x-wrapper-helper",
+   "lg-flush-in-action-effect-apply-defer-x-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): flush-in-effect-callback proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 6 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "lg-flush-in-effect-callback-effect-apply-defer-x-wrapper-none",
+   "lg-flush-in-effect-callback-effect-apply-defer-x-wrapper-helper",
+   "lg-flush-in-effect-callback-effect-apply-defer-x-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): flush-in-effect-callback proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 6 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "lg-flush-in-tracked-queue-callback-effect-apply-defer-x-wrapper-none",
+   "lg-flush-in-tracked-queue-callback-effect-apply-defer-x-wrapper-helper",
+   "lg-flush-in-tracked-queue-callback-effect-apply-defer-x-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
+ },
+ {
+  "finding": "a violation in a function only a never-run `{ defer: true }` apply calls (binding `wrapper`): static-dynamic-async-source proved at the wrapper's site, which never runs (ADR 0458 class; ADR 0590)",
+  "found": "lg-recall verify-0f06bcd (claude/fuzz-audit-fixes 0f06bcd95), the `effect-apply-defer` context: 6 `unexecuted` programs, every `wrapper` layer (84 across eight codes); also on main 644bd1a81",
+  "fixed": "ADR 0590",
+  "grid": "lg-recall",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "lg-dynamic-static-promise-effect-apply-defer-x-wrapper-none",
+   "lg-dynamic-static-promise-effect-apply-defer-x-wrapper-helper",
+   "lg-dynamic-static-promise-effect-apply-defer-x-wrapper-module-helper"
+  ],
+  "rediscovered": "pending (VM); locally every regenerated `effect-apply-defer` program of the eight codes (seed 1, 462) is clean on the fix build, and the 84 `wrapper` programs report on main 644bd1a81"
  }
 ]
