@@ -1085,7 +1085,8 @@ function recallContext(context, stmts, kit) {
     }
     // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
     case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {
-      const h = kit.name("h");
+      // `hd`, not `h`: the same-file helpers are `hN` (generate.mjs ensureHelper), and a handler of that name would shadow one.
+      const h = kit.name("hd");
       const handler = decl(h, context === "handler-named-function" ? fn(stmts, { form: "function" }) : fn(stmts));
       return { body: context === "handler-mixed" ? [handler, expr(call(ref(h)))] : [handler], view: [namedButton(kit.name("b"), ref(h), { tuple: context === "handler-tuple" })] };
     }
