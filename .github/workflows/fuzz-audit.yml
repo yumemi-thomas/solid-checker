@@ -10,14 +10,17 @@ name: Fuzz audit
 #
 #   build   the release checker, the Type Facts producer and tsrs, once; the latest earlier audit of this branch (else main)
 #   shard   one runner per shard: every grid restricted to shard i of N, no oracle; its oracle candidates
-#   pick    the whole run's oracle sample (one --ids manifest per grid) from every shard's candidates
-#   oracle  one runner per grid: the differential (Chrome against the fast path) on that grid's sample
+#   pick    the whole run's oracle sample (one --ids manifest per grid) from every shard's candidates, and the oracle jobs
+#   oracle  one runner per grid and part: the differential (Chrome against the fast path) on that part of the grid's sample (the recall
+#           grids' samples are split, audit.mjs ORACLE_PARTS; Chrome takes about 2.3 s a program, mx-recall's 911 took 35 minutes)
 #   report  the verdict (fails when something needs a look) and the outcomes that moved from the earlier audit
 #
 # Each shard keeps its warm state between runs: the fuzzer's runtime and type-check caches (keyed by program bytes and the
 # tools, never the checker) and the npm installs and browser those keys hash by size and mtime (cache.mjs treeStat), in a pax tar
 # that keeps sub-second mtimes. The state is reused only under the same lockfiles and runner image; otherwise the shard installs
-# cold. Artifacts carry it, not actions/cache: the repository's 10 GB Actions cache belongs to CI.
+# cold. Artifacts carry it, not actions/cache: the repository's 10 GB Actions cache belongs to CI. Each oracle job keeps its own the
+# same way (warm-oracle-<grid>-<part>of<parts>): its Chrome and runtime records are keyed by program bytes and the judging sources, never
+# the checker (cache.mjs chromeEnvironmentKey), so a night whose generator, oracle and browser are unchanged replays them.
 
 on:
   schedule:
@@ -224,6 +227,8 @@ jobs:
     if: always() && needs.build.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    outputs:
+      jobs: ${{ steps.pick.outputs.jobs }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -233,7 +238,10 @@ jobs:
         with:
           pattern: shard-*
           path: ${{ runner.temp }}/shards
-      - run: node scripts/fuzz/audit.mjs pick --shards "$RUNNER_TEMP/shards" --out "$RUNNER_TEMP/manifests"
+      - id: pick
+        run: |
+          node scripts/fuzz/audit.mjs pick --shards "$RUNNER_TEMP/shards" --out "$RUNNER_TEMP/manifests"
+          echo "jobs=$(cat "$RUNNER_TEMP/manifests/jobs.json")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: oracle-manifests
@@ -245,12 +253,14 @@ jobs:
     if: always() && needs.pick.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 240
+    name: oracle (${{ matrix.grid }} ${{ matrix.part }}/${{ matrix.parts }})
     strategy:
       fail-fast: false
-      matrix:
-        grid: [mx-base, mx-src, mx-combo, lg-base, lg-src, lg-combo, mx-recall, lg-recall]
+      # One job per grid and part (audit.mjs oracleJobs): { include: [{ grid, part, parts }, ...] }.
+      matrix: ${{ fromJSON(needs.pick.outputs.jobs) }}
     env:
       SOLID_CHECKER_TSRS_BIN: ${{ github.workspace }}/../bins/tsrs
+      STATE: warm-oracle-${{ matrix.grid }}-${{ matrix.part }}of${{ matrix.parts }}-${{ needs.build.outputs.state-key }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -267,28 +277,61 @@ jobs:
         with:
           name: oracle-manifests
           path: ${{ runner.temp }}/manifests
+      - id: warm
+        if: needs.build.outputs.earlier != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.STATE }}
+          path: ${{ runner.temp }}/state
+          run-id: ${{ needs.build.outputs.earlier }}
+          github-token: ${{ github.token }}
       - name: Installs and Chrome
         run: |
           chmod +x "$GITHUB_WORKSPACE"/../bins/*
-          (cd scripts/fuzz/install && npm ci --silent)
-          (cd scripts/runtime-oracle-install && npm ci --silent)
-          (cd packages/cli && bun install --frozen-lockfile --silent)
-          (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
-      - name: Oracle ${{ matrix.grid }}
+          if [ -f "$RUNNER_TEMP/state/state.tar.zst" ]; then
+            tar --zstd -xf "$RUNNER_TEMP/state/state.tar.zst" -C /
+            rm -f "$RUNNER_TEMP/state/state.tar.zst"
+            echo "warm state restored from run ${{ needs.build.outputs.earlier }}"
+            (cd scripts/runtime-oracle-install && sudo env PATH=$PATH ./node_modules/.bin/playwright install-deps chromium-headless-shell >/dev/null)
+          else
+            echo "no warm state: installing cold"
+            (cd scripts/fuzz/install && npm ci --silent)
+            (cd scripts/runtime-oracle-install && npm ci --silent)
+            (cd packages/cli && bun install --frozen-lockfile --silent)
+            (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
+          fi
+      - name: Oracle ${{ matrix.grid }} part ${{ matrix.part }} of ${{ matrix.parts }}
         run: |
           bins="$GITHUB_WORKSPACE/../bins"
           status=0
-          node scripts/fuzz/audit.mjs oracle --grid "${{ matrix.grid }}" --manifest "$RUNNER_TEMP/manifests/${{ matrix.grid }}.json" \
-            --out "$RUNNER_TEMP/oracle/${{ matrix.grid }}" --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" || status=$?
+          node scripts/fuzz/audit.mjs oracle --grid "${{ matrix.grid }}" --part "${{ matrix.part }}/${{ matrix.parts }}" --manifest "$RUNNER_TEMP/manifests/${{ matrix.grid }}.json" \
+            --out "$RUNNER_TEMP/oracle/${{ matrix.grid }}" --checker-bin "$bins/solid-checker-rust" --typefacts "$bins/solid-typefacts" \
+            -- --cache-dir "$HOME/fuzz-cache" || status=$?
           echo "oracle exit $status (the report job judges the run)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: oracle-${{ matrix.grid }}
+          name: oracle-${{ matrix.grid }}-part${{ matrix.part }}
           path: |
             ${{ runner.temp }}/oracle/${{ matrix.grid }}/*.json
             ${{ runner.temp }}/oracle/${{ matrix.grid }}/*.jsonl
           retention-days: 30
+      - name: Pack the warm state
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/state"
+          tar --format=posix --zstd -cf "$RUNNER_TEMP/state/state.tar.zst" -C / \
+            "${HOME#/}/fuzz-cache" "${HOME#/}/.cache/ms-playwright" \
+            "${GITHUB_WORKSPACE#/}/scripts/fuzz/install/node_modules" "${GITHUB_WORKSPACE#/}/scripts/runtime-oracle-install/node_modules" "${GITHUB_WORKSPACE#/}/packages/cli/node_modules"
+          ls -lh "$RUNNER_TEMP/state/state.tar.zst"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ env.STATE }}
+          path: ${{ runner.temp }}/state/state.tar.zst
+          compression-level: 0
+          retention-days: 7
 
   report:
     needs: [build, shard, pick, oracle]
@@ -324,7 +367,12 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/oracle"
           [ -d "$RUNNER_TEMP/oracle-artifacts/oracle-manifests" ] && mv "$RUNNER_TEMP/oracle-artifacts/oracle-manifests" "$RUNNER_TEMP/oracle/manifests"
-          for d in "$RUNNER_TEMP"/oracle-artifacts/oracle-*; do [ -d "$d" ] && mv "$d" "$RUNNER_TEMP/oracle/$(basename "$d" | sed 's/^oracle-//')"; done
+          # oracle-<grid>-part<i> is oracle/<grid>/part-<i>/ (audit.mjs readOracle).
+          for d in "$RUNNER_TEMP"/oracle-artifacts/oracle-*-part*; do
+            [ -d "$d" ] || continue
+            name=$(basename "$d"); name=${name#oracle-}
+            mkdir -p "$RUNNER_TEMP/oracle/${name%-part*}" && mv "$d" "$RUNNER_TEMP/oracle/${name%-part*}/part-${name##*-part}"
+          done
           against=()
           [ -d "$RUNNER_TEMP/earlier/rows" ] && against=(--against "$RUNNER_TEMP/earlier/rows")
           status=0

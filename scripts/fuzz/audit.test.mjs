@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { AUDIT_GRIDS, ORACLE_AXES, ORACLE_PER_STRATUM, judge, markdown, parseArgs, pickOracle, readShards, recallModeOf } from "./audit.mjs";
+import { AUDIT_GRIDS, ORACLE_AXES, ORACLE_PARTS, ORACLE_PER_STRATUM, judge, markdown, oracleJobs, parseArgs, parsePart, partIds, pickOracle, readShards, recallModeOf } from "./audit.mjs";
 import { fnv } from "./rng.mjs";
 import { parseAxes, sampleStrata, stratumOf } from "./runtime-diff.mjs";
 import { shardOf } from "./shard.mjs";
@@ -31,8 +31,9 @@ describe("the audit's oracle sample", () => {
   });
 });
 
-// A run directory as the workflow lays it out: shards/<name>/<grid>/ and oracle/<grid>/, oracle/manifests/<grid>.json.
-function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, problem = false, recall = "full", mixed = false } = {}) {
+// A run directory as the workflow lays it out: shards/<name>/<grid>/ and oracle/<grid>/, oracle/manifests/<grid>.json. `parts` splits a
+// grid's oracle as the workflow does (its manifest records `parts`, its results are oracle/<grid>/part-<i>/); `dropPart` leaves one out.
+function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, problem = false, recall = "full", mixed = false, parts = {}, dropPart = null } = {}) {
   const root = mkdtempSync(join(tmpdir(), "fuzz-audit-"));
   const all = Object.fromEntries(AUDIT_GRIDS.map((grid) => [grid, Array.from({ length: 10 }, (_, i) => ({ id: `${grid}-${i}`, outcome: problem && grid === "mx-base" && i === 3 ? "false-clean" : "agree" }))]));
   for (let index = 0; index < count; index += 1) {
@@ -45,15 +46,19 @@ function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, 
       writeFileSync(join(dir, grid.startsWith("mx") ? "matrix.json" : "legal.json"), JSON.stringify({ gridShard: { index, count, kept: mine.length, of: 10 }, selected: mine.length, ...(grid.endsWith("-recall") && (recall === "lean") !== (mixed && index === 1) ? { recallLean: true } : {}) }));
     }
   }
+  mkdirSync(join(root, "oracle", "manifests"), { recursive: true });
   for (const grid of AUDIT_GRIDS) {
-    const dir = join(root, "oracle", grid);
-    mkdirSync(join(root, "oracle", "manifests"), { recursive: true });
-    mkdirSync(dir, { recursive: true });
-    const ids = [`${grid}-0`, `${grid}-1`];
-    writeFileSync(join(root, "oracle", "manifests", `${grid}.json`), JSON.stringify({ grid, ids }));
-    writeFileSync(join(dir, "runtime-diff.jsonl"), ids.map((id) => JSON.stringify({ id, diffs: [] })).join("\n") + "\n");
-    writeFileSync(join(dir, "runtime-diff.json"), JSON.stringify({ summary: { compared: 2, behaviour: behaviour ? 1 : 0, inconclusive: 0 }, differing: behaviour && grid === "lg-src" ? [{ id: ids[0], diffs: [{ kind: "moved", detail: "x" }] }] : [] }));
-    writeFileSync(join(dir, "programs.jsonl"), ids.map((id) => JSON.stringify({ id, outcome: oracleOutcome && grid === "mx-recall" ? oracleOutcome : "agree" })).join("\n") + "\n");
+    const all = [`${grid}-0`, `${grid}-1`, ...(parts[grid] ? [`${grid}-2`, `${grid}-3`] : [])];
+    writeFileSync(join(root, "oracle", "manifests", `${grid}.json`), JSON.stringify({ grid, ids: all, ...(parts[grid] ? { parts: parts[grid] } : {}) }));
+    const slices = parts[grid] ? Array.from({ length: parts[grid] }, (_, part) => [join(root, "oracle", grid, `part-${part}`), partIds(all, part, parts[grid])]) : [[join(root, "oracle", grid), all]];
+    slices.forEach(([dir, ids], part) => {
+      if (dropPart && dropPart.grid === grid && dropPart.part === part) return;
+      mkdirSync(dir, { recursive: true });
+      const moved = behaviour && grid === "lg-src" && ids.includes(`${grid}-0`) ? [{ id: `${grid}-0`, diffs: [{ kind: "moved", detail: "x" }] }] : [];
+      writeFileSync(join(dir, "runtime-diff.jsonl"), ids.map((id) => JSON.stringify({ id, diffs: [] })).join("\n") + "\n");
+      writeFileSync(join(dir, "runtime-diff.json"), JSON.stringify({ summary: { compared: ids.length, behaviour: moved.length, inconclusive: 0, byKind: moved.length ? { moved: 1 } : {}, perStratum: "all" }, differing: moved }));
+      writeFileSync(join(dir, "programs.jsonl"), ids.map((id) => JSON.stringify({ id, outcome: oracleOutcome && grid === "mx-recall" ? oracleOutcome : "agree" })).join("\n") + "\n");
+    });
   }
   return root;
 }
@@ -72,6 +77,15 @@ describe("the workflow's lean and full audits", () => {
     expect(workflow).toContain("name: audit-report-${{ needs.build.outputs.recall }}");
     expect(workflow).toContain("name: ${{ needs.build.outputs.earlier-rows-name }}");
     expect(workflow).toContain('elif [ "$RECALL" = full ] && has "$id" audit-report;');
+  });
+  it("runs the oracle in pick's jobs, each part on its own warm cache, and files each part where report reads it", () => {
+    expect(workflow).toContain("matrix: ${{ fromJSON(needs.pick.outputs.jobs) }}");
+    expect(workflow).toContain('echo "jobs=$(cat "$RUNNER_TEMP/manifests/jobs.json")" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain('--part "${{ matrix.part }}/${{ matrix.parts }}"');
+    expect(workflow).toMatch(/--part[^\n]*\n[^\n]*\n\s+-- --cache-dir "\$HOME\/fuzz-cache"/);
+    expect(workflow).toContain("STATE: warm-oracle-${{ matrix.grid }}-${{ matrix.part }}of${{ matrix.parts }}-${{ needs.build.outputs.state-key }}");
+    expect(workflow).toContain("name: oracle-${{ matrix.grid }}-part${{ matrix.part }}");
+    expect(workflow).toContain('mv "$d" "$RUNNER_TEMP/oracle/${name%-part*}/part-${name##*-part}"');
   });
 });
 
@@ -149,6 +163,36 @@ describe("the audit's verdict", () => {
     }
   });
 
+  it("puts a split grid's oracle parts together, and needs a look at a part with no result", () => {
+    const split = run({ parts: { "mx-recall": 2, "lg-src": 3 }, behaviour: true, oracleOutcome: "recall-gap" });
+    const result = judge({ shards: join(split, "shards"), oracle: join(split, "oracle") });
+    expect(result.grids["mx-recall"].oracle).toMatchObject({ compared: 4, programs: 4, behaviour: 0, inconclusive: 0, perStratum: "all" });
+    expect(result.grids["lg-src"].oracle).toMatchObject({ compared: 4, programs: 4, behaviour: 1, byKind: { moved: 1 } });
+    // Every part's rows are read: the differing program of lg-src's part 0, and the outcomes of both mx-recall parts (ids 0 to 3).
+    expect(result.attention).toEqual([
+      expect.stringMatching(/^lg-src: oracle differs lg-src-0 moved/),
+      ...[0, 2, 1, 3].map((i) => `mx-recall: mx-recall-${i} is agree in its shard, recall-gap in the oracle grid`),
+    ]);
+    const gap = run({ parts: { "mx-recall": 2 }, dropPart: { grid: "mx-recall", part: 1 } });
+    expect(judge({ shards: join(gap, "shards"), oracle: join(gap, "oracle") }).attention).toEqual(["mx-recall: no oracle result for part 1/2 (2 programs)", "mx-recall: 2 oracle programs not compared (mx-recall-1, mx-recall-3)"]);
+  });
+
+  it("splits a manifest's ids into parts that take each id once and keep the rank order's spread", () => {
+    const ids = Array.from({ length: 911 }, (_, i) => `p${i}`);
+    for (const parts of [1, 2, 4]) {
+      const slices = Array.from({ length: parts }, (_, part) => partIds(ids, part, parts));
+      expect(slices.flat().sort()).toEqual([...ids].sort());
+      expect(Math.max(...slices.map((s) => s.length)) - Math.min(...slices.map((s) => s.length))).toBeLessThanOrEqual(1);
+    }
+    expect(partIds(ids, 1, 4).slice(0, 3)).toEqual(["p1", "p5", "p9"]);
+    // The workflow's matrix: every grid, the recall grids in their parts.
+    expect(ORACLE_PARTS).toEqual({ "mx-recall": 4, "lg-recall": 2 });
+    const jobs = oracleJobs().include;
+    expect(jobs.length).toBe(AUDIT_GRIDS.length - 2 + 4 + 2);
+    expect(jobs.filter((job) => job.grid === "mx-recall")).toEqual([0, 1, 2, 3].map((part) => ({ grid: "mx-recall", part, parts: 4 })));
+    expect(jobs.find((job) => job.grid === "mx-base")).toEqual({ grid: "mx-base", part: 0, parts: 1 });
+  });
+
   it("reads its phases' arguments", () => {
     expect(parseArgs(["shard", "--shard", "0/4", "--recall", "full", "--out", "o", "--checker-bin", "c", "--typefacts", "t"]).options.recall).toBe("full");
     expect(() => parseArgs(["shard", "--shard", "0/4", "--recall", "half", "--out", "o", "--checker-bin", "c", "--typefacts", "t"])).toThrow(/--recall is lean or full/);
@@ -156,5 +200,10 @@ describe("the audit's verdict", () => {
     expect(() => parseArgs(["pick", "--shards", "s"])).toThrow(/--out is required/);
     expect(() => parseArgs(["oracle", "--grid", "nope", "--manifest", "m", "--out", "o", "--checker-bin", "c", "--typefacts", "t"])).toThrow(/no grid nope/);
     expect(() => parseArgs(["dance"])).toThrow(/shard\|pick\|oracle\|report/);
+    const oracle = ["oracle", "--grid", "mx-recall", "--manifest", "m", "--out", "o", "--checker-bin", "c", "--typefacts", "t"];
+    expect(parseArgs([...oracle, "--part", "3/4"]).options.part).toBe("3/4");
+    for (const bad of ["4/4", "1", "-1/2", "a/b", "0/0"]) expect(() => parseArgs([...oracle, "--part", bad])).toThrow(/--part is i\/N/);
+    expect(parsePart(undefined)).toEqual({ part: 0, parts: 1 });
+    expect(parsePart("1/2")).toEqual({ part: 1, parts: 2 });
   });
 });
