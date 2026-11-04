@@ -323,7 +323,8 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/static_api.rs": {
-    "facts.files": 1
+    "facts.files": 1,
+    "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
     "facts.files": 1,

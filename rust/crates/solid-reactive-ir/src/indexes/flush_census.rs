@@ -207,6 +207,24 @@ impl<'a> SemanticLookup<'a> {
             .is_some_and(|origin| !origin.mixed)
     }
 
+    /// ADR 0639: the `flush()` at `call` runs where no delivery reaches it: a
+    /// timer, past an await, module scope, a test runner's callback or helper.
+    pub(crate) fn flush_runs_off_any_delivery(
+        &self,
+        file: &'a solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        matches!(
+            self.dispatch_caller(file, call),
+            Some(
+                DispatchCaller::FreshStack
+                    | DispatchCaller::AwaitContinuation
+                    | DispatchCaller::ModuleInitialization
+                    | DispatchCaller::TestRunner
+            )
+        ) || crate::execution_role::dispatch_in_test_only_function(file, call.span, self)
+    }
+
     /// The owner-free caller of a flush call: the dispatch census's positional
     /// classes, then a function every invocation of which is an event
     /// delivery (only while no synchronous dispatch can deliver it under an

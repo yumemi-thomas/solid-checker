@@ -76,16 +76,6 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/clean-ref-untrack.tsx",
-      "start": 340,
-      "end": 370,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/clean-store-draft.tsx",
       "start": 480,
       "end": 490,

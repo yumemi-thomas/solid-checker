@@ -371,9 +371,16 @@ impl StaticApiContext<'_> {
                         && violation.location == location(file.path.shared(), call.callee)
                 })
             {
-                // A function a listener or a handler holds, not the body itself.
-                if crate::owners::containing_ast_function(&file.ast, call.callee)
-                    .is_some_and(|function| !self.lookup.function_may_be_component(file, function))
+                // A function a listener or a handler may hold: not a body, and
+                // not code no delivery runs (a timer, past an await, a test).
+                let delivered = self
+                    .lookup
+                    .file_by_path(file.path.as_str())
+                    .is_none_or(|file| !self.lookup.flush_runs_off_any_delivery(file, call));
+                if delivered
+                    && crate::owners::containing_ast_function(&file.ast, call.callee).is_some_and(
+                        |function| !self.lookup.function_may_be_component(file, function),
+                    )
                 {
                     result.violations.push(StaticViolation {
                         id: "SC2008".into(),

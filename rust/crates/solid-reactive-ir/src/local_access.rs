@@ -3015,7 +3015,7 @@ impl LocalAccessContext<'_, '_> {
                 self.push_optimistic_write(file, call, name, declaration, result);
                 continue;
             }
-            if !self.value_reaches(file, call.callee, 4, &|symbol| {
+            if !self.callee_reaches(file, call.callee, &|symbol| {
                 self.optimistic_async_setter(symbol.as_str())
             }) {
                 continue;
@@ -3035,6 +3035,79 @@ impl LocalAccessContext<'_, '_> {
                 uncertain: true,
             });
         }
+    }
+
+    /// What the callee `value` runs may hit: the slot of a hook's closed result
+    /// it takes, not all the hook's text, and no argument of a call in the chain
+    /// (`expect(a).toBe` runs nothing of `a`).
+    fn callee_reaches(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: solid_facts::core::Span,
+        hit: &dyn Fn(&SymbolId) -> bool,
+    ) -> bool {
+        let ast = &file.ast;
+        let mut head = ast.peel_ts_sugar_span(value);
+        let mut key = None;
+        loop {
+            if let Some(member) = ast.member_at(head) {
+                key = (!ast.computed_members.contains(&member.span))
+                    .then(|| file.source_text(member.property))
+                    .flatten();
+                head = ast.peel_ts_sugar_span(member.object);
+            } else if let Some(call) = ast.call_at(head) {
+                key = None;
+                head = ast.peel_ts_sugar_span(call.callee);
+            } else {
+                break;
+            }
+        }
+        let declared = ast.reference_declaration(head);
+        let holder = declared.and_then(|declared| {
+            ast.bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declared))
+        });
+        let slot = holder.and_then(|holder| match holder.shape {
+            solid_facts::ast::BindingShape::Object => holder
+                .object_slots
+                .iter()
+                .find(|slot| Some(slot.local.span) == declared && slot.plain_identifier_key)
+                .map(|slot| slot.property.as_ref()),
+            _ => key,
+        });
+        if let Some(slot) = slot
+            && let Some(call) = holder
+                .and_then(|holder| holder.call_initializer)
+                .and_then(|initializer| ast.call_at(initializer))
+            && let Some((hook_file, hook, _)) =
+                crate::execution_role::project_callee_at_parameter(file, call, 0, self.lookup)
+        {
+            let values = hook_file
+                .ast
+                .returns
+                .iter()
+                .filter(|returned| {
+                    containing_ast_function(&hook_file.ast, returned.span)
+                        .is_some_and(|function| function.span == hook.span)
+                })
+                .map(|returned| {
+                    returned.argument.and_then(|argument| {
+                        crate::execution_role::closed_literal_slot_value(
+                            hook_file,
+                            hook_file.ast.peel_ts_sugar_span(argument),
+                            slot,
+                        )
+                    })
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(values) = values.filter(|values| !values.is_empty()) {
+                return values
+                    .into_iter()
+                    .any(|value| self.value_reaches(hook_file, value, 4, hit));
+            }
+        }
+        self.value_reaches(file, head, 4, hit)
     }
 
     /// ADR 0636: a write to an optimistic setter of an async source.
@@ -3177,7 +3250,16 @@ impl LocalAccessContext<'_, '_> {
                 if source.is_some_and(|(symbol, _)| self.caught_read_silent(symbol))
                     || (source.is_none()
                         && crate::execution_role::hook_result_root(file, call.callee, self.lookup)
-                            .is_none()
+                            .is_none_or(|hook| {
+                                crate::execution_role::project_callee_at_parameter(
+                                    file,
+                                    hook,
+                                    0,
+                                    self.lookup,
+                                )
+                                .is_none()
+                                    || !self.span_may_make_computation(file, hook.span, 4)
+                            })
                         && !self.value_reaches_async_source(file, call.callee, 4))
                 {
                     continue;
@@ -4054,6 +4136,14 @@ impl LocalAccessContext<'_, '_> {
         let Some(returned) = untrack_returned_value(file, call) else {
             return Some(EscapedValue::Unknown);
         };
+        // A prop every call site fills with no source holds no proxy.
+        if let Some((declaration, property)) = self.exact_props_callee(file, returned)
+            && self
+                .props_reactivity
+                .holds_no_proxy(&declaration, &property)
+        {
+            return Some(EscapedValue::Plain);
+        }
         if self.lookup.proven_primitive(file, returned, 8)
             || self.lookup.primitive_at_call(file, returned)
                 == Some(solid_dialect::Primitive::Snapshot)
@@ -4369,6 +4459,14 @@ impl LocalAccessContext<'_, '_> {
                 {
                     return false;
                 }
+                if crate::indexes::standard_library_declaration_of(
+                    self.lookup.resolved_callee_call(file, call.callee),
+                    typefacts::CallKind::Call,
+                )
+                .is_some()
+                {
+                    return false;
+                }
                 crate::execution_role::project_callee_at_parameter(file, call, 0, self.lookup)
                     .is_none_or(|(callee_file, callee, _)| {
                         self.span_may_make_computation(callee_file, callee.span, depth)
@@ -4549,10 +4647,15 @@ impl LocalAccessContext<'_, '_> {
                 }
                 binding.is_some_and(|binding| match binding.initializer {
                     Some(initializer) => self.value_reaches(file, initializer, depth, hit),
-                    // A `let` with no initializer may hold anything the program has.
+                    // A `let` with no initializer holds what is assigned to it.
                     None => {
                         !binding.immutable
-                            && (self.setters.keys().any(hit) || self.accessors.keys().any(hit))
+                            && ast.assignments.iter().any(|assignment| {
+                                ast.identifiers.iter().any(|name| {
+                                    assignment.target.contains(name.span)
+                                        && ast.reference_declaration(name.span) == Some(declaration)
+                                }) && self.value_reaches(file, assignment.value_span, depth, hit)
+                            })
                     }
                 })
             })

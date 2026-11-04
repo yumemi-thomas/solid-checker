@@ -85,11 +85,35 @@ pub(crate) enum PropsReactivity {
 /// keeps every call of the prop an obligation.
 pub(crate) type PassedSources = BTreeMap<String, PassedSource>;
 
+/// A closed object literal whose own values are functions or primitives.
+fn closed_plain_literal(file: &solid_facts::FileFacts, expression: Span) -> bool {
+    use solid_facts::ast::RuntimeValueKind;
+    let ast = &file.ast;
+    let literal = ast.peel_ts_sugar_span(expression);
+    ast.object_get_shapes
+        .iter()
+        .any(|shape| shape.span == literal && shape.closed)
+        && ast
+            .object_properties
+            .iter()
+            .filter(|property| literal.contains(property.span))
+            .all(|property| {
+                matches!(
+                    property.value_kind,
+                    RuntimeValueKind::Function
+                        | RuntimeValueKind::Primitive
+                        | RuntimeValueKind::Nullish
+                )
+            })
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct PassedSource {
     pub(crate) sources: BTreeSet<SymbolId>,
     /// Some visible site passes a value that is not an exact source.
     pub(crate) other: bool,
+    /// Some visible site passes a value that may hold a store proxy.
+    pub(crate) may_hold_proxy: bool,
     /// Some visible site passes a getter that calls an async source
     /// (`a={data()}`): reading the prop reads it, pending or not.
     pub(crate) async_getter: bool,
@@ -202,6 +226,17 @@ impl PropsReactivityIndex {
                 false,
             ),
             None => (Vec::new(), false),
+        }
+    }
+
+    /// ADR 0629: every visible call site passes `name` a value that holds no
+    /// store proxy: nothing, or a plain literal.
+    pub(crate) fn holds_no_proxy(&self, declaration: &Location, name: &str) -> bool {
+        match self.by_declaration.get(declaration) {
+            Some(PropsReactivity::Enumerated { passed, .. }) if self.caller_proof => passed
+                .get(name)
+                .is_none_or(|passed| passed.sources.is_empty() && !passed.may_hold_proxy),
+            _ => false,
         }
     }
 
@@ -798,7 +833,12 @@ pub(super) fn classify_one_component(
                         .function_at(use_file.ast.peel_ts_sugar_span(expression))
                         .is_some()
                 }) => {}
-                None => entry.other = true,
+                None => {
+                    entry.other = true;
+                    entry.may_hold_proxy |= !attribute
+                        .expression
+                        .is_some_and(|expression| closed_plain_literal(use_file, expression));
+                }
             }
             if attribute.namespace.is_none()
                 && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
