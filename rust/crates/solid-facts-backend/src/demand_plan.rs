@@ -330,7 +330,7 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
             {
                 add_symbol(expression, false);
             }
-            // ADR 0621: a component's `on` is judged by its resolved type:
+            // ADR 0624: a component's `on` is judged by its resolved type:
             // `loading-on-accessor` asks whether `<Loading on>` got a function.
             if name == "on" && !native && attribute.namespace.is_none() {
                 let runtime_expression = file.ast.peel_ts_sugar_span(expression);
@@ -672,7 +672,7 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
-    // ADR 0626: a value `untrack` returns is a store proxy only if it may be an
+    // ADR 0629: a value `untrack` returns is a store proxy only if it may be an
     // object, so a member of a primitive one reads nothing.
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {

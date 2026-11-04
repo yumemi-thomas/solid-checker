@@ -11,5 +11,5 @@ handler or an effect's apply. rc.21 warns `ON_FLUSH_IN_OWNED_SCOPE` when it runs
 under an owner that is no leaf (`onFlush`, `@solidjs/signals@2.0.0-rc.21`
 `dist/dev.js`). The call is placed by the owned-scope write role: a component body,
 a compute and a root body are reported, and an effect's apply, `onSettled`,
-`createTrackedEffect` and a handler are not (ADR 0622). A call no role places is
+`createTrackedEffect` and a handler are not (ADR 0625). A call no role places is
 uncertifiable. The callback itself runs from a microtask with no owner.

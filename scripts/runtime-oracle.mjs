@@ -7,7 +7,7 @@
 //
 //   node scripts/runtime-oracle.mjs --cases fixtures/runtime-oracle --out <fresh.json>
 //     [--only id,...] [--install <directory with solid-js 2.x node_modules>]
-//     [--browser <chromium>] [--concurrency <n>] [--cache <directory>|off]
+//     [--browser <chromium>] [--concurrency <n>] [--cache <directory>|off] [--session batch|per-case]
 //   env: SOLID_CHECKER_NATIVE_BIN, SOLID_TYPEFACTS_BIN
 //
 // A case is a directory holding an `App.tsx` and its other source files. Every
@@ -84,6 +84,10 @@ const options = {
   // --execution-cache`): a checker change that leaves a case's development
   // models alone reruns only its analysis. `off` runs every browser half.
   cache: join(repo, "rust/target/runtime-oracle-cache"),
+  // `batch`: each worker is one `feedback batch` process that runs its cases in turn, sharing the tooling, the
+  // Chromium process (a fresh context per case) and the browser's pin; a process that retires (a failed case,
+  // ...: feedback-browser.mjs `openBrowserFeedbackBatch`) is replaced. `per-case`: one `feedback run` per case.
+  session: "batch",
   out: null,
 };
 const argv = process.argv.slice(2);
@@ -94,6 +98,7 @@ for (let index = 0; index < argv.length; index += 2) {
 }
 assert(options.out, "--out <fresh.json> is required");
 assert(Number.isInteger(Number(options.concurrency)) && Number(options.concurrency) > 0, "positive integer --concurrency required");
+assert(["batch", "per-case"].includes(options.session), "--session takes batch or per-case");
 const output = resolve(options.out);
 assert(!existsSync(output), "use a fresh output path");
 assert(process.env.SOLID_CHECKER_NATIVE_BIN && process.env.SOLID_TYPEFACTS_BIN, "set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN");
@@ -326,16 +331,94 @@ function sourceFiles(directory, base = directory) {
   return files;
 }
 
+// A case's limit, in either session mode.
+const caseLimitMs = 180000;
 function run(command, args, cwd) {
   return new Promise((done) => {
     const child = spawn(command, args, { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), 180000);
+    const timer = setTimeout(() => child.kill("SIGKILL"), caseLimitMs);
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     child.on("close", (status) => { clearTimeout(timer); done({ status, stdout, stderr }); });
   });
+}
+
+const cli = join(repo, "packages/cli/bin/solid-checker.mjs");
+const sharedArgs = () => ["--browser", browser, "--tooling", tooling, "--native-bin", process.env.SOLID_CHECKER_NATIVE_BIN,
+  // The application's own stacks: the development source instrumentation wraps each analysed call in a `withOperation` arrow,
+  // frames no application has, which move an uncaught error's mapped site (an outer frame of a `for` row's CONTEXT_NOT_FOUND).
+  // The oracle reads none of its output (scope counts, read lineage).
+  "--source-instrumentation", "off",
+  ...(options.cache === "off" ? [] : ["--execution-cache", resolve(options.cache)])];
+
+// One `feedback batch` process (`--session batch`): `send` runs a case in it and resolves to the report's text, or to a
+// failure (`{ error }`) when the process died, timed out (killed, as `run` kills a `feedback run`) or answered nothing.
+// A process that retires, dies or times out is not reused; the next case starts another. Each answered case passed the
+// browser's file-stamp check; `close` ends the process, which hashes the browser once more, and resolves to whether it
+// closed cleanly. A process that refused its close vouches for none of its cases (`invalidated`); one that died
+// mid-case never reached the check, and its answered cases keep their per-case check.
+function batchProcess() {
+  const child = spawn(NODE, [cli, "feedback", "batch", ...sharedArgs()], { env: process.env, stdio: ["pipe", "pipe", "pipe"] });
+  let stdout = "", stderr = "", waiting = null, exited = null, closed = false;
+  const settle = () => {
+    if (!waiting) return;
+    const newline = stdout.indexOf("\n");
+    if (newline >= 0) {
+      const line = stdout.slice(0, newline);
+      stdout = stdout.slice(newline + 1);
+      const take = waiting; waiting = null;
+      take.done({ line });
+    } else if (exited) {
+      const take = waiting; waiting = null;
+      take.done({ exit: exited });
+    }
+  };
+  child.stdout.on("data", (chunk) => { stdout += chunk; settle(); });
+  child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-16384); });
+  const exit = new Promise((done) => child.on("close", (status, signal) => { exited = { status, signal }; settle(); done(exited); }));
+  child.stdin.on("error", () => {});
+  const next = (limitMs) => new Promise((done) => {
+    const timer = limitMs ? setTimeout(() => { child.kill("SIGKILL"); }, limitMs) : null;
+    waiting = { done: (value) => { if (timer) clearTimeout(timer); done(value); } };
+    settle();
+  });
+  const failure = (what) => ({ error: `${what}; the batch process exited ${JSON.stringify(exited)}: ${stderr.slice(-1500)}` });
+  return {
+    ran: [], usable: true,
+    alive: () => !exited,
+    async send(job) {
+      // The case's own stderr only.
+      stderr = "";
+      child.stdin.write(`${JSON.stringify(job)}\n`);
+      const answer = await next(caseLimitMs);
+      if (!answer.line) { this.usable = false; await exit; return failure("no answer for the case"); }
+      let row = null;
+      try { row = JSON.parse(answer.line); } catch { /* below */ }
+      // Anything but this case's answer (a stray line on stdout) leaves the protocol unaligned: the process is ended.
+      if (row?.report !== job.report) {
+        this.usable = false;
+        child.kill("SIGKILL");
+        await exit;
+        return failure(`the batch process answered ${JSON.stringify(answer.line.slice(0, 200))} for the case`);
+      }
+      if (row.retire) { this.usable = false; this.retired = row.retire; }
+      return { report: readFileSync(job.report, "utf8") };
+    },
+    async close() {
+      if (closed) return this.clean;
+      closed = true;
+      const dead = Boolean(exited) && !this.retired;
+      child.stdin.end();
+      const answer = await next(60000);
+      await exit;
+      const closing = (() => { try { return JSON.parse(answer.line ?? "null"); } catch { return null; } })();
+      this.clean = dead || (closing?.closed === true && exited.status === 0);
+      if (!this.clean) this.closeError = failure("the batch process did not close cleanly").error;
+      return this.clean;
+    },
+  };
 }
 
 const behaviourKinds = ["text", "window", "identity", "thrown", "reflected"];
@@ -577,7 +660,7 @@ function parseProbes(text) {
   }
 }
 
-async function runCase(id) {
+async function runCase(id, slot) {
   const source = join(resolve(options.cases), id);
   const specPath = join(source, "oracle.json");
   const spec = existsSync(specPath) ? JSON.parse(readFileSync(specPath, "utf8")) : {};
@@ -614,19 +697,26 @@ async function runCase(id) {
     writeFileSync(join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   }
   const started = Date.now();
-  const result = await run(NODE, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",
-    "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"),
-    "--browser", browser, "--tooling", tooling, "--native-bin", process.env.SOLID_CHECKER_NATIVE_BIN,
-    // The application's own stacks: the development source instrumentation wraps each analysed call in a `withOperation` arrow,
-    // frames no application has, which move an uncaught error's mapped site (an outer frame of a `for` row's CONTEXT_NOT_FOUND).
-    // The oracle reads none of its output (scope counts, read lineage).
-    "--source-instrumentation", "off",
-    ...(options.cache === "off" ? [] : ["--execution-cache", resolve(options.cache)])], dir);
-  const wallMs = Date.now() - started;
-  let report = null;
-  try { report = JSON.parse(result.stdout.slice(result.stdout.indexOf("{"))); } catch { /* recorded below */ }
-  if (report) writeFileSync(join(dir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
-  if (!report) return { id, verdict: "harness-error", error: (result.stderr || result.stdout).slice(-1500), wallMs };
+  let report = null, wallMs, failed;
+  if (slot) {
+    // A process that exited after its last answer is closed with the others; this case starts another.
+    if (slot.process?.usable && !slot.process.alive()) { slot.process.usable = false; slot.retired.push(slot.process); }
+    if (!slot.process?.usable) slot.process = batchProcess();
+    const batch = slot.process;
+    batch.ran.push(id);
+    // The case's own working directory, as its `feedback run` had.
+    const answer = await batch.send({ project: join(dir, "tsconfig.json"), scenario: join(dir, "scenario.json"), report: join(dir, "report.json"), cwd: dir });
+    wallMs = Date.now() - started;
+    if (!batch.usable) slot.retired.push(batch);
+    try { report = JSON.parse(answer.report); } catch { failed = answer.error ?? "the batch process wrote no report"; }
+  } else {
+    const result = await run(NODE, [cli, "feedback", "run",
+      "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"), ...sharedArgs()], dir);
+    wallMs = Date.now() - started;
+    try { report = JSON.parse(result.stdout.slice(result.stdout.indexOf("{"))); } catch { failed = (result.stderr || result.stdout).slice(-1500); }
+    if (report) writeFileSync(join(dir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  }
+  if (!report) return { id, verdict: "harness-error", error: failed, wallMs };
   if (!report.analysis || !report.execution) return {
     id, verdict: report.typingErrorCount ? "type-error" : "harness-error",
     error: report.failure?.message ?? "feedback report has no analysis or execution", wallMs,
@@ -774,18 +864,32 @@ const ids = readdirSync(resolve(options.cases))
   .sort();
 const results = [];
 let next = 0;
+const slots = [];
 async function worker() {
+  const slot = options.session === "batch" ? { process: null, retired: [] } : null;
+  if (slot) slots.push(slot);
   while (next < ids.length) {
     const id = ids[next++];
     // A case that cannot run (a refused spec, an unreadable case) fails that case alone, with its reason.
-    const result = await runCase(id).catch((error) => ({
+    const result = await runCase(id, slot).catch((error) => ({
       id, verdict: "harness-error", error: error instanceof Error ? error.message : String(error), wallMs: 0,
     }));
     results.push(result);
     process.stderr.write(`${results.length}/${ids.length} ${result.id}: ${result.verdict}\n`);
   }
+  if (slot?.process?.usable) slot.retired.push(slot.process);
 }
 await Promise.all(Array.from({ length: Number(options.concurrency) }, worker));
+// A batch process checks the browser's pin when it closes: one that did not close cleanly vouches for none of its cases.
+const batches = slots.flatMap((slot) => slot.retired);
+for (const [index, clean] of (await Promise.all(batches.map((batch) => batch.close()))).entries()) {
+  if (clean) continue;
+  const batch = batches[index];
+  for (const id of batch.ran) {
+    const at = results.findIndex((row) => row.id === id);
+    results[at] = { id, verdict: "harness-error", error: batch.closeError, wallMs: results[at].wallMs, invalidated: true };
+  }
+}
 results.sort((left, right) => left.id.localeCompare(right.id));
 const tally = results.reduce((counts, row) => ({ ...counts, [row.verdict]: (counts[row.verdict] ?? 0) + 1 }), {});
 const executionCache = results.reduce((counts, row) => (row.executionCache ? { ...counts, [row.executionCache]: (counts[row.executionCache] ?? 0) + 1 } : counts), {});

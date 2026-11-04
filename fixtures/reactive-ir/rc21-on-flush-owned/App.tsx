@@ -2,7 +2,7 @@ import { createEffect, createMemo, createRoot, createTrackedEffect, onFlush, onS
 
 const done = () => {};
 
-// Under a children-capable owner: rc.21 warns ON_FLUSH_IN_OWNED_SCOPE (ADR 0622).
+// Under a children-capable owner: rc.21 warns ON_FLUSH_IN_OWNED_SCOPE (ADR 0625).
 export function Owned() {
   onFlush(done);
   const memo = createMemo(() => {

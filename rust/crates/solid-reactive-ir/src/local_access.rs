@@ -1181,7 +1181,7 @@ impl LocalAccessContext<'_, '_> {
         self.view_hides_key(file, source.span, key, depth + 1)
     }
 
-    /// ADR 0627: where a Get of `key` on the `merge` view `expression` lands.
+    /// ADR 0630: where a Get of `key` on the `merge` view `expression` lands.
     /// rc.21's `merge` walks its sources last to first, one `in` each
     /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js`), and a last source that
     /// covers the union is returned as it is, so a key an object literal holds
@@ -2065,7 +2065,7 @@ impl LocalAccessContext<'_, '_> {
         {
             self.push_call_attributed_async_reads(file, call, symbol, allowed, result);
         }
-        // ADR 0625: a function a hand-off runs, written inside an `untrack` in a
+        // ADR 0628: a function a hand-off runs, written inside an `untrack` in a
         // strict window: the read may meet the pending throw there, or run later.
         if self.async_sources.contains(symbol)
             && !alias_withheld
@@ -2855,7 +2855,7 @@ impl LocalAccessContext<'_, '_> {
                 .source_primitives
                 .get(symbol)
                 .and_then(|primitive| self.lookup.dialect.primitive(primitive));
-            // ADR 0633: on rc.21 an optimistic setter of an async source throws
+            // ADR 0636: on rc.21 an optimistic setter of an async source throws
             // `OPTIMISTIC_WRITE_BEFORE_LOAD` before its first answer, ahead of
             // any owned-scope guard: SC2009, not SC2001. Where a write meets
             // the first answer is proven in the pass that creates the source,
@@ -2920,7 +2920,7 @@ impl LocalAccessContext<'_, '_> {
     /// The action invocation a call of the action whose row is `symbol`'s
     /// makes ([`Self::push_setter_write`]).
     #[allow(clippy::too_many_arguments)]
-    /// ADR 0633: `symbol` is, or aliases, the setter of an optimistic creation
+    /// ADR 0636: `symbol` is, or aliases, the setter of an optimistic creation
     /// that may not have answered. An alias holds the creation's declaration.
     fn optimistic_async_setter(&self, symbol: &str) -> bool {
         let optimistic = |symbol: &str| {
@@ -2944,7 +2944,7 @@ impl LocalAccessContext<'_, '_> {
             })
     }
 
-    /// ADR 0633: a call nothing placed that may run such a setter (a binding
+    /// ADR 0636: a call nothing placed that may run such a setter (a binding
     /// no alias resolves, a function that writes it, a hand-off the walk does
     /// not reach): an obligation, in any role, since a click may land first.
     fn discover_optimistic_reach(
@@ -2991,7 +2991,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0633: a write to an optimistic setter of an async source.
+    /// ADR 0636: a write to an optimistic setter of an async source.
     fn push_optimistic_write(
         &self,
         file: &solid_facts::FileFacts,
@@ -3064,7 +3064,7 @@ impl LocalAccessContext<'_, '_> {
                 .is_some_and(|compute| compute.r#async)
     }
 
-    /// ADR 0634: a reactive read in a `try` with a `catch`, in a computation. rc.21
+    /// ADR 0637: a reactive read in a `try` with a `catch`, in a computation. rc.21
     /// reports `CAUGHT_REACTIVE_READ` when the read's throw lands in the pass and
     /// the body completes. Proven for an async source the same body created,
     /// with a literal async compute, read first in the block and never rethrown:
@@ -3597,7 +3597,7 @@ impl LocalAccessContext<'_, '_> {
                 {
                     continue;
                 }
-                // ADR 0629, as for a direct read: the call reads the served value.
+                // ADR 0632, as for a direct read: the call reads the served value.
                 if options.declared_loading
                     && crate::execution_role::served_in_creating_pass(
                         file,
@@ -3651,7 +3651,7 @@ impl LocalAccessContext<'_, '_> {
                     CARRIED_LEAF_DEPTH,
                 );
                 let run_unproven = run_unproven || leaf_carrier_unproven;
-                // ADR 0625: a call in an exact `untrack` reads as the read
+                // ADR 0628: a call in an exact `untrack` reads as the read
                 // under it does.
                 let under_untrack = self.untrack_pending_role(
                     file,
@@ -3850,7 +3850,7 @@ impl LocalAccessContext<'_, '_> {
     /// (`ctx.data()`, ADR 0509) has its read row from the interprocedural
     /// summaries, and only this half here.
     #[allow(clippy::too_many_arguments)]
-    /// ADR 0626: what the value `span` names holds, where its head (`o` in
+    /// ADR 0629: what the value `span` names holds, where its head (`o` in
     /// `o.a.b`, or the call in `untrack(() => s.o).a`) is the result of an
     /// exact `untrack`, or of a project function returning one. `untrack`
     /// scopes the wrapped read only: a store proxy it hands back warns on the
@@ -3991,7 +3991,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0626: the Get at `span` of a value escaped from `untrack`: the
+    /// ADR 0629: the Get at `span` of a value escaped from `untrack`: the
     /// read of a proxy where the store's shape proves one, an obligation where
     /// nothing says what the value holds, and nothing on a plain value.
     /// Answers whether the value escaped, so the caller stops.
@@ -4051,7 +4051,7 @@ impl LocalAccessContext<'_, '_> {
         true
     }
 
-    /// ADR 0626: a whole-value use (a spread, `JSON.stringify(o)`) at `site`
+    /// ADR 0629: a whole-value use (a spread, `JSON.stringify(o)`) at `site`
     /// of an escaped value named exactly at `value`: its shape is not the
     /// store's, so it is an obligation at most.
     fn discover_escaped_whole(
@@ -4081,7 +4081,7 @@ impl LocalAccessContext<'_, '_> {
     }
 
     /// The role of a read of an async source under an exact `untrack`
-    /// (ADR 0625): it throws there as a direct read does, or no proof places
+    /// (ADR 0628): it throws there as a direct read does, or no proof places
     /// its source and it is an obligation.
     fn untrack_pending_role(
         &self,
@@ -4123,7 +4123,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0625: the value `value` a body reads under `untrack` is the result
+    /// ADR 0628: the value `value` a body reads under `untrack` is the result
     /// of a hook, and nothing resolves what it holds: a pending memo the hook
     /// created throws there. The obligation yields to a transport that does.
     fn push_untrack_hook_value_obligation(
@@ -4171,7 +4171,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0625: what `value` names may hold an async source or a function
+    /// ADR 0628: what `value` names may hold an async source or a function
     /// reading one: an identifier in it is one, or a `let` nothing states, or
     /// a binding or function whose text names one, through `depth` steps.
     /// Over-approximates: it only ever makes an obligation of a clean.
@@ -4268,7 +4268,7 @@ impl LocalAccessContext<'_, '_> {
             })
     }
 
-    /// ADR 0625: `untrack(m)` reads `m` where the call runs, and an async
+    /// ADR 0628: `untrack(m)` reads `m` where the call runs, and an async
     /// source a value names there is read as `untrack(() => m())` reads it.
     fn discover_untrack_reference(
         &self,
@@ -4312,7 +4312,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0625: a value handed to a project function that reads the
+    /// ADR 0628: a value handed to a project function that reads the
     /// parameter under `untrack`, in a body's strict-read window: an async
     /// source the body created, or a hook's unresolved result, may throw.
     fn discover_handed_to_untrack(
@@ -4384,7 +4384,7 @@ impl LocalAccessContext<'_, '_> {
         let timing_at = placed_at.unwrap_or(call.callee);
         let async_provenance = self.async_sources.contains(symbol);
         let async_options = self.effective_async_options(symbol);
-        // ADR 0629: the pass that creates a declared source reads the served
+        // ADR 0632: the pass that creates a declared source reads the served
         // value: no pending throw to report, and the strict read stands.
         if async_options.declared_loading
             && crate::execution_role::served_in_creating_pass(
@@ -4402,7 +4402,7 @@ impl LocalAccessContext<'_, '_> {
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
             let async_execution = async_execution_role(file, call.callee, execution);
-            // ADR 0620: tracked, in a computation's own callback: it suspends.
+            // ADR 0623: tracked, in a computation's own callback: it suspends.
             let computation_read = async_execution == ExecutionRole::TrackedJsx
                 && crate::execution_role::computation_read_suspends(
                     file,
@@ -4424,7 +4424,7 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
-            // ADR 0616, ADR 0625: rc.21 keeps the pending throw through an
+            // ADR 0619, ADR 0628: rc.21 keeps the pending throw through an
             // unlabelled `untrack` for a source the strict body itself created.
             let async_execution = if async_provenance {
                 self.untrack_pending_role(
@@ -4552,7 +4552,7 @@ impl LocalAccessContext<'_, '_> {
         if !prop_head && read_as_part_of_longer_path(file, member) {
             return;
         }
-        // ADR 0626: the head of the path is a value `untrack` returned. A write
+        // ADR 0629: the head of the path is a value `untrack` returned. A write
         // through it is dropped wherever it runs if it holds a store.
         if file.ast.is_no_get_target(member.span) {
             if matches!(
@@ -4576,7 +4576,7 @@ impl LocalAccessContext<'_, '_> {
         } else if self.discover_escaped_get(file, member.span, allowed, result) {
             return;
         }
-        // ADR 0625: a member of a hook's unresolved result in a body's
+        // ADR 0628: a member of a hook's unresolved result in a body's
         // `untrack`: a pending store the hook made throws there.
         if self
             .entities
@@ -4794,7 +4794,7 @@ impl LocalAccessContext<'_, '_> {
         let mut uncertain = self.uncertain_prop_sources.contains(symbol)
             || self.lookup.inside_possible_component(file, member.span);
         uncertain |= self.store_may_be_raw(symbol);
-        // ADR 0627: a key a `merge` view serves from a plain source.
+        // ADR 0630: a key a `merge` view serves from a plain source.
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
             match self.merge_view_get(file, member.object, property) {
                 MergeGet::Plain => return,
@@ -5013,7 +5013,7 @@ impl LocalAccessContext<'_, '_> {
     ) {
         let member_async = self.async_sources.contains(symbol);
         let member_options = self.effective_async_options(symbol);
-        // ADR 0630: `isPending(() => p.a)` and `latest(() => p.a)` are probes:
+        // ADR 0633: `isPending(() => p.a)` and `latest(() => p.a)` are probes:
         // the strict read warns and no pending throw fires.
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
             && (member_async
@@ -5035,7 +5035,7 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
-            // ADR 0629, as for an accessor.
+            // ADR 0632, as for an accessor.
             if member_options.declared_loading
                 && crate::execution_role::served_in_creating_pass(
                     file,
@@ -5046,7 +5046,7 @@ impl LocalAccessContext<'_, '_> {
             {
                 return;
             }
-            // ADR 0616, as for an accessor: a derive the strict body created.
+            // ADR 0619, as for an accessor: a derive the strict body created.
             let async_execution = if member_async {
                 self.untrack_pending_role(file, member, None, declaration, async_execution)
             } else {
@@ -5126,7 +5126,7 @@ impl LocalAccessContext<'_, '_> {
             } else {
                 None
             };
-            // ADR 0626: a spread of a value escaped from `untrack`.
+            // ADR 0629: a spread of a value escaped from `untrack`.
             if inline_root.is_none()
                 && !argument.is_some_and(|symbol| {
                     self.prop_sources.contains_key(symbol) || self.accessors.contains_key(symbol)
@@ -5138,7 +5138,7 @@ impl LocalAccessContext<'_, '_> {
             let Some(symbol) = inline_root.as_ref().or(argument) else {
                 continue;
             };
-            // ADR 0618: an object spread of a store reads the keys it holds, and
+            // ADR 0621: an object spread of a store reads the keys it holds, and
             // an array or call spread reads `length`: the store's own shape
             // proves either, and nothing else does. `{...s}` on `{}` is silent.
             if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -5354,7 +5354,7 @@ impl LocalAccessContext<'_, '_> {
             .map(|argument| file.ast.peel_ts_sugar_span(argument.span))
     }
 
-    /// ADR 0631: the source's value may be raw, so a Get reads no proxy.
+    /// ADR 0634: the source's value may be raw, so a Get reads no proxy.
     fn store_may_be_raw(&self, symbol: &SymbolId) -> bool {
         self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
             && self.accessors.get(symbol).is_some_and(|(_, declaration)| {
@@ -5376,7 +5376,7 @@ impl LocalAccessContext<'_, '_> {
             })
     }
 
-    /// ADR 0627: `value` is a `merge` view, whose keys and shape are its
+    /// ADR 0630: `value` is a `merge` view, whose keys and shape are its
     /// sources', and which may be its last source itself.
     fn names_merge_view(
         &self,
@@ -5424,7 +5424,7 @@ impl LocalAccessContext<'_, '_> {
             self.symbol_names,
             self.lookup,
         );
-        // ADR 0632: every trap of an uninitialized derive throws, so a read of
+        // ADR 0635: every trap of an uninitialized derive throws, so a read of
         // the whole store is the pending read.
         if self.async_sources.contains(symbol)
             && !self.effective_async_options(symbol).declared_loading
@@ -5496,8 +5496,8 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0632: `Object.keys(s)`, `k in s`, `for…in`, `hasOwn` and their kin
-    /// read no key, so a settled store is silent (ADR 0618); an uninitialized
+    /// ADR 0635: `Object.keys(s)`, `k in s`, `for…in`, `hasOwn` and their kin
+    /// read no key, so a settled store is silent (ADR 0621); an uninitialized
     /// derive's every trap holds its first answer, so they read pending.
     fn discover_key_probes(
         &self,
@@ -5560,7 +5560,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0630: `latest(m)` and `isPending(m)` call `m` in their own frame, a
+    /// ADR 0633: `latest(m)` and `isPending(m)` call `m` in their own frame, a
     /// read like `latest(() => m())`, with no literal for a role to place.
     fn discover_named_probes(
         &self,
@@ -5648,7 +5648,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
-    /// ADR 0617, 0618: the reads of a whole store no member or spread fact
+    /// ADR 0620, 0621: the reads of a whole store no member or spread fact
     /// states, as rc.21 measures them in a strict-read window. `deep`, `JSON`'s
     /// `toJSON` probe, `Reflect.get` and `Array.from` read a key on any store;
     /// an iteration reads `length`, so it needs an array; `Object.values`,
@@ -5662,7 +5662,7 @@ impl LocalAccessContext<'_, '_> {
     ) {
         self.discover_key_probes(file, allowed, result);
         self.discover_named_probes(file, allowed, result);
-        // ADR 0626: `const { x } = untrack(() => s.o)` reads at the pattern, and
+        // ADR 0629: `const { x } = untrack(() => s.o)` reads at the pattern, and
         // a value `untrack` returned handed to a function is read there.
         for binding in &file.ast.bindings {
             if matches!(
@@ -7588,7 +7588,7 @@ fn handed_role(
     }
 }
 
-/// ADR 0627: where a Get on a store-rooted value lands if it is a `merge` view.
+/// ADR 0630: where a Get on a store-rooted value lands if it is a `merge` view.
 enum MergeGet {
     /// Not a `merge` view.
     NoView,
@@ -7599,7 +7599,7 @@ enum MergeGet {
     Unproven,
 }
 
-/// ADR 0634: a `catch` around the read swallows the throw that would report it,
+/// ADR 0637: a `catch` around the read swallows the throw that would report it,
 /// so no read there is proven pending at the boundary or in a body.
 fn caught_in_try(file: &solid_facts::FileFacts, read: solid_facts::core::Span) -> bool {
     file.ast
@@ -7608,7 +7608,7 @@ fn caught_in_try(file: &solid_facts::FileFacts, read: solid_facts::core::Span) -
         .any(|caught| caught.block.contains(read))
 }
 
-/// ADR 0626: what a value escaped from `untrack` holds.
+/// ADR 0629: what a value escaped from `untrack` holds.
 enum EscapedValue {
     /// A store proxy of this store, proven (or not, with `false`) to be one.
     Store(SymbolId, bool),

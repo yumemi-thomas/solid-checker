@@ -51,7 +51,7 @@ pub(crate) struct AsyncSourceOptions {
 }
 
 /// [`async_source_options`], with a compute that may answer synchronously
-/// (ADR 0628) read as opaque options are: nothing it projects is proven.
+/// (ADR 0631) read as opaque options are: nothing it projects is proven.
 pub(crate) fn first_answer_options(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,

@@ -77,7 +77,7 @@ pub(crate) enum Section {
     /// A reflective write through a `prototype` (ADR 0292).
     ReflectivePrototypeWrite,
     /// Whether a value may be raw-marked: a `markRaw`, or a shallow store
-    /// that marks what enters it (ADR 0631).
+    /// that marks what enters it (ADR 0634).
     RawStoreValues,
     /// The route component values (ADR 0334), whose router configurations
     /// may sit in another file than the value (ADR 0408).

@@ -802,7 +802,7 @@ pub(super) fn hook_source_pending(
                 .any(|site| render_runs_first(lookup, site.entry, site.render))))
 }
 
-/// ADR 0625: the binding declared at `declared` is the value of a creation or
+/// ADR 0628: the binding declared at `declared` is the value of a creation or
 /// of a hook returning a fresh source, run where the binding is. A value
 /// `createRoot(() => createMemo(...))` hands back belongs to the root's owner.
 pub(super) fn binding_creates_here(
@@ -824,7 +824,7 @@ pub(super) fn binding_creates_here(
         })
 }
 
-/// ADR 0625: the head of `value` (`m`, `h.m`, `h.a.b`) is a `const` holding the
+/// ADR 0628: the head of `value` (`m`, `h.m`, `h.a.b`) is a `const` holding the
 /// result of a call no primitive states, directly or through what its
 /// initializer names (`const a = h.m`, `const [, a] = [0, m]`): a hook whose
 /// body may have created the value under the same owner.
@@ -866,7 +866,7 @@ fn hook_result_within<'f>(
         .find_map(|identifier| hook_result_within(file, identifier.span, lookup, depth))
 }
 
-/// ADR 0625: the project function `call` runs reads its parameter `index` under
+/// ADR 0628: the project function `call` runs reads its parameter `index` under
 /// an exact `untrack` written in its own body: `untrack(f)`, or
 /// `untrack(() => f())`. The summaries see nothing there: an `untrack`
 /// callback reads silently unless the caller's window keeps the pending throw.
@@ -908,7 +908,7 @@ pub(crate) fn callee_reads_parameter_under_untrack(
     })
 }
 
-/// ADR 0625: the read `read` (a call's callee or a member, `h.m` or `h.s.a`, or a
+/// ADR 0628: the read `read` (a call's callee or a member, `h.m` or `h.s.a`, or a
 /// slot of `const { m } = useM()`) is of the source declared at `declared` in
 /// `hook_file`, through a call of the function declaring it written directly
 /// in one of `layers`, which all run under one owner, and the source's own

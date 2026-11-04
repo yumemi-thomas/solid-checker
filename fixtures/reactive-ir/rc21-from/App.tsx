@@ -1,7 +1,7 @@
 import { createMemo, createSignal, from } from "solid-js";
 
 // The subscribe function runs in the memo's pass: a read tracks, and no strict
-// window holds it (ADR 0619).
+// window holds it (ADR 0622).
 export function Reads() {
   const [rate] = createSignal(1);
   const ticks = createMemo(() =>

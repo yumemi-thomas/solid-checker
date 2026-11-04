@@ -1,6 +1,6 @@
 import { createMemo, createSignal, Loading } from "solid-js";
 
-// `on` is the dependency's value: a function is never called (ADR 0621).
+// `on` is the dependency's value: a function is never called (ADR 0624).
 export function Accessors() {
   const [route] = createSignal(0);
   const page = createMemo(() => route() + 1);

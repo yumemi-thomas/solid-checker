@@ -10,7 +10,7 @@ if (process.argv[2] === "feedback") {
     console.error(`solid-checker: ${error instanceof Error ? error.message : error}`);
     process.exitCode = 2;
   } finally {
-    if (process.argv[3] === "run") {
+    if (["run", "batch"].includes(process.argv[3])) {
       // Configs can leave timers even when startup or collection fails.
       // Drain both published JSON and diagnostics before ending this CLI.
       try {

@@ -670,7 +670,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.static_defects,
     );
     let mut program = draft.into_program(factory_instances);
-    // ADR 0517: a `<Loading on>` whose hold is not proven its own; ADR 0621: one
+    // ADR 0517: a `<Loading on>` whose hold is not proven its own; ADR 0624: one
     // handed a function.
     let holds =
         crate::loading_hold::loading_on_outside_hold_obligations(facts, &program, semantic_lookup);

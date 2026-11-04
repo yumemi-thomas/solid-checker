@@ -1185,7 +1185,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             {
                 finding.kind = "uncertifiable".into();
             }
-            // ADR 0629: a declared value is served through the first flight,
+            // ADR 0632: a declared value is served through the first flight,
             // so a read past the creating pass throws, or warns in a leaf, only
             // on a re-ask nothing here proves.
             if read.declared_loading && finding.id == "SC5001" {

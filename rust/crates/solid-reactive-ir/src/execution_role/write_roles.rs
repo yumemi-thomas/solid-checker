@@ -4262,7 +4262,7 @@ fn climb_in_place_layers_recording(
     (climb.at != span).then_some(climb)
 }
 
-/// ADR 0625: the call that runs `function` in place, one layer of
+/// ADR 0628: the call that runs `function` in place, one layer of
 /// [`climb_in_place_layers`].
 pub(crate) fn in_place_layer_call(
     file: &solid_facts::FileFacts,

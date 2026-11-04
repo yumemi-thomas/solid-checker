@@ -2559,20 +2559,20 @@
   "rediscovered": "locally (2026-11-04): `legal.mjs --recall --contexts settled-handler,settled-flush-root`, 1,284 programs: main's release build 332 false positives, the fix none (1,238 uncertifiable, 46 clean)"
  },
  {
-  "finding": "rc.21: `untrack(() => m())` of a pending source the strict body created throws PENDING_ASYNC_UNTRACKED_READ; the checker certified it (ADR 0616)",
+  "finding": "rc.21: `untrack(() => m())` of a pending source the strict body created throws PENDING_ASYNC_UNTRACKED_READ; the checker certified it (ADR 0619)",
   "found": "mx-census on rc.21, the first run of the upgrade (2026-11-04), and probes p2/p4 independently",
-  "fixed": "ADR 0616",
+  "fixed": "ADR 0619",
   "grid": "mx-base",
   "code": "PENDING_ASYNC_UNTRACKED_READ",
   "ids": [
    "mx-pending-async-untracked-read-untrack-x-direct-none"
   ],
-  "rediscovered": "the rc.21 build before ADR 0616: certified false clean; the fix: agree"
+  "rediscovered": "the rc.21 build before ADR 0619: certified false clean; the fix: agree"
  },
  {
-  "finding": "reads of a whole store: `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Object.values/entries/assign(s)`, `Array.from(s)`, a template substitution, `for…of` and array spreads warn STRICT_READ_UNTRACKED; the checker certified them (ADRs 0617, 0618)",
+  "finding": "reads of a whole store: `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Object.values/entries/assign(s)`, `Array.from(s)`, a template substitution, `for…of` and array spreads warn STRICT_READ_UNTRACKED; the checker certified them (ADRs 0620, 0621)",
   "found": "rules-mining CS-R15, RS-R37, measured on rc.21 (probes p1, p4, p5)",
-  "fixed": "ADRs 0617, 0618",
+  "fixed": "ADRs 0620, 0621",
   "grid": "mx-recall",
   "code": "STRICT_READ_UNTRACKED",
   "ids": [
@@ -2589,21 +2589,21 @@
   "rediscovered": "the build before these ADRs: mx-recall 894+ false cleans on these variants; with them: agree or recall-gap"
  },
  {
-  "finding": "`{...s}` of an empty store was a proven SC1001; rc.21 reads no key there and warns nothing (ADR 0618)",
+  "finding": "`{...s}` of an empty store was a proven SC1001; rc.21 reads no key there and warns nothing (ADR 0621)",
   "found": "probe p5, then the checker on the same shape",
-  "fixed": "ADR 0618",
+  "fixed": "ADR 0621",
   "grid": "lg-recall",
   "code": "STRICT_READ_UNTRACKED",
   "ids": [
    "lg-strict-read-untracked-body-store-empty-spread-direct-none",
    "lg-strict-read-untracked-body-store-empty-values-direct-none"
   ],
-  "rediscovered": "the build before ADR 0618: a false positive on `store-empty-spread`; with it: uncertifiable"
+  "rediscovered": "the build before ADR 0621: a false positive on `store-empty-spread`; with it: uncertifiable"
  },
  {
-  "finding": "rc.21 `ON_FLUSH_IN_OWNED_SCOPE` had no rule (ADR 0622)",
+  "finding": "rc.21 `ON_FLUSH_IN_OWNED_SCOPE` had no rule (ADR 0625)",
   "found": "rc.21 diagnostics.json against rc.17",
-  "fixed": "ADR 0622",
+  "fixed": "ADR 0625",
   "grid": "mx-recall",
   "code": "ON_FLUSH_IN_OWNED_SCOPE",
   "ids": [
@@ -2613,9 +2613,9 @@
   "rediscovered": "the build before SC3002: 51 false cleans in mx-census; with it: 0"
  },
  {
-  "finding": "rc.21 `LOADING_ON_ACCESSOR` had no rule (ADR 0621)",
+  "finding": "rc.21 `LOADING_ON_ACCESSOR` had no rule (ADR 0624)",
   "found": "rc.21 diagnostics.json against rc.17",
-  "fixed": "ADR 0621",
+  "fixed": "ADR 0624",
   "grid": "mx-recall",
   "code": "LOADING_ON_ACCESSOR",
   "ids": [

@@ -814,19 +814,12 @@ async function sweep(options, config, out) {
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them; on a grid, picked by id before generation.
   const ids = options.ids && options.grid ? idFilter(options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
   let planned = 0;
-  const censusUnplaced = [];
   if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => {
     if (!layerKept(shape)) return;
     planned += 1;
     if (early && shardOf(shapeId(cell, shape), early.count) !== early.index) return;
     if (ids && !ids.keep(shapeId(cell, shape))) return;
-    // A census pair a template cannot place (an async variant in a context with no compute to hand it, say): no program, counted below.
-    try {
-      entries.push({ cell, ...generateShape(options, cell, shape, index) });
-    } catch (error) {
-      if (!options.census) throw error;
-      censusUnplaced.push(`${cell.code}/${cell.context}: ${String(error.message).slice(0, 80)}`);
-    }
+    entries.push({ cell, ...generateShape(options, cell, shape, index) });
   });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   if (ids) ids.check(entries);
@@ -845,7 +838,6 @@ async function sweep(options, config, out) {
   // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
   const selected = entries.length;
   profile.add("generate", performance.now() - phaseStart);
-  if (censusUnplaced.length) console.error(`matrix: census: ${censusUnplaced.length} shapes no template places (first: ${censusUnplaced[0]})`);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   // The rows judged so far, chunk by chunk (partial.mjs): what a grid process that dies before programs.jsonl leaves for focus.mjs.

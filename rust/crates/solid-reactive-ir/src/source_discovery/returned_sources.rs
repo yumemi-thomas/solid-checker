@@ -145,7 +145,7 @@ pub(super) fn proxied_target(
     (file.ast.peel_ts_sugar_span(construct.arguments[0].span) == target).then_some(target)
 }
 
-/// ADR 0625: the primitive of `created`, a call a project function returns as it
+/// ADR 0628: the primitive of `created`, a call a project function returns as it
 /// is, when that call's value is one fresh accessor or store: a creation whose
 /// result is a tuple is no single source.
 fn directly_returned_creation(
@@ -200,7 +200,7 @@ pub(super) fn returned_source_through<'a>(
     {
         return None;
     }
-    // ADR 0625: an arrow whose body is the creation (`() => createMemo(...)`).
+    // ADR 0628: an arrow whose body is the creation (`() => createMemo(...)`).
     if function.expression_body {
         let value = file.ast.peel_ts_sugar_span(function.body);
         let created = file.ast.call_at(value)?;
@@ -235,7 +235,7 @@ pub(super) fn returned_source_through<'a>(
             proxy_targets.push(target);
             continue;
         }
-        // ADR 0625: `return createMemo(...)`: this call's own fresh source, as
+        // ADR 0628: `return createMemo(...)`: this call's own fresh source, as
         // `const m = createMemo(...); return m;` is.
         if let Some(created) = file.ast.call_at(value)
             && let Some(primitive) =

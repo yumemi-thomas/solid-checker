@@ -147,7 +147,7 @@ impl SemanticLookup<'_> {
         })
     }
 
-    /// ADR 0631: some analyzed file names `markRaw` or writes a `shallow`
+    /// ADR 0634: some analyzed file names `markRaw` or writes a `shallow`
     /// option. A record that entered a shallow store is raw for every later
     /// store (`createStore(rec)` returns it as it is), so a store over a value
     /// no literal states may then be no proxy.
@@ -167,7 +167,7 @@ impl SemanticLookup<'_> {
         })
     }
 
-    /// ADR 0631: the store the binding `binding` holds, created in `file`,
+    /// ADR 0634: the store the binding `binding` holds, created in `file`,
     /// may be its raw value: its value is `markRaw(...)`, or names a value no
     /// literal or derive function states and some file may mark one raw.
     pub(crate) fn store_value_may_be_raw(
@@ -212,7 +212,7 @@ impl SemanticLookup<'_> {
         self.raw_store_values_present()
     }
 
-    /// ADR 0631: [`Self::store_value_may_be_raw`] of the store declared at
+    /// ADR 0634: [`Self::store_value_may_be_raw`] of the store declared at
     /// `declaration`, for a read any layer reports.
     pub(crate) fn store_declared_may_be_raw(&self, declaration: &crate::Location) -> bool {
         self.file_by_path(declaration.path.as_ref())

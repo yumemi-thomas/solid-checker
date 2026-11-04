@@ -8,9 +8,57 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request supersedes its older run. Main's runs are each
+# their own group: every one writes the caches its commit's readers restore.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
-  rust-engine:
+  # A push to main whose tree a pull request's CI already passed on (ADR 0621):
+  # its merge ref had this exact tree, so the gates would rerun on the same
+  # bytes. Then the jobs below only build, which is what writes main's caches;
+  # the tests, the gates and the cache-less jobs are skipped. Anything this
+  # cannot show (no record, an expired one, a run from a fork, a run that did
+  # not pass, an API error) leaves `tested` empty, and everything runs.
+  tested:
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tested: ${{ steps.lookup.outputs.tested }}
+    steps:
+      - id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          # An API error is no record: everything runs, and this job stays green.
+          tree=$(gh api "repos/$REPO/commits/$SHA" --jq .commit.tree.sha) || tree=""
+          if [ -z "$tree" ]; then echo "no tree for $SHA; running everything"; exit 0; fi
+          runs=$(gh api "repos/$REPO/actions/artifacts?name=ci-tested-tree-$tree&per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | .workflow_run.id') || runs=""
+          for run in $runs; do
+            passed=$(gh api "repos/$REPO/actions/runs/$run" --jq \
+              'select(.path == ".github/workflows/ci.yml" and .event == "pull_request"
+                      and .conclusion == "success" and .head_repository.id == .repository.id) | .id') || passed=""
+            if [ -n "$passed" ]; then
+              echo "tree $tree passed in pull request run $run"
+              echo "tested=$run" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "tree $tree has no passing pull request run; running everything"
+
+  rust-engine:
+    needs: tested
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    env:
+      TESTED: ${{ needs.tested.outputs.tested }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -42,20 +90,41 @@ jobs:
       # validity against the repository-pinned published TypeScript compiler,
       # which needs node (preinstalled on the runner) and packages/cli installed.
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+        if: env.TESTED == ''
       - run: make test-typefacts
+        if: env.TESTED == ''
+      # On a tested tree: what the steps below compile, without running it, so
+      # a cache main saves holds the same dependency builds.
+      - name: Build what the tested tree's gates build
+        if: env.TESTED != ''
+        env:
+          TYPEFACTS_BUILD_ID: dev
+          SOLID_CHECKER_BUILD_ID: dev
+        run: |
+          cargo +1.99.1 clippy --manifest-path apps/solid-typefacts/Cargo.toml --all-targets
+          cargo +1.99.1 test --manifest-path apps/solid-typefacts/Cargo.toml --no-run
+          cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
+          cargo test --manifest-path rust/Cargo.toml --workspace --no-run
+          make build-checker-debug
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+        if: env.TESTED == ''
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
+        if: env.TESTED == ''
       # solid-facts-backend's default features are exactly dialect-v2, so the
       # workspace clippy above already checks it; only the WASM crate without
       # napi-host is a composition nothing else builds.
       - name: Check the WASM crate without the napi host
+        if: env.TESTED == ''
         run: cargo +1.99.1 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
+        if: env.TESTED == ''
       # The two fixture gates: "no finding moved" over every fixture project,
       # and product-owned semantic/TypeScript ownership over every retained
       # former parity case. Both are meaningless unless something runs them.
       - run: make coverage
+        if: env.TESTED == ''
       - run: make ownership-gate
+        if: env.TESTED == ''
       # AGENTS.md's absolute rule, as a gate: no rule's positive case may also
       # be a `tsc` error against the real published Solid typings, and — the
       # half the checker-side declarations added — no rule may be narrowed into
@@ -64,8 +133,13 @@ jobs:
       # packages/cli, and the workspace and both binaries are already built by
       # the steps above, so this is one Bun install plus the audited installs.
       - run: make tsc-oracle
+        if: env.TESTED == ''
 
+  # Unchanged on a tested tree: the release build is the job, and its smoke
+  # test takes seconds.
   rust-package:
+    needs: tested
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -148,7 +222,11 @@ jobs:
           path: dist/solid-checker
 
   wasm-package:
+    needs: tested
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
+    env:
+      TESTED: ${{ needs.tested.outputs.tested }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.1
@@ -181,6 +259,7 @@ jobs:
       # same on any host, so wasm-parity checks these bytes instead of
       # rebuilding them for six minutes on macOS.
       - uses: actions/upload-artifact@v4
+        if: env.TESTED == ''
         with:
           name: wasm-package-build
           path: |
@@ -195,8 +274,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - run: bun run test
+        if: env.TESTED == ''
         working-directory: packages/wasm
       - run: bun pm pack --dry-run
+        if: env.TESTED == ''
         working-directory: packages/wasm
 
   # The owned check against the native one over the same projects. Local
@@ -207,8 +288,11 @@ jobs:
   # not 62) and on macOS 15 (a trailing slash through a file symlink).
   # It checks wasm-package's built files rather than building its own; only the
   # native checker and the path-control guest are built here.
+  # Skipped on a tested tree: it saves only crate downloads (no targets), which
+  # a later lockfile's pull requests restore by prefix.
   wasm-parity:
-    needs: wasm-package
+    needs: [tested, wasm-package]
+    if: ${{ !cancelled() && needs.wasm-package.result == 'success' && needs.tested.outputs.tested == '' }}
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
@@ -241,7 +325,10 @@ jobs:
       # The gate alone: `make wasm-parity` would rebuild the package first.
       - run: make wasm-parity-gate
 
+  # Skipped on a tested tree: it writes no cache.
   scripts-and-cli:
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.tested == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -268,3 +355,23 @@ jobs:
       - run: bun scripts/fuzz/test-lane.mjs
       - run: jq empty schema/*.json
       - run: make test-cli
+
+  # A pull request's passing run records the tree it tested (its merge ref's),
+  # which a push to main with the same tree reads in `tested` above. Only after
+  # every job passed; the reader also requires the whole run's success.
+  record-tested-tree:
+    if: github.event_name == 'pull_request'
+    needs: [rust-engine, rust-package, wasm-package, wasm-parity, scripts-and-cli]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - id: tree
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "$tree" > tested-tree
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-tested-tree-${{ steps.tree.outputs.tree }}
+          path: tested-tree
+          retention-days: 30

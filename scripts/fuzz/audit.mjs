@@ -12,7 +12,7 @@
 //       oracle jobs (`jobs.json`, one per grid and part: the workflow's matrix).
 //   node scripts/fuzz/audit.mjs oracle --grid <grid> --manifest <file> --out <dir> --checker-bin <bin> --typefacts <bin> [--part i/N] [-- <grid args>]
 //       the grid on the manifest's programs with the differential on every one of them (Chrome against the fast path). `--part i/N`:
-//       part i of the manifest's `parts` (`ORACLE_PARTS`; the recall grids' samples are split over runners, every N-th id from i).
+//       part i of the manifest's `parts` (`oracleParts`: the samples are split over the run's runners by their sizes, every N-th id from i).
 //       `report` reads a grid's parts from `<oracle>/<grid>/part-<i>/` (a manifest without `parts`: `<oracle>/<grid>/`).
 //   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>]
 //       the run's verdict: every shard present and whole, what needs a look (focus.mjs PROBLEMS, oracle behaviour differences, an
@@ -51,15 +51,33 @@ const gridReport = (dir) => readJson(join(dir, "matrix.json")) ?? readJson(join(
 const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
 
 /**
- * The runners a grid's oracle sample is split over: Chrome takes about 2.3 s a program on a 4-core runner, and the recall grids' samples
- * are the large ones (mx-recall 911 programs, 34 minutes of Chrome in one job; lg-recall about half). Every other grid is one job.
+ * The oracle jobs one run may take, the account's concurrent runners (20, the most run 41775917761 ran at once), and the part size a
+ * grid is not split below (ADR 0620). GitHub starts a matrix's jobs in no fixed order (that run's shard 0 started 29th), so a job past
+ * the runners waits whatever its size: the split keeps every part a job of its own.
  */
-export const ORACLE_PARTS = { "mx-recall": 4, "lg-recall": 2 };
-export const oraclePartsOf = (grid) => ORACLE_PARTS[grid] ?? 1;
+export const ORACLE_RUNNERS = 20;
+export const ORACLE_PART_FLOOR = 200;
+/**
+ * Each grid's oracle parts from its sample's size (`{ grid: programs }`, in AUDIT_GRIDS order): one each, then one more part at a time
+ * to the grid whose part is the largest (the first such grid on a tie) while the run has runners left and that part is over the floor.
+ * A program costs about the same in every grid (1.0 to 2.3 s of a job's differential, the same code 1.6x apart between runners), so
+ * the largest part is the run's tail: mx-census's 2,294 programs in one job took 90 minutes, every other job under 24.
+ */
+export function oracleParts(sizes) {
+  const grids = Object.keys(sizes);
+  const parts = Object.fromEntries(grids.map((grid) => [grid, 1]));
+  const part = (grid) => Math.ceil(sizes[grid] / parts[grid]);
+  for (let jobs = grids.length; grids.length && jobs < ORACLE_RUNNERS; jobs += 1) {
+    const largest = grids.reduce((a, b) => (part(b) > part(a) ? b : a));
+    if (part(largest) <= ORACLE_PART_FLOOR) break;
+    parts[largest] += 1;
+  }
+  return parts;
+}
 /** Part `part` of `parts` of a manifest's ids: every `parts`-th from `part`, so each part takes the whole rank order's spread. */
 export const partIds = (ids, part, parts) => ids.filter((_, index) => index % parts === part);
-/** The oracle jobs of a run, the workflow's matrix: one per grid and part. */
-export const oracleJobs = () => ({ include: AUDIT_GRIDS.flatMap((grid) => Array.from({ length: oraclePartsOf(grid) }, (_, part) => ({ grid, part, parts: oraclePartsOf(grid) }))) });
+/** The oracle jobs of a run, the workflow's matrix, from pick's manifests (`{ grid, parts }`): one per grid and part. */
+export const oracleJobs = (manifests) => ({ include: manifests.flatMap(({ grid, parts }) => Array.from({ length: parts }, (_, part) => ({ grid, part, parts }))) });
 
 /** `i/N` as `{ part, parts }`, `0/1` when absent. Throws on anything else. */
 export function parsePart(value) {
@@ -135,14 +153,20 @@ function pick(options) {
   const out = resolve(options.out);
   mkdirSync(out, { recursive: true });
   const perStratum = parsePerStratum(ORACLE_PER_STRATUM);
-  for (const grid of AUDIT_GRIDS) {
+  const picked = AUDIT_GRIDS.map((grid) => {
     const lists = shards.map((shard) => readJsonl(join(shard.dir, grid, "oracle-candidates.jsonl")));
-    const ids = pickOracle(lists, perStratum);
-    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, parts: oraclePartsOf(grid), ids }, null, 2)}\n`);
-    console.log(`${grid}: ${ids.length} oracle programs from ${lists.reduce((sum, list) => sum + list.length, 0)} candidates of ${shards.length} shards`);
+    return { grid, lists, ids: pickOracle(lists, perStratum) };
+  });
+  const split = oracleParts(Object.fromEntries(picked.map(({ grid, ids }) => [grid, ids.length])));
+  const manifests = [];
+  for (const { grid, lists, ids } of picked) {
+    const parts = split[grid];
+    manifests.push({ grid, parts });
+    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, parts, ids }, null, 2)}\n`);
+    console.log(`${grid}: ${ids.length} oracle programs in ${parts} part(s) from ${lists.reduce((sum, list) => sum + list.length, 0)} candidates of ${shards.length} shards`);
   }
   // The oracle matrix (the workflow reads it into its `oracle` job): beside the manifests, never one of them.
-  writeFileSync(join(out, "jobs.json"), `${JSON.stringify(oracleJobs())}\n`);
+  writeFileSync(join(out, "jobs.json"), `${JSON.stringify(oracleJobs(manifests))}\n`);
 }
 
 function shard(options, extra) {

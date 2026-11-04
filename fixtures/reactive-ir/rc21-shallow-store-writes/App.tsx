@@ -1,7 +1,7 @@
 import { createStore } from "solid-js";
 
 // A shallow store serves values raw: a write below the root lands there, with
-// no guard and no warning (ADR 0623).
+// no guard and no warning (ADR 0626).
 export function Raw() {
   const [state] = createStore({ list: [{ a: 1 }], row: { a: 1 } }, { shallow: true });
   const click = () => {

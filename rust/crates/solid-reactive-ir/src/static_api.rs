@@ -358,7 +358,7 @@ impl StaticApiContext<'_> {
                     uncertain: origin.mixed,
                 });
             }
-            // ADR 0636: `flush()`'s guard takes no event, so a handler dispatched
+            // ADR 0639: `flush()`'s guard takes no event, so a handler dispatched
             // synchronously from an effect's apply warns there. A visible
             // dispatch makes a flush in a handler an obligation.
             if let Some(kind) = kind
@@ -393,7 +393,7 @@ impl StaticApiContext<'_> {
                     });
                 }
             }
-            // SC3002 (ADR 0622): `onFlush` under a children-capable owner. rc.21
+            // SC3002 (ADR 0625): `onFlush` under a children-capable owner. rc.21
             // warns on `getOwner()` with no `CONFIG_CHILDREN_FORBIDDEN`, the
             // owned-scope write guard's test, so the write role places it: an
             // effect's apply, a leaf and an event handler have no such owner.

@@ -11,7 +11,7 @@ nothing is read, so the boundary never re-arms. rc.21 reports
 `LOADING_ON_ACCESSOR` on the boundary's first run (`reportOnAccessor`,
 `@solidjs/signals@2.0.0-rc.21` `dist/dev.js`), and `on` is typed `any`, so `tsc`
 is silent. Reported on the exact `Loading` for a function literal and for a value
-Type Facts call a function, wherever it came from (ADR 0621). A union that may be
+Type Facts call a function, wherever it came from (ADR 0624). A union that may be
 a function is uncertifiable, and any other value states nothing.
 
 ```tsx

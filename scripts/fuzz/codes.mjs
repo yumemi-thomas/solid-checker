@@ -63,7 +63,7 @@ export const codePolicy = {
   // New on rc.21. `<Loading on={fn}>` (SC5007) and `onFlush` under a children-capable owner (SC3002).
   LOADING_ON_ACCESSOR: claimed(["loading-on-accessor"], "warn"),
   ON_FLUSH_IN_OWNED_SCOPE: claimed(["on-flush-in-owned-scope"], "warn"),
-  // SC2009 and SC5008 (ADRs 0633, 0634): each proven in the pass that creates the source.
+  // SC2009 and SC5008 (ADRs 0636, 0637): each proven in the pass that creates the source.
   OPTIMISTIC_WRITE_BEFORE_LOAD: claimed(["optimistic-write-before-load"], "error"),
   CAUGHT_REACTIVE_READ: claimed(["caught-reactive-read"], "warn"),
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: claimed(["leaf-owner-forbidden-call"], "error"),

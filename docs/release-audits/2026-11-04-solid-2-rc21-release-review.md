@@ -26,13 +26,13 @@ Method, in three layers:
 
 | change | measured | what moved |
 | --- | --- | --- |
-| `untrack` keeps `strictPending`: an unlabelled `untrack` in an open strict window throws `PENDING_ASYNC_UNTRACKED_READ` for a pending node the same owner made (#4630) | a memo, derived store, projection or hook-made memo of the body, nested `untrack` too; rc.17: `NotReadyError` | SC5001 (ADR 0616) |
+| `untrack` keeps `strictPending`: an unlabelled `untrack` in an open strict window throws `PENDING_ASYNC_UNTRACKED_READ` for a pending node the same owner made (#4630) | a memo, derived store, projection or hook-made memo of the body, nested `untrack` too; rc.17: `NotReadyError` | SC5001 (ADR 0619) |
 | A strict-read window and the effect-callback window are tied to the event that was current (`strictReadActive`, `effectCallbackEvent`, #4237): a DOM event dispatched from inside starts outside them | read; Node has no `window.event`, so the probes do not show it | no proof moves: a native dispatch already withholds handler proofs (ADR 0356) |
 | `createOptimistic(fn)` and `createOptimisticStore(fn, seed)` setters throw `OPTIMISTIC_WRITE_BEFORE_LOAD` before the first answer | rc.17: the write stood | unclaimed: open work |
 | `CAUGHT_REACTIVE_READ`: a compute swallowed a read's throw and completed | memo, effect compute, an error, a leaf's catch; a rethrow or `finally` is silent | unclaimed: open work |
-| `onFlush(callback)`, new | a microtask, no owner, every path; warns `ON_FLUSH_IN_OWNED_SCOPE` under a children-capable owner | modelled (ADR 0619); SC3002 (ADR 0622) |
-| `from(source)`, new at the root | runs only in the pass of a computation that returns it, tracked and owned | modelled with a conditional owner (ADR 0619) |
-| `LOADING_ON_ACCESSOR`, new | read and measured through the grid | SC5007 (ADR 0621) |
+| `onFlush(callback)`, new | a microtask, no owner, every path; warns `ON_FLUSH_IN_OWNED_SCOPE` under a children-capable owner | modelled (ADR 0622); SC3002 (ADR 0625) |
+| `from(source)`, new at the root | runs only in the pass of a computation that returns it, tracked and owned | modelled with a conditional owner (ADR 0622) |
+| `LOADING_ON_ACCESSOR`, new | read and measured through the grid | SC5007 (ADR 0624) |
 | `ASYNC_MEMO_ELEMENT`, new | SSR only | out of scope |
 | `createOwner` is declared only in `solid-js/internal`; it is still exported from the root at runtime | TS2305 at the root | export table, fuzzer imports |
 | A store proxy keeps the source's prototype (#4670): `Object.setPrototypeOf(store, …)` now throws | rc.17: silent | no rule |

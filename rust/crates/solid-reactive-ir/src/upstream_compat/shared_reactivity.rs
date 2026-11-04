@@ -1629,12 +1629,12 @@ fn store_write_standing(
     {
         return WriteStanding::Exempt;
     }
-    // ADR 0627: a write through a `merge` of several sources meets the view's
+    // ADR 0630: a write through a `merge` of several sources meets the view's
     // own trap, or the last source itself: no store claims it.
     if merge_view_root(file, context, site.root) {
         return WriteStanding::Unproven;
     }
-    // ADR 0631: a raw value's write lands: no proxy drops it.
+    // ADR 0634: a raw value's write lands: no proxy drops it.
     if context
         .lookup
         .binding_at_reference(file.path.as_str(), site.root)
@@ -2288,7 +2288,7 @@ fn chain_links_verdict(
     )
 }
 
-/// ADR 0623: `root` is exactly slot 0 of a `const` array pattern initialized by
+/// ADR 0626: `root` is exactly slot 0 of a `const` array pattern initialized by
 /// `createStore(value, { shallow: true })`. A shallow store serves every value
 /// raw (rc.21 `core-store` R38, R39, measured): a write below the root lands on
 /// the raw object, with no guard and no warning. Inert for the store, and
@@ -2337,7 +2337,7 @@ fn shallow_store_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, roo
         })
 }
 
-/// ADR 0627: `root` is a `const` holding a `merge` call of several sources.
+/// ADR 0630: `root` is a `const` holding a `merge` call of several sources.
 fn merge_view_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
     context
         .lookup
@@ -3078,7 +3078,7 @@ fn no_store_mutator_call(
     }
 }
 
-/// ADR 0635: a method a store path holds, called on the read proxy, runs with
+/// ADR 0638: a method a store path holds, called on the read proxy, runs with
 /// the proxy as `this`, so a write of `this.x` in its body is dropped with
 /// `STORE_WRITE_OUTSIDE_SETTER` (rc.21 `core-store` R48, measured in Chrome). The
 /// member's value is what the store holds now, so this is an obligation.

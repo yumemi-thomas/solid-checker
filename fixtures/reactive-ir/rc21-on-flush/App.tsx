@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, onFlush } from "solid-js";
 
 // The callback runs on a microtask with no owner: a write is legal, and an
-// effect it creates has no owner (ADR 0619).
+// effect it creates has no owner (ADR 0622).
 export function Handler() {
   const [open, setOpen] = createSignal(false);
   const click = () => {

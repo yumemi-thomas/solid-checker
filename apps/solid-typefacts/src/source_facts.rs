@@ -237,7 +237,7 @@ fn is_async_function_node(node: P<Node>) -> bool {
 }
 
 /// Go: `asyncReturnType`.
-/// ADR 0628: every value of `return_type` is a native `Promise` or async
+/// ADR 0631: every value of `return_type` is a native `Promise` or async
 /// generator: pending on the call's stack. A union with a plain value, a custom
 /// thenable and a custom async iterable may answer there.
 fn every_answer_is_a_flight(checker: &mut Checker, return_type: P<Type>) -> bool {

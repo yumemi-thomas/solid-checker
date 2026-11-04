@@ -375,3 +375,30 @@ test("a capture or manifest cannot be bound to a solution-style tsconfig", () =>
   assert.equal(capture.status, 2);
   assert.match(capture.stderr, /capture belongs to one project/);
 }));
+
+// Declaration files are parsed once per process and reused by later programs with the same options and bytes.
+// Each program still reports a reused file's errors, and changed bytes are parsed again.
+test("later snapshots reuse a declaration parse only for the same bytes and still count its errors", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-declarations-")));
+  try {
+    const declaration = join(root, "shared.d.ts");
+    writeFileSync(declaration, "export declare const shared: number = 1;\n");
+    const project = (name, options = {}) => {
+      mkdirSync(join(root, name));
+      writeFileSync(join(root, name, "app.ts"), 'import { shared } from "../shared";\nexport const value: number = shared;\n');
+      const path = join(root, name, "tsconfig.json");
+      writeFileSync(path, JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], skipLibCheck: false, ...options }, files: ["app.ts"] }));
+      return path;
+    };
+    const [first, second, third] = [project("a"), project("b"), project("c", { skipLibCheck: true })];
+    const errors = path => feedbackSnapshot(path).typingErrors;
+    assert.equal(errors(first), 1);
+    assert.equal(errors(second), 1);
+    assert.equal(errors(third), 0);
+    writeFileSync(declaration, "export declare const shared: number;\n");
+    assert.equal(errors(second), 0);
+    writeFileSync(declaration, "export declare const shared: string;\n");
+    assert.equal(errors(first), 1);
+    assert.equal(feedbackSnapshot(second).sources.find(source => source.fileName.endsWith("shared.d.ts")).text, "export declare const shared: string;\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

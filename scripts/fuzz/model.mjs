@@ -195,13 +195,13 @@ export const storeShallowSignal = (name, init) => ({ ...signal(name, init, "prob
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 /** A derived store whose first answer has not landed: `createStore(async () => ({ v }), { v })`. */
 export const storeAsyncSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-async" });
-/** A store over a record that entered a shallow store first: raw, no proxy (ADR 0631). */
+/** A store over a record that entered a shallow store first: raw, no proxy (ADR 0634). */
 export const storeRawSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-raw" });
-/** A store holding a class instance whose method writes `this` (ADR 0635). */
+/** A store holding a class instance whose method writes `this` (ADR 0638). */
 export const storeClassSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-class" });
-/** `createMemo(async () => 1, { loadingValue: 0 })`: served through its first flight (ADR 0629). */
+/** `createMemo(async () => 1, { loadingValue: 0 })`: served through its first flight (ADR 0632). */
 export const asyncDeclaredSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-declared" });
-/** A compute that may answer without a flight (ADR 0628): typed `number | Promise<number>`, the plain value at run time. */
+/** A compute that may answer without a flight (ADR 0631): typed `number | Promise<number>`, the plain value at run time. */
 export const asyncMaybeSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-maybe" });
 /**
  * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),

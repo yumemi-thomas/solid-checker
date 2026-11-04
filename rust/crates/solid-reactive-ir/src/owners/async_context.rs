@@ -1086,7 +1086,7 @@ pub(crate) fn async_read_role(
     }
 }
 
-/// ADR 0634: a read in a function a computation runs by a name or a member
+/// ADR 0637: a read in a function a computation runs by a name or a member
 /// (`createMemo(cb)`, `createEffect(bag.compute, …)`), through `const` aliases:
 /// no render, as a literal compute's is not. Nothing here proves which of its
 /// other uses runs it, so its async row is unproven. A leaf's callback keeps its
@@ -1149,7 +1149,7 @@ fn handed_computation_read(
         })
 }
 
-/// ADR 0620: a read in the tracked callback of a computation that is no render
+/// ADR 0623: a read in the tracked callback of a computation that is no render
 /// (a memo's compute, a user effect's compute, a derived signal, an effect's
 /// apply, or a cleanup it returns, when its role is tracked). A pending source
 /// suspends such a read: it is no render, and no unsuspendable read either.
@@ -1236,7 +1236,7 @@ pub(crate) fn computation_is_async(
         .is_some_and(|function| function.r#async)
 }
 
-/// ADR 0628: the computation may return without a pending flight
+/// ADR 0631: the computation may return without a pending flight
 /// (`cache.get(k) ?? load()`, a conditional, a custom thenable): nothing proves
 /// its source is pending at a first read, or that it ever is.
 pub(crate) fn computation_may_answer_sync(

@@ -467,7 +467,7 @@ pub(super) fn semantic_role_before_awaits(
             )
         );
     }
-    // ADR 0625: a label that is not one non-empty string may open no window.
+    // ADR 0628: a label that is not one non-empty string may open no window.
     if file.ast.arguments_containing(span).any(|(call, index)| {
         index == 0
             && direct_callback_contains(file, call.arguments[index].span, span)

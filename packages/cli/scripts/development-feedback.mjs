@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
+import { createInterface } from "node:readline";
 import ts from "typescript";
 import { nativeExecutable, runNative } from "../bin/launcher.mjs";
 
@@ -53,6 +54,20 @@ export function expandSolutionProject(project, seen = new Set(), system = ts.sys
 const cleanupFailures = error => error.cleanupErrors?.length
   ? { cleanupErrors: error.cleanupErrors.slice(0, 8).map(cleanup => String(cleanup?.message ?? cleanup).slice(0, 2000)) } : {};
 
+// Parsed declaration files, reused by every later program of this process whose
+// options and file bytes are the same, as a language service's document registry
+// shares them: a parse depends on the path, the text and the options only, and the
+// text is still read (and recorded) through the program's host each time.
+const declarationSources = new Map();
+function parsedSource(path, text, languageVersion, optionsKey) {
+  if (!path.endsWith(".d.ts")) return ts.createSourceFile(path, text, languageVersion, true);
+  const key = JSON.stringify([path, languageVersion, optionsKey]), cached = declarationSources.get(key);
+  if (cached?.text === text) return cached;
+  const source = ts.createSourceFile(path, text, languageVersion, true);
+  declarationSources.set(key, source);
+  return source;
+}
+
 export function feedbackSnapshot(project) {
   const requested = resolve(project);
   const inputs = new Map();
@@ -86,11 +101,13 @@ export function feedbackSnapshot(project) {
   const referencedProjects = references.map(reference => ts.resolveProjectReferencePath(reference));
   for (const path of referencedProjects) system.readFile(path);
   const host = ts.createCompilerHost(parsed.options);
+  // The tsconfig's own path is the one option that names this project; nothing parsed depends on it.
+  const optionsKey = JSON.stringify({ ...parsed.options, configFilePath: undefined });
   Object.assign(host, { readFile: system.readFile, fileExists: system.fileExists,
     directoryExists: system.directoryExists, realpath: system.realpath, getDirectories: system.getDirectories,
     getSourceFile(path, languageVersion) {
       const text = system.readFile(path);
-      return text === undefined ? undefined : ts.createSourceFile(path, text, languageVersion, true);
+      return text === undefined ? undefined : parsedSource(path, text, languageVersion, optionsKey);
     } });
   if (references.length) host.useSourceOfProjectReferenceRedirect = () => true;
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options, host,
@@ -414,6 +431,9 @@ export const developmentFeedbackHelp = `Development feedback (experimental)
     --browser <chromium-path> [--tooling <directory>] [--compare-project <tsconfig.json>]
     [--root <directory>] [--config <file>] [--execution-cache <directory>]
     [--source-instrumentation on|off]
+  solid-checker feedback batch --browser <chromium-path> --tooling <directory>
+    [--execution-cache <directory>] [--source-instrumentation on|off]
+    [--native-timeout <seconds>] [--native-bin <path>]
 
 Returns native checker findings and separately labeled recorded observations.
 Read observations are information; they do not prove a stale result.
@@ -422,6 +442,11 @@ Scenarios may contain interactions without assertions or comparison projects.
 The manifest command creates a capture template before application execution.
 --execution-cache reuses the browser half of a run whose inputs, development models
 and recorded runtime inputs are unchanged; findings always come from this run.
+batch reads one JSON job per stdin line ({"project", "scenario", "report", "cwd"?}), runs
+each as \`feedback run\` would in this process, writes its document to "report", and
+answers {"report", "exitCode", "retire"} per job, then {"closed": true} at the end.
+It shares the tooling, the browser process and the browser's pin across jobs, and
+stops taking jobs when "retire" names a reason (a failed run, an application config).
 --source-instrumentation off leaves the application's source as written: no
 candidate-scope counts or read lineage, and no wrapper frames on its stacks.
 A solution-style tsconfig (references only) is expanded to its referenced projects.
@@ -440,6 +465,7 @@ export async function developmentFeedback(args) {
   if (!args.length || args.includes("--help") || args.includes("-h")) {
     process.stdout.write(developmentFeedbackHelp); return;
   }
+  if (args[0] === "batch") return feedbackBatch(args.slice(1));
   const manifest = args[0] === "manifest", live = args[0] === "run";
   if (manifest || live) args = args.slice(1);
   let project, capture;
@@ -480,14 +506,69 @@ export async function developmentFeedback(args) {
     for (const warning of result.warnings ?? []) process.stderr.write(`solid-checker: warning: ${warning}\n`);
     if (!manifest) process.exitCode = result.nativeExitCode;
   } catch (error) {
-    if (!(error instanceof FeedbackNativeError)) {
-      if (live) process.stdout.write(JSON.stringify({ schemaVersion: 1, documentKind: "solid-checker-development-feedback",
-        status: "runtime-failed", authority: false, certification: false, project: resolve(project),
-        failure: { kind: "collector-error", message: error.message, ...cleanupFailures(error) } }, null, 2) + "\n");
-      throw error;
-    }
-    // The partial result is the structured failure; the message is for humans.
-    process.stdout.write(JSON.stringify(failureDocument(realpathSync(resolve(project)), { ...error.failure, ...cleanupFailures(error) }), null, 2) + "\n");
+    const document = failedRunDocument(project, error, live);
+    if (document) process.stdout.write(JSON.stringify(document, null, 2) + "\n");
     throw error;
   }
+}
+
+// The document a failed run publishes: the structured native failure, or for a
+// live run the collector error; null when there is none (a plain inspect error).
+function failedRunDocument(project, error, live) {
+  // The partial result is the structured failure; the message is for humans.
+  if (error instanceof FeedbackNativeError) return failureDocument(realpathSync(resolve(project)), { ...error.failure, ...cleanupFailures(error) });
+  return live ? { schemaVersion: 1, documentKind: "solid-checker-development-feedback",
+    status: "runtime-failed", authority: false, certification: false, project: resolve(project),
+    failure: { kind: "collector-error", message: error.message, ...cleanupFailures(error) } } : null;
+}
+
+// `feedback batch`: `feedback run` per stdin job, in one process (feedback-browser.mjs `openBrowserFeedbackBatch`).
+async function feedbackBatch(args) {
+  const options = new Map();
+  for (let index = 0; index < args.length; index += 2) {
+    const name = args[index];
+    assert(["--browser", "--tooling", "--execution-cache", "--source-instrumentation", "--native-timeout", "--native-bin"].includes(name), `Unknown feedback batch option ${name}`);
+    assert(args[index + 1] && !args[index + 1].startsWith("--"), `${name} requires a value`);
+    assert(!options.has(name), `Duplicate feedback option ${name}`);
+    options.set(name, args[index + 1]);
+  }
+  assert(options.has("--browser") && options.has("--tooling"), "Feedback batch requires --browser and --tooling");
+  const sourceInstrumentation = sourceInstrumentationOption(options.get("--source-instrumentation"));
+  if (options.has("--native-timeout")) {
+    nativeTimeoutMs(options.get("--native-timeout"));
+    process.env[NATIVE_TIMEOUT_ENV] = options.get("--native-timeout");
+  }
+  if (options.has("--native-bin")) process.env.SOLID_CHECKER_NATIVE_BIN = resolve(options.get("--native-bin"));
+  const { openBrowserFeedbackBatch } = await import("./feedback-browser.mjs");
+  const batch = await openBrowserFeedbackBatch({ browserPath: options.get("--browser"), toolingRoot: options.get("--tooling"),
+    executionCacheDirectory: options.get("--execution-cache") });
+  const answer = row => new Promise((done, fail) => process.stdout.write(JSON.stringify(row) + "\n", error => error ? fail(error) : done()));
+  let primary;
+  try {
+    for await (const line of createInterface({ input: process.stdin, crlfDelay: Infinity })) {
+      if (!line.trim()) continue;
+      const job = JSON.parse(line);
+      assert(typeof job.project === "string" && typeof job.scenario === "string" && typeof job.report === "string"
+        && (job.cwd === undefined || typeof job.cwd === "string")
+        && Object.keys(job).every(key => ["project", "scenario", "report", "cwd"].includes(key)), "A batch job is {project, scenario, report, cwd?}");
+      let document, exitCode, retire;
+      // A job's `cwd` is the working directory a separate `feedback run` would have had.
+      const home = process.cwd();
+      try {
+        if (job.cwd) process.chdir(job.cwd);
+        ({ report: document, retire } = await batch.run({ project: job.project, scenarioPath: job.scenario, sourceInstrumentation }));
+        exitCode = document.nativeExitCode;
+      } catch (error) {
+        document = failedRunDocument(job.project, error, true);
+        exitCode = 2;
+        retire = `the run failed: ${error.message}`.slice(0, 500);
+      } finally { process.chdir(home); }
+      writeFileSync(job.report, JSON.stringify(document, null, 2) + "\n");
+      await answer({ report: job.report, exitCode, retire: retire ?? null });
+      if (retire) break;
+    }
+  } catch (error) { primary = error; throw error; } finally {
+    await batch.close(primary);
+  }
+  await answer({ closed: true });
 }

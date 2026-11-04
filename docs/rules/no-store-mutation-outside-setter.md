@@ -7,7 +7,7 @@ setter.
 
 A shallow store (`{ shallow: true }`) serves its values raw, so a write below its
 root lands on the raw object and warns nothing: silent, and a root write stays
-reported (ADR 0623).
+reported (ADR 0626).
 
 ## What it does
 
@@ -190,9 +190,9 @@ exact dynamic factory (ADR 0542), and in a local closure every reference of
 which is a plain call there (ADR 0571).
 
 `Object.assign`, `Reflect.set`, `Object.defineProperty` and `Reflect.deleteProperty` on a
-store are writes (ADRs 0526, 0635). A class method a store path holds runs with the proxy as
-`this`, so a write of `this.x` in it is uncertifiable (ADR 0635). A write through a `merge` of
-several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0627, 0631).
+store are writes (ADRs 0526, 0638). A class method a store path holds runs with the proxy as
+`this`, so a write of `this.x` in it is uncertifiable (ADR 0638). A write through a `merge` of
+several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0630, 0634).
 
 ## Why is this bad?
 

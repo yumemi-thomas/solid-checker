@@ -2140,7 +2140,7 @@ impl Dialect for Solid2 {
             // ADR 0443: the map function of `mapArray` and `repeat` runs with
             // tracking off (`callback_runs_untracked_without_window`).
             || (matches!(primitive, Primitive::MapArray | Primitive::RepeatMap) && argument == 1)
-            // ADR 0625: `untrack(fn, "label")` opens a strict-read window of
+            // ADR 0628: `untrack(fn, "label")` opens a strict-read window of
             // its own wherever it runs.
             || (primitive == Primitive::Untrack && argument == 0 && argument_count >= 2)
     }

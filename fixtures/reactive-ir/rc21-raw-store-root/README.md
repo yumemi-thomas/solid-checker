@@ -2,4 +2,4 @@
 
 `createStore(markRaw(x))`, and `createStore(rec)` after `rec` entered a shallow store,
 return the raw value. With a `markRaw` or a `shallow` key in the project a store over a
-value no literal states is open (ADR 0631). Chrome, rc.21.
+value no literal states is open (ADR 0634). Chrome, rc.21.

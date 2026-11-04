@@ -121,7 +121,7 @@ pub(crate) fn discover_file_sources(
                 },
             ));
             result.source_phases.push((symbol.clone(), 1));
-            // ADR 0625: read through a function like a direct creation's
+            // ADR 0628: read through a function like a direct creation's
             // accessor (ADR 0486): the summaries carry it.
             if !lookup.dialect.returns_store(primitive) {
                 result.summary_source_symbols.push(symbol.clone());
@@ -293,7 +293,7 @@ pub(crate) fn discover_file_sources(
                         .source_primitives
                         .push((symbol.clone(), primitive.into()));
                 }
-                // ADR 0633: the setter of an optimistic async source refuses a
+                // ADR 0636: the setter of an optimistic async source refuses a
                 // write before the first answer; a declared value is an answer.
                 if matches!(
                     resolved,

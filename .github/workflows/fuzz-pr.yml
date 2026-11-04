@@ -67,6 +67,23 @@ jobs:
           save-if: false
       # Producer with build id dev, the id cargo's [env] gives the checker below.
       - uses: ./.github/actions/typefacts
+      # Off the Rust builds' path, which they run beside (background steps, waited for before the smoke): the installs are network and
+      # apt, the cache restore a download, the builds below CPU on their own targets. After the producer, whose cmake check may use apt.
+      - name: Installs and Chrome
+        id: installs
+        background: true
+        run: |
+          (cd scripts/fuzz/install && npm ci --silent)
+          (cd scripts/runtime-oracle-install && npm ci --silent)
+          (cd packages/cli && bun install --frozen-lockfile --silent)
+          (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
+      - id: runtime-cache
+        uses: actions/cache/restore@v4
+        background: true
+        with:
+          path: ~/fuzz-cache
+          key: fuzz-pr-runtime-${{ github.sha }}
+          restore-keys: fuzz-pr-runtime-
       - id: tsrs-cache
         uses: actions/cache@v4
         with:
@@ -82,17 +99,8 @@ jobs:
       - run: echo "SOLID_CHECKER_TSRS_BIN=$HOME/tsrs-bin/tsrs" >> "$GITHUB_ENV"
       - name: Build the release checker
         run: cargo +$RUST_VERSION build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
-      - name: Installs and Chrome
-        run: |
-          (cd scripts/fuzz/install && npm ci --silent)
-          (cd scripts/runtime-oracle-install && npm ci --silent)
-          (cd packages/cli && bun install --frozen-lockfile --silent)
-          (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
-      - uses: actions/cache/restore@v4
-        with:
-          path: ~/fuzz-cache
-          key: fuzz-pr-runtime-${{ github.sha }}
-          restore-keys: fuzz-pr-runtime-
+      - name: Wait for the installs and the runtime cache
+        wait: [installs, runtime-cache]
       - name: Smoke
         env:
           COVER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'all' || inputs.cover || 'per-code' }}

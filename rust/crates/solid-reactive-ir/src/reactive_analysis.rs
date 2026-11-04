@@ -404,7 +404,7 @@ pub(crate) fn collect_project<'facts>(
                     .entities
                     .get(&read.declaration)
                     .is_some_and(|symbol| source.async_sources.contains(symbol))
-                // ADR 0629: a declared source's creating pass reads the served
+                // ADR 0632: a declared source's creating pass reads the served
                 // value through a local function too: no row, the strict read
                 // stands.
                 && !ctx
@@ -471,7 +471,7 @@ pub(crate) fn collect_project<'facts>(
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(synthesized);
-    // ADR 0631: whichever layer reports it, a read of a store that may be its
+    // ADR 0634: whichever layer reports it, a read of a store that may be its
     // raw value is no proven proxy read.
     for read in &mut draft.reads {
         if !read.uncertain

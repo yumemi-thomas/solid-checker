@@ -11,20 +11,20 @@ A positively identified visible configuration use makes it uncertifiable,
 with the veto site related. Missing reference evidence does not veto this
 conditional premise.
 
-A whole store is read by more than its members (ADRs 0617, 0618, measured on
+A whole store is read by more than its members (ADRs 0620, 0621, measured on
 rc.21): `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Array.from(s)` and
 `${s}` on any store; `for…of`, an array or call spread and array destructuring on
 an array; `{...s}`, `Object.values`, `Object.entries` and `Object.assign` on an
 object that holds a key. A store of unknown shape is uncertifiable there, and
 `Object.keys`, `in`, `hasOwn`, `for…in` and `snapshot` read nothing on a settled store.
 A `merge` view's Get lands on its last source that holds the key: a key a literal
-serves reads nothing (ADR 0627). A store over a value no literal states may be its
-raw value where a project uses `markRaw` or a shallow store (ADR 0631).
+serves reads nothing (ADR 0630). A store over a value no literal states may be its
+raw value where a project uses `markRaw` or a shallow store (ADR 0634).
 
 `untrack` scopes the wrapped read: a Get of a store proxy it returns warns
 (`const o = untrack(() => s.o); o.x`), proven where the store's literal initial value
-holds an object or array there (ADR 0626). A labelled `untrack(fn, "name")` opens a
-window wherever it runs (ADR 0625).
+holds an object or array there (ADR 0629). A labelled `untrack(fn, "name")` opens a
+window wherever it runs (ADR 0628).
 
 ## What it does
 

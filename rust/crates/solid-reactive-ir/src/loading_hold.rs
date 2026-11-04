@@ -72,7 +72,7 @@ pub(crate) fn loading_on_outside_hold_obligations(
     obligations
 }
 
-/// ADR 0621: `LOADING_ON_ACCESSOR`. rc.21 warns once, on the boundary's first
+/// ADR 0624: `LOADING_ON_ACCESSOR`. rc.21 warns once, on the boundary's first
 /// run, when `on` evaluates to a function: it is the dependency's value, and an
 /// accessor handed instead is never called, so the boundary never re-arms. `on`
 /// is typed `any`, so `tsc` is silent. Proven for a function literal and for a

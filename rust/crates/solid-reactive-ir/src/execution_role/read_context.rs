@@ -386,7 +386,7 @@ pub(crate) fn untrack_label(
 }
 
 /// What rc.21's `read()` does to a pending source read in an exact `untrack`
-/// (ADRs 0616, 0625). A labelled one opens a window, so it throws on any pending
+/// (ADRs 0619, 0628). A labelled one opens a window, so it throws on any pending
 /// source. An unlabelled one in a strict-read window tests
 /// `strictPending && owner._parent === context`, so the answer turns on which
 /// owner created the source.
@@ -564,7 +564,7 @@ fn enclosing_function<'f>(
         .min_by_key(|outer| outer.span.end - outer.span.start)
 }
 
-/// ADR 0629: `site` runs on the stack of a call of `function`: written in it, or
+/// ADR 0632: `site` runs on the stack of a call of `function`: written in it, or
 /// in layers that run in place up to it (a closure, an IIFE, a helper's
 /// callback, an `untrack`). A function that runs later (an effect's apply, a
 /// handler, a timer) ends the walk.
@@ -593,7 +593,7 @@ pub(crate) fn runs_on_stack_of(
     false
 }
 
-/// ADR 0629: `read` runs on the stack of the pass that creates the source
+/// ADR 0632: `read` runs on the stack of the pass that creates the source
 /// declared at `declaration`: nothing has landed and no re-ask has started, so
 /// a declared value is served, whatever layers carry the read.
 pub(crate) fn served_in_creating_pass(
@@ -633,7 +633,7 @@ impl UntrackLayers<'_> {
     }
 }
 
-/// ADR 0616, ADR 0625: where a read of the source declared at `declaration`
+/// ADR 0619, ADR 0628: where a read of the source declared at `declaration`
 /// stands. A labelled `untrack` throws on any pending source; an unlabelled
 /// one only runs the check in a strict-read window, for a source the owner
 /// running it created.
@@ -688,7 +688,7 @@ pub(crate) fn untrack_pending_read(
     UntrackPendingRead::Unproven
 }
 
-/// ADR 0620: the read is tracked in a computation's own callback, so a pending
+/// ADR 0623: the read is tracked in a computation's own callback, so a pending
 /// source suspends it. A read past an await is tracked by nothing, and a closure
 /// the compute names and stores may run anywhere: both stay unproven.
 pub(crate) fn computation_read_suspends(
@@ -734,7 +734,7 @@ pub(crate) fn allowed_callback_spans(
         let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
             continue;
         };
-        // ADR 0625: `untrack(fn, false)` is the unlabelled call.
+        // ADR 0628: `untrack(fn, false)` is the unlabelled call.
         if primitive == solid_dialect::Primitive::Untrack
             && untrack_label(file, call) == UntrackLabel::Closed
             && let Some(first) = call.arguments.first()

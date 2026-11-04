@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createStore, deep, snapshot } from "solid-js";
 
-// Each read warns STRICT_READ_UNTRACKED on rc.21 (ADRs 0617, 0618).
+// Each read warns STRICT_READ_UNTRACKED on rc.21 (ADRs 0620, 0621).
 export function Reads() {
   const [row] = createStore({ a: 1 });
   const [list] = createStore<number[]>([1]);
