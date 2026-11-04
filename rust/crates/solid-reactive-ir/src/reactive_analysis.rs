@@ -424,6 +424,7 @@ pub(crate) fn collect_project<'facts>(
             location: read.location.clone(),
             declaration: read.declaration.clone(),
             execution: read.execution,
+            leaf_call_site_gates: Vec::new(),
             leaf_owner: None,
             under_loading: false,
             async_provenance: true,

@@ -422,6 +422,27 @@ pub(crate) fn apply_settled_gates(
     });
 }
 
+/// An out-of-band `onSettled` (rc.17 enqueues a plain callback: no owner at
+/// the call, or a leaf) is no leaf owner, so a pending read in it is no
+/// leaf-owner read, and an unproven one is not proven either. Either way the
+/// read answers as the same read written in the callback does: an open
+/// obligation. A call the fixed point proves owned stays a violation.
+pub(crate) fn apply_settled_read_gates(
+    reads: &mut [crate::AsyncRead],
+    decisions: &SettledGateDecisions,
+) {
+    for read in reads {
+        let unowned = read.leaf_call_site_gates.iter().any(|gate| {
+            decisions
+                .get(&(gate.path.to_string(), gate.start_byte, gate.end_byte))
+                .is_some_and(|decision| *decision != LeafGateDecision::Owned)
+        });
+        if unowned {
+            read.invocation_context_unproven = true;
+        }
+    }
+}
+
 /// The owner pass sees `onCleanup` as a normal owner requirement while the
 /// leaf pass sees the same call as SC3001. For an owned inline `onSettled`
 /// callback, keep the leaf finding and remove only the duplicate SC4001

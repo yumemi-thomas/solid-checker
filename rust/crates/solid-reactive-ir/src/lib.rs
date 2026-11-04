@@ -1413,6 +1413,11 @@ pub struct AsyncRead {
     /// callback executes during that component's strict-read window.
     #[serde(default, skip_serializing_if = "is_false")]
     pub invocation_context_unproven: bool,
+    /// The calls the read owes [`Self::leaf_owner`] to whose callback is a
+    /// leaf only under an owned call site (`onSettled`): the owner fixed
+    /// point's call-site gates, which may withdraw the leaf-owner claim.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leaf_call_site_gates: Vec<Location>,
     /// The read is rendered by a function whose callers are not all in the
     /// analyzed project (an exported component, a route handed to a router, a
     /// lazy page): no `Loading` boundary was found above it, but the boundary

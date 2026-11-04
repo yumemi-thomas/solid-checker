@@ -3206,6 +3206,7 @@ impl LocalAccessContext<'_, '_> {
                             location: call_location,
                             declaration: declaration.clone(),
                             execution,
+                            leaf_call_site_gates: Vec::new(),
                             leaf_owner: None,
                             under_loading: false,
                             mount_unresolved: false,
@@ -3248,6 +3249,7 @@ impl LocalAccessContext<'_, '_> {
                     location: call_location,
                     declaration: declaration.clone(),
                     execution,
+                    leaf_call_site_gates: gated_leaf_call_locations(file, position, self.lookup),
                     leaf_owner: leaf_owner.map(Into::into),
                     under_loading: cover == LoadingCover::Covered,
                     mount_unresolved: cover == LoadingCover::Unresolved,
@@ -3414,6 +3416,7 @@ impl LocalAccessContext<'_, '_> {
                 location: location(file.path.shared(), call.span),
                 declaration: declaration.clone(),
                 execution: async_execution,
+                leaf_call_site_gates: gated_leaf_call_locations(file, call.span, self.lookup),
                 leaf_owner: leaf_owner.map(Into::into),
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
@@ -3926,6 +3929,7 @@ impl LocalAccessContext<'_, '_> {
                 location: location(file.path.shared(), member.span),
                 declaration: declaration.clone(),
                 execution: async_execution,
+                leaf_call_site_gates: gated_leaf_call_locations(file, member.span, self.lookup),
                 leaf_owner: containing_leaf_owner(
                     file,
                     member.span,
@@ -4115,6 +4119,11 @@ impl LocalAccessContext<'_, '_> {
                     |declaration| declaration.location.clone(),
                 ),
                 execution,
+                leaf_call_site_gates: gated_leaf_call_locations(
+                    file,
+                    element.name.span,
+                    self.lookup,
+                ),
                 leaf_owner: containing_leaf_owner(
                     file,
                     element.name.span,
@@ -4626,7 +4635,7 @@ fn carried_leaf_owner(
 /// `leaf_owner_requires_owned_call_site`), along the walk
 /// [`carried_leaf_owner`] takes. Their spans key the owner fixed point's
 /// call-site gates.
-pub(crate) fn gated_leaf_calls(
+fn gated_leaf_calls(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
@@ -4645,52 +4654,16 @@ pub(crate) fn gated_leaf_calls(
     calls
 }
 
-/// An out-of-band `onSettled` (rc.17 enqueues a plain callback: `Owner` is
-/// null or a leaf at the call) is no leaf owner, so a pending read in it is no
-/// leaf-owner read, and an unproven one is not proven either. Either way the
-/// read answers as the same read written in the callback does: an open
-/// obligation. A call the fixed point proves owned stays a violation.
-pub(crate) fn apply_settled_read_gates(
-    ctx: &crate::pipeline::AnalysisContext<'_>,
-    reads: &mut [crate::AsyncRead],
-    decisions: &crate::owners::SettledGateDecisions,
-) {
-    if !reads.iter().any(|read| read.leaf_owner.is_some()) {
-        return;
-    }
-    let files: HashMap<&str, &solid_facts::FileFacts> = ctx
-        .facts
-        .files
-        .iter()
-        .map(|file| (file.path.as_str(), file))
-        .collect();
-    for read in reads.iter_mut().filter(|read| read.leaf_owner.is_some()) {
-        let Some(file) = files.get(read.location.path.as_ref()) else {
-            continue;
-        };
-        let (Ok(start), Ok(end)) = (
-            u32::try_from(read.location.start_byte),
-            u32::try_from(read.location.end_byte),
-        ) else {
-            continue;
-        };
-        let span = solid_facts::core::Span::new(start, end);
-        let unowned = gated_leaf_calls(file, span, ctx.semantic_lookup, CARRIED_LEAF_DEPTH)
-            .into_iter()
-            .any(|call| {
-                let key = (
-                    read.location.path.to_string(),
-                    u64::from(call.start),
-                    u64::from(call.end),
-                );
-                decisions
-                    .get(&key)
-                    .is_some_and(|decision| *decision != crate::owners::LeafGateDecision::Owned)
-            });
-        if unowned {
-            read.invocation_context_unproven = true;
-        }
-    }
+/// [`gated_leaf_calls`] as the locations a read carries to the gates.
+fn gated_leaf_call_locations(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Location> {
+    gated_leaf_calls(file, span, lookup, CARRIED_LEAF_DEPTH)
+        .into_iter()
+        .map(|call| location(file.path.shared(), call))
+        .collect()
 }
 
 /// ADR 0537: the inline carriers `function`'s binding is handed to by name

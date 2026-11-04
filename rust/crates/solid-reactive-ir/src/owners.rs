@@ -70,7 +70,7 @@ pub(crate) fn collect_project(
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
-        crate::local_access::apply_settled_read_gates(ctx, &mut draft.async_reads, &gates);
+        apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
     } else {
@@ -87,7 +87,7 @@ pub(crate) fn collect_project(
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
-        crate::local_access::apply_settled_read_gates(ctx, &mut draft.async_reads, &gates);
+        apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
         timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
