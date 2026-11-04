@@ -30,6 +30,10 @@ This is the static counterpart of Solid's dev-mode `STRICT_READ_UNTRACKED` warni
 and it mirrors where the runtime actually installs strict-read contexts (component
 and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 
+- **Every read form takes one role.** A member read and a spread take the role an
+  accessor's call takes at the same place: an intrinsic `ref` the body applies
+  (ADR 0520), a carrier that runs a named function (ADR 0531), a hand-off nothing
+  follows (an obligation), a layer a summary climbs (ADR 0522; all ADR 0614).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write

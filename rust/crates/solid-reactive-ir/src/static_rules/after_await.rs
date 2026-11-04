@@ -97,6 +97,8 @@ struct Walk<'m> {
     /// Functions whose prefix the walk has reported as run on the
     /// continuation (ADR 0565): the unplaced-function pass skips them.
     placed: HashSet<(String, Span)>,
+    /// Helpers whose member reads this walk has reported (ADR 0614).
+    member_helpers: HashSet<(String, u64, u64)>,
     /// How the promise chain being followed reaches the flight.
     carried: Carried,
     /// The chain being followed runs inside `untrack`: a helper it reaches
@@ -567,6 +569,20 @@ fn callee_text(file: &FileFacts, callee: Span) -> String {
         )
 }
 
+/// The obligation of an accessor read past an await: [`tracking_obligation`]'s,
+/// or, for an async source (ADR 0614), whether it is pending at the read.
+fn read_obligation(
+    ctx: &AnalysisContext<'_>,
+    symbol: Option<&SymbolId>,
+    tracking: Tracking,
+) -> Option<AfterAwaitObligation> {
+    tracking_obligation(tracking).or_else(|| {
+        symbol
+            .is_some_and(|symbol| ctx.async_sources.contains(symbol))
+            .then_some(AfterAwaitObligation::AsyncSourceMayBePending)
+    })
+}
+
 /// The reason a read's pre-await tracking leaves it an obligation, if any.
 fn tracking_obligation(tracking: Tracking) -> Option<AfterAwaitObligation> {
     (tracking == Tracking::Possible).then_some(AfterAwaitObligation::MayBeTracked)
@@ -717,6 +733,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             visited: HashSet::default(),
             queued: HashSet::default(),
             placed: HashSet::default(),
+            member_helpers: HashSet::default(),
             carried: Carried::Held,
             untracked: false,
             unproven: false,
@@ -819,10 +836,12 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .unwrap_or(name);
             walk.reported
                 .insert((call.path.to_string(), call.start_byte, call.end_byte));
+            let obligation = read_obligation(ctx, symbol, tracking);
+            let uncertain = obligation.is_some();
             draft.push_defect(StaticDefect {
                 kind: StaticDefectKind::ReactiveReadAfterAwait {
                     accessor: display.to_string(),
-                    obligation: tracking_obligation(tracking),
+                    obligation,
                 },
                 location: typefacts::Location {
                     path: call.path.clone(),
@@ -831,7 +850,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 },
                 analysis_context: member.context.clone(),
                 fixes: vec![],
-                uncertain: tracking == Tracking::Possible,
+                uncertain,
             });
         }
         // ADR 0517: a comma, conditional, logical or assignment callee
@@ -1441,6 +1460,24 @@ impl<'f, 'a> Reach<'f, 'a> {
         {
             return;
         }
+        // ADR 0614: the helper's store and prop reads run on this stack too.
+        // Its body is past the suspension, up to its own first await.
+        if ctx.dialect.reports_member_reads_after_await()
+            && synchronous_prefix(helper_file, helper).end == helper.body.end
+            && walk.member_helpers.insert((
+                helper_file.path.to_string(),
+                u64::from(helper.span.start),
+                u64::from(helper.span.end),
+            ))
+        {
+            member_reads_after_await(
+                ctx,
+                draft,
+                (helper_file, helper, helper.body.start),
+                &walk.member.context,
+                &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+            );
+        }
         for read in helper_file
             .ast
             .calls_within(synchronous_prefix(helper_file, helper))
@@ -1812,15 +1849,17 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         let display = call.static_callee(&file.source).unwrap_or(name);
+        let obligation = read_obligation(ctx, Some(symbol), tracking);
+        let uncertain = obligation.is_some();
         draft.push_defect(StaticDefect {
             kind: StaticDefectKind::ReactiveReadAfterAwait {
                 accessor: display.to_string(),
-                obligation: tracking_obligation(tracking),
+                obligation,
             },
             location: location(file.path.shared(), call.callee),
             analysis_context: walk.member.context.clone(),
             fixes: vec![],
-            uncertain: tracking == Tracking::Possible,
+            uncertain,
         });
     }
 

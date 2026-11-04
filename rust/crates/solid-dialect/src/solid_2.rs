@@ -2229,6 +2229,14 @@ impl Dialect for Solid2 {
             | Primitive::CreateLoadingBoundary
             | Primitive::UseHead
             | Primitive::Children => CleanupRule::Always,
+            // ADR 0614, measured on rc.17 only: what these create is as
+            // refused under a leaf owner as what they create in an apply
+            // ([`Solid2::throws_creating_in_effect_callback`]).
+            Primitive::Loading | Primitive::Errored | Primitive::Resolve | Primitive::Until
+                if self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown =>
+            {
+                CleanupRule::Always
+            }
             Primitive::CreateSignal
             | Primitive::CreateStore
             | Primitive::CreateOptimistic
@@ -2716,7 +2724,16 @@ impl Dialect for Solid2 {
                 | Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
                 | Primitive::CreateRoot
-                | Primitive::CreateProjection => true,
+                | Primitive::CreateProjection
+                // ADR 0614: `Errored`/`Loading` called as a function create
+                // their boundary's computation in the call (`solid.dev.js`
+                // `Errored`, `Loading`).
+                | Primitive::Loading
+                | Primitive::Errored
+                // ADR 0614: `resolve`/`until` make a `createRoot` and a
+                // `computed` for their thunk (`dist/dev.js:2694-2735`).
+                | Primitive::Resolve
+                | Primitive::Until => true,
                 Primitive::CreateSignal | Primitive::CreateStore => first_argument_is_function,
                 _ => false,
             }

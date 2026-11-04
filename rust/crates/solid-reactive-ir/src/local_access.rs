@@ -3548,25 +3548,8 @@ impl LocalAccessContext<'_, '_> {
         // `const` (ADR 0481, `thing.useIt`) is that `const`.
         // The receiver may be the alias itself or a static path below it
         // (`thing.useIt.items` in `thing.useIt.items.push(1)`).
-        let member_alias_symbol = {
-            let mut at = file.ast.peel_ts_sugar_span(member.object);
-            let mut found = None;
-            for _ in 0..8 {
-                if let Some(alias) = file.ast.local_alias_member(at) {
-                    found = self.entities.at(file.path.as_str(), alias.source).cloned();
-                    break;
-                }
-                let Some(inner) = file
-                    .ast
-                    .member_at(at)
-                    .filter(|_| file.ast.computed_members.binary_search(&at).is_err())
-                else {
-                    break;
-                };
-                at = file.ast.peel_ts_sugar_span(inner.object);
-            }
-            found
-        };
+        let member_alias_symbol = member_receiver_alias(file, member.object)
+            .and_then(|alias| self.entities.at(file.path.as_str(), alias.source).cloned());
         // The alias fact is exact, so it comes before the entity at the
         // member (the property's own symbol, no source).
         let Some(symbol) = member_alias_symbol
@@ -3578,20 +3561,15 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         // ADR 0463: as for a call, an alias mention before its declarator.
-        let execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
+        let mut execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
             ExecutionRole::Unknown
         } else {
-            crate::execution_role::dynamic_read_role(
+            read_execution_role(
                 file,
                 member.span,
-                semantic_execution_role(
-                    file,
-                    member.span,
-                    allowed,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                ),
+                allowed,
+                self.entities,
+                self.symbol_names,
                 self.lookup,
             )
         };
@@ -3617,8 +3595,51 @@ impl LocalAccessContext<'_, '_> {
                         | ExecutionRole::UntrackedCallback
                         | ExecutionRole::UntrackedUnwindowed
                 );
-        if helper.is_none() && gate_refuses {
-            return;
+        // ADR 0614: where the gate refuses, the summaries see only a direct
+        // call of the function. As for an accessor's call (ADR 0531, ADR
+        // 0516), a carrier that runs the function places the read, and a
+        // function handed where nothing follows it makes it an obligation.
+        let mut placed_at = None;
+        let nested = nested_named_function(file, member.span, self.lookup);
+        let escapes = escapes_nested(file, member.span, self.lookup);
+        if helper.is_none()
+            && (gate_refuses
+                || nested
+                || escapes
+                || inside_non_component_function(file, member.span, self.lookup))
+        {
+            let handed = handed_read_role(
+                file,
+                member.span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            );
+            let unplaced = handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown);
+            if let Some((role, Some(carrier))) = handed
+                && role.reports_untracked_read()
+            {
+                execution = role;
+                placed_at = Some(carrier);
+            } else if gate_refuses
+                || unplaced
+                || (nested && handed_to_unknown_code(file, member.span, self.lookup))
+                || escapes
+            {
+                if crate::execution_role::named_at_tracked_position(file, member.span, self.lookup)
+                    || !(unplaced
+                        || function_escapes_unfollowed(file, member.span, self.lookup)
+                        || crate::execution_role::inside_class_member(
+                            file,
+                            member.span,
+                            self.lookup,
+                        ))
+                {
+                    return;
+                }
+                execution = ExecutionRole::Unknown;
+            }
         }
         // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,
         // so the type says nothing about a proxy.
@@ -3791,6 +3812,7 @@ impl LocalAccessContext<'_, '_> {
             symbol,
             (name, declaration),
             (execution, uncertain, prop_head),
+            placed_at,
         );
         if let Some(helper) = helper {
             self.project_helper_prop_read(
@@ -3818,7 +3840,10 @@ impl LocalAccessContext<'_, '_> {
         symbol: &SymbolId,
         (name, declaration): (&SymbolId, &Location),
         (execution, uncertain, prop_head): (ExecutionRole, bool, bool),
+        placed_at: Option<solid_facts::core::Span>,
     ) -> ReactiveRead {
+        // ADR 0531: the timing of a read a carrier places is the carrier's.
+        let timing_at = placed_at.unwrap_or(member.span);
         let accessor = if prop_head {
             // Name the Get we proved, including brackets/optional syntax,
             // rather than a suffix's property or an invented dotted key.
@@ -3858,16 +3883,11 @@ impl LocalAccessContext<'_, '_> {
             origin: None,
             origin_context: Arc::from(""),
             uncertain,
-            missing_jsx_census: missing_jsx_census(file, member.span, execution),
-            host_callback_timing: host_callback_timing(file, member.span, execution, self.lookup),
+            missing_jsx_census: missing_jsx_census(file, timing_at, execution),
+            host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(
-                file,
-                member.span,
-                execution,
-                self.lookup,
-            ),
+            callee_callback_timing: callee_callback_timing(file, timing_at, execution, self.lookup),
         }
     }
 
@@ -3981,7 +4001,7 @@ impl LocalAccessContext<'_, '_> {
             let Some(symbol) = inline_root.as_ref().or(argument) else {
                 continue;
             };
-            let execution = semantic_execution_role(
+            let execution = read_execution_role(
                 file,
                 spread.span,
                 allowed,
@@ -5811,6 +5831,27 @@ fn handed_role(
     } else {
         silent.map(|role| (role, None))
     }
+}
+
+/// ADR 0498: the `const` alias a member receiver holds exactly (ADR 0481,
+/// `thing.useIt`), the receiver being the alias's own member or a static path
+/// below it (`thing.useIt.items` in `thing.useIt.items.push(1)`).
+pub(crate) fn member_receiver_alias(
+    file: &solid_facts::FileFacts,
+    receiver: solid_facts::core::Span,
+) -> Option<&solid_facts::ast::LocalAliasMemberFact> {
+    let mut at = file.ast.peel_ts_sugar_span(receiver);
+    for _ in 0..8 {
+        if let Some(alias) = file.ast.local_alias_member(at) {
+            return Some(alias);
+        }
+        let inner = file
+            .ast
+            .member_at(at)
+            .filter(|_| file.ast.computed_members.binary_search(&at).is_err())?;
+        at = file.ast.peel_ts_sugar_span(inner.object);
+    }
+    None
 }
 
 /// Whether `member` is read as part of a longer path, which is reported

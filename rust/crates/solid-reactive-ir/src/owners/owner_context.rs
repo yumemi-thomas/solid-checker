@@ -1537,6 +1537,32 @@ pub(crate) fn containing_leaf_owner(
 ) -> Option<String> {
     lexical_leaf_owner(file, span, entities, symbol_names, lookup)
         .or_else(|| named_leaf_owner(file, span, entities, symbol_names, lookup))
+        .or_else(|| action_step_leaf_owner(file, span, entities, symbol_names, lookup))
+}
+
+/// ADR 0614: the leaf owner an action's first step runs under: it runs on its
+/// caller's stack (ADR 0547, ADR 0550), so the owner of its calls, when every
+/// one has it and no `yield` may come first. A step with other callers is not
+/// this read's claim.
+fn action_step_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let step = containing_body_function(&file.ast, span)?;
+    stepped_action_generator(file, step, lookup)?;
+    if action_step_resumption(file, span, lookup).is_some() {
+        return None;
+    }
+    let calls = crate::execution_role::action_step_call_sites(file, step, lookup)?;
+    let mut owners = calls.iter().map(|call| {
+        lexical_leaf_owner(file, call.span, entities, symbol_names, lookup)
+            .or_else(|| named_leaf_owner(file, call.span, entities, symbol_names, lookup))
+    });
+    let first = owners.next()??;
+    owners.all(|owner| owner.is_some()).then_some(first)
 }
 
 /// ADR 0516: the leaf owner a callback handed by name (`onSettled(cb)`, a

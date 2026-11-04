@@ -43,7 +43,8 @@ leaf owner of the carrier that runs it, not of the read's own position: the
 named callback of `onSettled(cb)` or `createTrackedEffect(cb)` runs `hf` under
 that owner through `[1].forEach(hf)`, and an `onSettled` literal around
 `[].forEach(hf)` proves nothing, since the carrier may never run `hf`
-(ADR 0580).
+(ADR 0580). An action's first step is under the leaf owner its every call runs
+in (ADR 0614).
 
 A pending read in a callback a host API retains (an `addEventListener`
 listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation

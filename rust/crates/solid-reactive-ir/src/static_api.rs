@@ -185,7 +185,7 @@ impl StaticApiContext<'_> {
                     message: format!(
                         "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
                     ),
-                    hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    hint: "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -201,7 +201,7 @@ impl StaticApiContext<'_> {
                     id: "SC2004".into(),
                     rule: "no-await-primitive-in-tracked-scope".into(),
                     message: "resolve() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call resolve inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
-                    hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    hint: "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -225,7 +225,7 @@ impl StaticApiContext<'_> {
                     message: format!(
                         "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate"
                     ),
-                    hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
+                    hint: "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -240,7 +240,7 @@ impl StaticApiContext<'_> {
                     id: "SC2005".into(),
                     rule: "no-await-primitive-in-tracked-scope".into(),
                     message: "until() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call until inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
-                    hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
+                    hint: "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -836,32 +836,60 @@ fn resolve_scope_unplaced(
     {
         return true;
     }
-    let judged_by_primitive = file
-        .ast
-        .arguments_containing(call.span)
-        .any(|(container, index)| {
-            crate::execution_role::direct_callback_runs(
-                file,
-                container.arguments[index].span,
-                call.span,
-            ) && context
-                .lookup
-                .primitive_at_call(file, container.span)
-                .is_some_and(|primitive| {
-                    crate::owners::callback_execution_at_call(
-                        file,
-                        container,
-                        primitive,
-                        index,
-                        context.lookup,
-                    )
-                    .is_some()
+    let mut judged_by_primitive = false;
+    let mut steps_on_callers = false;
+    for (container, index) in file.ast.arguments_containing(call.span) {
+        if !crate::execution_role::direct_callback_runs(
+            file,
+            container.arguments[index].span,
+            call.span,
+        ) {
+            continue;
+        }
+        let Some(primitive) = context.lookup.primitive_at_call(file, container.span) else {
+            continue;
+        };
+        // ADR 0614: a `flush()` under a computation drains this callback with
+        // that computation's observer active (ADR 0613).
+        if context
+            .lookup
+            .dialect
+            .callback_runs_drained_by_flush(primitive, index)
+            && context.lookup.flush_drains_under_owner()
+        {
+            return true;
+        }
+        steps_on_callers |= primitive == solid_dialect::Primitive::Action;
+        judged_by_primitive |= crate::owners::callback_execution_at_call(
+            file,
+            container,
+            primitive,
+            index,
+            context.lookup,
+        )
+        .is_some();
+    }
+    // ADR 0614: an action's first step runs on its caller's stack, under the
+    // caller's observer (ADR 0547), so its callers answer, not the primitive:
+    // a read role cannot, since a tracked caller reports no read.
+    if steps_on_callers {
+        let resumed = crate::owners::action_step_resumption(file, call.span, context.lookup);
+        return resumed != Some(crate::owners::StepResumption::Proven)
+            && crate::owners::containing_body_function(&file.ast, call.span)
+                .and_then(|step| {
+                    crate::execution_role::action_step_call_sites(file, step, context.lookup)
                 })
-        });
+                .is_none_or(|calls| {
+                    calls.iter().any(|caller| {
+                        resolve_tracked_scope(file, caller, allowed, context).is_some()
+                            || resolve_scope_unplaced(file, caller, allowed, context)
+                    })
+                });
+    }
     if judged_by_primitive {
         return false;
     }
-    let role = crate::execution_role::semantic_execution_role(
+    let role = crate::execution_role::read_execution_role(
         file,
         call.span,
         allowed,
@@ -881,7 +909,16 @@ fn resolve_scope_unplaced(
             | ExecutionRole::DeferredCallback
             | ExecutionRole::DiscardedRendering
     );
+    // ADR 0614: a deferred role inside tracked JSX is no proof the observer is
+    // clear: an IIFE in a flow child's expression runs under the render effect.
+    let deferred_in_jsx = role == ExecutionRole::DeferredCallback
+        && file
+            .compiler
+            .tracked_regions
+            .iter()
+            .any(|region| region.span.contains(call.span));
     !observer_cleared
+        || deferred_in_jsx
         || crate::execution_role::callee_callback_timing(file, call.span, role, context.lookup)
 }
 

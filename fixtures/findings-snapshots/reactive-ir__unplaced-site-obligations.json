@@ -243,6 +243,26 @@
     },
     {
       "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 929,
+      "end": 934,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 1021,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",
       "severity": "error",

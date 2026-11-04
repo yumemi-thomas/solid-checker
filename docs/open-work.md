@@ -12,7 +12,7 @@ Defects the runtime reports and the checker does not. Each is a missing violatio
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
 
-- Fuzzer async family (ADR 0612): SC1002 past an async compute's await for a store reached through a hook's result or member, a tuple, or a wrapper function written before the await (1,316 certified `secondary-false-clean` rows in `mx-recall`, second code of SC2003): member reads follow only functions written past the boundary and run in place. A thrown code past an async compute's await is reported by nothing (README, Not built).
+- Fuzzer async family (ADR 0612): a thrown code past an async compute's await is reported by nothing (README, Not built).
 - Fuzzer `ref-factory-body` with a helper or IIFE layer and a `hook-member`, `or-assign` or `bind` binding (about 190 recall programs, ADR 0527): the read reaches the layer through a binding dispatch, ADR 0522's non-layer edge; certified clean.
 - Fuzzer `pos-handler-expr` with some non-direct bindings (about 25 recall programs, ADR 0527): a read in the IIFE of a handler expression reached through an alias, tuple or hook binding of the memo variant; certified clean.
 
@@ -196,6 +196,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 - Named callbacks (ADR 0517): a `createRoot`/`runWithOwner` callback with another entry than its sole by-name position, and a write under several `untrack` positions with no rejection, are uncertifiable; so is SC5001 there. Open programs: SC4002 is uncertifiable.
 
+- ADR 0614 trades: a store read past an await in a loop, a `for await` or through a class or `ref` row stays an obligation as an accessor's does; a pending read in an action step with callers outside a leaf owner is not claimed; SC1002 of an async source is an obligation (rc.17 warns it settled).
 - A library callback that may run zero times (`none.forEach(() => s())`) is crossed by SC1001/SC2001's inline arms (rc.17 is silent on an empty array), not by `resolve`/`until`, ADR 0517's climbs, or the owner, leaf, async-read and after-await rules (ADRs 0563, 0566: obligations there). Conflicting `export *` (TS2308) resolve to the binder's winner.
 - ADR 0585: `resolve()`/`until()` in a closure handed on (an inline carrier, an unknown or local helper, a member) inside a compute a memo names by its binding is an SC2004/SC2005 obligation where rc.17 throws whenever it runs, as in the inline compute; a tracked read there is an SC1001 obligation.
 - ADR 0531: a named function handed where nothing follows it (a project helper's argument, `addEventListener`, `bind`, a stored, returned or exported value, a `defineProperty` getter) has its direct reads reported as obligations where they were silent; a `const` copy too. Legal f25-shaped readers handed to project schedulers or stored without invocation pay this obligation cost. A reader handed only to a reviewed fresh-stack scheduler, a handler or a memo compute stays clean.

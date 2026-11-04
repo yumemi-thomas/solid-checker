@@ -8,8 +8,9 @@ between, on the stack of a `createEffect` apply callback.
 ## What it does
 
 Flags `createMemo`, `createEffect`, `createRenderEffect`, `createRoot`,
-`createProjection`, and the function forms of `createSignal` and `createStore`,
-when the call runs synchronously inside the apply (second) argument of a
+`createProjection`, the function forms of `createSignal` and `createStore`,
+`Loading`/`Errored` called as functions, and `resolve` and `until`, which create
+a root and a computation for their thunk (ADR 0614), when the call runs synchronously inside the apply (second) argument of a
 `createEffect(compute, apply)` in a client build, reached directly or through
 an IIFE, an inline standard-library callback, `untrack`, or project helpers,
 a named function handed to such a callback position or a callback prop the

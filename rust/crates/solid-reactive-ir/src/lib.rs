@@ -910,6 +910,10 @@ pub enum AfterAwaitObligation {
     /// A composite callee (`a || b`, `c ? a : b`) not every operand of which
     /// is proven to be this accessor.
     CalleeInexact,
+    /// The source is async (ADR 0614): pending at the read it throws
+    /// `NotReadyError` before any warning, and settled it warns; which one
+    /// the read meets is not proven.
+    AsyncSourceMayBePending,
     /// A prop read whose signal backing is not proven: the component's call
     /// sites cannot be enumerated, or the prop's use is unknown.
     PropBackingUnproven { callers_unenumerable: bool },
