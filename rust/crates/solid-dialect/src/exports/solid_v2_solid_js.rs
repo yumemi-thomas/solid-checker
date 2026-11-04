@@ -3,7 +3,9 @@
 //!
 //! Audited against the exact `solid-js@2.0.0-rc.3` published declaration surface.
 //!
-//! The rc.17 review adds the new root exports of `2.0.0-rc.17`.
+//! The rc.17 review adds the new root exports of `2.0.0-rc.17`, the rc.21
+//! review those of `2.0.0-rc.21`. rc.21 still exports `createOwner` from the
+//! root at runtime, but declares it only in `solid-js/internal`.
 //!
 //! Sorted by name so lookup can binary search. A name appears under every
 //! module that exports it — 1.x's `solid-js/web` re-exports nine control-flow
@@ -52,7 +54,7 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("createMemo", &["solid-js"]),
     ("createOptimistic", &["solid-js"]),
     ("createOptimisticStore", &["solid-js"]),
-    ("createOwner", &["solid-js"]),
+    ("createOwner", &["solid-js", "solid-js/internal"]),
     ("createProjection", &["solid-js"]),
     ("createReaction", &["solid-js"]),
     ("createRenderEffect", &["solid-js"]),
@@ -70,6 +72,7 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("enforceLoadingBoundary", &["solid-js"]),
     ("flatten", &["solid-js"]),
     ("flush", &["solid-js"]),
+    ("from", &["solid-js"]),
     ("getNextChildId", &["solid-js"]),
     ("getObserver", &["solid-js"]),
     ("getOwner", &["solid-js"]),
@@ -87,6 +90,7 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("merge", &["solid-js"]),
     ("omit", &["solid-js"]),
     ("onCleanup", &["solid-js"]),
+    ("onFlush", &["solid-js"]),
     ("onHydrationEnd", &["solid-js"]),
     ("onSettled", &["solid-js"]),
     ("reconcile", &["solid-js"]),

@@ -142,10 +142,10 @@ describe("the policy table", () => {
   it("names every thrown code", () => {
     for (const [, code] of thrownCodes) expect(codePolicy[code], code).toBeDefined();
   });
-  it.skipIf(!haveFastInstall)("classifies every code the pinned rc.17 dev dists emit, with the severity they emit (skipped without the fast install)", () => {
+  it.skipIf(!haveFastInstall)("classifies every code the pinned rc.21 dev dists emit, with the severity they emit (skipped without the fast install)", () => {
     for (const pkg of ["@solidjs/signals", "@solidjs/web", "solid-js"]) {
       const { version } = JSON.parse(readFileSync(join(fastModules, pkg, "package.json"), "utf8"));
-      expect(version, pkg).toMatch(/^2\.0\.0-rc\.17$/);
+      expect(version, pkg).toMatch(/^2\.0\.0-rc\.21$/);
     }
     const emitted = emittedCodes();
     expect(emitted.size).toBeGreaterThan(30);

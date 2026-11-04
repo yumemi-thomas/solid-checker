@@ -1,5 +1,5 @@
-//! Exact published rc.13 and rc.17 declaration identities for ADRs 0266 and
-//! 0268. Re-exports resolve through binder aliases; source spellings are not
+//! Exact published rc.13, rc.17 and rc.21 declaration identities for ADRs 0266
+//! and 0268. Re-exports resolve through binder aliases; source spellings are not
 //! inputs. rc.17's `setWriteHook` and `setReadWatch` install callbacks run on
 //! every write and read, so they veto as development hooks do.
 
@@ -25,7 +25,15 @@ pub(super) fn api(path: &str, start: u64, end: u64) -> Option<RuntimeConfigurati
         | ("@solidjs/signals/dist/types/index.d.ts", 1635, 1638)
         | ("@solidjs/signals/dist/types/core/dev.d.ts", 24681, 24684)
         | ("@solidjs/signals/dist/types/core/core.d.ts", 18505, 18517)
-        | ("@solidjs/signals/dist/types/core/identities.d.ts", 879, 891) => {
+        | ("@solidjs/signals/dist/types/core/identities.d.ts", 879, 891)
+        // rc.21
+        | ("solid-js/types/index.d.ts", 2694, 2697)
+        | ("solid-js/types/server/index.d.ts", 2258, 2261)
+        | ("solid-js/types/internal.d.ts", 3441, 3453)
+        | ("solid-js/types/internal.d.ts", 3977, 3989)
+        | ("@solidjs/signals/dist/types/index.d.ts", 2396, 2399)
+        | ("@solidjs/signals/dist/types/core/dev.d.ts", 24814, 24817)
+        | ("@solidjs/signals/dist/types/core/core.d.ts", 21424, 21436) => {
             Some(RuntimeConfigurationApi::DevelopmentHooks)
         }
         // rc.13
@@ -37,13 +45,20 @@ pub(super) fn api(path: &str, start: u64, end: u64) -> Option<RuntimeConfigurati
         | ("solid-js/types/index.d.ts", 2601, 2608)
         | ("solid-js/types/server/index.d.ts", 2193, 2200)
         | ("@solidjs/signals/dist/types/index.d.ts", 1497, 1504)
-        | ("@solidjs/signals/dist/types/core/dev.d.ts", 24244, 24251) => {
+        | ("@solidjs/signals/dist/types/core/dev.d.ts", 24244, 24251)
+        // rc.21
+        | ("solid-js/types/index.d.ts", 2643, 2650)
+        | ("solid-js/types/server/index.d.ts", 2207, 2214)
+        | ("@solidjs/signals/dist/types/index.d.ts", 2258, 2265)
+        | ("@solidjs/signals/dist/types/core/dev.d.ts", 24377, 24384) => {
             Some(RuntimeConfigurationApi::Observation)
         }
         ("solid-js/types/internal.d.ts", 7472, 7484)
         | ("solid-js/types/server/shared.d.ts", 4285, 4297)
         | ("solid-js/types/internal.d.ts", 9454, 9466)
-        | ("solid-js/types/server/shared.d.ts", 5282, 5294) => {
+        | ("solid-js/types/server/shared.d.ts", 5282, 5294)
+        // rc.21
+        | ("solid-js/types/internal.d.ts", 10065, 10077) => {
             Some(RuntimeConfigurationApi::HydrationHost)
         }
         _ => None,

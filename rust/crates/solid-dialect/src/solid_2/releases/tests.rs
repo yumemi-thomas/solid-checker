@@ -168,10 +168,22 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             true,
             1,
         ),
-        // The audited release: these answers are rc.13's (the rc.17
-        // review); its one gap is scoped to `setLinkClaim`.
+        // rc.13's answers (the rc.17 review); its gap is scoped to
+        // `setLinkClaim`, and it is older than the audited release.
         (
             "2.0.0-rc.17",
+            StoreRootTyping::Mutable,
+            true,
+            true,
+            DynamicOptions::StaticForm,
+            StoreSetterRootGuard::Guarded,
+            true,
+            2,
+        ),
+        // The audited release: rc.17's answers (the rc.21 review); its one
+        // gap is scoped to `setLinkClaim`.
+        (
+            "2.0.0-rc.21",
             StoreRootTyping::Mutable,
             true,
             true,
@@ -222,6 +234,10 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
     );
     assert_eq!(
         analyzed(&same("2.0.0-rc.17")).0.index(),
+        Solid2::RC17.index()
+    );
+    assert_eq!(
+        analyzed(&same("2.0.0-rc.21")).0.index(),
         Solid2::AUDITED.index()
     );
     // rc.10 and rc.11 were published and never read: the conservative
@@ -917,7 +933,7 @@ fn the_trait_answers_from_the_variant() {
     }
     for gated in super::super::RELEASE_GATED_NAMES {
         assert_eq!(Solid2::RC3.primitive(gated), None, "{gated}");
-        assert!(Solid2::RC17.primitive(gated).is_some(), "{gated}");
+        assert!(Solid2::AUDITED.primitive(gated).is_some(), "{gated}");
     }
     assert!(Solid2::RC9.primitive("until").is_some());
     // New in rc.17 (the rc.17 review): no earlier vocabulary has them.
@@ -1235,9 +1251,10 @@ fn a_dialect_id_without_the_disposal_token_decodes_to_unknown() {
 /// on any other installation that has them; `setLinkClaim` stays a gap
 /// everywhere.
 #[test]
-fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
-    let (audited, gaps) = analyzed(&same("2.0.0-rc.17"));
-    assert!(audited.rc17_callback_exports);
+fn rc17_callback_exports_are_modelled_only_on_a_whole_triple() {
+    let (audited, gaps) = analyzed(&same("2.0.0-rc.21"));
+    assert!(analyzed(&same("2.0.0-rc.17")).0.rc17_callback_exports());
+    assert!(audited.rc17_callback_exports());
     let scoped = |gaps: &[InstallationGap]| {
         let mut names = gaps
             .iter()
@@ -1251,7 +1268,7 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
     // Only `setLinkClaim`'s handler is server-rendering-only (`dist/server.js:3508-3512`);
     // declared CSR closes that gap and no other.
     for gap in &gaps {
-        let scope = gap.scope.expect("every rc.17 gap is scoped");
+        let scope = gap.scope.expect("every rc.21 gap is scoped");
         assert_eq!(
             scope.server_rendering_only,
             scope.exports == ["setLinkClaim"],
@@ -1283,7 +1300,7 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
         ),
     ] {
         let (vocabulary, gaps) = analyzed(&installed);
-        assert!(!vocabulary.rc17_callback_exports, "{installed:?}");
+        assert!(!vocabulary.rc17_callback_exports(), "{installed:?}");
         assert_eq!(vocabulary.primitive("dynamicComponent"), None);
         assert_eq!(vocabulary.primitive("dispatchAsInteraction"), None);
         for name in [

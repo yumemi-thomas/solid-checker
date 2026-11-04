@@ -294,6 +294,20 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether an unlabelled `untrack` in an open strict-read window keeps the
+    /// pending throw for a source the window's own owner created. It does not
+    /// open a window of its own, so only that pending read is affected: a
+    /// settled read stays silent.
+    fn untrack_keeps_own_pending_throw(&self) -> bool {
+        false
+    }
+
+    /// Whether an optimistic setter of an async source throws before the
+    /// source's first answer lands.
+    fn refuses_optimistic_write_before_load(&self) -> bool {
+        false
+    }
+
     /// Whether this primitive clears tracking around a callback it nonetheless
     /// runs **before its own call returns**.
     ///

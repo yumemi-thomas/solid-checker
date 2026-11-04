@@ -202,6 +202,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 - ADR 0585: `resolve()`/`until()` in a closure handed on (an inline carrier, an unknown or local helper, a member) inside a compute a memo names by its binding is an SC2004/SC2005 obligation where rc.17 throws whenever it runs, as in the inline compute; a tracked read there is an SC1001 obligation.
 - ADR 0531: a named function handed where nothing follows it (a project helper's argument, `addEventListener`, `bind`, a stored, returned or exported value, a `defineProperty` getter) has its direct reads reported as obligations where they were silent; a `const` copy too. Legal f25-shaped readers handed to project schedulers or stored without invocation pay this obligation cost. A reader handed only to a reviewed fresh-stack scheduler, a handler or a memo compute stays clean.
 
+
 ## 4. Open questions and live approximations
 
 - Dynamic-only component bodies returned directly from an inline source of an exact rc.17 non-static factory have the unwindowed role (ADR 0530): a stale snapshot, deliberately reported like unnamed map reads (ADR 0443), with no runtime-warning promise. Mixed entries remain obligations. Not followed: block-bodied sources, aliases and wrappers; a dynamic-only mount through those forms retains the old component-placement uncertainty. The 12 store `pos-flush-fn` wrapper programs now have SC2003 at the closure's write (ADR 0571); their SC1001 rows stay stale snapshots rc.17 does not warn.

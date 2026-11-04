@@ -901,7 +901,6 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
         "produce",
         "draft-first mutation is now the default store setter behavior; drop the wrapper",
     ),
-    ("from", "use async iterators as computation results"),
     (
         "observable",
         "push signal changes to external subscribers with createEffect",

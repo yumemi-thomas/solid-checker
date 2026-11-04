@@ -60,6 +60,16 @@
       "start": 2749,
       "end": 2761,
       "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
     }
   ]
 }

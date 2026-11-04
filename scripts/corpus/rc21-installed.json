@@ -1,0 +1,120 @@
+{
+ "note": "What each rc.21 corpus app has installed (2026-11-04): the Solid triple of each swept project, resolved as the checker does. All 23 apps installed; every project resolves the exact rc.21 triple.",
+ "apps": {
+  "ai-memory-ui": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "app-game": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "compass-ui": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "dashiboard-ui": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "donegeon-client": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "error-menu-web": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "every-deck-of-cards": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "expenses-app": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "helge-dev": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "hoxxes-briefing": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "inferay": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "jandibat-web": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "jar-hell-web": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "kui": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "oscartbeaumont-website": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "pekochan-blog": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "probus-hk": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "sensor-sim": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "skyjtx-website": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "solid-groove": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "spookysoftware-www": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "spotify-desk-thing": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  },
+  "viviana-ui-web": {
+   "solid-js": "2.0.0-rc.21",
+   "@solidjs/signals": "2.0.0-rc.21",
+   "@solidjs/web": "2.0.0-rc.21"
+  }
+ }
+}

@@ -441,6 +441,7 @@ fn the_vocabulary_is_pinned_by_name() {
             "Errored",
             "flush",
             "For",
+            "from",
             "getOwner",
             "httpHeader",
             "httpStatus",
@@ -455,6 +456,7 @@ fn the_vocabulary_is_pinned_by_name() {
             "merge",
             "omit",
             "onCleanup",
+            "onFlush",
             "onHydrationEnd",
             "onSettled",
             "reconcile",
@@ -959,6 +961,32 @@ fn on_hydration_end_runs_its_callback_later_with_a_conditional_owner() {
     );
     assert!(two.runs_callback_deferred(primitive));
     assert!(!two.callback_requires_return_invocation(primitive, 0));
+    assert!(!two.reports_untracked_reads_at(primitive, 0, 1));
+    assert!(!two.callback_preserves_owner_write_context(primitive));
+}
+
+/// rc.21's `onFlush(callback)`: `queueMicrotask(callback)`, so never during
+/// the call and never with an owner (`@solidjs/signals@2.0.0-rc.21`
+/// `dist/dev.js:3958-3980`, measured).
+#[test]
+fn on_flush_runs_its_callback_later_with_no_owner() {
+    let two: &dyn Dialect = &Solid2::AUDITED;
+    let primitive = Primitive::OnFlush;
+    assert_eq!(two.primitive("onFlush"), Some(primitive));
+    assert_eq!(two.callback_positions(primitive), &[0]);
+    assert_eq!(
+        two.callback_execution_at(primitive, 0, 1),
+        Some(Execution::Deferred)
+    );
+    assert_eq!(
+        two.callback_execution_word_at(primitive, 0, 1),
+        Some(Execution::Deferred)
+    );
+    assert_eq!(
+        two.callback_owner_at(primitive, 0, 1),
+        Some(CallbackOwner::None)
+    );
+    assert!(two.runs_callback_deferred(primitive));
     assert!(!two.reports_untracked_reads_at(primitive, 0, 1));
     assert!(!two.callback_preserves_owner_write_context(primitive));
 }

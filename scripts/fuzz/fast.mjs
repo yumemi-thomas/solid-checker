@@ -4,7 +4,7 @@
 //
 // The work directory sits inside the install because the Solid plugin, the dev runtime
 // and the diagnostics harness resolve from its node_modules. The install is the one
-// scripts/fuzz/install/package.json describes (the pinned 2.0.0-rc.17 Solid packages,
+// scripts/fuzz/install/package.json describes (the pinned 2.0.0-rc.21 Solid packages,
 // the same pins and overrides as scripts/runtime-oracle-install, plus vitest, happy-dom
 // and @solidjs/diagnostics); `--install` takes another directory that has the same.
 import { spawn } from "node:child_process";
@@ -17,7 +17,7 @@ import { NODE } from "../lib/node-runtime.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_FAST_INSTALL = join(here, "install");
 /** Invariant 7: the Solid prerelease under test. Never a newer one. */
-export const PINNED_SOLID = "2.0.0-rc.17";
+export const PINNED_SOLID = "2.0.0-rc.21";
 
 /** Problems with a name -> version table of the Solid packages (empty when the install is the pinned one). */
 export function pinnedProblems(versions, pinned = PINNED_SOLID) {

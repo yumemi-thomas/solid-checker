@@ -243,7 +243,7 @@ export function packageFiles(helpers) {
   const files = {
     "package.json": `${JSON.stringify({
       name: PACKAGE_NAME, version: "1.0.0", type: "module",
-      peerDependencies: { "solid-js": "^2.0.0-rc.17" },
+      peerDependencies: { "solid-js": "^2.0.0-rc.21" },
       exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
     }, null, 2)}\n`,
     "index.js": text([...head(direct), ...direct.js, ...index]),

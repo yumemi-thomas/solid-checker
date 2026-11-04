@@ -397,7 +397,7 @@ if (process.argv[2] === "--prepare") {
     while (dirname(dir) !== dir) {
       const path = join(dir, "package.json");
       if (existsSync(path) && json(path).name === "solid-js") {
-        assert.equal(json(path).version, "2.0.0-rc.17", path);
+        assert.equal(json(path).version, "2.0.0-rc.21", path);
         return { version: json(path).version, packageSha256: sha(readFileSync(path)),
           typesSha256: sha(readFileSync(found.resolvedFileName)), resolved: realpathSync(found.resolvedFileName) };
       }
@@ -520,7 +520,7 @@ if (process.argv[2] === "--prepare") {
 const options = { "apps-root": "/Users/thomas/Documents/Github/solid-checker-rc17-corpus/apps",
   checker: "/tmp/sc-scratch.noindex/agents/checker-6a4940bc9",
   typefacts: "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts",
-  manifest: join(repo, "scripts/corpus/rc17-manifest.json"), scratch: "/tmp/sc-scratch.noindex/mutants",
+  manifest: join(repo, "scripts/corpus/rc21-manifest.json"), scratch: "/tmp/sc-scratch.noindex/mutants",
   heavy: "/Users/thomas/.local/bin/sc-heavy", jobs: "3", limit: "5", seed: "20261019", apps: "", typescript: null, oracle: null, out: null, resume: "false" };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, "");
@@ -549,7 +549,7 @@ const scratch = resolve(options.scratch);
 assert(scratchPath(scratch), "scratch must be under /tmp/sc-scratch.noindex/mutants");
 mkdirSync(scratch, { recursive: true });
 const oracle = json(options.oracle);
-assert.equal(oracle.solid, "2.0.0-rc.17", "calibrate against rc.17");
+assert.equal(oracle.solid, "2.0.0-rc.21", "calibrate against rc.21");
 for (const [id, pattern] of Object.entries(patterns)) {
   const row = oracle.results.find(r => r.id === id);
   assert(row && row.typingErrors === 0 && row.diagnostics.some(d => d.code === pattern.code), `runtime template ${id} unconfirmed`);

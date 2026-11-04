@@ -135,7 +135,7 @@ describe("the runtime and Chrome keys", () => {
   it("the type-check key moves with tsrs, the rc.17 install and the type-check harness, and not with the checker, the runtime or the clock", () => {
     const { config } = setup();
     mkdirSync(join(config.install, "node_modules/solid-js"), { recursive: true });
-    writeFileSync(join(config.install, "node_modules/solid-js/package.json"), '{"version":"2.0.0-rc.17"}');
+    writeFileSync(join(config.install, "node_modules/solid-js/package.json"), '{"version":"2.0.0-rc.21"}');
     const key = (over = {}, parts = {}) => typecheckEnvironmentKey({ ...config, ...over }, { code: "h1", ...parts });
     const base = key();
     expect(key()).toBe(base);

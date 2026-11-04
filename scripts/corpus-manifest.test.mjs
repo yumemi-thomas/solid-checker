@@ -46,3 +46,11 @@ test("the committed rc.17 manifest has provenance for every app it sweeps", () =
   assert.deepEqual(committed.excluded.unavailable.apps, ["lutra-console"]);
   assert.match(committed.rebuilt.comparability, /not comparable/);
 });
+
+test("the committed rc.21 manifest sweeps the rc.17 manifest's projects", () => {
+  const read = (name) => JSON.parse(readFileSync(new URL(`./corpus/${name}`, import.meta.url), "utf8"));
+  const committed = read("rc21-manifest.json");
+  assertManifestProvenance(committed, "rc21-manifest.json");
+  assert.deepEqual(committed.projects, read("rc17-manifest.json").projects);
+  assert.match(committed.rebuilt.comparability, /compares with itself only/);
+});

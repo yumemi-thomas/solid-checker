@@ -4,7 +4,7 @@
 // drift. `codeRules` is derived from the policy table below.
 
 // --- The policy table (phase D) -------------------------------------------------------------------------------
-// Every rc.17 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
+// Every rc.21 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
 // the comparison (`disposition`), and how loud Solid is about it (`severity`: "error" throws or is an engine failure,
 // "warn" and "info" report). codes.test.mjs greps `code: "X"` across the pinned dev dists and fails on a code that is
 // not here, so a Solid bump cannot add noise silently.
@@ -67,6 +67,11 @@ export const codePolicy = {
   PRIMITIVE_IN_EFFECT_CALLBACK: claimed(["primitive-in-effect-callback"], "error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
   ASYNC_STORE_SETTER: unclaimed("error"),
+  // New on rc.21, unclaimed: docs/open-work.md.
+  LOADING_ON_ACCESSOR: unclaimed("warn", "`<Loading on={fn}>`"),
+  ON_FLUSH_IN_OWNED_SCOPE: unclaimed("warn", "`onFlush` in an owned scope"),
+  CAUGHT_REACTIVE_READ: unclaimed("warn", "a read's throw swallowed by a try in a computation: docs/open-work.md"),
+  OPTIMISTIC_WRITE_BEFORE_LOAD: unclaimed("error", "an optimistic setter before its source's first answer: docs/open-work.md"),
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn", "decided not to build: docs/open-work.md, `UNCOMMITTED_INPUT_OVERWRITTEN`"),
 
   // The engine's reaction to an earlier failure.
@@ -105,6 +110,7 @@ export const codePolicy = {
   // The typings reject a bad target, so tsc reports it (invariant 1): the checker stays silent.
   INVALID_REFRESH_TARGET: outOfScope("error", "typed away"),
   INVALID_AFFECTS_TARGET: outOfScope("error", "typed away"),
+  ASYNC_MEMO_ELEMENT: outOfScope("error", "SSR"),
   DYNAMIC_ASYNC_COMPONENT: outOfScope("error", "SSR"),
   LATE_HEADER_WRITE: outOfScope("error", "SSR"),
   LAZY_ASSET_UNMAPPED: outOfScope("warn", "SSR"),

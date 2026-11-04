@@ -8,12 +8,12 @@ const all = Object.fromEntries(["solid-js", "@solidjs/web", "@solidjs/signals", 
 
 describe("pinned install", () => {
   it("pins rc.17 (invariant 7: never a newer prerelease)", () => {
-    expect(PINNED_SOLID).toBe("2.0.0-rc.17");
+    expect(PINNED_SOLID).toBe("2.0.0-rc.21");
     expect(pinnedProblems(all)).toEqual([]);
   });
   it("names every package that is missing or not the pin", () => {
     const problems = pinnedProblems({ ...all, "@solidjs/compiler": "2.0.0-rc.18", "solid-js": undefined });
-    expect(problems).toEqual(["solid-js is not installed", "@solidjs/compiler is 2.0.0-rc.18, not 2.0.0-rc.17"]);
+    expect(problems).toEqual(["solid-js is not installed", "@solidjs/compiler is 2.0.0-rc.18, not 2.0.0-rc.21"]);
   });
   it("reads versions from node_modules and refuses a runFast on an install that is not the pin", async () => {
     const install = mkdtempSync(join(tmpdir(), "fuzz-fast-"));

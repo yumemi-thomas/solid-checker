@@ -39,7 +39,7 @@
 // ships, as a project's dependency; it imports solid-js from the install, as a peer).
 //
 // The install is committed: scripts/runtime-oracle-install holds the manifest and
-// lockfile of the pinned Solid 2.0.0-rc.17 install (solid-js, @solidjs/web,
+// lockfile of the pinned Solid 2.0.0-rc.21 install (solid-js, @solidjs/web,
 // @solidjs/signals, and the rc.17 @solidjs/compiler and @solidjs/babel-plugin that
 // the plugin's `^2.0.0-rc.16` ranges would otherwise resolve to rc.18; ADR 0453).
 // `make runtime-oracle-install` runs `npm ci` there. The default `--install` is that

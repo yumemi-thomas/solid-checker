@@ -40,23 +40,23 @@
   "dialects": {
     "v2": {
       "install": [
-        "solid-js@2.0.0-rc.17",
-        "@solidjs/signals@2.0.0-rc.17",
-        "@solidjs/web@2.0.0-rc.17"
+        "solid-js@2.0.0-rc.21",
+        "@solidjs/signals@2.0.0-rc.21",
+        "@solidjs/web@2.0.0-rc.21"
       ],
       "expect": {
-        "solid-js": "2.0.0-rc.17",
-        "@solidjs/signals": "2.0.0-rc.17",
-        "@solidjs/web": "2.0.0-rc.17"
+        "solid-js": "2.0.0-rc.21",
+        "@solidjs/signals": "2.0.0-rc.21",
+        "@solidjs/web": "2.0.0-rc.21"
       },
       "integrity": {
-        "solid-js": "sha512-ym3x2kzC+vzgD9VNqhqExn3qWzkrpJco3vane0wTFHCVPS9HBXI3GgSp+ieZ1h72zcb2z27PXFSbMsi8Ot+Hxw==",
-        "@solidjs/signals": "sha512-GXXWBlJsiZeBCTw3a941Y/HVBYfwupCfctPnwNjFJV+u3tZnRe/SL+NeStI1247zfxlvkH4p9PWzdZK/yX1I1Q==",
-        "@solidjs/web": "sha512-cJ+8GzVYWBi+/glbgWt6cVgRTxvVa4TG+rShaEuQnPHjUZQTsHh8hvR89KVdFB+5XQJnAajWDNpxz7LkD4MkDg=="
+        "solid-js": "sha512-0Z8/qiJKnK6A2g8QspGthwxR0W8WauMOD2/LQtNmxBT8gpZkKaXmo/fdek/+cB+84w4HYejWJixSAn4fcAI0Uw==",
+        "@solidjs/signals": "sha512-F1TUMO/nd1XC//+tcaWxibOOgXBHQGmNQnAeiDnpLh+1smnlwIgKF6pc20evlyfQwqf0gP6rH4sNEqCPBNcpgg==",
+        "@solidjs/web": "sha512-1E9dvR3/+5fQTI3oxxACBX2Rg4rezXgrljerhWDHR5uQZ04p5Z8qXROI7dIDJKyANtsnLKYbM2OyI/p/FmjGUA=="
       },
       "jsxImportSource": "@solidjs/web",
       "audit": [
-        "docs/release-audits/2026-10-22-solid-2-rc17-release-review.md"
+        "docs/release-audits/2026-11-04-solid-2-rc21-release-review.md"
       ]
     }
   }

@@ -496,7 +496,7 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-array", "store-empty", "store-shallow", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
@@ -543,7 +543,7 @@ function render(program, instrument) {
       }
       case "loading": {
         used.add("Loading");
-        return [`${ind(depth)}<Loading fallback={0}${item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
+        return [`${ind(depth)}<Loading fallback={0}${item.onExpr ? ` on={${item.onExpr}}` : item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
       }
       default: throw new Error(`cannot print view ${item.k}`);
     }
@@ -644,7 +644,9 @@ function render(program, instrument) {
   for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
   packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
+  // rc.21 declares `createOwner` only in `solid-js/internal`.
+  const owner = importNames.includes("createOwner") ? `import { createOwner } from "solid-js/internal";\n` : "";
+  const header = `import { ${importNames.filter((name) => name !== "createOwner").join(", ")} } from "solid-js";\n${owner}${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");
@@ -736,6 +738,9 @@ function signalText(sig, signals, used) {
     case "optimistic-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore({ v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;
     case "deferred": used.add("createDeferred"); return `const ${sig.name} = createDeferred(async () => 1);`;
+    case "store-array": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<number[]>([${sig.init}]);`;
+    case "store-empty": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({});`;
+    case "store-shallow": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] }, { shallow: true });`;
     case "store-link": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { v: number } }>({ v: ${sig.init} });`;
     case "store-link-leaf": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { b?: number } }>({ v: ${sig.init} });`;
     default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
@@ -747,7 +752,7 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-array": "number[]", "store-empty": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-shallow": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "projection": return [[sig.name, "{ v: number }"]];

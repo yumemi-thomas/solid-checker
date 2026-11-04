@@ -19,7 +19,9 @@ export const readerProfiles = {
   "2.0.0-rc.13": { sha256: "sha256:c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
     observer: [156682, 156812], reader: [301718, 311816], untrack: [277947, 278538] },
   "2.0.0-rc.17": { sha256: "sha256:93e01d4ef6ba1ec02daeeb6c378ff8f7baa2ca6ccfc1eff8a2f8f3c767ed0572",
-    observer: [60078, 60140], reader: [238087, 248114], untrack: [230810, 231214] }
+    observer: [60078, 60140], reader: [238087, 248114], untrack: [230810, 231214] },
+  "2.0.0-rc.21": { sha256: "sha256:8e6d40eaab356d3cf371731e5952f4e8a3bb78ba90e0dcdc85c0244c315afd0d",
+    observer: [71062, 71124], reader: [280880, 295558], untrack: [270467, 271213] }
 };
 export function instrumentFeedbackReads(text, path, runtimeSpecifier) {
   const sha256 = `sha256:${createHash("sha256").update(text).digest("hex")}`;

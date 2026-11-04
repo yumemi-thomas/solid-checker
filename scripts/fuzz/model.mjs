@@ -158,8 +158,9 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
 export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
-/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`. */
-export const loadingView = (on, children) => ({ k: "loading", on, children });
+/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`;
+ * `onExpr`: the `on` attribute's expression as written (LOADING_ON_ACCESSOR). */
+export const loadingView = (on, children, onExpr = null) => ({ k: "loading", on, children, onExpr });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
@@ -181,6 +182,12 @@ export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe")
 /** `createStore<{ v: number; a?: { v: number } }>({ v })`: an optional link (`s.a.v = 7` is TS18048: the typed-away templates);
  * `leaf`: `a?: { b?: number }`, open-work.md's form (`s.a.b = 1`). */
 export const storeLinkSignal = (name, init, leaf = false) => ({ ...signal(name, init, "probe"), kind: leaf ? "store-link-leaf" : "store-link" });
+/** `createStore<number[]>([v])`: a store that is an array (an iteration reads `length`). */
+export const storeArraySignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-array" });
+/** `createStore<{ v?: number }>({})`: no key to read yet (rc.21 is silent on `{ ...s }`). */
+export const storeEmptySignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-empty" });
+/** `createStore({ v, a: { v }, items: [v] }, { shallow: true })`: every value is served raw. */
+export const storeShallowSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-shallow" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 /**
  * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),

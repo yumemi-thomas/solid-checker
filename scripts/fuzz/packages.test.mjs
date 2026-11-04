@@ -36,7 +36,7 @@ describe("the packages profile", () => {
       const built = buildCase(program, { id: `p${seed}` });
       expect(Object.keys(built.packages)).toEqual(["fz-lib"]);
       const manifest = JSON.parse(built.packages["fz-lib"]["package.json"]);
-      expect(manifest.peerDependencies).toEqual({ "solid-js": "^2.0.0-rc.17" });
+      expect(manifest.peerDependencies).toEqual({ "solid-js": "^2.0.0-rc.21" });
       expect(manifest.dependencies).toBeUndefined();
       expect(manifest.type).toBe("module");
       expect(manifest.exports["."]).toEqual({ types: "./index.d.ts", default: "./index.js" });

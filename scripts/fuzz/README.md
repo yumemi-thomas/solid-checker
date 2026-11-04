@@ -1,6 +1,6 @@
 # Differential fuzzer
 
-Finds checker violations that the real Solid 2.0.0-rc.17 runtime contradicts (false positives) and defects Solid reports where the checker is silent (false cleans), automatically. For each generated program it compares what the checker says at each site (violation, uncertifiable, none) with what the runtime says (dev diagnostics and thrown errors after driving the program). Only disagreements go to Chrome, the authority. It is operator tooling: its sweeps are not part of `make verify`, and the checker and the gates do not read it. Its own unit tests are (The tests, below).
+Finds checker violations that the real Solid 2.0.0-rc.21 runtime contradicts (false positives) and defects Solid reports where the checker is silent (false cleans), automatically. For each generated program it compares what the checker says at each site (violation, uncertifiable, none) with what the runtime says (dev diagnostics and thrown errors after driving the program). Only disagreements go to Chrome, the authority. It is operator tooling: its sweeps are not part of `make verify`, and the checker and the gates do not read it. Its own unit tests are (The tests, below).
 
 ## What a finding means
 
