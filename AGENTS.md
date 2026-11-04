@@ -92,6 +92,8 @@ and docs/decisions.md (live decisions by ADR number).
   cross-file reads). Long budget on the corpus: `make ir-edit-fuzz-corpus`.
 - Fixture or finding changes: `make coverage`, then `make ownership-gate`. Both
   build and use the fresh debug checker.
+- Proof or rule changes: `make fuzz-smoke` (the census and a covering sample; a PR job,
+  `fuzz-pr.yml`). `not-fired` is judged: a violation on a site that ran fails it.
 - Handoff authority: `make verify`, once, at the end.
 - `make` targets rebuild `bin/solid-typefacts` when its source stamp is stale;
   bare `cargo` does not. If a gate result looks impossible, rerun it with

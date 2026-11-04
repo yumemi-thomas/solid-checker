@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-twins fuzz-test
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -215,6 +215,11 @@ fuzz-test:
 # programs covering every behaviour and axis pair of the full grids; after any checker change. Exits 1 on anything to look at.
 fuzz-smoke: build-checker-release
 	node scripts/fuzz/focus.mjs --smoke \
+	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
+
+# The tier before a merge (ADR 0615): the census and the pairs within each code, about 60,000 programs.
+fuzz-premerge: build-checker-release
+	node scripts/fuzz/focus.mjs --smoke --cover per-code \
 	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
 
 # The twin consistency check (scripts/fuzz/twins.mjs): the checker alone on the grids' runtime-identical twins (one program under
