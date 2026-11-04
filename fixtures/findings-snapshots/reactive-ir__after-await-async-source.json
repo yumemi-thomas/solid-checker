@@ -22,16 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-async-source/App.tsx",
-      "start": 457,
-      "end": 460,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

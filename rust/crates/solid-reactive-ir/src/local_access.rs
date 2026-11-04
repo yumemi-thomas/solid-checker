@@ -364,6 +364,21 @@ fn is_intrinsic_spread_argument(
     })
 }
 
+/// What a store's literal initial value says about its first reads.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StoreShape {
+    /// An array literal: `length` is there to read.
+    Array,
+    /// An object literal with a key of its own.
+    Keyed,
+    /// `{}`: no key to read yet.
+    Empty,
+    /// The `[store, setter]` pair itself, bound whole: no store is read.
+    Tuple,
+    /// Anything else, a derive's seed included.
+    Unknown,
+}
+
 /// The depth a view call's nested view arguments are followed to.
 const VIEW_CALL_DEPTH: usize = 8;
 
@@ -1650,6 +1665,7 @@ impl LocalAccessContext<'_, '_> {
             self.discover_member(file, member, &allowed, &mut result, &mut seen);
         }
         self.discover_spreads(file, &allowed, &mut result);
+        self.discover_whole_store_reads(file, &allowed, &mut result);
         self.discover_dynamic_jsx(file, &mut result);
         result
     }
@@ -2720,6 +2736,23 @@ impl LocalAccessContext<'_, '_> {
                 .source_primitives
                 .get(symbol)
                 .and_then(|primitive| self.lookup.dialect.primitive(primitive));
+            // ADR 0624: on rc.21 an optimistic setter of an async source throws
+            // `OPTIMISTIC_WRITE_BEFORE_LOAD` before its first answer, ahead of
+            // any owned-scope guard. No rule claims the code, so an owned write
+            // there is an obligation: neither SC2001 nor silence.
+            if write_execution.reports_disallowed_write()
+                && matches!(
+                    primitive,
+                    Some(
+                        solid_dialect::Primitive::CreateOptimistic
+                            | solid_dialect::Primitive::CreateOptimisticStore
+                    )
+                )
+                && self.async_sources.contains(symbol)
+                && self.lookup.dialect.refuses_optimistic_write_before_load()
+            {
+                write_execution = ExecutionRole::Unknown;
+            }
             if write_execution.reports_disallowed_write()
                 && *source_kind == ReactiveSourceKind::Store
                 && !self.lookup.dialect.optimistic_store_setter_guarded()
@@ -3379,6 +3412,15 @@ impl LocalAccessContext<'_, '_> {
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
             let async_execution = async_execution_role(file, call.callee, execution);
+            // ADR 0620: tracked, in a computation's own callback: it suspends.
+            let computation_read = async_execution == ExecutionRole::TrackedJsx
+                && crate::execution_role::computation_read_suspends(
+                    file,
+                    call.callee,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
             let async_execution =
                 if async_options.ssr_client_bare || async_options.server_rendering_unresolved {
                     async_execution
@@ -3392,6 +3434,21 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
+            // ADR 0616: rc.21 keeps the pending throw through an unlabelled
+            // `untrack` for a source the strict body itself created.
+            let async_execution = if async_provenance
+                && crate::execution_role::untrack_throws_own_pending_read(
+                    file,
+                    call.callee,
+                    declaration,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                ) {
+                ExecutionRole::UntrackedRendering
+            } else {
+                async_execution
+            };
             let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
             // ADR 0504: the proof climbs from the read to the apply itself, so a
             // read in a closure the apply calls (its own role the body's) is
@@ -3461,7 +3518,8 @@ impl LocalAccessContext<'_, '_> {
                     async_execution,
                     self.lookup,
                 ),
-                invocation_context_unproven: async_execution == ExecutionRole::Unknown
+                invocation_context_unproven: (async_execution == ExecutionRole::Unknown
+                    && !computation_read)
                     || async_execution == ExecutionRole::UntrackedRendering
                         && !nested_literal_runs_during_body(
                             file,
@@ -3927,6 +3985,20 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
+            // ADR 0616, as for an accessor: a derive the strict body created.
+            let async_execution = if member_async
+                && crate::execution_role::untrack_throws_own_pending_read(
+                    file,
+                    member.span,
+                    declaration,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                ) {
+                ExecutionRole::UntrackedRendering
+            } else {
+                async_execution
+            };
             let cover = read_loading_cover(self.lookup, file, member.span, self.symbol_names);
             result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!(
@@ -4008,6 +4080,32 @@ impl LocalAccessContext<'_, '_> {
             let Some(symbol) = inline_root.as_ref().or(argument) else {
                 continue;
             };
+            // ADR 0618: an object spread of a store reads the keys it holds, and
+            // an array or call spread reads `length`: the store's own shape
+            // proves either, and nothing else does. `{...s}` on `{}` is silent.
+            if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                if let Some((_, declaration)) = self.accessors.get(symbol) {
+                    let shape = self.store_initial_shape(file, declaration);
+                    if shape == StoreShape::Tuple {
+                        continue;
+                    }
+                    let proven = if file.ast.iterated_operands.contains(&spread.argument) {
+                        shape == StoreShape::Array
+                    } else {
+                        shape == StoreShape::Keyed
+                    };
+                    self.push_whole_store_read(
+                        file,
+                        spread.span,
+                        symbol,
+                        "spread",
+                        proven,
+                        allowed,
+                        result,
+                    );
+                }
+                continue;
+            }
             let execution = read_execution_role(
                 file,
                 spread.span,
@@ -4099,6 +4197,257 @@ impl LocalAccessContext<'_, '_> {
             if counts_as_strict_read_root(file, spread.span, execution, self.lookup) {
                 result.strict_read_obligations += 1;
             }
+        }
+    }
+
+    /// What a store's initial value proves about a whole-store read: a key
+    /// read needs a key (rc.21 warns on `{...s}`, `Object.values(s)` only
+    /// through a key the store holds), and an iteration needs an array to read
+    /// `length`. The first argument of the exact store primitive in the
+    /// declaring binding; anything else proves nothing.
+    fn store_initial_shape(
+        &self,
+        file: &solid_facts::FileFacts,
+        declaration: &Location,
+    ) -> StoreShape {
+        // A store of another module proves nothing here: an obligation.
+        if declaration.path.as_ref() != file.path.as_str() {
+            return StoreShape::Unknown;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(declaration.start_byte),
+            u32::try_from(declaration.end_byte),
+        ) else {
+            return StoreShape::Unknown;
+        };
+        let span = solid_facts::core::Span::new(start, end);
+        let Some(binding) = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == span))
+        else {
+            return StoreShape::Unknown;
+        };
+        let Some(call) = binding
+            .call_initializer
+            .and_then(|initializer| file.ast.call_at(initializer))
+        else {
+            return StoreShape::Unknown;
+        };
+        if !matches!(
+            self.lookup.primitive_at_call(file, call.span),
+            Some(
+                solid_dialect::Primitive::CreateStore
+                    | solid_dialect::Primitive::CreateOptimisticStore
+            )
+        ) {
+            return StoreShape::Unknown;
+        }
+        // `const pair = createStore(…)`: the `[store, setter]` tuple, no proxy.
+        if binding.array_slots.is_empty() {
+            return StoreShape::Tuple;
+        }
+        let Some(first) = call.arguments.first().filter(|argument| !argument.spread) else {
+            return StoreShape::Unknown;
+        };
+        let value = file.ast.peel_ts_sugar_span(first.span);
+        if file.ast.array_literals.contains(&value) {
+            return StoreShape::Array;
+        }
+        file.ast
+            .object_get_shapes
+            .iter()
+            .find(|shape| shape.span == value && shape.closed)
+            .map_or(StoreShape::Unknown, |shape| {
+                if shape.properties.is_empty() {
+                    StoreShape::Empty
+                } else {
+                    StoreShape::Keyed
+                }
+            })
+    }
+
+    /// The store a whole-store use reads, when `span` denotes one exactly.
+    fn whole_store_source(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+    ) -> Option<&SymbolId> {
+        let symbol = self.entities.value_symbol(file, span)?;
+        (self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            && self.accessors.contains_key(symbol))
+        .then_some(symbol)
+    }
+
+    /// One read of a whole store at `span`, placed as a spread is.
+    #[allow(clippy::too_many_arguments)]
+    fn push_whole_store_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        symbol: &SymbolId,
+        form: &str,
+        proven: bool,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
+        let Some((name, declaration)) = self.accessors.get(symbol) else {
+            return;
+        };
+        let mut execution = read_execution_role(
+            file,
+            span,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        // No summary describes these reads, so a closure no role places is
+        // an obligation here, where a member's read is the summaries' (ADR
+        // 0614), unless it is named at a tracked position.
+        if inside_non_component_function(file, span, self.lookup)
+            && named_callback_execution_role(file, span, self.lookup).is_none()
+            && !matches!(
+                execution,
+                ExecutionRole::EffectApply
+                    | ExecutionRole::UntrackedCallback
+                    | ExecutionRole::UntrackedUnwindowed
+            )
+        {
+            if crate::execution_role::named_at_tracked_position(file, span, self.lookup) {
+                return;
+            }
+            execution = match handed_read_role(
+                file,
+                span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            ) {
+                Some((role, Some(_))) if role.reports_untracked_read() => role,
+                _ => ExecutionRole::Unknown,
+            };
+        }
+        result.reads.push(Arc::new(ReactiveRead {
+            summary_attributed: false,
+            transported: false,
+            kind: "store-path".into(),
+            accessor: format!("{name} {form}").into(),
+            location: location(file.path.shared(), span),
+            declaration: declaration.clone(),
+            execution,
+            context: read_analysis_context(file, span, execution, self.lookup).into(),
+            via: Arc::from(""),
+            origin: None,
+            origin_context: Arc::from(""),
+            // A pending derive throws here instead of warning.
+            uncertain: !proven
+                || self.async_sources.contains(symbol)
+                || self.lookup.inside_possible_component(file, span),
+            missing_jsx_census: missing_jsx_census(file, span, execution),
+            host_callback_timing: host_callback_timing(file, span, execution, self.lookup),
+            project_consumer_non_strict: false,
+            callback_invocation_unproven: false,
+            callee_callback_timing: callee_callback_timing(file, span, execution, self.lookup),
+        }));
+        if counts_as_strict_read_root(file, span, execution, self.lookup) {
+            result.strict_read_obligations += 1;
+        }
+    }
+
+    /// ADR 0617, 0618: the reads of a whole store no member or spread fact
+    /// states, as rc.21 measures them in a strict-read window. `deep`, `JSON`'s
+    /// `toJSON` probe, `Reflect.get` and `Array.from` read a key on any store;
+    /// an iteration reads `length`, so it needs an array; `Object.values`,
+    /// `entries` and `assign` read a key the store holds. `snapshot`,
+    /// `Object.keys`, `in`, `hasOwn` and `for…in` read none.
+    fn discover_whole_store_reads(
+        &self,
+        file: &solid_facts::FileFacts,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
+        for operand in &file.ast.iterated_operands {
+            if file
+                .ast
+                .spreads
+                .iter()
+                .any(|spread| spread.argument == *operand)
+            {
+                continue;
+            }
+            let Some(symbol) = self.whole_store_source(file, *operand) else {
+                continue;
+            };
+            let Some((_, declaration)) = self.accessors.get(symbol) else {
+                continue;
+            };
+            let shape = self.store_initial_shape(file, declaration);
+            if shape == StoreShape::Tuple {
+                continue;
+            }
+            self.push_whole_store_read(
+                file,
+                *operand,
+                symbol,
+                "iterated",
+                shape == StoreShape::Array,
+                allowed,
+                result,
+            );
+        }
+        // A substitution reads `valueOf` or `toString` on any store; a tagged
+        // template hands its substitutions to the tag instead.
+        for template in &file.ast.template_literals {
+            for operand in template
+                .expressions
+                .iter()
+                .filter(|operand| file.ast.coercing_operands.binary_search(operand).is_ok())
+            {
+                if let Some(symbol) = self.whole_store_source(file, *operand) {
+                    self.push_whole_store_read(
+                        file, *operand, symbol, "coerced", true, allowed, result,
+                    );
+                }
+            }
+        }
+        for call in &file.ast.calls {
+            let library = self
+                .lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .map(|declaration| declaration.qualified_name.as_ref());
+            let (form, argument, needs_key) = if self.lookup.primitive_at_call(file, call.span)
+                == Some(solid_dialect::Primitive::Deep)
+            {
+                ("deep", 0, false)
+            } else {
+                match library {
+                    Some("JSON.stringify") => ("stringified", 0, false),
+                    Some("Reflect.get") => ("read", 0, false),
+                    Some("ArrayConstructor.from") => ("iterated", 0, false),
+                    Some("ObjectConstructor.values") => ("values", 0, true),
+                    Some("ObjectConstructor.entries") => ("entries", 0, true),
+                    Some("ObjectConstructor.assign") => ("assigned", 1, true),
+                    _ => continue,
+                }
+            };
+            let Some(value) = call.arguments.get(argument).filter(|value| !value.spread) else {
+                continue;
+            };
+            let Some(symbol) = self.whole_store_source(file, value.span) else {
+                continue;
+            };
+            let Some((_, declaration)) = self.accessors.get(symbol) else {
+                continue;
+            };
+            let shape = self.store_initial_shape(file, declaration);
+            if shape == StoreShape::Tuple {
+                continue;
+            }
+            let proven = !needs_key || matches!(shape, StoreShape::Keyed | StoreShape::Array);
+            self.push_whole_store_read(file, call.span, symbol, form, proven, allowed, result);
         }
     }
 

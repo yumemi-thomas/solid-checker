@@ -202,6 +202,8 @@ Known false-positive shapes left open (fire today, wanted gone):
 - ADR 0585: `resolve()`/`until()` in a closure handed on (an inline carrier, an unknown or local helper, a member) inside a compute a memo names by its binding is an SC2004/SC2005 obligation where rc.17 throws whenever it runs, as in the inline compute; a tracked read there is an SC1001 obligation.
 - ADR 0531: a named function handed where nothing follows it (a project helper's argument, `addEventListener`, `bind`, a stored, returned or exported value, a `defineProperty` getter) has its direct reads reported as obligations where they were silent; a `const` copy too. Legal f25-shaped readers handed to project schedulers or stored without invocation pay this obligation cost. A reader handed only to a reviewed fresh-stack scheduler, a handler or a memo compute stays clean.
 
+- rc.21 `OPTIMISTIC_WRITE_BEFORE_LOAD` and `CAUGHT_REACTIVE_READ` have no rule: an owned write to an optimistic setter of an async source is an obligation (ADR 0624), a handler's before the first answer is silent, and a `try` around a pending read in a compute stays clean (ADR 0620).
+- rc.21 `untrack` of a hook's memo in the body throws (ADR 0616), and is silent here; a plain body read of a local hook's async memo is SC1001 where the run throws `PENDING_ASYNC_UNTRACKED_READ`. A member of a value escaped from `untrack` (`const o = untrack(() => s.o); o.x`) warns and is silent (rules-mining CS-R19).
 
 ## 4. Open questions and live approximations
 

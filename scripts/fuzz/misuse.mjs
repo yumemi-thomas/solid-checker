@@ -13,7 +13,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
   CBP_CALLS, CBP_FORMS, cbProp, namedButton,
 } from "./model.mjs";
@@ -241,6 +241,29 @@ const STORE_OPERATIONS = {
  * fast runtime first (API_VARIANTS): the signal kind a variant declares (model.mjs `apiSignal`).
  */
 const API_KINDS = { "owned-write": "owned", optimistic: "optimistic", "writable-memo": "writable-memo", "optimistic-store": "optimistic-store", "optimistic-store-draft": "optimistic-store", projection: "projection" };
+/**
+ * The reads of a whole store (ADRs 0617, 0618), each measured on rc.21 in a strict-read window. `reads`: it warns; `array`, `empty`: the
+ * store it needs. The silent forms read no key, or none the store holds yet.
+ */
+const WHOLE_STORE_READS = {
+  "store-json": { reads: true, text: (o) => `JSON.stringify(${o})` },
+  "store-reflect": { reads: true, text: (o) => `Reflect.get(${o}, "v")` },
+  "store-values": { reads: true, text: (o) => `Object.values(${o})` },
+  "store-entries": { reads: true, text: (o) => `Object.entries(${o})` },
+  "store-assign": { reads: true, text: (o) => `Object.assign({}, ${o})` },
+  "store-template": { reads: true, text: (o) => `\`\${${o}}\`` },
+  "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
+  "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
+  "store-keys": { text: (o) => `Object.keys(${o})` },
+  "store-has": { text: (o) => `"v" in ${o}` },
+  "store-has-own": { text: (o) => `Object.hasOwn(${o}, "v")` },
+  "store-empty-spread": { empty: true, text: (o) => `({ ...${o} })` },
+  "store-empty-values": { empty: true, text: (o) => `Object.values(${o})` },
+};
+const WHOLE_STORE_WARNING = Object.keys(WHOLE_STORE_READS).filter((form) => WHOLE_STORE_READS[form].reads);
+const WHOLE_STORE_SILENT = Object.keys(WHOLE_STORE_READS).filter((form) => !WHOLE_STORE_READS[form].reads);
+const STRICT_WINDOWS = ["body", "effect-apply", "root", "render-apply"];
+
 /** A pending read in another reader: `latest(() => a1())`, `isPending(() => a1())`, or a plain read of a `createDeferred` source. */
 const pendingRead = (node, [sig]) => (node.variant === "latest" ? api("latest", `() => ${sig.name}()`, { locals: true }) : node.variant === "is-pending" ? api("isPending", `() => ${sig.name}()`, { locals: true }) : local(sig.name));
 /** The owner-attaching constructors a leaf or an effect apply refuses, besides memo, root and effect: a writable memo, a projection. */
@@ -287,14 +310,17 @@ export const SPEC = {
     // API_VARIANTS (measured 2026-11-03): a write through an optimistic store's or a projection's read proxy reports in every context;
     // an optimistic store's draft write is legal.
     recallVariants: [...Object.keys(STORE_OPERATIONS), "optional-link", "optional-link-leaf", "async-setter", "optimistic-store", "projection"],
-    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft"],
-    setup: (variant, name) => [API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    // ADR 0623: a shallow store serves values raw, so a write past its root lands and warns nothing; a root write is dropped as ever.
+    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft", "shallow-nested", "shallow-items"],
+    setup: (variant, name) => [variant?.startsWith("shallow-") ? storeShallowSignal(name("s"), 0) : API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
     call: (node, [sig]) => member(sig.name, (object) => {
       const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
       if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
       if (node.variant === "in-setter") return `${sig.setter}(() => { ${object}.v = 7; })`;
       if (node.variant === "draft") return `${sig.setter}((draft) => { draft.v = 7; })`;
       if (STORE_OPERATIONS[node.variant]) return STORE_OPERATIONS[node.variant].text(object);
+      if (node.variant === "shallow-nested") return `${object}.a.v = 7`;
+      if (node.variant === "shallow-items") return `${object}.items.push(7)`;
       if (node.variant === "copy-spread") return `({ ...${object} }).v = 7`;
       if (node.variant === "copy-assign") return `Object.assign({}, ${object}, { v: 7 })`;
       if (node.variant === "slice-push") return `${object}.items.slice().push(7)`;
@@ -319,17 +345,19 @@ export const SPEC = {
     // API_VARIANTS (measured 2026-11-03): `latest(() => a1())` and `isPending(() => a1())` of a pending async memo are strict reads
     // (not a pending throw): reported where a read is, silent in a memo, a compute, JSX, `untrack` and a leaf (`legalVariantContexts`).
     // `store-link` (ADR 0615): a store's Get, the read form a call of an accessor and a member read reach by different paths.
-    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending", "store-link"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending", "store-link"],
-    bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant === "store-link" ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    // ADRs 0617, 0618: the reads of a whole store. A warning form is legal where a read is, a silent one in every window too.
+    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending", "store-link", "store-deep", ...WHOLE_STORE_WARNING],
+    recallLegalVariants: ["uncalled-arith", "latest", "is-pending", "store-link", "store-deep", "store-snapshot", ...WHOLE_STORE_WARNING, ...WHOLE_STORE_SILENT],
+    bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
       latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"] },
-    legalVariantContexts: { latest: LEAF, "is-pending": LEAF },
+    legalVariantContexts: { latest: LEAF, "is-pending": LEAF, "store-snapshot": STRICT_WINDOWS, ...Object.fromEntries(WHOLE_STORE_SILENT.map((form) => [form, STRICT_WINDOWS])) },
     // A pending read in JSX or a memo the JSX reads is under `<Loading>` (`legalLoading`, see PENDING_ASYNC_UNTRACKED_READ); in a render
     // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
     legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
     variantSources: { settled: ["module-hook-shared"] },
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" ? storeNestedSignal(name("s"), 0) : signal(name("r"), 3, "src")],
-    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" ? storeNestedSignal(name("s"), 0) : variant === "store-deep" || variant === "store-snapshot" ? storeSignal(name("s"), 0) : WHOLE_STORE_READS[variant] ? (WHOLE_STORE_READS[variant].array ? storeArraySignal : WHOLE_STORE_READS[variant].empty ? storeEmptySignal : storeSignal)(name("s"), 0) : signal(name("r"), 3, "src")],
+    call: (node, sigs) => (WHOLE_STORE_READS[node.variant] ? member(sigs[0].name, WHOLE_STORE_READS[node.variant].text) : node.variant === "store-deep" ? api("deep", sigs[0].name, { locals: true }) : node.variant === "store-snapshot" ? api("snapshot", sigs[0].name, { locals: true }) : node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its

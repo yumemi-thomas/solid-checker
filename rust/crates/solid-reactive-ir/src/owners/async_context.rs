@@ -1077,8 +1077,26 @@ pub(crate) fn async_read_role(
     }) {
         return crate::ExecutionRole::Unknown;
     }
+    if tracked_computation_read(file, span, entities, symbol_names, lookup) {
+        crate::ExecutionRole::Unknown
+    } else {
+        role
+    }
+}
+
+/// ADR 0620: a read in the tracked callback of a computation that is no render
+/// (a memo's compute, a user effect's compute, a derived signal, an effect's
+/// apply, or a cleanup it returns, when its role is tracked). A pending source
+/// suspends such a read: it is no render, and no unsuspendable read either.
+pub(crate) fn tracked_computation_read(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
     let dialect = lookup.dialect;
-    let in_computation = file.ast.arguments_containing(span).any(|(call, index)| {
+    file.ast.arguments_containing(span).any(|(call, index)| {
         let argument = &call.arguments[index];
         matches!(
             argument.value,
@@ -1100,12 +1118,7 @@ pub(crate) fn async_read_role(
                 .tracked_regions
                 .iter()
                 .any(|region| argument.span.contains(region.span) && region.span.contains(span))
-    });
-    if in_computation {
-        crate::ExecutionRole::Unknown
-    } else {
-        role
-    }
+    })
 }
 
 pub(crate) fn jsx_element_is_loading(

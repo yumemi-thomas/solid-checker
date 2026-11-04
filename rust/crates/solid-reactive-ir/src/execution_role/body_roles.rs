@@ -809,7 +809,7 @@ pub(crate) fn may_follow_own_await(file: &solid_facts::FileFacts, span: Span) ->
 /// function by any of the tests that place code by position: the textual
 /// await order, an implicit suspension before it, or [`may_follow_own_await`].
 /// A call site or a write that may follow one has no proven placement.
-pub(super) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
+pub(crate) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
     follows_await_in_async_function(file, span)
         || follows_any_suspension(file, span)
         || may_follow_own_await(file, span)

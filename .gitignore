@@ -849,7 +849,15 @@ packages/wasm/owned/
 !fixtures/reactive-ir/async-read-under-jsx/node_modules/**
 !fixtures/reactive-ir/after-await-async-source/node_modules/
 !fixtures/reactive-ir/after-await-async-source/node_modules/**
+!fixtures/reactive-ir/rc21-whole-store-reads/node_modules/
+!fixtures/reactive-ir/rc21-whole-store-reads/node_modules/**
+!fixtures/reactive-ir/rc21-untrack-own-pending/node_modules/
+!fixtures/reactive-ir/rc21-untrack-own-pending/node_modules/**
 !fixtures/reactive-ir/rc21-on-flush/node_modules/
 !fixtures/reactive-ir/rc21-on-flush/node_modules/**
 !fixtures/reactive-ir/rc21-from/node_modules/
 !fixtures/reactive-ir/rc21-from/node_modules/**
+!fixtures/reactive-ir/rc21-shallow-store-writes/node_modules/
+!fixtures/reactive-ir/rc21-shallow-store-writes/node_modules/**
+!fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/
+!fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/**

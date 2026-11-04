@@ -5,6 +5,10 @@
 A store or projection is written through its read proxy instead of through its
 setter.
 
+A shallow store (`{ shallow: true }`) serves its values raw, so a write below its
+root lands on the raw object and warns nothing: silent, and a root write stays
+reported (ADR 0623).
+
 ## What it does
 
 **Props (2026-10-19).** A write through a 2.0 props object, or a `merge`/`omit`

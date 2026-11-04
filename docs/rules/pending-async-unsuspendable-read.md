@@ -21,6 +21,12 @@ with conditional wording. If the options object cannot be read, the untracked
 variant becomes uncertifiable because a declared first-paint value can neither
 be proven nor ruled out.
 
+On rc.21 an unlabelled `untrack` in a component body does not hide a pending
+source that body created: `const v = untrack(() => memo())` throws as a direct
+read does, and so does a derived store or a projection the body made (ADR 0616).
+A source made elsewhere does not. A tracked read in a compute suspends, and is no
+obligation (ADR 0620).
+
 A read written directly in a named local function (`const f1 = () => {
 user(); }`), whose binding is never written, is read where a call of that
 function runs, through up to four such functions. A call in the component

@@ -2241,6 +2241,9 @@ fn chain_links_verdict(
     if links.is_empty() {
         return Some(false);
     }
+    if shallow_store_root(file, context, root) {
+        return None;
+    }
     if context.strict_null_checks != Some(true) || !tsc_reports_in(file) {
         return Some(true);
     }
@@ -2267,6 +2270,38 @@ fn chain_links_verdict(
         !(optional_free(ast, member, &links)
             && links_proven_wrappable(file, context, member, root)),
     )
+}
+
+/// ADR 0623: `root` is exactly slot 0 of a `const` array pattern initialized by
+/// `createStore(value, { shallow: true })`. A shallow store serves every value
+/// raw (rc.21 `core-store` R38, R39, measured): a write below the root lands on
+/// the raw object, with no guard and no warning. Inert for the store, and
+/// nothing this rule claims.
+fn shallow_store_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
+    let Some((binding_file, binding, _)) = context
+        .lookup
+        .binding_at_reference(file.path.as_str(), root)
+    else {
+        return false;
+    };
+    if !binding.immutable
+        || !binding
+            .array_slots
+            .first()
+            .and_then(Option::as_ref)
+            .is_some_and(|slot| binding_file.source_text(slot.span) == file.source_text(root))
+    {
+        return false;
+    }
+    binding
+        .call_initializer
+        .and_then(|initializer| binding_file.ast.call_at(initializer))
+        .is_some_and(|call| {
+            context.lookup.primitive_at_call(binding_file, call.span)
+                == Some(solid_dialect::Primitive::CreateStore)
+                && crate::call_option_literal(binding_file, call, 1, "shallow")
+                    == solid_dialect::OptionLiteral::True
+        })
 }
 
 /// No link of the chain, nor the written member, is an optional access.

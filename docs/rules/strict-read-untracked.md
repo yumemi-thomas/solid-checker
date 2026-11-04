@@ -11,6 +11,13 @@ A positively identified visible configuration use makes it uncertifiable,
 with the veto site related. Missing reference evidence does not veto this
 conditional premise.
 
+A whole store is read by more than its members (ADRs 0617, 0618, measured on
+rc.21): `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Array.from(s)` and
+`${s}` on any store; `for…of`, an array or call spread and array destructuring on
+an array; `{...s}`, `Object.values`, `Object.entries` and `Object.assign` on an
+object that holds a key. A store of unknown shape is uncertifiable there, and
+`Object.keys`, `in`, `hasOwn`, `for…in` and `snapshot` read nothing.
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top

@@ -1483,6 +1483,30 @@ Not built: test selection from role arms (only `execution_role` and owner arms a
 
 A hint that the runtime does not warn excused its finding on its own word; `window.mjs` now measures it: a control run reads one signal per counter, and rc.17 warns there exactly when a strict-read window is open (24 `pos-flush-fn` × `dynamic` rows: none; mounted plainly: all). No evidence excuses nothing. The pair grids join the audit. The sample found three older false positives, `delete store.key` past an await. The per-code tier found a pending read through a helper in a handler's `onSettled` proven SC5001 (332 of 1,284 programs on main): the read now takes the owner fixed point's `onSettled` gate.
 
+<a id="adr-0616"></a>
+## ADR 0616 — An unlabelled `untrack` keeps the pending throw for the body's own source
+rc.21 `untrack` sets `strictPending` in an active strict window, and `read()` throws `PENDING_ASYNC_UNTRACKED_READ` on `strictPending && owner._parent === context` (#4630), so a pending memo, derived store or projection the strict body made throws through `untrack`, nested ones too. SC5001 reads that as the body's own read: the read's callback chain is exact unlabelled `untrack`s, the outermost runs in the strict window, and the source's binding is in the same function. A source made elsewhere, or a read under a child root, has another `context`. Answered by `Dialect::untrack_keeps_own_pending_throw` on the rc.21 triple. A hook's memo throws too but is not claimed: open work. Owners: `execution_role/read_context.rs` (`untrack_throws_own_pending_read`), `local_access.rs`.
+
+<a id="adr-0617"></a>
+## ADR 0617 — `deep(store)` is a read of the whole store
+Measured on rc.21: `deep(s)` warns `STRICT_READ_UNTRACKED` in a strict window on any store, an empty or shallow one too, and throws for a pending derive; `snapshot` reads nothing. Rules-mining RS-R37. A proven SC1001 row at the call, uncertain over a pending derive. Owner: `local_access.rs` (`discover_whole_store_reads`).
+
+<a id="adr-0618"></a>
+## ADR 0618 — A whole-store read needs what it reads
+Rules-mining CS-R15; every form measured on rc.21 in a strict window. `JSON.stringify` (`toJSON`), `Reflect.get`, `Array.from` and a template substitution read a key on any store; an iteration (`for…of`, array and call spread, array destructuring) reads `length`, so it needs an array literal; `{...s}`, `Object.values`, `entries` and `assign` read a key the store holds, so they need an object literal with one. `{...s}` on `{}` is silent, so the old proven `s spread` row on such a store was a false positive: a store of unknown shape is uncertifiable now. `Object.keys`, `in`, `hasOwn`, `for…in`, `!!s` and `snapshot` read none. Owner: `local_access.rs` (`store_initial_shape`).
+
 <a id="adr-0619"></a>
 ## ADR 0619 — `onFlush` and `from` are modelled on the rc.21 triple
 `onFlush` ends in `queueMicrotask(callback)` on every path: deferred, no owner, no window. `from` calls nothing itself; the iterator a computation asks for runs the subscribe function in that pass, tracked and owned, and without a consumer it never runs. Whether a computation consumes the result is not known at the call, so `from`'s callback has a conditional owner, and a write in it is unproven. A mixed install keeps them in a scoped gap, so a namespace import of `solid-js` on a whole triple costs nothing. `from` left `V2_REMOVED_EXPORTS`, the 1.x name it was. Owner: rust/crates/solid-dialect/src/solid_2.rs.
+
+<a id="adr-0620"></a>
+## ADR 0620 — A tracked read in a compute is no obligation
+`async_read_role` maps a tracked read in a computation's callback to `Unknown`, so it is no render for SC5003; the same `Unknown` also set `invocation_context_unproven`, so `createMemo(() => m())` over an async memo was an SC5001 obligation in every project since the flag was added. A pending source suspends such a read: `tracked_computation_read` separates it from a read no role places. Owner: `owners/async_context.rs`.
+
+<a id="adr-0623"></a>
+## ADR 0623 — A write below a shallow store's root is the raw write
+Rules-mining CS-R38, R39, measured: `createStore(v, { shallow: true })` serves values raw, so `state.list[0].a = 2` lands and warns nothing, and `state.list = []` is dropped with `STORE_WRITE_OUTSIDE_SETTER`. SC2003 stays silent past the root of a store proven shallow by a literal option; it was uncertifiable. Owner: `upstream_compat/shared_reactivity.rs` (`shallow_store_root`).
+
+<a id="adr-0624"></a>
+## ADR 0624 — An owned optimistic write before load is an obligation
+rc.21 throws `OPTIMISTIC_WRITE_BEFORE_LOAD` from an optimistic setter of an async source before its first answer, ahead of the owned-scope guard: SC2001 named the wrong code for the store form, and the signal form, unguarded since rc.17, was silent. No rule claims the code yet, so an owned write there is uncertifiable. Owner: `local_access.rs`; `Dialect::refuses_optimistic_write_before_load`.

@@ -345,6 +345,81 @@ pub(crate) fn async_execution_role(
     }
 }
 
+/// ADR 0616: a read in an exact unlabelled `untrack` around it, whose outermost
+/// call runs in a component body's strict-read window, of a source that same
+/// body declares. rc.21 keeps the pending throw there
+/// ([`solid_dialect::Dialect::untrack_keeps_own_pending_throw`]): `read()` tests
+/// `owner._parent === context`, so the proof asks for the body that created
+/// the source. A labelled `untrack` opens its own window, and any other
+/// carrier leaves this proof.
+pub(crate) fn untrack_throws_own_pending_read(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    declaration: &crate::Location,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if !lookup.dialect.untrack_keeps_own_pending_throw()
+        || declaration.path.as_ref() != file.path.as_str()
+    {
+        return false;
+    }
+    let mut outermost = None;
+    let mut body = containing_ast_function(&file.ast, span);
+    while let Some(literal) = body {
+        let carrier = file
+            .ast
+            .arguments_containing(literal.span)
+            .filter(|(call, index)| {
+                *index == 0
+                    && call.arguments.len() == 1
+                    && file.ast.peel_ts_sugar_span(call.arguments[0].span) == literal.span
+            })
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+            .map(|(call, _)| call);
+        let Some(call) = carrier else { break };
+        if lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::Untrack) {
+            break;
+        }
+        outermost = Some(call.span);
+        body = containing_ast_function(&file.ast, call.span);
+    }
+    let (Some(outermost), Some(body)) = (outermost, body) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    let declared_here = containing_ast_function(&file.ast, Span::new(start, end))
+        .is_some_and(|function| function.span == body.span);
+    let allowed = allowed_callback_spans(file, lookup);
+    declared_here
+        && super::read_execution_role(file, outermost, &allowed, entities, symbol_names, lookup)
+            == ExecutionRole::UntrackedRendering
+}
+
+/// ADR 0620: the read is tracked in a computation's own callback, so a pending
+/// source suspends it. A read past an await is tracked by nothing, and a closure
+/// the compute names and stores may run anywhere: both stay unproven.
+pub(crate) fn computation_read_suspends(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    crate::owners::tracked_computation_read(file, span, entities, symbol_names, lookup)
+        && !may_follow_suspension(file, span)
+        && file
+            .ast
+            .arguments_containing(span)
+            .any(|(call, index)| direct_callback_contains(file, call.arguments[index].span, span))
+}
+
 pub(crate) fn pending_accessor_probe(
     file: &solid_facts::FileFacts,
     span: Span,
