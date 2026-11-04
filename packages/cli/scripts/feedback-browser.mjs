@@ -783,7 +783,8 @@ export function selectFeedbackModels(rows) {
   return { models, conflictingLeafModels };
 }
 
-export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory, sourceInstrumentation = true }) {
+// The scenario, supplied responses and runtime options of one run, validated before any tooling loads.
+function prepareFeedbackRun({ project, scenarioPath, comparisonProject, root, config, sourceInstrumentation = true }) {
   const scenarioPin = { path: realpathSync(resolve(scenarioPath)), sha256: hash(readFileSync(scenarioPath)) };
   const scenario = validateFeedbackScenario(JSON.parse(readFileSync(scenarioPin.path, "utf8")));
   const responses = loadSuppliedResponses(scenario, scenarioPin.path);
@@ -791,43 +792,115 @@ export async function runBrowserFeedback({ project, scenarioPath, browserPath, t
   // Part of the execution cache's key through `runtimeOptions`.
   if (!sourceInstrumentation) runtimeOptions.sourceInstrumentation = false;
   assert(!comparisonProject || (!root && !config), "Explicit --root/--config with --compare-project needs separate app inputs; run each app separately");
+  return { project, comparisonProject, scenarioPin, scenario, responses, runtimeOptions };
+}
+
+// What a run may share with the runs after it: the loaded tooling, the pinned
+// browser binary and its launched process, and the execution cache's
+// identities of that tooling and this harness (the code this process loaded).
+// Each run still gets its own Vite server, browser context, analysis and pins.
+async function openFeedbackSession({ toolingRoot, browserPath, executionCacheDirectory, stampBrowser = false }) {
   // The tooling loads up front even when every browser half is reused: loading
   // it only on a miss saved ~0.2 s a case but left about one hit in 80 unable
   // to exit until killed (2026-10-24, not explained), so it is not lazy.
-  const toolsRoot = realpathSync(resolve(toolingRoot ?? dirname(resolve(project))));
-  const tools = await toolingAt(resolve(toolingRoot ?? dirname(resolve(project))));
+  const toolsRoot = realpathSync(resolve(toolingRoot));
+  const tools = await toolingAt(resolve(toolingRoot));
   tools.root = toolsRoot;
-  const tooling = async () => tools;
+  // A batch stamps the binary before hashing it, so a change during the hash fails the first run's stamp check.
+  const browserStamp = stampBrowser ? fileStamp(realpathSync(resolve(browserPath))) : null;
   const browserPin = { path: realpathSync(resolve(browserPath)), sha256: hash(readFileSync(browserPath)) };
-  assert(!executionCacheDirectory || !comparisonProject, "--execution-cache does not combine with --compare-project");
   const executionCache = executionCacheDirectory ? { cache: createExecutionCache(resolve(executionCacheDirectory)),
     parts: { harness: harnessDigest(), tools: toolingIdentity(toolsRoot), browser: browserPin.sha256 } } : null;
-  // Likewise Chromium.
-  let launched = null;
-  const browser = () => (launched ??= tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 }));
-  if (!executionCache) await browser();
+  // Likewise Chromium, launched on the first browser half that needs it.
+  let launched = null, disconnected = false;
+  const browser = () => (launched ??= tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 })
+    .then(chromium => { chromium.on?.("disconnected", () => { disconnected = true; }); return chromium; }));
+  return { tooling: async () => tools, browser, browserPin, browserStamp, executionCache,
+    launched: async () => launched && await launched.catch(() => null), disconnected: () => disconnected };
+}
+
+async function executeFeedbackRun(session, { project, comparisonProject, scenarioPin, scenario, responses, runtimeOptions }, verifyBrowser) {
+  const { tooling, browser, browserPin, executionCache } = session;
+  const fresh = () => new Map([...responses].map(([url, row]) => [url, { ...row, served: 0 }]));
+  const original = await collectProject(project, scenario, tooling, browser, fresh(), runtimeOptions, executionCache);
+  const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tooling, browser, fresh(), validateFeedbackRuntimeOptions(comparisonProject)) : null;
+  for (const run of [original, comparison].filter(Boolean)) {
+    validateFeedbackInputs(run.capture.manifest);
+    for (const pin of run.capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
+  }
+  assert.equal(hash(readFileSync(scenarioPin.path)), scenarioPin.sha256, "Scenario changed during execution");
+  for (const { pin } of responses.values()) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Supplied response changed: ${pin.path}`);
+  verifyBrowser();
+  const selection = selectAssertionFeedback(original.assertions, comparison?.assertions ?? []);
+  return { ...original.feedback, coverage: { ...original.feedback.coverage, runtime: "executed-browser", nativeReadCollection: original.coverage },
+    assertions: original.assertions, assertionFailures: original.assertions.filter(row => !row.passed),
+    guidance: selection, execution: { ...original, feedback: undefined, capture: undefined },
+    automatic: original.automatic,
+    comparison: comparison ? { project: comparison.feedback.project, inputId: comparison.feedback.inputId,
+      assertions: comparison.assertions, stats: comparison.stats, nativeExitCode: comparison.feedback.nativeExitCode,
+      typingErrors: comparison.typingErrors, pageErrors: comparison.pageErrors } : null,
+    scenario: scenarioPin, browser: { ...browserPin, version: original.browserVersion } };
+}
+
+export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory, sourceInstrumentation = true }) {
+  const run = prepareFeedbackRun({ project, scenarioPath, comparisonProject, root, config, sourceInstrumentation });
+  const session = await openFeedbackSession({ toolingRoot: toolingRoot ?? dirname(resolve(project)), browserPath,
+    executionCacheDirectory: comparisonProject ? null : executionCacheDirectory });
+  assert(!executionCacheDirectory || !comparisonProject, "--execution-cache does not combine with --compare-project");
+  if (!session.executionCache) await session.browser();
   let primary;
   try {
-    const fresh = () => new Map([...responses].map(([url, row]) => [url, { ...row, served: 0 }]));
-    const original = await collectProject(project, scenario, tooling, browser, fresh(), runtimeOptions, executionCache);
-    const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tooling, browser, fresh(), validateFeedbackRuntimeOptions(comparisonProject)) : null;
-    for (const run of [original, comparison].filter(Boolean)) {
-      validateFeedbackInputs(run.capture.manifest);
-      for (const pin of run.capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
-    }
-    assert.equal(hash(readFileSync(scenarioPin.path)), scenarioPin.sha256, "Scenario changed during execution");
-    for (const { pin } of responses.values()) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Supplied response changed: ${pin.path}`);
-    assert.equal(hash(readFileSync(browserPin.path)), browserPin.sha256, "Browser changed during execution");
-    const selection = selectAssertionFeedback(original.assertions, comparison?.assertions ?? []);
-    return { ...original.feedback, coverage: { ...original.feedback.coverage, runtime: "executed-browser", nativeReadCollection: original.coverage },
-      assertions: original.assertions, assertionFailures: original.assertions.filter(row => !row.passed),
-      guidance: selection, execution: { ...original, feedback: undefined, capture: undefined },
-      automatic: original.automatic,
-      comparison: comparison ? { project: comparison.feedback.project, inputId: comparison.feedback.inputId,
-        assertions: comparison.assertions, stats: comparison.stats, nativeExitCode: comparison.feedback.nativeExitCode,
-        typingErrors: comparison.typingErrors, pageErrors: comparison.pageErrors } : null,
-      scenario: scenarioPin, browser: { ...browserPin, version: original.browserVersion } };
+    return await executeFeedbackRun(session, run, () =>
+      assert.equal(hash(readFileSync(session.browserPin.path)), session.browserPin.sha256, "Browser changed during execution"));
   } catch (error) { primary = error; throw error; } finally {
-    await closeFeedbackResourcesAfter(primary, { browser: launched && await launched.catch(() => null) });
+    await closeFeedbackResourcesAfter(primary, { browser: await session.launched() });
   }
+}
+
+// The identity of a file's bytes as the file system reports it: a write, a
+// replacement or a rename onto the path changes the change time or the inode.
+const fileStamp = path => { const stat = statSync(path, { bigint: true }); return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":"); };
+
+/**
+ * Many `feedback run`s in one process (`feedback batch`). Each run gets what a
+ * fresh `feedback run` gets -- its own snapshot and native analysis, Vite
+ * server, browser context and pins -- and shares only what `openFeedbackSession`
+ * names. The browser binary is hashed when the session opens and when it closes,
+ * and its file stamp is checked after every run.
+ * `run` returns `{ report, retire }`: `retire` names why the process must not
+ * take another run (the run failed, application code ran in this process, the
+ * working directory changed, the browser disconnected or kept a context), and
+ * the caller then closes the session. Each run starts from the process
+ * environment the session opened with.
+ */
+export async function openBrowserFeedbackBatch({ browserPath, toolingRoot, executionCacheDirectory }) {
+  const session = await openFeedbackSession({ toolingRoot, browserPath, executionCacheDirectory, stampBrowser: true });
+  if (!session.executionCache) await session.browser();
+  // Vite sets NODE_ENV on the process; every run starts from the environment a fresh process has.
+  const stamp = session.browserStamp, environment = { ...process.env };
+  const restoreEnvironment = () => {
+    for (const name of Object.keys(process.env)) if (!(name in environment)) delete process.env[name];
+    Object.assign(process.env, environment);
+  };
+  const verifyBrowser = () => assert.equal(fileStamp(session.browserPin.path), stamp, "Browser changed during execution");
+  return {
+    async run({ project, scenarioPath, root, config, sourceInstrumentation = true }) {
+      const cwd = process.cwd();
+      restoreEnvironment();
+      const report = await executeFeedbackRun(session, prepareFeedbackRun({ project, scenarioPath, root, config, sourceInstrumentation }), verifyBrowser);
+      const chromium = await session.launched();
+      const retire = report.execution.failure ? "the run's scenario failed"
+        : report.execution.configuration?.kind !== "collector-default" ? "the run loaded an application Vite config into this process"
+        : process.cwd() !== cwd ? "the run changed the working directory"
+        : session.disconnected() ? "the browser disconnected"
+        : chromium && chromium.contexts().length ? "a browser context outlived its run" : null;
+      return { report, retire };
+    },
+    async close(primary) {
+      try { await closeFeedbackResourcesAfter(primary, { browser: await session.launched() }); } finally {
+        assert.equal(fileStamp(session.browserPin.path), stamp, "Browser changed during execution");
+        assert.equal(hash(readFileSync(session.browserPin.path)), session.browserPin.sha256, "Browser changed during execution");
+      }
+    },
+  };
 }
