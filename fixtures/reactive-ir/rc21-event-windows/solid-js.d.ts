@@ -18,6 +18,8 @@ declare module "solid-js" {
   export function createTrackedEffect(fn: () => void): void;
   export function createRoot<T>(fn: () => T): T;
   export function untrack<T>(fn: () => T, label?: string | false): T;
+  export function flush(): void;
+  export function flush<T>(fn: () => T): T;
   export function snapshot<T>(store: T): T;
   export function merge<A extends object, B extends object>(a: A, b: B): A & B;
   export function merge<A extends object>(a: A): A;

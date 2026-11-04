@@ -7,8 +7,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
-      "start": 378,
-      "end": 385,
+      "start": 385,
+      "end": 392,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 807,
+      "end": 814,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 1229,
+      "end": 1236,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 1280,
+      "end": 1287,
       "fixes": 0
     },
     {
@@ -17,8 +47,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
-      "start": 1573,
-      "end": 1580,
+      "start": 1580,
+      "end": 1587,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 1951,
+      "end": 1956,
       "fixes": 0
     }
   ]

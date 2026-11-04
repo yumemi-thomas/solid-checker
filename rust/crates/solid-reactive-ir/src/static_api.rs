@@ -359,14 +359,13 @@ impl StaticApiContext<'_> {
                 });
             }
             // ADR 0639: `flush()`'s guard takes no event, so a handler dispatched
-            // synchronously from an effect's apply warns there. A visible
-            // dispatch makes a flush in a handler an obligation.
+            // synchronously from an effect's apply warns there. A dispatch whose
+            // caller is not placed outside every apply makes a flush in a handler
+            // an obligation.
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
-                && self
-                    .lookup
-                    .hazard_present(crate::base::Hazard::SynchronousDispatch)
+                && self.lookup.synchronous_event_flush_dispatch_present()
                 && !result.violations.iter().any(|violation| {
                     violation.id == "SC2008"
                         && violation.location == location(file.path.shared(), call.callee)

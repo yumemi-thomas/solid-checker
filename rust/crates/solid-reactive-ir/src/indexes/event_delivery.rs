@@ -48,6 +48,10 @@ pub(crate) enum DispatchCaller {
     /// census): a delivery it makes runs on the stack of a delivery, which
     /// has no owner and no window (ADR 0437).
     EventHandler,
+    /// A `createEffect`'s apply on a dialect whose effect window takes only
+    /// its queue's event (ADR 0639): a delivery reads in no window, and still
+    /// runs under the owner and inside the flush.
+    EffectApply,
 }
 
 impl DispatchCaller {
@@ -60,6 +64,7 @@ impl DispatchCaller {
             Self::TestRunner => "test runner callback",
             Self::TestHelper => "test-only helper",
             Self::EventHandler => "event handler",
+            Self::EffectApply => "effect apply",
         }
     }
 }
@@ -77,7 +82,8 @@ impl DispatchSite {
     /// Whether the site withholds ownerless event proofs (owner and write
     /// roles): a delivery can inherit its caller's owner.
     pub(crate) const fn withholds_owner_proofs(&self) -> bool {
-        !self.receiver.excluded() && self.caller.is_none()
+        !self.receiver.excluded()
+            && matches!(self.caller, None | Some(DispatchCaller::EffectApply))
     }
 
     /// Whether the site withholds an event handler's untracked-read proof: a
@@ -94,8 +100,26 @@ impl DispatchSite {
                         | DispatchCaller::TestRunner
                         | DispatchCaller::TestHelper
                         | DispatchCaller::EventHandler
+                        | DispatchCaller::EffectApply
                 )
             )
+    }
+
+    /// Whether a delivery may run inside an effect's apply, whose `flush()` guard
+    /// takes no event (ADR 0639). The same callers exclude it as a strict-read
+    /// window, but the receiver does not: a listener on `window` flushes too.
+    pub(crate) const fn withholds_flush_proofs(&self) -> bool {
+        !matches!(
+            self.caller,
+            Some(
+                DispatchCaller::FreshStack
+                    | DispatchCaller::AwaitContinuation
+                    | DispatchCaller::ModuleInitialization
+                    | DispatchCaller::TestRunner
+                    | DispatchCaller::TestHelper
+                    | DispatchCaller::EventHandler
+            )
+        )
     }
 }
 
@@ -249,25 +273,33 @@ impl SemanticLookup<'_> {
         self.dispatch_veto().1
     }
 
-    /// The two veto answers, owner proofs and read proofs
+    /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
+    pub(crate) fn synchronous_event_flush_dispatch_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
+        self.dispatch_veto().2
+    }
+
+    /// The veto answers, owner, read and flush proofs
     /// ([`Self::synchronous_event_dispatch_present`],
-    /// [`Self::synchronous_event_read_dispatch_present`]): the section
+    /// [`Self::synchronous_event_read_dispatch_present`],
+    /// [`Self::synchronous_event_flush_dispatch_present`]): the section
     /// [`crate::base::reads::Section::DispatchVeto`] binds them, and the memo
     /// [`super::project_memos::DispatchVetoAnswer`] keeps them between builds
     /// (ADR 0450). With no
     /// call anywhere that resolves to a dispatch (the hazard
     /// [`crate::base::Hazard::SynchronousDispatch`]) neither holds, whatever
     /// the censuses say, and they are not computed.
-    pub(crate) fn dispatch_veto(&self) -> (bool, bool) {
+    pub(crate) fn dispatch_veto(&self) -> (bool, bool, bool) {
         #[cfg(debug_assertions)]
         VetoComputation::assert_not_computing();
         if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
-            return (false, false);
+            return (false, false, false);
         }
         let sites = self.event_dispatch_sites();
         (
             sites.iter().any(DispatchSite::withholds_owner_proofs),
             sites.iter().any(DispatchSite::withholds_read_proofs),
+            sites.iter().any(DispatchSite::withholds_flush_proofs),
         )
     }
 
@@ -373,12 +405,37 @@ impl SemanticLookup<'_> {
                         path: file.path.to_string(),
                         span: call.span,
                         receiver,
-                        caller: self.dispatch_caller(file, call),
+                        caller: self
+                            .dispatch_caller(file, call)
+                            .or_else(|| self.dispatch_in_effect_apply(file, call.span)),
                     });
                 }
             }
             sites
         })
+    }
+
+    /// ADR 0639: `site` is written directly in a `createEffect`'s apply. A render
+    /// effect's window is the body's, and takes any event.
+    fn dispatch_in_effect_apply(
+        &self,
+        file: &solid_facts::FileFacts,
+        site: Span,
+    ) -> Option<DispatchCaller> {
+        (self.dialect.effect_window_takes_only_its_event()
+            && file.ast.arguments_containing(site).any(|(call, index)| {
+                crate::execution_role::direct_callback_contains(
+                    file,
+                    call.arguments[index].span,
+                    site,
+                ) && self.primitive_at_call(file, call.span)
+                    == Some(solid_dialect::Primitive::CreateEffect)
+                    && self
+                        .dialect
+                        .apply_callback_argument(solid_dialect::Primitive::CreateEffect)
+                        == Some(index)
+            }))
+        .then_some(DispatchCaller::EffectApply)
     }
 
     /// `window.dispatchEvent(…)` and `document.dispatchEvent(…)` where the

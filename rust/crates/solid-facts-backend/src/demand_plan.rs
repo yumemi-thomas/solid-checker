@@ -1221,6 +1221,16 @@ fn plan_call_demands(
                         )
                     )
                 });
+        // ADR 0639: `element.click()` delivers its listeners on the caller's
+        // stack, and only the resolved call says the callee is
+        // `HTMLElement.click`. Matched by spelling: the demand states no
+        // decision.
+        let argumentless_dispatch = call.arguments.is_empty()
+            && !call.construct
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| file.source_text(member.property) == Some("click"));
         // The owner walk asks whether the operand of an action body's `yield`
         // is a native promise, which only an exactly resolved standard-library
         // declaration answers (`yield Promise.resolve()`; the action's next
@@ -1234,6 +1244,7 @@ fn plan_call_demands(
             });
         planned.resolved_call = !call.arguments.is_empty()
             || argumentless_array_mutator
+            || argumentless_dispatch
             || argumentless_before_suspension
             || argumentless_yield_operand
             || returned_callees.contains(&call.callee)

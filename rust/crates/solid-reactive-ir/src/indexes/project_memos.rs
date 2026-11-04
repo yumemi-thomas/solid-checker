@@ -407,11 +407,11 @@ whole_program! {
     /// lookup (the dispatch sites, the receivers' declarations, the callers'
     /// positions, the two function censuses), so this memo reads the whole
     /// program and reruns in every build in which it moved; a reader of the
-    /// veto records this answer, not the program, and reruns only when the two
+    /// veto records this answer, not the program, and reruns only when the
     /// bits do (early cutoff: an equal rerun keeps its revision). Fail
-    /// closed on a cycle: both proofs withheld.
-    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool),
-    cycle: (true, true),
+    /// closed on a cycle: every proof withheld.
+    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool, bool),
+    cycle: (true, true, true),
     direct: |lookup| lookup.dispatch_veto(),
     |ctx| Ok(ctx.project(|lookup| lookup.dispatch_veto()))
 }

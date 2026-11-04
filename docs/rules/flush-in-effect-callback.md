@@ -142,6 +142,11 @@ effect.
   (ADR 0538). One handed to a project helper, written as a member's value or
   an object slot, or a method of a class written in the apply is reported as
   uncertifiable, anchored at the code around it.
+- **A handler a dispatch may reach from an apply.** The guard takes no event, so
+  a flush in a listener an apply's `click()` fires warns. A flush in a function
+  that is no component is uncertifiable while any dispatch of the program has no
+  placed caller (ADR 0639); one after an await, in a timer or in a handler costs
+  nothing.
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or

@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, flush } from "solid-js";
 
 // A body's window takes any event: a listener it dispatches reads in it. The
 // run through the listener is followed by nothing: open.
@@ -65,4 +65,21 @@ export function ApplyRead() {
     },
   );
   return <button ref={button}>x</button>;
+}
+
+// `flush()`'s guard takes no event, so a handler an apply dispatches flushes
+// inside the drain. The dispatch sits in a helper: an obligation, not a clean.
+export function FlushDispatchedFromHelper() {
+  const element = document.createElement("button");
+  element.addEventListener("click", () => {
+    flush();
+  });
+  const fire = () => element.click();
+  createEffect(
+    () => 1,
+    () => {
+      fire();
+    },
+  );
+  return <p>{1}</p>;
 }

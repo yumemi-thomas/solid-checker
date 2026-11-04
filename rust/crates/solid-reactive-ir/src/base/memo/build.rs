@@ -1941,7 +1941,7 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 crate::base::reads::Section::SynchronousDispatch => {
                     let _ = self.hazard(crate::base::Hazard::SynchronousDispatch);
                 }
-                // A reader of the veto's two answers records the answers
+                // A reader of the veto's answers records the answers
                 // (ADR 0450): the hazard's probe, and while the hazard is
                 // present the memo that holds the classified veto. A cycle
                 // reads the whole program.

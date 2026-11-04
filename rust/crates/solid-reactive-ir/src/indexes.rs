@@ -1819,12 +1819,12 @@ impl<'a> SemanticLookup<'a> {
                 )]);
             }
             Section::DispatchVeto => {
-                // The hazard, then the two answers the classified sites give.
+                // The hazard, then the answers the classified sites give.
                 hasher.update([u8::from(
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
-                let (owner, read) = self.dispatch_veto();
-                hasher.update([u8::from(owner), u8::from(read)]);
+                let (owner, read, flush) = self.dispatch_veto();
+                hasher.update([u8::from(owner), u8::from(read), u8::from(flush)]);
             }
             Section::FlushVeto => {
                 hasher.update([u8::from(self.flush_veto())]);

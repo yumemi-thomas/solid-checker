@@ -302,6 +302,13 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether an effect's apply opens a strict-read window for its queue's
+    /// event alone, so a handler it dispatches reads under another event, in
+    /// no window.
+    fn effect_window_takes_only_its_event(&self) -> bool {
+        false
+    }
+
     /// Whether an optimistic setter of an async source throws before the
     /// source's first answer lands.
     fn refuses_optimistic_write_before_load(&self) -> bool {

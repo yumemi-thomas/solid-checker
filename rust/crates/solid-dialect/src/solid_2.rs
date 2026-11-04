@@ -468,6 +468,13 @@ impl Dialect for Solid2 {
         self.triple_exports == releases::TripleExports::Rc21
     }
 
+    // rc.21 records the queue's event in an effect's window (`strictReadEvent`)
+    // and compares `globalThis.event`. Measured in Chrome (ADR 0639): a handler
+    // an apply dispatches reads silently. A body's window takes any event.
+    fn effect_window_takes_only_its_event(&self) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
+    }
+
     // rc.21 `devGuardOptimisticBeforeLoad` (`@solidjs/signals` `dist/dev-shared.js`):
     // `STATUS_UNINITIALIZED` throws `OPTIMISTIC_WRITE_BEFORE_LOAD`, ahead of
     // `storeSetter`'s guard. Measured on the dev build: `createOptimistic(async …)`
