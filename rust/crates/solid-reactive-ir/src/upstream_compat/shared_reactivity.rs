@@ -3092,17 +3092,24 @@ fn no_store_method_write(
         if call.construct || file.ast.member_at(callee).is_none() {
             continue;
         }
-        let Some((method_file, method, _)) =
-            crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup)
-        else {
-            continue;
-        };
-        let writes_this = method_file.ast.write_targets.iter().any(|target| {
-            method.body.contains(*target)
-                && method_file
-                    .source_text(*target)
-                    .is_some_and(|written| written.starts_with("this."))
-        });
+        // A method no declaration resolves (a class expression, a value the
+        // store was handed) may write `this` as well.
+        let writes_this =
+            match crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup)
+            {
+                Some((method_file, method, _)) => {
+                    method_file.ast.write_targets.iter().any(|target| {
+                        method.body.contains(*target)
+                            && method_file
+                                .source_text(*target)
+                                .is_some_and(|written| written.starts_with("this."))
+                    })
+                }
+                None => context
+                    .lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_none(),
+            };
         let Some(root) = member_root(file, callee).filter(|_| writes_this) else {
             continue;
         };

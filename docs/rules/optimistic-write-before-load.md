@@ -8,11 +8,15 @@ An optimistic setter of an async source runs before the source's first answer.
 
 rc.21 refuses it: a `createOptimistic(async ...)` or `createOptimisticStore(async ...,
 seed)` setter throws `OPTIMISTIC_WRITE_BEFORE_LOAD` while the source has no first answer,
-ahead of the owned-scope guard, and the seed does not count. A declared `loadingValue` is
-an answer. Proven in the pass that creates the source: the setter runs in the function
-holding a creation with a literal `async` compute, after it, in a component body or
-module scope. Anywhere else it is uncertifiable (ADR 0636): a handler or action may run
-before the answer lands or after it, and no fact tells which.
+ahead of the owned-scope guard, in any role. The seed does not count; a declared
+`loadingValue` is an answer. Proven where the call runs on one stack with a `const` creation
+with a literal `async` compute, entered after it and past no await: in the same function, or
+in closures, helpers' callbacks, `untrack` or `createRoot` on that stack, in a handler that
+creates the source too, at module scope (ADR 0636).
+
+Anywhere else it is uncertifiable: a handler or action that did not create the source may run
+before the answer lands or after it, and no fact tells which. So is a compute that is not a
+literal `async` one, a source a hook creates, and a setter a `let` or `var` holds.
 
 ## How to fix
 

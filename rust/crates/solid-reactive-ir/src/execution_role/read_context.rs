@@ -423,23 +423,78 @@ fn untrack_carrier<'f>(
     {
         return Some(call);
     }
-    let name = crate::owners::function_binding_name(file, function)?;
-    if crate::indexes::binding_written(file, name.span) {
+    if let Some(call) = crate::owners::function_binding_name(file, function)
+        .filter(|name| !crate::indexes::binding_written(file, name.span))
+        .and_then(|name| {
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    identifier.role == solid_facts::ast::IdentifierRole::Reference
+                        && file.ast.reference_declaration(identifier.span) == Some(name.span)
+                })
+                .find_map(|reference| {
+                    file.ast
+                        .arguments_containing(reference.span)
+                        .find(|(call, index)| *index == 0 && carries(call, reference.span))
+                        .map(|(call, _)| call)
+                })
+        })
+    {
+        return Some(call);
+    }
+    // ADR 0628: a `const` chain or an object literal's member names it exactly.
+    if crate::local_access::member_assigned(file, function) {
         return None;
     }
-    file.ast
-        .identifiers
-        .iter()
-        .filter(|identifier| {
-            identifier.role == solid_facts::ast::IdentifierRole::Reference
-                && file.ast.reference_declaration(identifier.span) == Some(name.span)
-        })
-        .find_map(|reference| {
-            file.ast
-                .arguments_containing(reference.span)
-                .find(|(call, index)| *index == 0 && carries(call, reference.span))
-                .map(|(call, _)| call)
-        })
+    file.ast.calls.iter().find(|call| {
+        lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack)
+            && call
+                .arguments
+                .first()
+                .is_some_and(|first| value_is_function(file, first.span, function, 4))
+    })
+}
+
+/// `value` holds `function`: it is written there, or through unwritten `const`s
+/// and members of object literals they hold.
+fn value_is_function(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    function: &solid_facts::ast::FunctionFact,
+    depth: usize,
+) -> bool {
+    let ast = &file.ast;
+    let value = ast.peel_ts_sugar_span(value);
+    if value == function.span {
+        return true;
+    }
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let held = |name: Span| {
+        ast.reference_declaration(name)
+            .filter(|declaration| !crate::indexes::binding_written(file, *declaration))
+            .and_then(|declaration| {
+                ast.bindings.iter().find(|binding| {
+                    binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.iter().any(|name| name.span == declaration)
+                })
+            })
+            .and_then(|binding| binding.initializer)
+            .map(|initializer| ast.peel_ts_sugar_span(initializer))
+    };
+    if let Some(member) = ast.member_at(value) {
+        return !ast.computed_members.contains(&member.span)
+            && held(ast.peel_ts_sugar_span(member.object))
+                .zip(file.source_text(member.property))
+                .and_then(|(holder, key)| {
+                    super::pending_sources::closed_literal_slot_value(file, holder, key)
+                })
+                .is_some_and(|slot| value_is_function(file, slot, function, depth));
+    }
+    held(value).is_some_and(|initializer| value_is_function(file, initializer, function, depth))
 }
 
 /// The layers a read runs in under exact `untrack`s and the outermost window.
@@ -513,7 +568,7 @@ pub(crate) fn untrack_layers<'f>(
             walking = note(call);
             at = call.span;
             held = (layers.len(), containing_ast_function(&file.ast, at));
-        } else if let Some(call) = super::in_place_layer_call(file, function, lookup) {
+        } else if let Some(call) = in_place_step(file, function, lookup) {
             layers.push(function);
             at = call;
         } else if !file
@@ -564,33 +619,69 @@ fn enclosing_function<'f>(
         .min_by_key(|outer| outer.span.end - outer.span.start)
 }
 
-/// ADR 0632: `site` runs on the stack of a call of `function`: written in it, or
-/// in layers that run in place up to it (a closure, an IIFE, a helper's
-/// callback, an `untrack`). A function that runs later (an effect's apply, a
-/// handler, a timer) ends the walk.
+/// The position that runs `function` on its stack: an in-place layer's call,
+/// or a standard-library carrier that provably runs it (`f.call()`,
+/// `[1].forEach(f)`, a tagged template, ADR 0566).
+fn in_place_step(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    super::in_place_layer_call(file, function, lookup).or_else(|| {
+        crate::local_access::inline_carriers(file, function, lookup)
+            .into_iter()
+            .find(|carrier| crate::carrier_runs::carrier_provably_runs(file, *carrier, lookup))
+    })
+}
+
+/// ADR 0636: the position in `target` (`None`: at module scope) whose evaluation
+/// runs `site` on one stack: `site` itself written there, or the call entering
+/// layers that run synchronously (a closure, an IIFE, a helper's callback, an
+/// `untrack`, a root's or another primitive's synchronous callback, a carrier).
+/// A function that runs later (an effect's apply, a handler, a timer) ends it.
+pub(crate) fn entry_on_stack_of(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    target: Option<&solid_facts::ast::FunctionFact>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut at = site;
+    for _ in 0..16 {
+        let layer = containing_ast_function(&file.ast, at);
+        if layer.map(|function| function.span) == target.map(|function| function.span) {
+            return Some(at);
+        }
+        let layer = layer?;
+        let synchronous = file
+            .ast
+            .arguments_containing(layer.span)
+            .find(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+                    && lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            lookup.dialect.synchronous_callback_slot(
+                                primitive,
+                                *index,
+                                call.arguments.len(),
+                            )
+                        })
+            })
+            .map(|(call, _)| call.span);
+        at = synchronous
+            .or_else(|| untrack_carrier(file, layer, lookup).map(|call| call.span))
+            .or_else(|| in_place_step(file, layer, lookup))?;
+    }
+    None
+}
+
 pub(crate) fn runs_on_stack_of(
     file: &solid_facts::FileFacts,
     site: Span,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let mut at = site;
-    for _ in 0..16 {
-        let Some(layer) = containing_ast_function(&file.ast, at) else {
-            return false;
-        };
-        if layer.span == function.span {
-            return true;
-        }
-        if let Some(call) = untrack_carrier(file, layer, lookup) {
-            at = call.span;
-        } else if let Some(call) = super::in_place_layer_call(file, layer, lookup) {
-            at = call;
-        } else {
-            return false;
-        }
-    }
-    false
+    entry_on_stack_of(file, site, Some(function), lookup).is_some()
 }
 
 /// ADR 0632: `read` runs on the stack of the pass that creates the source
@@ -619,11 +710,6 @@ impl UntrackLayers<'_> {
     /// pending source its owner created throws there.
     pub(crate) fn keeps_pending_throw(&self) -> bool {
         self.in_window && !self.labelled
-    }
-
-    /// A function a hand-off runs stands between the read and the `untrack`.
-    pub(crate) fn handed_inside(&self) -> bool {
-        self.lexical
     }
 
     /// `span` is a call written directly in one of the layers.

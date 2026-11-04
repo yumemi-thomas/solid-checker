@@ -2078,21 +2078,18 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             )
-            .is_some_and(|layers| layers.handed_inside() && layers.keeps_pending_throw())
+            .is_some_and(|layers| layers.keeps_pending_throw())
             && let Some(accessor) = self.accessors.get(symbol)
         {
-            let here = location(file.path.shared(), call.span);
-            if !result.async_reads.iter().any(|read| read.location == here) {
-                self.push_async_read(
-                    file,
-                    call,
-                    symbol,
-                    accessor,
-                    ExecutionRole::Unknown,
-                    None,
-                    result,
-                );
-            }
+            self.push_async_read(
+                file,
+                call,
+                symbol,
+                accessor,
+                ExecutionRole::Unknown,
+                None,
+                result,
+            );
         }
         // A universal callback-context proof can certify an accessor
         // read even when invocation is optional or resource-triggered.
@@ -2861,7 +2858,7 @@ impl LocalAccessContext<'_, '_> {
             // the first answer is proven in the pass that creates the source,
             // and open anywhere else: a handler may run before it lands.
             if self.optimistic_async_setter(symbol) {
-                self.push_optimistic_write(file, call, name, declaration, write_execution, result);
+                self.push_optimistic_write(file, call, name, declaration, result);
                 return;
             }
             if write_execution.reports_disallowed_write()
@@ -2968,10 +2965,21 @@ impl LocalAccessContext<'_, '_> {
                 .static_violations
                 .iter()
                 .any(|violation| violation.location == here && violation.id == "SC2009")
-                || !self.value_reaches(file, call.callee, 4, &|symbol| {
-                    self.optimistic_async_setter(symbol.as_str())
-                })
             {
+                continue;
+            }
+            // A setter no row placed (a call at module scope has no reachable
+            // row) is its own proof.
+            if let Some(symbol) = self.lookup.callee_symbol(file, call.callee)
+                && self.optimistic_async_setter(symbol)
+                && let Some((name, declaration, ..)) = self.setters.get(symbol)
+            {
+                self.push_optimistic_write(file, call, name, declaration, result);
+                continue;
+            }
+            if !self.value_reaches(file, call.callee, 4, &|symbol| {
+                self.optimistic_async_setter(symbol.as_str())
+            }) {
                 continue;
             }
             result.static_violations.push(crate::StaticViolation {
@@ -2998,13 +3006,8 @@ impl LocalAccessContext<'_, '_> {
         call: &solid_facts::ast::CallFact,
         name: &SymbolId,
         declaration: &Location,
-        execution: ExecutionRole,
         result: &mut LocalAccessResult,
     ) {
-        let in_creating_pass = matches!(
-            execution,
-            ExecutionRole::UntrackedRendering | ExecutionRole::ModuleInitialization
-        ) && self.created_by_async_literal_before(file, call, declaration);
         result.static_violations.push(crate::StaticViolation {
             id: "SC2009".into(),
             rule: "optimistic-write-before-load".into(),
@@ -3018,14 +3021,15 @@ impl LocalAccessContext<'_, '_> {
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: !in_creating_pass,
+            uncertain: !self.written_in_creating_pass(file, call, declaration),
         });
     }
 
-    /// The setter declared at `declaration` belongs to a creation with a
-    /// literal `async` compute, in the function `call` runs in, before it: that
-    /// pass runs on one stack, so no answer has landed.
-    fn created_by_async_literal_before(
+    /// ADR 0636: rc.21 throws whatever the role, on the first answer alone, so
+    /// the proof is temporal: the call of the setter runs on one stack with a
+    /// `const` creation with a literal `async` compute, entered after it, past
+    /// no await. A `let` or `var` may not hold it there.
+    fn written_in_creating_pass(
         &self,
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
@@ -3037,31 +3041,41 @@ impl LocalAccessContext<'_, '_> {
         ) else {
             return false;
         };
+        if declaration.path.as_ref() != file.path.as_str() {
+            return false;
+        }
         let declared = solid_facts::core::Span::new(start, end);
-        let same_body = |one: solid_facts::core::Span, other: solid_facts::core::Span| match (
-            containing_ast_function(&file.ast, one),
-            containing_ast_function(&file.ast, other),
-        ) {
-            (Some(left), Some(right)) => left.span == right.span,
-            (None, None) => true,
-            _ => false,
+        let creating = containing_ast_function(&file.ast, declared);
+        let Some(binding) = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declared))
+        else {
+            return false;
         };
-        declaration.path.as_ref() == file.path.as_str()
-            && declared.end <= call.span.start
-            && same_body(declared, call.span)
-            && file
-                .ast
-                .bindings
-                .iter()
-                .find(|binding| binding.names.iter().any(|name| name.span == declared))
-                .and_then(|binding| binding.call_initializer)
-                .and_then(|initializer| file.ast.call_at(initializer))
-                .and_then(|created| created.arguments.first())
-                .and_then(|compute| {
-                    file.ast
-                        .function_at(file.ast.peel_ts_sugar_span(compute.span))
-                })
-                .is_some_and(|compute| compute.r#async)
+        let literal_async = binding
+            .call_initializer
+            .and_then(|initializer| file.ast.call_at(initializer))
+            .and_then(|created| created.arguments.first())
+            .and_then(|compute| {
+                file.ast
+                    .function_at(file.ast.peel_ts_sugar_span(compute.span))
+            })
+            .is_some_and(|compute| compute.r#async);
+        let Some(entry) =
+            crate::execution_role::entry_on_stack_of(file, call.span, creating, self.lookup)
+        else {
+            return false;
+        };
+        binding.immutable
+            && literal_async
+            && declared.end <= entry.start
+            && !creating.is_some_and(|function| function.r#async)
+            && !crate::execution_role::may_follow_suspension(file, call.span)
+            && !file.ast.awaits.iter().any(|awaited| {
+                awaited.end <= entry.start && containing_ast_function(&file.ast, *awaited).is_none()
+            })
     }
 
     /// ADR 0637: a reactive read in a `try` with a `catch`, in a computation. rc.21
@@ -3111,51 +3125,69 @@ impl LocalAccessContext<'_, '_> {
                 .throw_statements
                 .iter()
                 .any(|thrown| caught.handler.contains(*thrown));
-            let mut first = true;
+            // The reads in the block: the sites, and whether the form is one the
+            // proof reads (an accessor's call, a Get or a probe of an async store).
+            let mut sites = Vec::new();
             for call in file
                 .ast
                 .calls
                 .iter()
                 .filter(|call| caught.block.contains(call.span))
             {
-                let own = containing_ast_function(&file.ast, call.span)
-                    .is_some_and(|owner| owner.span == function.span);
                 let symbol = self.lookup.callee_symbol(file, call.callee);
                 let source = symbol.and_then(|symbol| self.accessors.get_key_value(symbol));
-                if source.is_some_and(|(symbol, _)| {
-                    !self.async_sources.contains(symbol) && self.lookup_primitive_is_signal(symbol)
-                }) {
-                    first &= !own;
-                    continue;
-                }
-                if source.is_none()
-                    && crate::execution_role::hook_result_root(file, call.callee, self.lookup)
-                        .is_none()
-                    && !self.value_reaches_async_source(file, call.callee, 4)
+                if source.is_some_and(|(symbol, _)| self.caught_read_silent(symbol))
+                    || (source.is_none()
+                        && crate::execution_role::hook_result_root(file, call.callee, self.lookup)
+                            .is_none()
+                        && !self.value_reaches_async_source(file, call.callee, 4))
                 {
-                    first &= !own;
                     continue;
                 }
-                let proven = own
-                    && first
-                    && !rethrows
-                    && !function.r#async
-                    && role == ExecutionRole::TrackedJsx
-                    && self.computation_runs_where_written(file, function)
-                    && source.is_some_and(|(symbol, (_, declaration))| {
-                        self.async_sources.contains(symbol)
-                            && !self.effective_async_options(symbol).declared_loading
-                            && !self.effective_async_options(symbol).opaque
-                            && self.created_by_async_literal_around(file, function, declaration)
+                sites.push((
+                    call.span,
+                    call.callee,
+                    source.map(|(symbol, _)| symbol.clone()),
+                ));
+            }
+            for identifier in file.ast.identifiers.iter().filter(|identifier| {
+                caught.block.contains(identifier.span)
+                    && file.ast.reference_declaration(identifier.span).is_some()
+            }) {
+                let Some(symbol) = crate::source_discovery::reference_symbol(
+                    file,
+                    identifier.span,
+                    self.entities,
+                    self.lookup,
+                ) else {
+                    continue;
+                };
+                if self.async_sources.contains(&symbol)
+                    && self.accessors.contains_key(&symbol)
+                    && !self.caught_read_silent(&symbol)
+                    && !sites
+                        .iter()
+                        .any(|(site, _, _)| site.contains(identifier.span))
+                {
+                    sites.push((identifier.span, identifier.span, Some(symbol)));
+                }
+            }
+            for (site, read, source) in sites {
+                let proven = !rethrows
+                    && source.as_ref().is_some_and(|symbol| {
+                        self.caught_read_proven(file, read, symbol, &file.ast.try_catches)
                     });
-                let name = source.map_or_else(
-                    || {
-                        file.source_text(call.callee)
-                            .unwrap_or("a reactive value")
-                            .to_owned()
-                    },
-                    |(_, (name, _))| name.to_string(),
-                );
+                let name = source
+                    .as_ref()
+                    .and_then(|symbol| self.accessors.get(symbol))
+                    .map_or_else(
+                        || {
+                            file.source_text(read)
+                                .unwrap_or("a reactive value")
+                                .to_owned()
+                        },
+                        |(name, _)| name.to_string(),
+                    );
                 result.static_violations.push(crate::StaticViolation {
                     id: "SC5008".into(),
                     rule: "caught-reactive-read".into(),
@@ -3167,14 +3199,85 @@ impl LocalAccessContext<'_, '_> {
                     hint: "Branch on readiness with isPending(), show ahead with latest(), or let \
                            the read suspend; handle errors with <Errored>."
                         .into(),
-                    location: location(file.path.shared(), call.span),
+                    location: location(file.path.shared(), site),
                     analysis_context: String::new(),
                     fixes: vec![],
                     uncertain: !proven,
                 });
-                first &= !own;
             }
         }
+    }
+
+    /// A read that cannot throw into a pass: a plain signal, a source served
+    /// its declared value.
+    fn caught_read_silent(&self, symbol: &SymbolId) -> bool {
+        (!self.async_sources.contains(symbol) && self.lookup_primitive_is_signal(symbol))
+            || self.effective_async_options(symbol).declared_loading
+    }
+
+    /// ADR 0637: the pass of a compute that runs where it is written holds this
+    /// read of a pending source, on its stack, and every other read that might
+    /// throw sits in a `try` that keeps it: an uncaught throw leaves the pass,
+    /// which then never completes with a value.
+    fn caught_read_proven(
+        &self,
+        file: &solid_facts::FileFacts,
+        read: solid_facts::core::Span,
+        symbol: &SymbolId,
+        tries: &[solid_facts::ast::TryCatchFact],
+    ) -> bool {
+        let keeps = |span: solid_facts::core::Span| {
+            tries.iter().any(|caught| {
+                caught.block.contains(span)
+                    && !file
+                        .ast
+                        .throw_statements
+                        .iter()
+                        .any(|thrown| caught.handler.contains(*thrown))
+            })
+        };
+        let Some((_, declaration)) = self.accessors.get(symbol) else {
+            return false;
+        };
+        let options = self.effective_async_options(symbol);
+        !options.declared_loading
+            && !options.opaque
+            && file.ast.functions_owning(read).any(|compute| {
+                !compute.r#async
+                    && self.computation_runs_where_written(file, compute)
+                    && crate::execution_role::runs_on_stack_of(file, read, compute, self.lookup)
+                    && self.created_by_async_literal_around(file, compute, declaration)
+                    && file.ast.identifiers.iter().all(|identifier| {
+                        !compute.body.contains(identifier.span)
+                            || keeps(identifier.span)
+                            || file.ast.reference_declaration(identifier.span).is_none()
+                            || crate::source_discovery::reference_symbol(
+                                file,
+                                identifier.span,
+                                self.entities,
+                                self.lookup,
+                            )
+                            .is_none_or(|other| {
+                                !self.accessors.contains_key(&other)
+                                    || self.caught_read_silent(&other)
+                            })
+                    })
+                    && file.ast.calls.iter().all(|call| {
+                        !compute.body.contains(call.span)
+                            || keeps(call.span)
+                            || !(crate::execution_role::hook_result_root(
+                                file,
+                                call.callee,
+                                self.lookup,
+                            )
+                            .is_some()
+                                || (self
+                                    .lookup
+                                    .callee_symbol(file, call.callee)
+                                    .is_none_or(|symbol| !self.accessors.contains_key(symbol))
+                                    && self.value_reaches_async_source(file, call.callee, 4)))
+                    })
+            })
     }
 
     /// `function` is the compute of a memo or an effect with no options, so it
@@ -4380,6 +4483,10 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
     ) {
         let (name, declaration) = accessor;
+        let here = location(file.path.shared(), call.span);
+        if result.async_reads.iter().any(|read| read.location == here) {
+            return;
+        }
         // ADR 0531: the timing of a read a carrier places is the carrier's.
         let timing_at = placed_at.unwrap_or(call.callee);
         let async_provenance = self.async_sources.contains(symbol);
@@ -4437,6 +4544,10 @@ impl LocalAccessContext<'_, '_> {
             } else {
                 async_execution
             };
+            // The walk proved the read runs on the `untrack`'s stack in the body.
+            let throws_under_untrack = async_provenance
+                && async_execution == ExecutionRole::UntrackedRendering
+                && execution != ExecutionRole::UntrackedRendering;
             let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
             // ADR 0504: the proof climbs from the read to the apply itself, so a
             // read in a closure the apply calls (its own role the body's) is
@@ -4509,6 +4620,7 @@ impl LocalAccessContext<'_, '_> {
                 invocation_context_unproven: (async_execution == ExecutionRole::Unknown
                     && !computation_read)
                     || async_execution == ExecutionRole::UntrackedRendering
+                        && !throws_under_untrack
                         && !nested_literal_runs_during_body(
                             file,
                             timing_at,

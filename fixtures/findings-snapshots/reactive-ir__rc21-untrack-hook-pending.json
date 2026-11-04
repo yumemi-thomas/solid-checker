@@ -124,6 +124,16 @@
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 1494,
+      "end": 1500,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
@@ -179,6 +189,16 @@
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 2130,
       "end": 2137,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 2382,
+      "end": 2390,
       "fixes": 0
     },
     {

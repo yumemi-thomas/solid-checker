@@ -30,6 +30,16 @@
       "start": 368,
       "end": 386,
       "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-literal-async-component/helpers.ts",
+      "start": 171,
+      "end": 176,
+      "fixes": 0
     }
   ]
 }

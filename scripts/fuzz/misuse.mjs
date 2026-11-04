@@ -470,8 +470,7 @@ export const SPEC = {
   ON_FLUSH_IN_OWNED_SCOPE: { recallOnly: true, legal: ["handler", "effect-apply", "settled", "tracked"],
     contexts: [], recallContexts: ["body", "memo", "effect-compute", "render-compute", "root"], bindings: BINDINGS, setup: () => [], call: () => api("onFlush", "() => {}") },
   // rc.21 (ADR 0636): an optimistic setter before its async source's first answer. A driven click lands after it: legal, an obligation.
-  // A barrel's module source has answered by the mount.
-  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallLegal: ["handler"], sourcesNotIn: { body: ["module-barrel"], root: ["module-barrel"] },
+  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallLegal: ["handler"],
     contexts: [], recallContexts: ["body", "root"], bindings: ["direct", "alias", "wrapper"],
     setup: (variant, name) => [apiSignal(name("o"), 1, variant === "store" ? "optimistic-async-store" : "optimistic-async", "src")],
     call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(d) => { d.v = 2; }") : local(sig.setter, "2")),

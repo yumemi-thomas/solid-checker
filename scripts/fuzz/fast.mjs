@@ -47,10 +47,13 @@ export function installedVersions(install) {
   return versions;
 }
 
+/** A case's entry: renders in the task that evaluates App.tsx, as a page does; a dynamic import's continuation is a microtask later. */
+export const ENTRY_SOURCE = `import * as mod from "./App.tsx";\n(globalThis as { __scMount?: (mod: unknown) => void }).__scMount?.(mod);\n`;
+
 /** One Vitest test file for a case; `up` is the path from the test file's directory to the work directory. */
 const testSource = (id, caseDir, { up = "..", sub = "", out } = {}) => `import { test } from 'vitest';
 import { runCase } from '${up}/runner';
-test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('${up}/cases/${sub}${id}/App.tsx')${out ? `, ${JSON.stringify(out)}` : ""}), 60000);
+test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('${up}/cases/${sub}${id}/sc-entry.ts')${out ? `, ${JSON.stringify(out)}` : ""}), 60000);
 `;
 
 /** The Vitest work directory inside the install: the config, the runner and what they import. */
@@ -69,6 +72,7 @@ export function stageCases(work, cases, { sub = "", out } = {}) {
     const target = join(work, "cases", sub, id);
     mkdirSync(target, { recursive: true });
     for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) cpSync(join(dir, file), join(target, file));
+    writeFileSync(join(target, "sc-entry.ts"), ENTRY_SOURCE);
     // The project's other modules (`helpers.ts`), which App.tsx imports by a relative path.
     for (const file of readdirSync(dir).filter((name) => /\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx")) cpSync(join(dir, file), join(target, file));
     // A generated package sits in the case's own node_modules, where Vite resolves it from App.tsx.

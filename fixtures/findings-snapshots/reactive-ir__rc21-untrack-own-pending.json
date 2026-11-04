@@ -42,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-own-pending/App.tsx",
+      "start": 1095,
+      "end": 1103,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
