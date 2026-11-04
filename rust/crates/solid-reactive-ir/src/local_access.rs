@@ -4412,7 +4412,10 @@ impl LocalAccessContext<'_, '_> {
                         .iter()
                         .find(|slot| slot.local.span == name.span && slot.plain_identifier_key)
                         .is_none_or(|slot| {
-                            open(&location(file.path.shared(), parameter.pattern), &slot.property)
+                            open(
+                                &location(file.path.shared(), parameter.pattern),
+                                &slot.property,
+                            )
                         });
                 }
                 let declared = location(file.path.shared(), name.span);

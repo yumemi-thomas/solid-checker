@@ -82,8 +82,7 @@ impl DispatchSite {
     /// Whether the site withholds ownerless event proofs (owner and write
     /// roles): a delivery can inherit its caller's owner.
     pub(crate) const fn withholds_owner_proofs(&self) -> bool {
-        !self.receiver.excluded()
-            && matches!(self.caller, None | Some(DispatchCaller::EffectApply))
+        !self.receiver.excluded() && matches!(self.caller, None | Some(DispatchCaller::EffectApply))
     }
 
     /// Whether the site withholds an event handler's untracked-read proof: a

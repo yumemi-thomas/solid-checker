@@ -240,12 +240,12 @@ fn is_async_function_node(node: P<Node>) -> bool {
 /// ADR 0631: every value of `return_type` is a native `Promise` or async
 /// generator: pending on the call's stack. A union with a plain value, a custom
 /// thenable and a custom async iterable may answer there.
-fn every_answer_is_a_flight(checker: &mut Checker, return_type: P<Type>) -> bool {
+fn every_answer_is_a_flight(return_type: P<Type>) -> bool {
     if return_type.is_union() {
         return return_type
             .types()
             .iter()
-            .all(|constituent| every_answer_is_a_flight(checker, *constituent));
+            .all(|constituent| every_answer_is_a_flight(*constituent));
     }
     return_type
         .symbol()

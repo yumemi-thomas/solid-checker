@@ -269,12 +269,7 @@ pub(crate) fn discover_file_sources(
                                 .iter()
                                 .filter(|identifier| argument.span.contains(identifier.span))
                                 .filter_map(|identifier| {
-                                    super::reference_symbol(
-                                        file,
-                                        identifier.span,
-                                        entities,
-                                        lookup,
-                                    )
+                                    super::reference_symbol(file, identifier.span, entities, lookup)
                                 })
                                 .any(|read| result.async_sources.contains(&read))
                     });

@@ -303,6 +303,8 @@ export function pairShapes(code, context, { legal = false, sets = PAIR_SETS } = 
       const takes = sourcesOf(code, variant, binding, context);
       for (const source of PAIR_SOURCES.filter((one) => takes.includes(one))) for (const mount of PAIR_MOUNTS) {
         if (mount === "dynamic" && (source !== "module-hook" || bodyLabelled)) continue;
+        // A mount this context's code cannot take (`recallMountsNotIn`: a body re-run onto a fresh pending memo never ends, and reports nothing).
+        if (spec.recallMountsNotIn?.[context]?.includes(mount)) continue;
         // A settled pair is no misuse: the legal grid takes it, in the code's misuse contexts (`onlySettled`).
         if (!legal && settled(mount, source)) continue;
         if (onlySettled && !settled(mount, source)) continue;
