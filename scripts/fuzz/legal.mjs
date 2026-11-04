@@ -35,7 +35,7 @@ import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf, writeOracleC
 import { budgetOf } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
-import { LAYERS, LEGAL_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
+import { LAYERS, LEGAL_CODES, RECALL_TEMPLATE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
 import { axesKey, cellList, combined, mountSuffix, mountsOption, pairShapes, pairsOption, recallAxes, recallLeanOf, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
@@ -139,7 +139,7 @@ function withOffSite(verdict, uses, { built, program, checker, runtime, plan }) 
 /** The cells: every code with legal contexts, each legal context; `recall` adds the contexts only the recall grids list (`recallLegal`). */
 export function legalCells({ codes, recall = false } = {}) {
   const contextsOf = (code) => [...(SPEC[code].legal ?? []), ...(recall ? recallLegalOf(code) : [])];
-  return (recall ? TEMPLATE_CODES.filter((code) => contextsOf(code).length) : LEGAL_CODES()).filter((code) => !codes || codes.includes(code)).flatMap((code) => contextsOf(code).map((context) => ({ code, context })));
+  return (recall ? [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES].filter((code) => contextsOf(code).length) : LEGAL_CODES()).filter((code) => !codes || codes.includes(code)).flatMap((code) => contextsOf(code).map((context) => ({ code, context })));
 }
 
 /** The legal pair grid's cells (`--pairs`): every legal cell, then each misuse cell a settled pair is legal in (matrix.mjs `pairShapes`). */

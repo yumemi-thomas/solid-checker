@@ -117,6 +117,16 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 655,
+      "end": 659,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
       "start": 733,
       "end": 742,
       "fixes": 0
@@ -182,10 +192,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
       "start": 2403,
       "end": 2412,

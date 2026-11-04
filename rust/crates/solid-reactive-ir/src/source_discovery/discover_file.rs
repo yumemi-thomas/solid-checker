@@ -51,7 +51,7 @@ pub(crate) fn returned_source_facts(
     ReturnedSourceFacts {
         owned_write: crate::owned_write_option(origin, created, Some(primitive), lookup.dialect),
         value_form: store_is_value_form(created, Some(primitive)),
-        async_options: async_source_options(origin, created, Some(primitive), lookup.dialect),
+        async_options: first_answer_options(lookup, origin, created, Some(primitive)),
         async_source: created
             .arguments
             .first()
@@ -121,6 +121,11 @@ pub(crate) fn discover_file_sources(
                 },
             ));
             result.source_phases.push((symbol.clone(), 1));
+            // ADR 0625: read through a function like a direct creation's
+            // accessor (ADR 0486): the summaries carry it.
+            if !lookup.dialect.returns_store(primitive) {
+                result.summary_source_symbols.push(symbol.clone());
+            }
             if let Some(spelling) = lookup.dialect.name_of(primitive) {
                 result
                     .source_primitives
@@ -252,7 +257,7 @@ pub(crate) fn discover_file_sources(
                     symbol.clone(),
                     crate::owned_write_option(file, call, resolved, lookup.dialect),
                 ));
-                let options = async_source_options(file, call, resolved, lookup.dialect);
+                let options = first_answer_options(lookup, file, call, resolved);
                 if options != AsyncSourceOptions::default() {
                     result.source_async_options.push((symbol.clone(), options));
                 }
@@ -287,6 +292,19 @@ pub(crate) fn discover_file_sources(
                     result
                         .source_primitives
                         .push((symbol.clone(), primitive.into()));
+                }
+                // ADR 0633: the setter of an optimistic async source refuses a
+                // write before the first answer; a declared value is an answer.
+                if matches!(
+                    resolved,
+                    Some(Primitive::CreateOptimistic | Primitive::CreateOptimisticStore)
+                ) && call.arguments.first().is_some_and(|argument| {
+                    // A sync compute may read a pending source: only a data
+                    // value has its answer.
+                    !argument.runtime_value_kind.is_data_literal()
+                }) && !first_answer_options(lookup, file, call, resolved).declared_loading
+                {
+                    result.async_sources.push(symbol.clone());
                 }
             }
         }

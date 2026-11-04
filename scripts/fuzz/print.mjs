@@ -280,6 +280,8 @@ function render(program, instrument) {
   function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
+      case "dom": return e.text;
+      case "listen": return `${e.target}.addEventListener(${JSON.stringify(e.type)}, ${expr(e.fn, depth)})`;
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
@@ -700,6 +702,7 @@ export function moduleFiles(program) {
     const hook = (head) => [`${head} {`, ...created.map((line) => `${INDENT}${line}`), `${INDENT}return { ${keys.join(", ")} };`, "}"].join("\n");
     if (component.source === "module" || component.source === "module-barrel") sourced.push(created.map((line) => `export ${line}`).join("\n"));
     else if (component.source === "module-default-hook") sourced.push(hook("export default function useVals()"));
+    else if (component.source === "module-hook-direct") sourced.push(["export function useVals() {", `${INDENT}return ${created[0].replace(/^const \w+ = /, "")}`, "}"].join("\n"));
     else sourced.push(hook("export function useVals()"));
     if (component.source === "module-barrel") barrel.push(`export { ${keys.join(", ")} } from "./helpers";`);
   }
@@ -736,6 +739,13 @@ function signalText(sig, signals, used) {
     case "optimistic": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(${sig.init});`;
     case "writable-memo": used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(() => ${sig.init});`;
     case "optimistic-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore({ v: ${sig.init} });`;
+    case "store-async": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
+    case "store-class": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ c: new (class { n = 0; inc() { this.n++; } })() });`;
+    case "store-raw": used.add("createStore"); return `const raw = { v: ${sig.init} }; createStore({ r: raw }, { shallow: true }); const [${sig.name}, ${sig.setter}] = createStore(raw);`;
+    case "async-declared": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1, { loadingValue: 0 });`;
+    case "async-maybe": used.add("createMemo"); return `const ${sig.name} = createMemo((): number | Promise<number> => ((globalThis as { late?: boolean }).late ? Promise.resolve(1) : 1));`;
+    case "optimistic-async": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init});`;
+    case "optimistic-async-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;
     case "deferred": used.add("createDeferred"); return `const ${sig.name} = createDeferred(async () => 1);`;
     case "store-array": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<number[]>([${sig.init}]);`;
@@ -752,13 +762,13 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-array": "number[]", "store-empty": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-shallow": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-async": "{ v: number }", "store-raw": "{ v: number }", "store-opt": "{ v?: number }", "store-array": "number[]", "store-empty": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-shallow": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "projection": return [[sig.name, "{ v: number }"]];
     case "deferred": return [[sig.name, "Accessor<number>"]];
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
-    case "async": case "async-dep": return [[sig.name, "Accessor<number>"]];
+    case "async": case "async-dep": case "async-declared": case "async-maybe": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];
     case "reaction": return [[sig.name, "(tracking: () => void) => void"]];
     default: return [[sig.name, "Accessor<number>"], [sig.setter, "Setter<number>"]];
@@ -799,6 +809,7 @@ function sourcePrelude(component, signals, used) {
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
     case "module-hook": case "module-default-hook": return [`const { ${keys()} } = useVals();`];
     case "module-hook-member": return ["const vals = useVals();"];
+    case "module-hook-direct": return [`const ${keys()} = useVals();`];
     // Another instance, never read: the read goes through the module-scope result (`sourceDeclarations`).
     case "module-hook-shared": return ["const mine = useVals();"];
     default: return [];

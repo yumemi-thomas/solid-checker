@@ -672,6 +672,20 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
+    // ADR 0626: a value `untrack` returns is a store proxy only if it may be an
+    // object, so a member of a primitive one reads nothing.
+    for binding in &file.ast.bindings {
+        let Some(initializer) = binding.call_initializer else {
+            continue;
+        };
+        if file.ast.call_at(initializer).is_some_and(|call| {
+            file.source_text(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|callee| callee == "untrack" || callee.ends_with(".untrack"))
+        }) {
+            add_symbol(initializer, false);
+            primitive_value_domain_spans.insert(initializer);
+        }
+    }
     for call in &file.ast.calls {
         for argument in &call.arguments {
             match argument.value {

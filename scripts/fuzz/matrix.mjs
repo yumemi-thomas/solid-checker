@@ -242,7 +242,8 @@ export const LEAN_DEMOTED = {
   callbacks: ["function", "let"],
 };
 export function recallAxes(code, context, base, variants, { legal = false, lean = true } = {}) {
-  const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
+  // A recall-only code has no base grid: its `legal` contexts are recall cells too.
+  const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context) || (legal && SPEC[code].recallOnly && SPEC[code].legal?.includes(context));
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
   // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
   const only = legal ? SPEC[code].variantOnlyLegal?.[context] : null;
@@ -260,7 +261,8 @@ export function recallAxes(code, context, base, variants, { legal = false, lean 
     const known = new Set(gridBindingsOf(code, variant));
     for (const binding of recallBindingsOf(code, variant).filter((b) => !known.has(b))) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
     // A `catch` swallows a code the runtime only throws (codes.mjs thrownCodes): the try-catch layer never shows it.
-    const layers = THROWN.has(code) ? RECALL_LAYERS.filter((layer) => layer !== "try-catch") : RECALL_LAYERS;
+    // A legal template of CAUGHT_REACTIVE_READ (`noCatchLayer`): a `catch` around the read is the code's own misuse.
+    const layers = THROWN.has(code) || (legal && SPEC[code].noCatchLayer) ? RECALL_LAYERS.filter((layer) => layer !== "try-catch") : RECALL_LAYERS;
     for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
   }
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.

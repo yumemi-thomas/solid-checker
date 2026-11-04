@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 265,
+      "end": 271,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 512,
+      "end": 518,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 815,
+      "end": 822,
+      "fixes": 0
+    }
+  ]
+}

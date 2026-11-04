@@ -143,6 +143,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) unconditional_awaits: Vec<Span>,
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
+    pub(super) try_catches: Vec<TryCatchFact>,
     pub(super) in_place_import_globs: Vec<Span>,
     pub(super) unmodeled_require_references: Vec<Span>,
     /// The `require` identifiers that are the (peeled) callee of a call.
@@ -177,6 +178,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) coercing_operands: Vec<Span>,
     pub(super) primitive_results: Vec<Span>,
     pub(super) iterated_operands: Vec<Span>,
+    pub(super) key_probed_operands: Vec<Span>,
     pub(super) assignments: Vec<AssignmentFact>,
     pub(super) write_targets: Vec<Span>,
     pub(super) deleted_targets: Vec<Span>,
@@ -395,6 +397,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            try_catches: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             direct_require_callees: Vec::new(),
@@ -425,6 +428,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
+            key_probed_operands: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
@@ -521,6 +525,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.primitive_results.dedup();
         self.iterated_operands.sort_unstable();
         self.iterated_operands.dedup();
+        self.key_probed_operands.sort_unstable();
+        self.key_probed_operands.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
         self.write_targets.sort_unstable();
         self.write_targets.dedup();
@@ -717,6 +723,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: self.unconditional_awaits,
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
+            try_catches: self.try_catches,
             in_place_import_globs: self.in_place_import_globs,
             unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
@@ -744,6 +751,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: self.coercing_operands,
             primitive_results: self.primitive_results,
             iterated_operands: self.iterated_operands,
+            key_probed_operands: self.key_probed_operands,
             assignments: self.assignments,
             write_targets: self.write_targets,
             deleted_targets: self.deleted_targets,

@@ -15,17 +15,28 @@ message variant retains **warning** severity; untracked reads retain **error**
 severity. Each message names the execution scope that made the read unsafe.
 
 A declared `loadingValue` or store `seedLoadingValue` makes the first flight
-safe, but the protection ends after the first real answer. A later refresh or
-input change can make the same unsuspendable read throw, so the rule remains
-with conditional wording. If the options object cannot be read, the untracked
+safe. The pass that creates such a source gets the served value: no pending
+throw, so a body read is `strict-read-untracked` and an `untrack` of it is silent
+(ADR 0629), through closures and helpers too. Any other read of it throws or warns
+only on a re-ask, which is uncertifiable, with conditional wording. If the options object cannot be read, the untracked
 variant becomes uncertifiable because a declared first-paint value can neither
 be proven nor ruled out.
+
+A compute that may answer without a pending flight (`cache.get(k) ?? load()`, a
+conditional, a custom thenable) proves nothing: uncertifiable (ADR 0628). An
+uninitialized derived store refuses `Object.keys`, `in`, `hasOwn` and `for…in` too
+(ADR 0632). `isPending`, `latest` and `isPending(() => p.a)` are probes: a strict
+read, no throw (ADR 0630).
 
 On rc.21 an unlabelled `untrack` in a component body does not hide a pending
 source that body created: `const v = untrack(() => memo())` throws as a direct
 read does, and so does a derived store or a projection the body made (ADR 0616).
 A source made elsewhere does not. A tracked read in a compute suspends, and is no
-obligation (ADR 0620).
+obligation (ADR 0620). A hook creates under its caller's owner, so its memo throws
+too, read plainly or through `untrack`, `untrack(m)` and what runs on the untrack's
+stack; a module-scope source suspends, and one nothing places is uncertifiable. A
+labelled `untrack(fn, "name")` opens a window of its own, in a handler too, and
+throws on any pending source (ADR 0625).
 
 A read written directly in a named local function (`const f1 = () => {
 user(); }`), whose binding is never written, is read where a call of that

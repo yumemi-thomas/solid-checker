@@ -283,6 +283,8 @@ const codeRules = {
   LOADING_ON_OUTSIDE_HOLD: ["loading-on-outside-hold"],
   LOADING_ON_ACCESSOR: ["loading-on-accessor"],
   ON_FLUSH_IN_OWNED_SCOPE: ["on-flush-in-owned-scope"],
+  OPTIMISTIC_WRITE_BEFORE_LOAD: ["optimistic-write-before-load"],
+  CAUGHT_REACTIVE_READ: ["caught-reactive-read"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };

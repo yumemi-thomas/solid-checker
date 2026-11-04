@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { generateLegal, judgeLegal, legalCells, legalShapes } from "./legal.mjs";
+import { generateLegal, judgeLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
+import { RECALL_TEMPLATE_CODES, SPEC, TEMPLATE_CODES } from "./misuse.mjs";
 import { siteOf } from "./matrix.mjs";
-import { SPEC } from "./misuse.mjs";
 
 const site = { line: 10, aux: [], hit: 4 };
 const finding = (rule, kind, line = 10) => ({ rule, kind, line, endLine: line, id: "SC", file: "App.tsx" });
@@ -92,5 +92,33 @@ describe("a legal program whose JSX reads a pending value (misuse.mjs legalLoadi
     expect(generateLegal({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context: "jsx" }, { shape: { variant: "latest", binding: "direct", layer: "none" } }).built.text).toContain("<Loading fallback={0}>");
     expect(generateLegal({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context: "jsx" }, { shape: { variant: "signal", binding: "direct", layer: "none" } }).built.text).not.toContain("<Loading");
     expect(SPEC.STRICT_READ_UNTRACKED.variantContexts.latest).not.toContain("render-compute");
+  });
+});
+
+// `legalCells` once took TEMPLATE_CODES alone: a recall-only code's legal cells were declared and never generated, a silent blind spot.
+describe("the legal grids' reach", () => {
+  it("gives every context a code declares legal programs, a recall-only code too", () => {
+    const empty = [];
+    const declared = (code) => [...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])];
+    const measured = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
+    // An advisory code is not measured (misuse.mjs MISUSE_CODES), its legal cells with it: named here, so no other code joins it unseen.
+    expect(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !measured.includes(code) && declared(code).length)).toEqual(["ASYNC_OUTSIDE_LOADING_BOUNDARY"]);
+    for (const code of measured) {
+      for (const context of declared(code)) {
+        const cell = legalCells({ codes: [code], recall: true }).find((candidate) => candidate.context === context);
+        const shapes = [...legalShapes(code, ["root"], ["local"], context), ...recallLegalShapes(code, context)];
+        if (!cell || !shapes.length) empty.push(`${code}/${context}`);
+      }
+    }
+    expect(empty).toEqual([]);
+  });
+  it("generates a program in every legal cell of a recall-only code", () => {
+    for (const code of RECALL_TEMPLATE_CODES) {
+      for (const cell of legalCells({ codes: [code], recall: true })) {
+        const [shape] = recallLegalShapes(code, cell.context);
+        expect(shape, `${code}/${cell.context}`).toBeDefined();
+        expect(generateLegal({ seed: 1 }, cell, { shape }).built.files["App.tsx"]).toContain("export function");
+      }
+    }
   });
 });

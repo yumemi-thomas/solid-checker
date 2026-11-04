@@ -78,6 +78,10 @@ export const nul = () => ({ k: "nul" });
 export const jsx = () => ({ k: "jsx" });
 /** `createOwner()` (the recall axes' bound owner: `const o = createOwner(); runWithOwner(o, ...)`). */
 export const createOwnerExpr = () => ({ k: "createOwner" });
+/** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
+export const domExpr = (text) => ({ k: "dom", text });
+/** `el.addEventListener(type, fn)`: a listener the program dispatches to itself. */
+export const listenExpr = (target, type, fn) => ({ k: "listen", target, type, fn });
 
 /**
  * Control-flow statements (the recall axes, misuse.mjs RECALL_LAYERS and the after-await contexts): `body` runs exactly once, in the
@@ -189,6 +193,16 @@ export const storeEmptySignal = (name, init) => ({ ...signal(name, init, "probe"
 /** `createStore({ v, a: { v }, items: [v] }, { shallow: true })`: every value is served raw. */
 export const storeShallowSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-shallow" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+/** A derived store whose first answer has not landed: `createStore(async () => ({ v }), { v })`. */
+export const storeAsyncSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-async" });
+/** A store over a record that entered a shallow store first: raw, no proxy (ADR 0631). */
+export const storeRawSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-raw" });
+/** A store holding a class instance whose method writes `this` (ADR 0635). */
+export const storeClassSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-class" });
+/** `createMemo(async () => 1, { loadingValue: 0 })`: served through its first flight (ADR 0629). */
+export const asyncDeclaredSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-declared" });
+/** A compute that may answer without a flight (ADR 0628): typed `number | Promise<number>`, the plain value at run time. */
+export const asyncMaybeSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-maybe" });
 /**
  * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),
  * `createOptimistic(init)` (`optimistic`), a writable memo `createSignal(() => init)` (`writable-memo`), `createOptimisticStore`
@@ -482,6 +496,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
     function typeOf(e, scope) {
       switch (e.k) {
         case "num": return T.num;
+        case "dom": return T.unknown;
+        case "listen": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
         case "own": return ownType(e, scope);

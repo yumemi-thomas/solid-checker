@@ -345,61 +345,347 @@ pub(crate) fn async_execution_role(
     }
 }
 
-/// ADR 0616: a read in an exact unlabelled `untrack` around it, whose outermost
-/// call runs in a component body's strict-read window, of a source that same
-/// body declares. rc.21 keeps the pending throw there
-/// ([`solid_dialect::Dialect::untrack_keeps_own_pending_throw`]): `read()` tests
-/// `owner._parent === context`, so the proof asks for the body that created
-/// the source. A labelled `untrack` opens its own window, and any other
-/// carrier leaves this proof.
-pub(crate) fn untrack_throws_own_pending_read(
+/// The label of an exact `untrack` call. `strictRead = strictReadLabel || false`
+/// (`@solidjs/signals@2.0.0-rc.21` `dist/dev-shared.js:5853`): a non-empty
+/// string opens a window, and a call that passes anything else opens none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum UntrackLabel {
+    /// No label: the call keeps the window around it for one pending check.
+    Absent,
+    /// A non-empty string literal: a strict-read window of its own.
+    Window,
+    /// `false`, `undefined` or `""` written there: no window.
+    Closed,
+    /// Any other expression.
+    Unproven,
+}
+
+pub(crate) fn untrack_label(
     file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> UntrackLabel {
+    use solid_facts::ast::ArgumentValueKind;
+    let Some(label) = call.arguments.get(1) else {
+        return UntrackLabel::Absent;
+    };
+    if label.spread {
+        return UntrackLabel::Unproven;
+    }
+    let text = file
+        .source_text(file.ast.peel_ts_sugar_span(label.span))
+        .unwrap_or_default();
+    let quoted = text.len() >= 2
+        && (text.starts_with('"') || text.starts_with('\''))
+        && text.ends_with(&text[..1]);
+    match label.value {
+        ArgumentValueKind::Undefined => UntrackLabel::Closed,
+        _ if text == "false" || (quoted && text.len() == 2) => UntrackLabel::Closed,
+        _ if quoted => UntrackLabel::Window,
+        _ => UntrackLabel::Unproven,
+    }
+}
+
+/// What rc.21's `read()` does to a pending source read in an exact `untrack`
+/// (ADRs 0616, 0625). A labelled one opens a window, so it throws on any pending
+/// source. An unlabelled one in a strict-read window tests
+/// `strictPending && owner._parent === context`, so the answer turns on which
+/// owner created the source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum UntrackPendingRead {
+    /// No such `untrack` around the read: the read keeps its own role.
+    NotUnderUntrack,
+    /// The read throws `PENDING_ASYNC_UNTRACKED_READ`, as a direct read does.
+    Throws,
+    /// Another owner created the source: the read suspends.
+    OtherOwner,
+    /// Nothing decides which owner created it: an obligation.
+    Unproven,
+}
+
+/// The `untrack` call running `function`: the call `function` is the sole
+/// first argument of, or (`const read = () => m(); untrack(read)`) one of the
+/// calls a never-written binding of it is handed to.
+fn untrack_carrier<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::CallFact> {
+    let carries = |call: &&solid_facts::ast::CallFact, argument: Span| {
+        file.ast.peel_ts_sugar_span(call.arguments[0].span) == argument
+            && lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack)
+    };
+    if let Some(call) = file
+        .ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| *index == 0 && carries(call, function.span))
+        .min_by_key(|(call, _)| call.span.end - call.span.start)
+        .map(|(call, _)| call)
+    {
+        return Some(call);
+    }
+    let name = crate::owners::function_binding_name(file, function)?;
+    if crate::indexes::binding_written(file, name.span) {
+        return None;
+    }
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(name.span)
+        })
+        .find_map(|reference| {
+            file.ast
+                .arguments_containing(reference.span)
+                .find(|(call, index)| *index == 0 && carries(call, reference.span))
+                .map(|(call, _)| call)
+        })
+}
+
+/// The layers a read runs in under exact `untrack`s and the outermost window.
+pub(crate) struct UntrackLayers<'f> {
+    /// The functions from the read up to the one holding the outermost
+    /// `untrack`: `untrack` changes no owner, so each runs under one owner.
+    layers: Vec<&'f solid_facts::ast::FunctionFact>,
+    /// The innermost `untrack` holds a window label itself.
+    labelled: bool,
+    /// The strict body is proven: the outermost call runs in a component
+    /// body's window, or in a label of its own.
+    in_window: bool,
+    /// A function between the read and the `untrack` runs by a hand-off nothing
+    /// follows: the read is written inside the `untrack`, and may run on its
+    /// stack or later.
+    lexical: bool,
+}
+
+/// [`UntrackLayers`] of a site, or of a value handed to `carrier` by reference
+/// (`untrack(m)`): `None` where no `untrack` holds it.
+pub(crate) fn untrack_layers<'f>(
+    file: &'f solid_facts::FileFacts,
     span: Span,
-    declaration: &crate::Location,
+    carrier: Option<&'f solid_facts::ast::CallFact>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
-) -> bool {
-    if !lookup.dialect.untrack_keeps_own_pending_throw()
-        || declaration.path.as_ref() != file.path.as_str()
-    {
-        return false;
-    }
+) -> Option<UntrackLayers<'f>> {
+    let mut labelled = None::<bool>;
+    let mut window_label = false;
     let mut outermost = None;
-    let mut body = containing_ast_function(&file.ast, span);
-    while let Some(literal) = body {
-        let carrier = file
-            .ast
-            .arguments_containing(literal.span)
-            .filter(|(call, index)| {
-                *index == 0
-                    && call.arguments.len() == 1
-                    && file.ast.peel_ts_sugar_span(call.arguments[0].span) == literal.span
-            })
-            .min_by_key(|(call, _)| call.span.end - call.span.start)
-            .map(|(call, _)| call);
-        let Some(call) = carrier else { break };
-        if lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::Untrack) {
+    let mut note = |call: &'f solid_facts::ast::CallFact| -> bool {
+        match untrack_label(file, call) {
+            UntrackLabel::Absent => {
+                labelled.get_or_insert(false);
+                outermost = Some(call.span);
+                true
+            }
+            UntrackLabel::Window => {
+                labelled.get_or_insert(true);
+                outermost = Some(call.span);
+                window_label = true;
+                false
+            }
+            UntrackLabel::Closed | UntrackLabel::Unproven => false,
+        }
+    };
+    let mut layers = Vec::new();
+    // The layers up to the outermost `untrack`, and the function holding it.
+    let mut held = (0, None);
+    let mut at = span;
+    let mut walking = true;
+    let mut lexical = false;
+    if let Some(call) = carrier {
+        walking = note(call);
+        at = call.span;
+        held = (0, containing_ast_function(&file.ast, at));
+    }
+    // Bounded as the in-place climb is. A function that runs in place (an
+    // IIFE, a closure called once, a helper's callback) runs on the stack of
+    // its call, under the same owner.
+    for _ in 0..16 {
+        if !walking {
             break;
         }
-        outermost = Some(call.span);
-        body = containing_ast_function(&file.ast, call.span);
+        let Some(function) = containing_ast_function(&file.ast, at) else {
+            break;
+        };
+        if let Some(call) = untrack_carrier(file, function, lookup) {
+            layers.push(function);
+            walking = note(call);
+            at = call.span;
+            held = (layers.len(), containing_ast_function(&file.ast, at));
+        } else if let Some(call) = super::in_place_layer_call(file, function, lookup) {
+            layers.push(function);
+            at = call;
+        } else if !file
+            .ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup.primitive_at_call(file, call.span).is_some()
+            })
+            && let Some(outer) = enclosing_function(file, function)
+        {
+            // A callback a primitive owns has its own role. Anything else
+            // written inside an `untrack` may run there.
+            lexical = true;
+            layers.push(function);
+            at = outer.body;
+        } else {
+            break;
+        }
     }
-    let (Some(outermost), Some(body)) = (outermost, body) else {
-        return false;
+    let labelled = labelled?;
+    let outermost = outermost?;
+    let in_window = window_label || {
+        let allowed = allowed_callback_spans(file, lookup);
+        super::read_execution_role(file, outermost, &allowed, entities, symbol_names, lookup)
+            == ExecutionRole::UntrackedRendering
     };
+    let (kept, body) = held;
+    layers.truncate(kept);
+    layers.extend(body);
+    Some(UntrackLayers {
+        layers,
+        labelled,
+        in_window,
+        lexical,
+    })
+}
+
+/// The smallest function holding `function`.
+fn enclosing_function<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    file.ast
+        .functions
+        .iter()
+        .filter(|outer| outer.span != function.span && outer.span.contains(function.span))
+        .min_by_key(|outer| outer.span.end - outer.span.start)
+}
+
+/// ADR 0629: `site` runs on the stack of a call of `function`: written in it, or
+/// in layers that run in place up to it (a closure, an IIFE, a helper's
+/// callback, an `untrack`). A function that runs later (an effect's apply, a
+/// handler, a timer) ends the walk.
+pub(crate) fn runs_on_stack_of(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = site;
+    for _ in 0..16 {
+        let Some(layer) = containing_ast_function(&file.ast, at) else {
+            return false;
+        };
+        if layer.span == function.span {
+            return true;
+        }
+        if let Some(call) = untrack_carrier(file, layer, lookup) {
+            at = call.span;
+        } else if let Some(call) = super::in_place_layer_call(file, layer, lookup) {
+            at = call;
+        } else {
+            return false;
+        }
+    }
+    false
+}
+
+/// ADR 0629: `read` runs on the stack of the pass that creates the source
+/// declared at `declaration`: nothing has landed and no re-ask has started, so
+/// a declared value is served, whatever layers carry the read.
+pub(crate) fn served_in_creating_pass(
+    file: &solid_facts::FileFacts,
+    read: Span,
+    declaration: &crate::Location,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
     let (Ok(start), Ok(end)) = (
         u32::try_from(declaration.start_byte),
         u32::try_from(declaration.end_byte),
     ) else {
         return false;
     };
-    let declared_here = containing_ast_function(&file.ast, Span::new(start, end))
-        .is_some_and(|function| function.span == body.span);
-    let allowed = allowed_callback_spans(file, lookup);
-    declared_here
-        && super::read_execution_role(file, outermost, &allowed, entities, symbol_names, lookup)
-            == ExecutionRole::UntrackedRendering
+    declaration.path.as_ref() == file.path.as_str()
+        && containing_ast_function(&file.ast, Span::new(start, end)).is_some_and(|function| {
+            !function.r#async && runs_on_stack_of(file, read, function, lookup)
+        })
+}
+
+impl UntrackLayers<'_> {
+    /// The read is in an unlabelled `untrack` in a strict-read window, so a
+    /// pending source its owner created throws there.
+    pub(crate) fn keeps_pending_throw(&self) -> bool {
+        self.in_window && !self.labelled
+    }
+
+    /// A function a hand-off runs stands between the read and the `untrack`.
+    pub(crate) fn handed_inside(&self) -> bool {
+        self.lexical
+    }
+
+    /// `span` is a call written directly in one of the layers.
+    pub(crate) fn holds_call(&self, file: &solid_facts::FileFacts, span: Span) -> bool {
+        containing_ast_function(&file.ast, span)
+            .is_some_and(|function| self.layers.iter().any(|layer| layer.span == function.span))
+    }
+}
+
+/// ADR 0616, ADR 0625: where a read of the source declared at `declaration`
+/// stands. A labelled `untrack` throws on any pending source; an unlabelled
+/// one only runs the check in a strict-read window, for a source the owner
+/// running it created.
+pub(crate) fn untrack_pending_read(
+    file: &solid_facts::FileFacts,
+    layers: Option<&UntrackLayers<'_>>,
+    span: Span,
+    declaration: &crate::Location,
+    lookup: &SemanticLookup<'_>,
+) -> UntrackPendingRead {
+    if !lookup.dialect.untrack_keeps_own_pending_throw() {
+        return UntrackPendingRead::NotUnderUntrack;
+    }
+    let Some(found) = layers.filter(|found| found.in_window) else {
+        return UntrackPendingRead::NotUnderUntrack;
+    };
+    if found.labelled {
+        return UntrackPendingRead::Throws;
+    }
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return UntrackPendingRead::Unproven;
+    };
+    let declared = Span::new(start, end);
+    let Some(source_file) = lookup.file_by_path(declaration.path.as_ref()) else {
+        return UntrackPendingRead::Unproven;
+    };
+    if crate::indexes::at_module_scope(&source_file.ast, declared) {
+        return UntrackPendingRead::OtherOwner;
+    }
+    if found.lexical {
+        return UntrackPendingRead::Unproven;
+    }
+    let own = declaration.path.as_ref() == file.path.as_str()
+        && containing_ast_function(&file.ast, declared)
+            .is_some_and(|function| found.layers.iter().any(|layer| layer.span == function.span))
+        && super::pending_sources::binding_creates_here(file, declared, lookup);
+    if own
+        || super::pending_sources::read_of_hook_called_in(
+            file,
+            span,
+            &found.layers,
+            source_file,
+            declared,
+            lookup,
+        )
+    {
+        return UntrackPendingRead::Throws;
+    }
+    UntrackPendingRead::Unproven
 }
 
 /// ADR 0620: the read is tracked in a computation's own callback, so a pending
@@ -448,6 +734,14 @@ pub(crate) fn allowed_callback_spans(
         let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
             continue;
         };
+        // ADR 0625: `untrack(fn, false)` is the unlabelled call.
+        if primitive == solid_dialect::Primitive::Untrack
+            && untrack_label(file, call) == UntrackLabel::Closed
+            && let Some(first) = call.arguments.first()
+        {
+            spans.push(first.span);
+            continue;
+        }
         let deferred = deferred_callback_positions(dialect, primitive, call.arguments.len())
             .into_iter()
             .filter(|index| {

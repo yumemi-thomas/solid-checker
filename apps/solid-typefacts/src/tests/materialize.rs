@@ -55,6 +55,7 @@ fn async_fact(path: &str) -> AsyncFunctionFact {
         symbol: format!("symbol:h:{path}:fn").into(),
         target: "".into(),
         can_return_async: true,
+        may_answer_sync: false,
         calls_after_await: Vec::new(),
     }
 }

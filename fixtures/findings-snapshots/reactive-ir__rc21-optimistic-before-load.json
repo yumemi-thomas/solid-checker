@@ -2,13 +2,33 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 328,
+      "end": 339,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 343,
       "end": 386,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 401,
+      "end": 408,
       "fixes": 0
     },
     {

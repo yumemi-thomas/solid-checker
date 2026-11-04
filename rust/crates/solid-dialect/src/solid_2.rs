@@ -2129,7 +2129,6 @@ impl Dialect for Solid2 {
         argument: usize,
         argument_count: usize,
     ) -> bool {
-        let _ = argument_count;
         // `createReaction`'s invalidation callback runs untracked and
         // one-shot; the RC.0 runtime emits `STRICT_READ_UNTRACKED` for a
         // reactive read inside it, so the checker reports the same.
@@ -2141,6 +2140,9 @@ impl Dialect for Solid2 {
             // ADR 0443: the map function of `mapArray` and `repeat` runs with
             // tracking off (`callback_runs_untracked_without_window`).
             || (matches!(primitive, Primitive::MapArray | Primitive::RepeatMap) && argument == 1)
+            // ADR 0625: `untrack(fn, "label")` opens a strict-read window of
+            // its own wherever it runs.
+            || (primitive == Primitive::Untrack && argument == 0 && argument_count >= 2)
     }
 
     /// `mapArray(list, map, { name })` and `repeat(count, map, { name })` wrap

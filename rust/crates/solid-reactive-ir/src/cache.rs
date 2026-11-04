@@ -597,6 +597,7 @@ pub(crate) struct LocalAccessResult {
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,
+    pub(crate) static_violations: Vec<crate::StaticViolation>,
 }
 
 pub(crate) struct LocalAccessBuild {

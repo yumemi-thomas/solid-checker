@@ -36,6 +36,8 @@ pub enum Rule {
     LoadingOnOutsideHold,
     LoadingOnAccessor,
     OnFlushInOwnedScope,
+    OptimisticWriteBeforeLoad,
+    CaughtReactiveRead,
     PrimitiveInDirectiveApplication,
     PrimitiveInEffectCallback,
     MissingEffectFunction,
@@ -84,7 +86,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 40] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -108,6 +110,8 @@ impl Rule {
         Self::LoadingOnOutsideHold,
         Self::LoadingOnAccessor,
         Self::OnFlushInOwnedScope,
+        Self::OptimisticWriteBeforeLoad,
+        Self::CaughtReactiveRead,
         Self::PrimitiveInDirectiveApplication,
         Self::PrimitiveInEffectCallback,
         Self::MissingEffectFunction,
@@ -224,6 +228,10 @@ impl Rule {
             Self::LoadingOnOutsideHold => ("SC5006", "loading-on-outside-hold", "warning", false),
             Self::LoadingOnAccessor => ("SC5007", "loading-on-accessor", "warning", false),
             Self::OnFlushInOwnedScope => ("SC3002", "on-flush-in-owned-scope", "warning", false),
+            Self::OptimisticWriteBeforeLoad => {
+                ("SC2009", "optimistic-write-before-load", "error", false)
+            }
+            Self::CaughtReactiveRead => ("SC5008", "caught-reactive-read", "warning", false),
             // The apply callback runs with no owner (`@solidjs/web` rc.0's
             // `ref()` is `runWithOwner(null, ...)`), so an owner-attaching
             // primitive created there is the SC4001-family defect: a real,
@@ -430,6 +438,8 @@ mod tests {
             ("SC5006", "loading-on-outside-hold"),
             ("SC5007", "loading-on-accessor"),
             ("SC3002", "on-flush-in-owned-scope"),
+            ("SC2009", "optimistic-write-before-load"),
+            ("SC5008", "caught-reactive-read"),
             ("SC6002", "primitive-in-effect-callback"),
             ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),

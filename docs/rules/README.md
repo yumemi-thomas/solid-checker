@@ -96,6 +96,7 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC2006 | [flush-in-action](flush-in-action.md) | error | on |
 | SC2007 | [static-dynamic-async-source](static-dynamic-async-source.md) | error | on |
 | SC2008 | [flush-in-effect-callback](flush-in-effect-callback.md) | warning | on |
+| SC2009 | [optimistic-write-before-load](optimistic-write-before-load.md) | error | on |
 | SC3001 | [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) | error | on |
 | SC3002 | [on-flush-in-owned-scope](on-flush-in-owned-scope.md) | warning | on |
 | SC4001 | [missing-owner](missing-owner.md) | warning | on |
@@ -104,6 +105,7 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning | on |
 | SC5006 | [loading-on-outside-hold](loading-on-outside-hold.md) | warning | on |
 | SC5007 | [loading-on-accessor](loading-on-accessor.md) | warning | on |
+| SC5008 | [caught-reactive-read](caught-reactive-read.md) | warning | on |
 | SC6001 | [primitive-in-directive-application](primitive-in-directive-application.md) | warning | on |
 | SC6002 | [primitive-in-effect-callback](primitive-in-effect-callback.md) | error | on |
 | SC7001 | [missing-effect-function](missing-effect-function.md) | error | on |

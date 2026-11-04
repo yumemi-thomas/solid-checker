@@ -57,6 +57,7 @@ pub(super) fn check_file(
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
     no_store_mutator_call(file, context, defects);
+    no_store_method_write(file, context, defects);
     no_store_standard_library_write(file, context, defects);
     no_store_delete(file, context, defects);
     expected_function_got_expression(file, context, defects);
@@ -1628,6 +1629,21 @@ fn store_write_standing(
     {
         return WriteStanding::Exempt;
     }
+    // ADR 0627: a write through a `merge` of several sources meets the view's
+    // own trap, or the last source itself: no store claims it.
+    if merge_view_root(file, context, site.root) {
+        return WriteStanding::Unproven;
+    }
+    // ADR 0631: a raw value's write lands: no proxy drops it.
+    if context
+        .lookup
+        .binding_at_reference(file.path.as_str(), site.root)
+        .is_some_and(|(binding_file, binding, _)| {
+            context.lookup.store_value_may_be_raw(binding_file, binding)
+        })
+    {
+        return WriteStanding::Unproven;
+    }
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
@@ -2284,23 +2300,57 @@ fn shallow_store_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, roo
     else {
         return false;
     };
-    if !binding.immutable
-        || !binding
-            .array_slots
-            .first()
-            .and_then(Option::as_ref)
-            .is_some_and(|slot| binding_file.source_text(slot.span) == file.source_text(root))
-    {
+    // A projection's binding is the store itself.
+    let named = binding
+        .array_slots
+        .first()
+        .and_then(Option::as_ref)
+        .or(binding.names.first())
+        .is_some_and(|slot| binding_file.source_text(slot.span) == file.source_text(root));
+    if !binding.immutable || !named {
         return false;
     }
     binding
         .call_initializer
         .and_then(|initializer| binding_file.ast.call_at(initializer))
         .is_some_and(|call| {
-            context.lookup.primitive_at_call(binding_file, call.span)
-                == Some(solid_dialect::Primitive::CreateStore)
-                && crate::call_option_literal(binding_file, call, 1, "shallow")
+            use solid_dialect::Primitive;
+            // A derive takes a seed before its options; the value form does not.
+            let derived = call.arguments.first().is_some_and(|first| {
+                matches!(
+                    first.value,
+                    solid_facts::ast::ArgumentValueKind::Function
+                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                )
+            });
+            let options = match context.lookup.primitive_at_call(binding_file, call.span) {
+                Some(Primitive::CreateStore | Primitive::CreateOptimisticStore) => {
+                    Some(if derived { 2 } else { 1 })
+                }
+                Some(Primitive::CreateProjection) => Some(2),
+                _ => None,
+            };
+            options.is_some_and(|options| {
+                crate::call_option_literal(binding_file, call, options, "shallow")
                     == solid_dialect::OptionLiteral::True
+            })
+        })
+}
+
+/// ADR 0627: `root` is a `const` holding a `merge` call of several sources.
+fn merge_view_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
+    context
+        .lookup
+        .binding_at_reference(file.path.as_str(), root)
+        .is_some_and(|(binding_file, binding, _)| {
+            binding
+                .call_initializer
+                .and_then(|initializer| binding_file.ast.call_at(initializer))
+                .is_some_and(|call| {
+                    call.arguments.len() > 1
+                        && context.lookup.primitive_at_call(binding_file, call.span)
+                            == Some(solid_dialect::Primitive::Merge)
+                })
         })
 }
 
@@ -3028,15 +3078,82 @@ fn no_store_mutator_call(
     }
 }
 
+/// ADR 0635: a method a store path holds, called on the read proxy, runs with
+/// the proxy as `this`, so a write of `this.x` in its body is dropped with
+/// `STORE_WRITE_OUTSIDE_SETTER` (rc.21 `core-store` R48, measured in Chrome). The
+/// member's value is what the store holds now, so this is an obligation.
+fn no_store_method_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    for call in &file.ast.calls {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if call.construct || file.ast.member_at(callee).is_none() {
+            continue;
+        }
+        let Some((method_file, method, _)) =
+            crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup)
+        else {
+            continue;
+        };
+        let writes_this = method_file.ast.write_targets.iter().any(|target| {
+            method.body.contains(*target)
+                && method_file
+                    .source_text(*target)
+                    .is_some_and(|written| written.starts_with("this."))
+        });
+        let Some(root) = member_root(file, callee).filter(|_| writes_this) else {
+            continue;
+        };
+        let Some(symbol) = source_symbol_at(context, file, root) else {
+            continue;
+        };
+        let Some((name, _)) = context
+            .accessors
+            .get(symbol)
+            .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+        else {
+            continue;
+        };
+        if !bare_root(file, root) {
+            continue;
+        }
+        let standing = store_write_standing(
+            file,
+            context,
+            StoreWriteSite {
+                span: call.span,
+                member: callee,
+                root,
+            },
+            symbol,
+        );
+        if standing != WriteStanding::Exempt {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::DirectMutation {
+                    name: name.as_str().to_owned(),
+                    target: store_target(context, symbol),
+                },
+                location: location(file.path.shared(), call.span),
+                analysis_context: String::new(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+}
+
 /// The standard-library calls that write properties of their first argument,
 /// by the exact declaration Type Facts resolved the callee to (a project
 /// function named `assign`, a shadowed `Object` and an unresolved callee are
 /// silent): `Object.assign(target, …)`, `Reflect.set(target, key, value)` and
 /// `Object.defineProperty(target, key, descriptor)`.
-const STANDARD_LIBRARY_WRITES: [(&str, &str); 3] = [
+const STANDARD_LIBRARY_WRITES: [(&str, &str); 4] = [
     ("assign", "ObjectConstructor.assign"),
     ("set", "Reflect.set"),
     ("defineProperty", "ObjectConstructor.defineProperty"),
+    ("deleteProperty", "Reflect.deleteProperty"),
 ];
 
 /// A standard-library write whose target is a proven store's read proxy (ADR

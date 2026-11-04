@@ -189,6 +189,11 @@ A write in a component also handed out as a plain function is uncertifiable
 exact dynamic factory (ADR 0542), and in a local closure every reference of
 which is a plain call there (ADR 0571).
 
+`Object.assign`, `Reflect.set`, `Object.defineProperty` and `Reflect.deleteProperty` on a
+store are writes (ADRs 0526, 0635). A class method a store path holds runs with the proxy as
+`this`, so a write of `this.x` in it is uncertifiable (ADR 0635). A write through a `merge` of
+several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0627, 0631).
+
 ## Why is this bad?
 
 Solid updates the graph only through setters: the setter is what notifies

@@ -2562,7 +2562,7 @@
   "finding": "rc.21: `untrack(() => m())` of a pending source the strict body created throws PENDING_ASYNC_UNTRACKED_READ; the checker certified it (ADR 0616)",
   "found": "mx-census on rc.21, the first run of the upgrade (2026-11-04), and probes p2/p4 independently",
   "fixed": "ADR 0616",
-  "grid": "mx-census",
+  "grid": "mx-base",
   "code": "PENDING_ASYNC_UNTRACKED_READ",
   "ids": [
    "mx-pending-async-untracked-read-untrack-x-direct-none"

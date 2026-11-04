@@ -867,6 +867,7 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
+    raw_store_values: crate::base::reads::Recorded<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: crate::base::reads::Recorded<bool>,
     router_params: crate::base::reads::Recorded<crate::router_params::RouterParamsStatus>,
@@ -1243,6 +1244,7 @@ impl<'a> SemanticLookup<'a> {
             synchronous_event_dispatch: OnceLock::new(),
             synchronous_flush: OnceLock::new(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
+            raw_store_values: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
             route_component_values: crate::base::reads::Recorded::new(),
@@ -1402,6 +1404,11 @@ impl<'a> SemanticLookup<'a> {
                 .filter_map(|name| self.dialect.primitive(name.as_str()))
                 .collect()
         })
+    }
+
+    /// Whether the project names `primitive` anywhere.
+    pub(crate) fn project_names_primitive(&self, primitive: solid_dialect::Primitive) -> bool {
+        self.project_primitives().contains(&primitive)
     }
 
     pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
@@ -1821,6 +1828,9 @@ impl<'a> SemanticLookup<'a> {
             }
             Section::FlushVeto => {
                 hasher.update([u8::from(self.flush_veto())]);
+            }
+            Section::RawStoreValues => {
+                hasher.update([u8::from(self.raw_store_values_present())]);
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);

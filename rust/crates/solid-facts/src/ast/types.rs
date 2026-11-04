@@ -166,6 +166,8 @@ pub struct AstFacts {
     /// Whether the operand can throw is the consumer's question.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub try_catches: Vec<TryCatchFact>,
     /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
     /// bundler may turn into static imports run in place (facts schema 70):
     /// every call except `glob` with no options, or with an options object
@@ -310,6 +312,10 @@ pub struct AstFacts {
     /// of a caller's value leaves the enumeration undescribable.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iterated_operands: Vec<Span>,
+    /// The right operand of each `key in value` and `for (key in value)`: an
+    /// operation that probes the value's keys without reading one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_probed_operands: Vec<Span>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     /// Exact simple assignment targets, including destructuring leaves,
@@ -1354,6 +1360,14 @@ pub struct YieldFact {
     pub region: Option<Span>,
 }
 
+/// A `try` with a `catch` clause.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TryCatchFact {
+    pub block: Span,
+    pub handler: Span,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TryHeadAwaitFact {
@@ -2272,6 +2286,7 @@ impl AstFacts {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            try_catches: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
@@ -2299,6 +2314,7 @@ impl AstFacts {
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
+            key_probed_operands: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),

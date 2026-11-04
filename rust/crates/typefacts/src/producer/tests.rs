@@ -209,6 +209,7 @@ fn golden_wire_table() -> ProducerTable {
             symbol: "symbol:h:2".into(),
             target: "symbol:h:1".into(),
             can_return_async: true,
+            may_answer_sync: false,
             calls_after_await: vec![location(path, 30, 34)],
         }]),
         ..file(path)
@@ -1068,6 +1069,7 @@ fn path_symbols_come_from_entities_calls_and_async_functions() {
             symbol: "sym-async".into(),
             target: "sym-async-target".into(),
             can_return_async: false,
+            may_answer_sync: false,
             calls_after_await: Vec::new(),
         }]),
         ..file("src/a.ts")

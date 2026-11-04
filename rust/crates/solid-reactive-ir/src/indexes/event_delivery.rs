@@ -147,6 +147,89 @@ impl SemanticLookup<'_> {
         })
     }
 
+    /// ADR 0631: some analyzed file names `markRaw` or writes a `shallow`
+    /// option. A record that entered a shallow store is raw for every later
+    /// store (`createStore(rec)` returns it as it is), so a store over a value
+    /// no literal states may then be no proxy.
+    pub(crate) fn raw_store_values_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::RawStoreValues);
+        *self.raw_store_values.get_or_init(|| {
+            self.files().iter().any(|file| {
+                file.ast
+                    .identifiers
+                    .iter()
+                    .any(|identifier| file.source_text(identifier.span) == Some("markRaw"))
+                    || file.ast.object_properties.iter().any(|property| {
+                        file.source_text(property.key)
+                            .is_some_and(|key| key.trim_matches(['"', '\'']) == "shallow")
+                    })
+            })
+        })
+    }
+
+    /// ADR 0631: the store the binding `binding` holds, created in `file`,
+    /// may be its raw value: its value is `markRaw(...)`, or names a value no
+    /// literal or derive function states and some file may mark one raw.
+    pub(crate) fn store_value_may_be_raw(
+        &self,
+        file: &FileFacts,
+        binding: &solid_facts::ast::BindingFact,
+    ) -> bool {
+        use solid_facts::ast::ArgumentValueKind;
+        let Some(call) = binding
+            .call_initializer
+            .and_then(|initializer| file.ast.call_at(initializer))
+        else {
+            return false;
+        };
+        if !matches!(
+            self.primitive_at_call(file, call.span),
+            Some(
+                solid_dialect::Primitive::CreateStore
+                    | solid_dialect::Primitive::CreateOptimisticStore
+            )
+        ) {
+            return false;
+        }
+        let Some(first) = call.arguments.first() else {
+            return false;
+        };
+        let value = file.ast.peel_ts_sugar_span(first.span);
+        if first.runtime_value_kind.is_data_literal()
+            || file.ast.array_literals.contains(&value)
+            || file
+                .ast
+                .object_get_shapes
+                .iter()
+                .any(|shape| shape.span == value)
+            || matches!(
+                first.value,
+                ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
+            )
+        {
+            return false;
+        }
+        self.raw_store_values_present()
+    }
+
+    /// ADR 0631: [`Self::store_value_may_be_raw`] of the store declared at
+    /// `declaration`, for a read any layer reports.
+    pub(crate) fn store_declared_may_be_raw(&self, declaration: &crate::Location) -> bool {
+        self.file_by_path(declaration.path.as_ref())
+            .is_some_and(|file| {
+                file.ast
+                    .bindings
+                    .iter()
+                    .find(|binding| {
+                        binding
+                            .names
+                            .iter()
+                            .any(|name| u64::from(name.span.start) == declaration.start_byte)
+                    })
+                    .is_some_and(|binding| self.store_value_may_be_raw(file, binding))
+            })
+    }
+
     /// ADR 0356, narrowed by ADR 0435: DOM dispatch runs handlers on its
     /// caller's stack. A visible synchronous dispatch withholds the ownerless
     /// proof for event-only invocations unless its target cannot reach a JSX

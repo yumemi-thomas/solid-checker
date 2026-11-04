@@ -648,6 +648,12 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::OnFlushInOwnedScope => {
             "the onFlush() call runs under a children-capable owner, a component body or a computation"
         }
+        Rule::OptimisticWriteBeforeLoad => {
+            "the setter runs in the pass that creates its async source, or where nothing proves the source has answered"
+        }
+        Rule::CaughtReactiveRead => {
+            "the read sits in a try with a catch in a computation that completes with a value"
+        }
         Rule::LoadingOnOutsideHold => {
             "a Loading boundary with `on` holds an async source the analysis cannot prove only it reads, so whether the frame waits on an outside read of the same flight is not decided"
         }
