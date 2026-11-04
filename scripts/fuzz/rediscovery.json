@@ -2875,5 +2875,11 @@
    "mx-pending-async-untracked-read-body-over-async-direct-closure"
   ],
   "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 2 false-clean, 1 wrong-rule; the fix: 3 recall-gap"
+ },
+ {
+  "finding": "`untrack` of a memo the body creates, in a body `dynamic` mounts: the page never settles and the program was certified clean; no window was read as no `untrack` (ADR 0628)",
+  "found": "the known-gap note for three pair programs with no runtime record",
+  "fixed": "ADR 0628",
+  "outside": "the page never settles, so no runtime record exists and a grid cannot judge it; pairShapes leaves the shape out and fixtures/reactive-ir/rc21-untrack-hook-pending holds it as an obligation"
  }
 ]

@@ -584,7 +584,7 @@ fn async_function_fact(
                 .get_return_type_of_signature_exported(*signature);
             if async_return_type(env.checker, return_type) {
                 fact.can_return_async = true;
-                fact.may_answer_sync = !every_answer_is_a_flight(env.checker, return_type);
+                fact.may_answer_sync = !every_answer_is_a_flight(return_type);
                 break;
             }
         }

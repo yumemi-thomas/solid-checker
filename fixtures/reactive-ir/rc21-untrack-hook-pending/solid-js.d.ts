@@ -28,3 +28,7 @@ declare module "solid-js" {
 declare module "@solidjs/signals" {
   export function markRaw<T extends object>(value: T): T;
 }
+
+declare module "@solidjs/web" {
+  export function dynamic<T extends (props: {}) => JSX.Element>(source: () => Promise<T> | T): T;
+}

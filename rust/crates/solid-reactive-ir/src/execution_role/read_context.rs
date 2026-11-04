@@ -507,6 +507,9 @@ pub(crate) struct UntrackLayers<'f> {
     /// The strict body is proven: the outermost call runs in a component
     /// body's window, or in a label of its own.
     in_window: bool,
+    /// No window is proven, and the read may still not return: a body `dynamic`
+    /// mounts re-runs onto a fresh pending memo, and never ends.
+    window_unproven: bool,
     /// A function between the read and the `untrack` runs by a hand-off nothing
     /// follows: the read is written inside the `untrack`, and may run on its
     /// stack or later.
@@ -591,11 +594,11 @@ pub(crate) fn untrack_layers<'f>(
     }
     let labelled = labelled?;
     let outermost = outermost?;
-    let in_window = window_label || {
+    let role = (!window_label).then(|| {
         let allowed = allowed_callback_spans(file, lookup);
         super::read_execution_role(file, outermost, &allowed, entities, symbol_names, lookup)
-            == ExecutionRole::UntrackedRendering
-    };
+    });
+    let in_window = window_label || role == Some(ExecutionRole::UntrackedRendering);
     let (kept, body) = held;
     layers.truncate(kept);
     layers.extend(body);
@@ -603,6 +606,10 @@ pub(crate) fn untrack_layers<'f>(
         layers,
         labelled,
         in_window,
+        window_unproven: matches!(
+            role,
+            Some(ExecutionRole::Unknown | ExecutionRole::UntrackedUnwindowed)
+        ),
         lexical,
     })
 }
@@ -709,7 +716,7 @@ impl UntrackLayers<'_> {
     /// The read is in an unlabelled `untrack` in a strict-read window, so a
     /// pending source its owner created throws there.
     pub(crate) fn keeps_pending_throw(&self) -> bool {
-        self.in_window && !self.labelled
+        (self.in_window || self.window_unproven) && !self.labelled
     }
 
     /// `span` is a call written directly in one of the layers.
@@ -733,7 +740,7 @@ pub(crate) fn untrack_pending_read(
     if !lookup.dialect.untrack_keeps_own_pending_throw() {
         return UntrackPendingRead::NotUnderUntrack;
     }
-    let Some(found) = layers.filter(|found| found.in_window) else {
+    let Some(found) = layers.filter(|found| found.in_window || found.window_unproven) else {
         return UntrackPendingRead::NotUnderUntrack;
     };
     if found.labelled {
@@ -769,12 +776,20 @@ pub(crate) fn untrack_pending_read(
             lookup,
         )
     {
-        return UntrackPendingRead::Throws;
+        return if found.in_window {
+            UntrackPendingRead::Throws
+        } else {
+            UntrackPendingRead::Unproven
+        };
     }
     if super::pending_sources::read_of_module_hook_result(file, span) {
         return UntrackPendingRead::OtherOwner;
     }
-    UntrackPendingRead::Unproven
+    if found.in_window {
+        UntrackPendingRead::Unproven
+    } else {
+        UntrackPendingRead::NotUnderUntrack
+    }
 }
 
 /// ADR 0623: the read is tracked in a computation's own callback, so a pending

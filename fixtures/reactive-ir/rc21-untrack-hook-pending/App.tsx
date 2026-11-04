@@ -1,4 +1,5 @@
 import { createMemo, createRoot, createSignal, createStore, untrack } from "solid-js";
+import { dynamic } from "@solidjs/web";
 
 function useBare() {
   return createMemo(async () => 1);
@@ -129,4 +130,17 @@ export function OverAsync() {
   const outer = createMemo(() => inner());
   const one = untrack(() => outer());
   return <p>{one}</p>;
+}
+
+// `dynamic` mounts this in no window: the read re-runs the body onto a fresh
+// pending memo, the page never settles, and nothing is reported: open.
+function Remounted() {
+  const memo = useBare();
+  const one = untrack(() => memo());
+  return <p>{one}</p>;
+}
+
+export function DynamicMount() {
+  const Mounted = dynamic(() => Remounted);
+  return <Mounted />;
 }
