@@ -771,6 +771,9 @@ pub(crate) fn untrack_pending_read(
     {
         return UntrackPendingRead::Throws;
     }
+    if super::pending_sources::read_of_module_hook_result(file, span) {
+        return UntrackPendingRead::OtherOwner;
+    }
     UntrackPendingRead::Unproven
 }
 

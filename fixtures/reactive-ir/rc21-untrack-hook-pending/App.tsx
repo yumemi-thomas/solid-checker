@@ -1,4 +1,4 @@
-import { createMemo, createRoot, createStore, untrack } from "solid-js";
+import { createMemo, createRoot, createSignal, createStore, untrack } from "solid-js";
 
 function useBare() {
   return createMemo(async () => 1);
@@ -109,4 +109,24 @@ export function Labelled() {
   const one = untrack(() => memo(), "mine");
   const two = untrack(() => memo(), false);
   return <p>{[one, two].length}</p>;
+}
+
+// A hook of a plain signal holds nothing pending: no obligation.
+const usePlain = () => {
+  const [value] = createSignal(1);
+  return { value };
+};
+
+export function PlainHook() {
+  const { value } = usePlain();
+  const one = untrack(() => value());
+  return <p>{one}</p>;
+}
+
+// A sync memo over an async one is pending with it, and throws here: open.
+export function OverAsync() {
+  const inner = createMemo(async () => 1);
+  const outer = createMemo(() => inner());
+  const one = untrack(() => outer());
+  return <p>{one}</p>;
 }

@@ -37,6 +37,41 @@ use typefacts::{Declaration, Location};
 /// (ADR 0509), dropped where accessor transport resolves the call.
 pub(crate) const UNRESOLVED_HANDED_MEMBER: &str = "handed-member-dispatch";
 
+/// A source no pending state can reach: a signal or store of a data literal, or
+/// a memo whose sync literal compute reads nothing. `createSignal(fn)` computes,
+/// and an identifier may be a function.
+fn source_call_holds_a_value(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: solid_dialect::Primitive,
+) -> bool {
+    use solid_dialect::Primitive;
+    use solid_facts::ast::ArgumentValueKind;
+    let first = call.arguments.first();
+    match primitive {
+        Primitive::CreateSignal | Primitive::CreateStore => first.is_none_or(|argument| {
+            matches!(
+                argument.value,
+                ArgumentValueKind::Null | ArgumentValueKind::Undefined
+            ) || argument.runtime_value_kind.is_data_literal()
+        }),
+        Primitive::CreateMemo => first.is_some_and(|argument| {
+            argument.value == ArgumentValueKind::Function
+                && !file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|inner| argument.span.contains(inner.span))
+                && !file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| argument.span.contains(member.span))
+        }),
+        _ => false,
+    }
+}
+
 /// [`UNRESOLVED_HANDED_MEMBER`] where the call may only read (its role reports
 /// no write or action): a read row at the call speaks for it.
 pub(crate) const UNRESOLVED_HANDED_READ: &str = "handed-member-read";
@@ -1742,7 +1777,11 @@ impl LocalAccessContext<'_, '_> {
                 if self
                     .lookup
                     .callee_symbol(file, call.callee)
-                    .is_none_or(|symbol| !self.accessors.contains_key(symbol))
+                    .is_none_or(|symbol| {
+                        !self.accessors.contains_key(symbol)
+                            || (!self.async_sources.contains(symbol)
+                                && self.value_reaches_async_source(file, call.callee, 4))
+                    })
                 {
                     self.push_untrack_hook_value_obligation(file, call.callee, None, &mut result);
                 }
@@ -3935,7 +3974,11 @@ impl LocalAccessContext<'_, '_> {
             origin_context: origin
                 .map_or_else(String::new, |origin| origin.1.to_string())
                 .into(),
-            uncertain: self.lookup.inside_possible_component(file, call.span),
+            // ADR 0628: a memo over an async source is pending with it, and a
+            // pending read throws instead of warning.
+            uncertain: self.lookup.inside_possible_component(file, call.span)
+                || (!self.async_sources.contains(symbol)
+                    && self.value_reaches_async_source(file, call.callee, 4)),
             missing_jsx_census: missing_jsx_census(file, timing_at, execution),
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
@@ -4243,6 +4286,28 @@ impl LocalAccessContext<'_, '_> {
         if hook.is_none() && !self.value_reaches_async_source(file, value, 4) {
             return;
         }
+        // A module's source has no owner of a body.
+        if crate::execution_role::read_of_module_hook_result(file, value)
+            || (hook.is_none()
+                && file
+                    .ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(value))
+                    .is_some_and(|declared| crate::indexes::at_module_scope(&file.ast, declared)))
+        {
+            return;
+        }
+        // rc.21 throws on a pending source of this very owner: a computation
+        // this body or the hook made. A signal of a value is never pending, and
+        // a prop or a context value was made by another owner.
+        if hook.is_some_and(|hook| {
+            !self.span_may_make_computation(file, hook.span, 4)
+                && !self.value_reaches(file, value, 4, &|symbol| {
+                    self.accessors.contains_key(symbol) && !self.accessor_holds_a_value(symbol)
+                })
+                && !self.value_reaches_open_prop(file, value)
+        }) {
+            return;
+        }
         let holds = crate::execution_role::untrack_layers(
             file,
             value,
@@ -4262,9 +4327,12 @@ impl LocalAccessContext<'_, '_> {
                     member: None,
                 },
                 location: location(file.path.shared(), value),
-                // No transport follows a value handed to `untrack` by name.
+                // No transport follows a value handed to `untrack` by name, and
+                // one that names a sync memo says nothing of the memo's sources.
                 analysis_context: if carrier.is_some() {
                     "value-read-under-untrack".to_owned()
+                } else if self.value_reaches_async_source(file, value, 4) {
+                    "derived-read-under-untrack".to_owned()
                 } else {
                     UNRESOLVED_HANDED_READ.to_owned()
                 },
@@ -4272,6 +4340,123 @@ impl LocalAccessContext<'_, '_> {
                 uncertain: true,
             });
         }
+    }
+
+    /// ADR 0628: a call in `span`, or in the project functions those calls run,
+    /// may make a computation: a source that can be pending. A signal or store
+    /// of a data literal is none. A call nothing resolves may make one.
+    fn span_may_make_computation(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        depth: usize,
+    ) -> bool {
+        let Some(depth) = depth.checked_sub(1) else {
+            return true;
+        };
+        file.ast
+            .calls
+            .iter()
+            .filter(|call| span.contains(call.span))
+            .any(|call| {
+                if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
+                    return self.lookup.dialect.creates_reactive_source(primitive)
+                        && !source_call_holds_a_value(file, call, primitive);
+                }
+                if self
+                    .lookup
+                    .callee_symbol(file, call.callee)
+                    .is_some_and(|symbol| self.accessors.contains_key(symbol))
+                {
+                    return false;
+                }
+                crate::execution_role::project_callee_at_parameter(file, call, 0, self.lookup)
+                    .is_none_or(|(callee_file, callee, _)| {
+                        self.span_may_make_computation(callee_file, callee.span, depth)
+                    })
+            })
+    }
+
+    /// `value` reaches a parameter of a function around it that is no props
+    /// object every call site fills with signals of values. A prop's getter runs
+    /// here, so a memo written inline in the parent's JSX is this body's own.
+    fn value_reaches_open_prop(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: solid_facts::core::Span,
+    ) -> bool {
+        let ast = &file.ast;
+        ast.functions_owning(value)
+            .flat_map(|function| &function.parameters)
+            .flat_map(|parameter| parameter.names.iter().map(move |name| (parameter, name)))
+            .any(|(parameter, name)| {
+                let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+                    return true;
+                };
+                if !self.value_reaches(file, value, 4, &|reached| reached == symbol) {
+                    return false;
+                }
+                let open = |declared: &Location, property: &str| {
+                    let (sources, complete) =
+                        self.props_reactivity.passed_sources(declared, property);
+                    !complete
+                        || sources.is_empty()
+                        || sources
+                            .iter()
+                            .any(|source| !self.accessor_holds_a_value(source))
+                };
+                // `({ r1 })`: the slot names its prop.
+                if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+                    return parameter
+                        .object_slots
+                        .iter()
+                        .find(|slot| slot.local.span == name.span && slot.plain_identifier_key)
+                        .is_none_or(|slot| {
+                            open(&location(file.path.shared(), parameter.pattern), &slot.property)
+                        });
+                }
+                let declared = location(file.path.shared(), name.span);
+                ast.identifiers
+                    .iter()
+                    .filter(|identifier| {
+                        ast.reference_declaration(identifier.span) == Some(name.span)
+                    })
+                    .any(|identifier| {
+                        let member = ast.members.iter().find(|member| {
+                            ast.peel_ts_sugar_span(member.object) == identifier.span
+                                && !ast.computed_members.contains(&member.span)
+                        });
+                        member
+                            .and_then(|member| file.source_text(member.property))
+                            .is_none_or(|property| open(&declared, property))
+                    })
+            })
+    }
+
+    /// The accessor `symbol` belongs to a signal of a data literal.
+    fn accessor_holds_a_value(&self, symbol: &SymbolId) -> bool {
+        let Some((_, declared)) = self.accessors.get(symbol) else {
+            return false;
+        };
+        let Some(file) = self.lookup.file_by_path(&declared.path) else {
+            return false;
+        };
+        file.ast
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.names.iter().any(|name| {
+                    u64::from(name.span.start) == declared.start_byte
+                        && u64::from(name.span.end) == declared.end_byte
+                })
+            })
+            .and_then(|binding| binding.call_initializer)
+            .and_then(|initializer| file.ast.call_at(initializer))
+            .is_some_and(|call| {
+                self.lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| source_call_holds_a_value(file, call, primitive))
+            })
     }
 
     /// ADR 0628: what `value` names may hold an async source or a function

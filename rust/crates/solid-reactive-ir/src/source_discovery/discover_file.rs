@@ -257,14 +257,36 @@ pub(crate) fn discover_file_sources(
                     symbol.clone(),
                     crate::owned_write_option(file, call, resolved, lookup.dialect),
                 ));
-                let options = first_answer_options(lookup, file, call, resolved);
+                let mut options = first_answer_options(lookup, file, call, resolved);
+                // ADR 0628: a sync memo over an async source is pending with it,
+                // and answers once it settled: its reads are open.
+                let over_async = resolved == Some(Primitive::CreateMemo)
+                    && call.arguments.first().is_some_and(|argument| {
+                        argument.value == solid_facts::ast::ArgumentValueKind::Function
+                            && file
+                                .ast
+                                .identifiers
+                                .iter()
+                                .filter(|identifier| argument.span.contains(identifier.span))
+                                .filter_map(|identifier| {
+                                    super::reference_symbol(
+                                        file,
+                                        identifier.span,
+                                        entities,
+                                        lookup,
+                                    )
+                                })
+                                .any(|read| result.async_sources.contains(&read))
+                    });
+                options.opaque |= over_async;
                 if options != AsyncSourceOptions::default() {
                     result.source_async_options.push((symbol.clone(), options));
                 }
-                if call
-                    .arguments
-                    .first()
-                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                if over_async
+                    || call
+                        .arguments
+                        .first()
+                        .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
                 {
                     result.async_sources.push(symbol.clone());
                 }

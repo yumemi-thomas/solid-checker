@@ -231,11 +231,6 @@ pub(crate) fn collect_project<'facts>(
         .collect::<HashSet<_>>();
     // A handed-member obligation is the last resort at its site: pushed after
     // every other producer's, it yields to a cause already recorded there.
-    if std::env::var_os("SC_DBG").is_some() {
-        for (k, v) in interprocedural.source_call_targets.iter() {
-            eprintln!("DBG target {}:{} {:?}", k.path, k.start_byte, v);
-        }
-    }
     let mut handed = Vec::new();
     for obligation in dispatch_obligations {
         if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER

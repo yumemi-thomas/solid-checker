@@ -998,6 +998,62 @@ pub(super) fn read_of_hook_called_in(
         && hook_returned_slot_holds(hook_file, hook, binding, &key)
 }
 
+/// ADR 0628: the read goes through a module `const` holding a call's result
+/// (`const shared = useVals(); shared.a()`), written nowhere, directly or through
+/// local `const`s and closures that name only such holders: the hook ran at
+/// module scope, so what it made belongs to no owner of a body.
+pub(crate) fn read_of_module_hook_result(file: &solid_facts::FileFacts, read: Span) -> bool {
+    read_of_module_hook_within(file, read, 4)
+}
+
+fn read_of_module_hook_within(file: &solid_facts::FileFacts, read: Span, depth: usize) -> bool {
+    let ast = &file.ast;
+    let head_of = |span: Span| {
+        let mut object = ast.peel_ts_sugar_span(span);
+        while let Some(member) = ast.member_at(object) {
+            object = ast.peel_ts_sugar_span(member.object);
+        }
+        ast.reference_declaration(object)
+    };
+    let Some(declaration) = head_of(read) else {
+        return false;
+    };
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+    }) else {
+        return false;
+    };
+    let Some(initializer) = binding.initializer.map(|span| ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    if crate::indexes::binding_written(file, declaration)
+        || ast
+            .assignments
+            .iter()
+            .any(|assignment| head_of(assignment.target) == Some(declaration))
+    {
+        return false;
+    }
+    if crate::indexes::at_module_scope(ast, declaration) {
+        return ast.call_at(initializer).is_some();
+    }
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let mut named = ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            initializer.contains(identifier.span)
+                && ast
+                    .reference_declaration(identifier.span)
+                    .is_some_and(|declared| !initializer.contains(declared))
+        })
+        .peekable();
+    named.peek().is_some()
+        && named.all(|identifier| read_of_module_hook_within(file, identifier.span, depth))
+}
+
 /// Whether a return of `hook` is a closed literal holding the source `binding`
 /// declares under `key`.
 fn hook_returned_slot_holds(
