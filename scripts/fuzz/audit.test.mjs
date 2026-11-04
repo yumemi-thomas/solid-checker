@@ -1,9 +1,10 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { AUDIT_GRIDS, ORACLE_AXES, ORACLE_PARTS, ORACLE_PER_STRATUM, judge, markdown, oracleJobs, parseArgs, parsePart, partIds, pickOracle, readShards, recallModeOf } from "./audit.mjs";
+import { AUDIT_GRIDS, ORACLE_AXES, ORACLE_PART_FLOOR, ORACLE_PER_STRATUM, ORACLE_RUNNERS, judge, markdown, oracleJobs, oracleParts, parseArgs, parsePart, partIds, pickOracle, readShards, recallModeOf } from "./audit.mjs";
 import { fnv } from "./rng.mjs";
 import { parseAxes, sampleStrata, stratumOf } from "./runtime-diff.mjs";
 import { shardOf } from "./shard.mjs";
@@ -185,12 +186,58 @@ describe("the audit's verdict", () => {
       expect(Math.max(...slices.map((s) => s.length)) - Math.min(...slices.map((s) => s.length))).toBeLessThanOrEqual(1);
     }
     expect(partIds(ids, 1, 4).slice(0, 3)).toEqual(["p1", "p5", "p9"]);
-    // The workflow's matrix: every grid, the recall grids in their parts.
-    expect(ORACLE_PARTS).toEqual({ "mx-recall": 4, "lg-recall": 2 });
-    const jobs = oracleJobs().include;
-    expect(jobs.length).toBe(AUDIT_GRIDS.length - 2 + 4 + 2);
-    expect(jobs.filter((job) => job.grid === "mx-recall")).toEqual([0, 1, 2, 3].map((part) => ({ grid: "mx-recall", part, parts: 4 })));
-    expect(jobs.find((job) => job.grid === "mx-base")).toEqual({ grid: "mx-base", part: 0, parts: 1 });
+  });
+
+  it("splits the samples over the run's runners, the largest part first, never below the floor", () => {
+    expect([ORACLE_RUNNERS, ORACLE_PART_FLOOR]).toEqual([20, 200]);
+    // Run 41775917761's samples (a full-recall night): mx-census's 2,294 programs were one job of 90 minutes.
+    const full = { "mx-base": 106, "mx-src": 96, "mx-combo": 151, "lg-base": 54, "lg-src": 38, "lg-combo": 100, "mx-recall": 1231, "lg-recall": 1316, "mx-pairs": 198, "lg-pairs": 100, "mx-census": 2294 };
+    expect(Object.keys(full).toSorted()).toEqual(AUDIT_GRIDS.toSorted());
+    const parts = oracleParts(full);
+    expect(Object.fromEntries(Object.entries(parts).filter(([, n]) => n > 1))).toEqual({ "mx-recall": 3, "lg-recall": 3, "mx-census": 6 });
+    expect(Object.values(parts).reduce((a, b) => a + b)).toBe(ORACLE_RUNNERS);
+    expect(Math.max(...Object.keys(full).map((grid) => Math.ceil(full[grid] / parts[grid])))).toBe(439);
+    // Run 41754339595's (lean, before the census): runners left over, every part at most the floor.
+    const lean = { "mx-base": 106, "mx-src": 96, "mx-combo": 149, "lg-base": 53, "lg-src": 36, "lg-combo": 98, "mx-recall": 1025, "lg-recall": 950 };
+    expect(oracleParts(lean)).toMatchObject({ "mx-recall": 6, "lg-recall": 5, "mx-combo": 1 });
+    // Small samples are never split; an empty one is one job; more grids than runners each keep one; a tie goes to the first grid.
+    expect(oracleParts({ a: 200, b: 0 })).toEqual({ a: 1, b: 1 });
+    expect(oracleParts({})).toEqual({});
+    const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`g${i}`, 5000]));
+    expect(Object.values(oracleParts(many)).every((n) => n === 1)).toBe(true);
+    expect(oracleParts({ a: 1000, b: 1000, ...Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`s${i}`, 1])) })).toMatchObject({ a: 2, b: 1 });
+    // The matrix: every grid and part once, and every program in exactly one job.
+    const manifests = AUDIT_GRIDS.map((grid) => ({ grid, ids: Array.from({ length: full[grid] }, (_, i) => `${grid}-${i}`), parts: parts[grid] }));
+    const jobs = oracleJobs(manifests).include;
+    expect(jobs.length).toBe(ORACLE_RUNNERS);
+    expect(new Set(jobs.map((job) => `${job.grid}#${job.part}/${job.parts}`)).size).toBe(jobs.length);
+    const taken = jobs.flatMap((job) => partIds(manifests.find((m) => m.grid === job.grid).ids, job.part, job.parts));
+    expect(taken.toSorted()).toEqual(manifests.flatMap((m) => m.ids).toSorted());
+    expect(jobs.filter((job) => job.grid === "mx-census")).toEqual([0, 1, 2, 3, 4, 5].map((part) => ({ grid: "mx-census", part, parts: 6 })));
+  });
+
+  it("writes the parts into pick's manifests and its matrix", () => {
+    const root = run({ count: 2 });
+    const size = { "mx-census": 850, "lg-src": 0 };
+    for (const grid of AUDIT_GRIDS) {
+      const candidates = Array.from({ length: size[grid] ?? 5 }, (_, i) => ({ id: `${grid}-c${i}`, stratum: `s${i}`, rank: fnv(`${grid}-c${i}`) }));
+      for (let index = 0; index < 2; index += 1) {
+        const mine = candidates.filter((candidate) => shardOf(candidate.id, 2) === index);
+        writeFileSync(join(root, "shards", `shard-${index}`, grid, "oracle-candidates.jsonl"), mine.map((row) => JSON.stringify(row)).join("\n") + "\n");
+      }
+    }
+    const out = join(root, "manifests");
+    const result = spawnSync(process.execPath, [new URL("./audit.mjs", import.meta.url).pathname, "pick", "--shards", join(root, "shards"), "--out", out], { encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    const manifest = (grid) => JSON.parse(readFileSync(join(out, `${grid}.json`), "utf8"));
+    // 850 census programs and ten 5-program grids: the census splits until a part is at most the floor (5 of 170), runners to spare.
+    expect(manifest("mx-census")).toMatchObject({ parts: 5 });
+    expect(manifest("mx-census").ids.length).toBe(850);
+    expect(manifest("lg-src")).toMatchObject({ parts: 1, ids: [] });
+    expect(manifest("mx-base")).toMatchObject({ parts: 1 });
+    const jobs = JSON.parse(readFileSync(join(out, "jobs.json"), "utf8")).include;
+    expect(jobs.length).toBe(AUDIT_GRIDS.length + 4);
+    for (const grid of AUDIT_GRIDS) expect(jobs.filter((job) => job.grid === grid).map((job) => job.part)).toEqual(Array.from({ length: manifest(grid).parts }, (_, part) => part));
   });
 
   it("reads its phases' arguments", () => {
