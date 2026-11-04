@@ -1031,9 +1031,8 @@ fn iife_call<'f>(
     literal: &FunctionFact,
 ) -> Option<&'f solid_facts::ast::CallFact> {
     file.ast
-        .calls
-        .iter()
-        .filter(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+        .calls_with_peeled_callee(literal.span)
+        .filter(|call| !call.construct)
         .min_by_key(|call| call.span.end - call.span.start)
 }
 

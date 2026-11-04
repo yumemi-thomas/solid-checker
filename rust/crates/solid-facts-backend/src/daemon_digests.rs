@@ -8,9 +8,44 @@ use std::{fs, io, path::Path};
 
 use sha2::{Digest, Sha256};
 
-/// SHA-256 of the file's bytes.
+/// SHA-256 of the file's bytes, kept per path while the file's stamp
+/// (device, inode, length, modification and change times) is the one it had
+/// when it was hashed. A digest is kept only when the stamp read after the
+/// bytes is the one read before them, so a write during the read is hashed
+/// again next time.
 pub(crate) fn content_hash(path: &Path) -> io::Result<[u8; 32]> {
-    Ok(Sha256::digest(fs::read(path)?).into())
+    use std::os::unix::fs::MetadataExt as _;
+    type Stamp = (u64, u64, u64, i64, i64, i64, i64);
+    type Kept = std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (Stamp, [u8; 32])>>;
+    static KEPT: std::sync::OnceLock<Kept> = std::sync::OnceLock::new();
+    let stamp = |metadata: &fs::Metadata| -> Stamp {
+        (
+            metadata.dev(),
+            metadata.ino(),
+            metadata.len(),
+            metadata.mtime(),
+            metadata.mtime_nsec(),
+            metadata.ctime(),
+            metadata.ctime_nsec(),
+        )
+    };
+    let kept = KEPT.get_or_init(Default::default);
+    let before = stamp(&fs::metadata(path)?);
+    if let Some((recorded, digest)) = kept
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(path)
+        && *recorded == before
+    {
+        return Ok(*digest);
+    }
+    let digest: [u8; 32] = Sha256::digest(fs::read(path)?).into();
+    if fs::metadata(path).is_ok_and(|metadata| stamp(&metadata) == before) {
+        kept.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(path.to_path_buf(), (before, digest));
+    }
+    Ok(digest)
 }
 
 /// `solid_facts_backend::inferred_host_input_digests`, with a regular file's

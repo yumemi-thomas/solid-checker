@@ -144,12 +144,7 @@ pub(crate) fn unwindowed_role_at_call(
         let Some(function) = containing_ast_function(&file.ast, at) else {
             break;
         };
-        let Some(invocation) = file
-            .ast
-            .calls
-            .iter()
-            .find(|invocation| file.ast.peel_ts_sugar_span(invocation.callee) == function.span)
-        else {
+        let Some(invocation) = file.ast.calls_with_peeled_callee(function.span).next() else {
             break;
         };
         at = invocation.span;
@@ -1580,9 +1575,9 @@ pub(super) fn forwarded_tracked_compute_role(
         // A direct call `p()`, written directly in one function literal.
         let invoked = wrapper_file
             .ast
-            .calls
-            .iter()
-            .any(|inner| wrapper_file.ast.peel_ts_sugar_span(inner.callee) == reference);
+            .calls_with_peeled_callee(reference)
+            .next()
+            .is_some();
         // ADR 0454: the function that runs the call, also for a call in a
         // parameter list.
         let owner = crate::owners::owning_function(&wrapper_file.ast, reference)?;
@@ -1949,9 +1944,7 @@ pub(super) fn callee_callback_timing_within(
             // surroundings'.
             if let Some(call) = file
                 .ast
-                .calls
-                .iter()
-                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+                .calls_with_peeled_callee(literal.span)
                 .min_by_key(|call| call.span.end - call.span.start)
             {
                 span = call.span;

@@ -1394,9 +1394,9 @@ impl<'a> CallGraph<'a, '_> {
                         && !targets.iter().any(|target| target.contains(read.span))
                         && !file
                             .ast
-                            .calls
-                            .iter()
-                            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == read.span)
+                            .calls_with_peeled_callee(read.span)
+                            .next()
+                            .is_some()
                 })
             });
         if !only_read {
@@ -1779,9 +1779,9 @@ impl<'a> CallGraph<'a, '_> {
                         && !targets.iter().any(|target| target.contains(read.span))
                         && !file
                             .ast
-                            .calls
-                            .iter()
-                            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == read.span)
+                            .calls_with_peeled_callee(read.span)
+                            .next()
+                            .is_some()
                 })
             });
         if !only_read {

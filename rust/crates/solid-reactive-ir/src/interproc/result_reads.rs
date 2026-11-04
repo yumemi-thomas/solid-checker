@@ -126,10 +126,7 @@ pub(super) fn local_dispatch_exclusion_depth(
         for reference in references {
             // A stored value, alias, JSX tag, .call/.bind use or argument is
             // an escape. Only the exact identifier callee closes this census.
-            file.ast
-                .calls
-                .iter()
-                .find(|call| file.ast.peel_ts_sugar_span(call.callee) == reference)?;
+            file.ast.calls_with_peeled_callee(reference).next()?;
             let caller_depth =
                 local_dispatch_exclusion_depth(file, reference, allowed, lookup, following, cache)?;
             depth = depth.max(caller_depth + 1);

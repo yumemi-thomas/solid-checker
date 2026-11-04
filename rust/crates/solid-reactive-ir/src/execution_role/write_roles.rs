@@ -2915,11 +2915,7 @@ pub(crate) fn layer_run(
     lookup: &SemanticLookup<'_>,
 ) -> LayerRun {
     use crate::runtime_semantics::RuntimeArgumentBehavior;
-    let iife = file
-        .ast
-        .calls
-        .iter()
-        .find(|call| file.ast.peel_ts_sugar_span(call.callee) == layer.span);
+    let iife = file.ast.calls_with_peeled_callee(layer.span).next();
     let behavior = file
         .ast
         .arguments_containing(layer.span)
@@ -2991,11 +2987,7 @@ fn sole_call_of_named_function(
     if caller.path.as_str() != path {
         return None;
     }
-    let call = file
-        .ast
-        .calls
-        .iter()
-        .find(|call| file.ast.peel_ts_sugar_span(call.callee) == *callee)?;
+    let call = file.ast.calls_with_peeled_callee(*callee).next()?;
     let references = lookup.symbol_references_if_present(symbol.as_str())?;
     let accounted = |start: u32, end: u32| {
         (start == binding.span.start && end == binding.span.end)
@@ -4519,9 +4511,8 @@ pub(super) fn plain_call_outside_jsx(
     callee: Span,
 ) -> bool {
     file.ast
-        .calls
-        .iter()
-        .any(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == callee)
+        .calls_with_peeled_callee(callee)
+        .any(|call| !call.construct)
         && !file
             .ast
             .jsx_containing(callee)

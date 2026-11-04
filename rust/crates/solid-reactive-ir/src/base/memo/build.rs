@@ -1333,8 +1333,10 @@ impl MemoStore {
         let measure = crate::base::reads::cost::on();
         let one_thread = measure.then(|| crate::pipeline::AnalysisWorkerLimit::enter(1));
         let started = Instant::now();
+        // Probe costs vary by orders of magnitude (a census answer against a
+        // binding lookup), so workers claim them one at a time.
         let now =
-            crate::pipeline::parallel_slice_results(&recorded, |(input, probe, key, last)| {
+            crate::pipeline::parallel_balanced_results(&recorded, |(input, probe, key, last)| {
                 let asked = measure.then(crate::base::reads::cost::now_ns);
                 let fingerprint = super::probes::fingerprint(probes, *probe, key);
                 let cost = asked.map_or(0, |asked| {

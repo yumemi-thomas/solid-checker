@@ -366,19 +366,15 @@ fn parameter_calls<'a>(
                 && lookup.entities().at(file.path.as_str(), id.span) == Some(symbol)
         })
         .any(|id| match path {
-            [] => !file
-                .ast
-                .calls
-                .iter()
-                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == id.span),
+            [] => !file.ast.calls_with_peeled_callee(id.span).next().is_some(),
             [key] => !file.ast.members.iter().any(|member| {
                 member.object == id.span
                     && file.source_text(member.property) == Some(key.as_str())
                     && file
                         .ast
-                        .calls
-                        .iter()
-                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+                        .calls_with_peeled_callee(member.span)
+                        .next()
+                        .is_some()
             }),
             _ => true,
         })

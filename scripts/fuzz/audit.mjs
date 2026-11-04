@@ -8,9 +8,12 @@
 //       The recall grids are lean (matrix.mjs LEAN_DEMOTED) unless `--recall full` (the weekly full audit). `pick` writes the run's
 //       mode into each manifest, `oracle` runs the manifest's mode, and `report` records it in audit.json (`recall`).
 //   node scripts/fuzz/audit.mjs pick   --shards <dir> --out <dir>
-//       one `--ids` manifest per grid (`<grid>.json`): the oracle sample of the whole grid, from every shard's candidates.
-//   node scripts/fuzz/audit.mjs oracle --grid <grid> --manifest <file> --out <dir> --checker-bin <bin> --typefacts <bin> [-- <grid args>]
-//       the grid on the manifest's programs with the differential on every one of them (Chrome against the fast path).
+//       one `--ids` manifest per grid (`<grid>.json`): the oracle sample of the whole grid, from every shard's candidates, and the
+//       oracle jobs (`jobs.json`, one per grid and part: the workflow's matrix).
+//   node scripts/fuzz/audit.mjs oracle --grid <grid> --manifest <file> --out <dir> --checker-bin <bin> --typefacts <bin> [--part i/N] [-- <grid args>]
+//       the grid on the manifest's programs with the differential on every one of them (Chrome against the fast path). `--part i/N`:
+//       part i of the manifest's `parts` (`ORACLE_PARTS`; the recall grids' samples are split over runners, every N-th id from i).
+//       `report` reads a grid's parts from `<oracle>/<grid>/part-<i>/` (a manifest without `parts`: `<oracle>/<grid>/`).
 //   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>]
 //       the run's verdict: every shard present and whole, what needs a look (focus.mjs PROBLEMS, oracle behaviour differences, an
 //       inconclusive or missing oracle program, an outcome that differs between a shard and its oracle grid), and the programs whose
@@ -21,7 +24,8 @@
 // `sampleStrata`); a shard's candidates are the same over its own rows, so the N smallest of all shards' candidates of a stratum are the
 // whole grid's N (`pickOracle`). The Chrome work then runs once, on the programs a whole run compares, not once per shard.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -45,6 +49,26 @@ const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "ut
 /** A grid directory's report (matrix.json or legal.json). */
 const gridReport = (dir) => readJson(join(dir, "matrix.json")) ?? readJson(join(dir, "legal.json"));
 const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
+
+/**
+ * The runners a grid's oracle sample is split over: Chrome takes about 2.3 s a program on a 4-core runner, and the recall grids' samples
+ * are the large ones (mx-recall 911 programs, 34 minutes of Chrome in one job; lg-recall about half). Every other grid is one job.
+ */
+export const ORACLE_PARTS = { "mx-recall": 4, "lg-recall": 2 };
+export const oraclePartsOf = (grid) => ORACLE_PARTS[grid] ?? 1;
+/** Part `part` of `parts` of a manifest's ids: every `parts`-th from `part`, so each part takes the whole rank order's spread. */
+export const partIds = (ids, part, parts) => ids.filter((_, index) => index % parts === part);
+/** The oracle jobs of a run, the workflow's matrix: one per grid and part. */
+export const oracleJobs = () => ({ include: AUDIT_GRIDS.flatMap((grid) => Array.from({ length: oraclePartsOf(grid) }, (_, part) => ({ grid, part, parts: oraclePartsOf(grid) }))) });
+
+/** `i/N` as `{ part, parts }`, `0/1` when absent. Throws on anything else. */
+export function parsePart(value) {
+  if (value === undefined) return { part: 0, parts: 1 };
+  const match = /^(\d+)\/(\d+)$/.exec(String(value));
+  const [part, parts] = match ? [Number(match[1]), Number(match[2])] : [NaN, NaN];
+  if (!(parts >= 1 && part < parts)) throw new Error(`audit.mjs oracle: --part is i/N with 0 <= i < N, not ${value}`);
+  return { part, parts };
+}
 
 /** The grids whose programs a recall mode changes. */
 const RECALL_GRIDS = AUDIT_GRIDS.filter((grid) => grid.endsWith("-recall"));
@@ -114,9 +138,11 @@ function pick(options) {
   for (const grid of AUDIT_GRIDS) {
     const lists = shards.map((shard) => readJsonl(join(shard.dir, grid, "oracle-candidates.jsonl")));
     const ids = pickOracle(lists, perStratum);
-    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, ids }, null, 2)}\n`);
+    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, parts: oraclePartsOf(grid), ids }, null, 2)}\n`);
     console.log(`${grid}: ${ids.length} oracle programs from ${lists.reduce((sum, list) => sum + list.length, 0)} candidates of ${shards.length} shards`);
   }
+  // The oracle matrix (the workflow reads it into its `oracle` job): beside the manifests, never one of them.
+  writeFileSync(join(out, "jobs.json"), `${JSON.stringify(oracleJobs())}\n`);
 }
 
 function shard(options, extra) {
@@ -131,16 +157,53 @@ function oracle(options, extra) {
   const manifest = readJson(resolve(options.manifest));
   if (!manifest) throw new Error(`audit oracle: no manifest ${options.manifest}`);
   if (manifest.grid !== options.grid) throw new Error(`audit oracle: ${options.manifest} is ${manifest.grid}'s, not ${options.grid}'s`);
+  const { part, parts } = parsePart(options.part);
+  if (parts !== (manifest.parts ?? 1)) throw new Error(`audit oracle: ${options.manifest} is split in ${manifest.parts ?? 1} parts, not ${parts}`);
   const out = resolve(options.out);
-  if (!manifest.ids.length) { mkdirSync(out, { recursive: true }); console.log(`${options.grid}: no oracle program`); return 0; }
+  const ids = partIds(manifest.ids, part, parts);
+  const label = parts > 1 ? `${options.grid} part ${part}/${parts}` : options.grid;
+  if (!ids.length) { mkdirSync(out, { recursive: true }); console.log(`${label}: no oracle program`); return 0; }
+  // A part's own manifest, outside `out` (the artifact holds the results, the run's manifests are their own artifact).
+  const partManifest = join(mkdtempSync(join(tmpdir(), "fuzz-audit-part-")), `${options.grid}.json`);
+  writeFileSync(partManifest, `${JSON.stringify({ ...manifest, part, ids })}\n`);
   const [script, ...shape] = GRIDS[options.grid];
   const heap = options.grid.endsWith("-recall") ? ["--max-old-space-size=12000"] : [];
   // The manifest's ids name the programs of the shards' mode: a recall grid regenerates them in it (a manifest from before `recall` is full).
   const recall = options.grid.endsWith("-recall") && manifest.recall !== "lean" ? ["--recall-full"] : [];
-  const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, ...recall, "--ids", resolve(options.manifest), "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
+  const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, ...recall, "--ids", partManifest, "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
     "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs(), ...extra];
-  console.log(`${options.grid}: the runtime differential on ${manifest.ids.length} programs`);
+  console.log(`${label}: the runtime differential on ${ids.length} of the grid's ${manifest.ids.length} oracle programs`);
   return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
+}
+
+/** Summary fields a grid's oracle parts add up (runtime-diff.mjs `summarize`, and `inconclusive`). */
+const SUMMED = ["compared", "same", "differ", "behaviour", "attributionOnly", "inconclusive"];
+
+/**
+ * A grid's oracle results, its parts put together: the summary added up (per kind too), the differing programs and the rows of every part,
+ * and what is absent (`<grid>: no oracle result ...`). A part with no program writes nothing and is not absent.
+ */
+export function readOracle(oracleDir, grid, manifest) {
+  const parts = manifest?.parts;
+  const dirs = parts ? Array.from({ length: parts }, (_, part) => join(oracleDir, grid, `part-${part}`)) : [join(oracleDir, grid)];
+  const absent = [];
+  const found = [];
+  dirs.forEach((dir, part) => {
+    const expected = manifest ? (parts ? partIds(manifest.ids, part, parts).length : manifest.ids.length) : 0;
+    const diff = readJson(join(dir, "runtime-diff.json"));
+    if (diff) found.push({ dir, diff });
+    else if (expected) absent.push(parts > 1 ? `${grid}: no oracle result for part ${part}/${parts} (${expected} programs)` : `${grid}: no oracle result for ${expected} programs`);
+  });
+  if (!found.length) return { diff: null, oracleRows: [], programRows: [], absent };
+  const summary = { ...found[0].diff.summary, byKind: {} };
+  for (const key of SUMMED) if (found.some(({ diff }) => diff.summary?.[key] !== undefined)) summary[key] = found.reduce((sum, { diff }) => sum + (diff.summary?.[key] ?? 0), 0);
+  for (const { diff } of found) for (const [kind, n] of Object.entries(diff.summary?.byKind ?? {})) summary.byKind[kind] = (summary.byKind[kind] ?? 0) + n;
+  return {
+    diff: { summary, differing: found.flatMap(({ diff }) => diff.differing ?? []) },
+    oracleRows: found.flatMap(({ dir }) => readJsonl(join(dir, "runtime-diff.jsonl"))),
+    programRows: found.flatMap(({ dir }) => readJsonl(join(dir, "programs.jsonl"))),
+    absent,
+  };
 }
 
 /**
@@ -177,18 +240,18 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
     if (planned !== null && planned > 0 && outcomes.size === 0) attention.push(`${grid}: no program judged`);
     // The oracle grid: its sample compared in Chrome, every program of the manifest, each with the outcome its shard gave it.
     const manifest = readJson(join(oracleDir, "manifests", `${grid}.json`));
-    const diff = readJson(join(oracleDir, grid, "runtime-diff.json"));
-    const oracleRows = readJsonl(join(oracleDir, grid, "runtime-diff.jsonl"));
+    const { diff, oracleRows, programRows, absent } = readOracle(oracleDir, grid, manifest);
     let oracle = null;
     if (!manifest) attention.push(`${grid}: no oracle manifest`);
-    else if (manifest.ids.length && !diff) attention.push(`${grid}: no oracle result for ${manifest.ids.length} programs`);
-    else if (diff) {
+    else attention.push(...absent);
+    // The parts that wrote a result are judged even when another is absent: a difference in one is not hidden by a lost runner.
+    if (manifest && diff) {
       const compared = new Set(oracleRows.map((result) => result.id));
       const missing = manifest.ids.filter((id) => !compared.has(id));
       if (missing.length) attention.push(`${grid}: ${missing.length} oracle programs not compared (${missing.slice(0, 3).join(", ")})`);
       for (const result of oracleRows) if (result.inconclusive) attention.push(`${grid}: oracle inconclusive ${result.id}: ${String(result.inconclusive).slice(0, 160)}`);
       for (const result of diff.differing ?? []) if (result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind))) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
-      for (const row of readJsonl(join(oracleDir, grid, "programs.jsonl"))) {
+      for (const row of programRows) {
         if (outcomes.has(row.id) && outcomes.get(row.id) !== row.outcome) attention.push(`${grid}: ${row.id} is ${outcomes.get(row.id)} in its shard, ${row.outcome} in the oracle grid`);
       }
       oracle = { ...diff.summary, programs: manifest.ids.length };
@@ -270,6 +333,7 @@ export function parseArgs(argv) {
   for (const key of need) if (!options[key]) throw new Error(`audit.mjs ${phase}: --${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} is required`);
   if (options.recall !== undefined && !["lean", "full"].includes(options.recall)) throw new Error(`audit.mjs: --recall is lean or full, not ${options.recall}`);
   if (phase === "oracle" && !GRIDS[options.grid]) throw new Error(`audit.mjs oracle: no grid ${options.grid}`);
+  if (phase === "oracle") parsePart(options.part);
   return { phase, options, extra };
 }
 

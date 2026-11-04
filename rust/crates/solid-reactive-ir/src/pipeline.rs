@@ -1015,8 +1015,24 @@ fn joined<R>((value, reads): (R, Option<crate::base::reads::Reads>)) -> R {
 /// spreads as it would on the caller's thread. Without threads (WASM), or
 /// for a short slice, the items run in order on the caller's thread.
 // Threads only with a second worker and 64 items; otherwise a plain map (wasm32-wasip1).
-#[allow(clippy::disallowed_methods)]
 pub(crate) fn parallel_balanced_results<T, R, F>(items: &[T], analyze: F) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    F: Fn(&T) -> R + Sync,
+{
+    parallel_balanced_results_from(64, items, analyze)
+}
+
+/// [`parallel_balanced_results`] for items each costly enough (milliseconds)
+/// that `threshold` of them, fewer than the default 64, already pay for the
+/// threads.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_balanced_results_from<T, R, F>(
+    threshold: usize,
+    items: &[T],
+    analyze: F,
+) -> Vec<R>
 where
     T: Sync,
     R: Send,
@@ -1024,7 +1040,7 @@ where
 {
     let limit = available_analysis_workers();
     let workers = limit.min(items.len());
-    if workers <= 1 || items.len() < 64 {
+    if workers <= 1 || items.len() < threshold.max(2) {
         return items.iter().map(analyze).collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);

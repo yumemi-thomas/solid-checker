@@ -355,12 +355,7 @@ pub(super) fn parameter_rows<'w, W: World<'w>>(w: &W, file: &'w FileFacts) -> Pa
         {
             continue;
         }
-        let Some(call) = caller
-            .ast
-            .calls
-            .iter()
-            .find(|c| caller.ast.peel_ts_sugar_span(c.callee) == callee)
-        else {
+        let Some(call) = caller.ast.calls_with_peeled_callee(callee).next() else {
             continue;
         };
         if call.construct

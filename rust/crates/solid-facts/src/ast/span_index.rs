@@ -192,6 +192,12 @@ pub struct AstSpanIndex {
     iteration_targets_by_span: SpanTable,
     /// The reference spans the binder resolved to each declaration span.
     references_by_declaration: OnceLock<HashMap<Span, Vec<Span>>>,
+    /// Call indexes by their callee's peeled span ([`AstFacts::peel_ts_sugar_span`]).
+    calls_by_peeled_callee: OnceLock<HashMap<Span, Vec<u32>>>,
+    /// Return indexes by their argument's peeled span.
+    returns_by_peeled_argument: OnceLock<HashMap<Span, Vec<u32>>>,
+    /// Binding indexes by their initializer's peeled span.
+    bindings_by_peeled_initializer: OnceLock<HashMap<Span, Vec<u32>>>,
     /// Answers to per-declaration questions, by (question, declaration).
     flags: RwLock<HashMap<(u8, Span), bool>>,
 }
@@ -316,6 +322,9 @@ impl AstSpanIndex {
                 &mut facts.iteration_targets.iter().copied(),
             )),
             references_by_declaration: OnceLock::new(),
+            calls_by_peeled_callee: OnceLock::new(),
+            returns_by_peeled_argument: OnceLock::new(),
+            bindings_by_peeled_initializer: OnceLock::new(),
             flags: RwLock::new(HashMap::new()),
             arguments_by_span: SpanTable::build(argument_entries),
             argument_slots,
@@ -638,6 +647,88 @@ impl AstFacts {
             .map_or(&[], Vec::as_slice)
     }
 
+    /// The calls whose callee, peeled of value-preserving wrappers, is
+    /// exactly `span`, in `calls` order: what
+    /// `calls.iter().filter(|c| peel_ts_sugar_span(c.callee) == span)` yields.
+    pub fn calls_with_peeled_callee(&self, span: Span) -> impl Iterator<Item = &CallFact> + '_ {
+        peeled_lookup(&self.span_index().calls_by_peeled_callee, span, || {
+            self.calls
+                .iter()
+                .map(|call| Some(self.peel_ts_sugar_span(call.callee)))
+        })
+        .iter()
+        .map(|index| &self.calls[*index as usize])
+    }
+
+    /// The returns whose argument, peeled, is exactly `span`, in `returns`
+    /// order: what `returns.iter().filter(|r| r.argument.is_some_and(|a|
+    /// peel_ts_sugar_span(a) == span))` yields.
+    pub fn returns_with_peeled_argument(
+        &self,
+        span: Span,
+    ) -> impl Iterator<Item = &ReturnFact> + '_ {
+        peeled_lookup(&self.span_index().returns_by_peeled_argument, span, || {
+            self.returns.iter().map(|returned| {
+                returned
+                    .argument
+                    .map(|argument| self.peel_ts_sugar_span(argument))
+            })
+        })
+        .iter()
+        .map(|index| &self.returns[*index as usize])
+    }
+
+    /// The bindings whose initializer, peeled, is exactly `span`, in
+    /// `bindings` order: what `bindings.iter().filter(|b|
+    /// b.initializer.is_some_and(|i| peel_ts_sugar_span(i) == span))` yields.
+    pub fn bindings_with_peeled_initializer(
+        &self,
+        span: Span,
+    ) -> impl Iterator<Item = &BindingFact> + '_ {
+        peeled_lookup(
+            &self.span_index().bindings_by_peeled_initializer,
+            span,
+            || {
+                self.bindings.iter().map(|binding| {
+                    binding
+                        .initializer
+                        .map(|initializer| self.peel_ts_sugar_span(initializer))
+                })
+            },
+        )
+        .iter()
+        .map(|index| &self.bindings[*index as usize])
+    }
+
+    /// The reference-role identifiers the binder resolved to `declaration`,
+    /// in `identifiers` order: exactly what
+    /// `identifiers.iter().filter(|i| i.role == Reference &&
+    /// reference_declaration(i.span) == Some(declaration))` yields, without
+    /// a binary search per identifier of the file. Candidates come from
+    /// [`Self::references_to`], each re-checked with
+    /// [`AstFacts::reference_declaration`] so a span recorded under two
+    /// declarations answers as the scan did.
+    pub fn reference_identifiers_to(
+        &self,
+        declaration: Span,
+    ) -> impl Iterator<Item = &IdentifierFact> + '_ {
+        let mut previous = None;
+        self.references_to(declaration)
+            .iter()
+            .copied()
+            .filter(move |reference| previous.replace(*reference) != Some(*reference))
+            .filter(move |reference| self.reference_declaration(*reference) == Some(declaration))
+            .flat_map(move |reference| {
+                let first = self
+                    .identifiers
+                    .partition_point(|identifier| identifier.span < reference);
+                self.identifiers[first..]
+                    .iter()
+                    .take_while(move |identifier| identifier.span == reference)
+                    .filter(|identifier| identifier.role == IdentifierRole::Reference)
+            })
+    }
+
     /// Whether some member access has exactly `span` as its object.
     pub fn any_member_with_object(&self, span: Span) -> bool {
         self.span_index()
@@ -693,6 +784,29 @@ impl AstFacts {
     pub fn identifiers_within(&self, region: Span) -> impl Iterator<Item = &IdentifierFact> {
         within(&self.identifiers, region, |identifier| identifier.span)
     }
+}
+
+/// The indexes, in table order, of the rows whose peeled key is `span`, from
+/// a table built once from `keys` (a row's peeled key, `None` for no key).
+fn peeled_lookup<I>(
+    slot: &OnceLock<HashMap<Span, Vec<u32>>>,
+    span: Span,
+    keys: impl FnOnce() -> I,
+) -> &[u32]
+where
+    I: Iterator<Item = Option<Span>>,
+{
+    slot.get_or_init(|| {
+        let mut by_key: HashMap<Span, Vec<u32>> = HashMap::new();
+        for (index, key) in keys().enumerate() {
+            if let Some(key) = key {
+                by_key.entry(key).or_default().push(index as u32);
+            }
+        }
+        by_key
+    })
+    .get(&span)
+    .map_or(&[], Vec::as_slice)
 }
 
 #[cfg(test)]

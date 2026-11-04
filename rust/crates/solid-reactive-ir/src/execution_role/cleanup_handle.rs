@@ -48,9 +48,8 @@ pub(super) fn cleanup_handle(
     }
     let ast = &file.ast;
     let call_of = |callee: Span| {
-        ast.calls
-            .iter()
-            .find(|outer| !outer.construct && ast.peel_ts_sugar_span(outer.callee) == callee)
+        ast.calls_with_peeled_callee(callee)
+            .find(|outer| !outer.construct)
     };
     if let Some(outer) = call_of(call.span) {
         return CleanupHandle::Called(vec![outer.span]);

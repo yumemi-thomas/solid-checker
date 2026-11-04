@@ -112,12 +112,16 @@ recall value (`--recall-full`; Sunday 16:00 UTC, Monday 01:00 JST), and on deman
 chooses lean or full) on free GitHub-hosted runners, through `audit.mjs`: 40 shards (`--shard i/40`, every code and grid, no oracle; each grid writes
 `oracle-candidates.jsonl`, the programs its runtime differential would take), then `audit.mjs pick` builds each grid's oracle sample
 from every shard's candidates (per stratum the smallest `fnv(id)` with a fast record, as `sampleStrata` picks over a whole grid, so
-the sample is a local full run's), one runner per grid runs the differential on it (`--ids`, picked by id before generation), and
+the sample is a local full run's), one runner per grid and part runs the differential on it (`--ids`, picked by id before generation;
+`ORACLE_PARTS` splits the recall grids' samples, mx-recall in 4 and lg-recall in 2, every N-th id: Chrome takes about 2.3 s a program,
+and mx-recall's 911 took 35 minutes in one job), and
 `audit.mjs report` judges the run: every shard present and whole, PROBLEMS rows, oracle behaviour differences and inconclusive or
 missing programs, outcomes a shard and its oracle grid disagree on, and the moves from the last audit of the same mode (its `audit-report-lean` or `audit-report-full` artifact; a lean night is compared with the latest lean audit, the weekly full run with the latest full one, and `report` skips a recall grid whose earlier audit was the other mode, so the lean-versus-full refusal never fails a night; the six base grids hold the same programs in both). `audit.mjs shard --recall lean|full` picks the mode, `pick` writes it into each oracle manifest, `oracle` runs the manifest's mode, and `report` records it in audit.json.
 The report fails the workflow when something needs a look and is the run's step summary. Each shard carries its warm state to the
 next run (the runtime and type-check caches, and the installs and browser their keys hash by mtime, in a pax tar); measured on one
 shard of 6,540 programs, every lookup hit and the shard ran 1.8x faster (11.4 programs/s against 6.4 cold on a 4-vCPU runner).
+Each oracle job carries its own (`warm-oracle-<grid>-<part>of<parts>`, with `--cache-dir`): the browser execution cache below is keyed
+by program bytes, the development models and the judging sources, never the checker build, so a night that leaves those alone replays Chrome.
 
 Rediscovery (AGENTS.md): a defect found any way is closed when the grids generate its shape and the build that had it fails `make
 fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
