@@ -14,8 +14,8 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     for (rule, count) in [
         // rc.17's `createOptimistic` setter meets no owned-scope guard, so
         // `owned-leaf-extended-invalid.tsx`'s optimistic write is legal there.
-        // ADR 0613: five more, the uncertifiable apply writes pinned below.
-        ("no-write-in-pure-computation", 15),
+        // ADR 0613: six more, the uncertifiable apply writes pinned below.
+        ("no-write-in-pure-computation", 16),
         ("action-called-in-owned-scope", 2),
         // Review round 4: two zero-parameter `Show` children are tracked
         // inserts, not strict-read callbacks.
@@ -210,9 +210,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 // memo's owner, so the inline write and the `flushWrite` it is
                 // passed throw REACTIVE_WRITE_IN_OWNED_SCOPE on every
                 // rc.0-rc.9 dev build (ownership case
-                // no-write-in-pure-computation/positive/002). A third,
-                // uncertifiable: an apply write under that flush (ADR 0613).
-                ("no-write-in-pure-computation", 3),
+                // no-write-in-pure-computation/positive/002). Two more,
+                // uncertifiable: an apply's write and a module-scope
+                // `onSettled`'s, which that flush may drain (ADR 0613).
+                ("no-write-in-pure-computation", 4),
             ]
             .as_slice(),
         ),
