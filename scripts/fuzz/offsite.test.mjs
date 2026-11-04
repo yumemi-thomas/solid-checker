@@ -185,4 +185,15 @@ describe("the census (ADR 0615)", () => {
     const { built } = generateShape({ seed: 1 }, { code: "RESOLVE_IN_REACTIVE_SCOPE", context: "for" }, shape, 0);
     expect(built.files["App.tsx"]).toContain("resolve(");
   });
+  it("builds every shape of every pair: a pair no template can place is left out in censusCells, with its reason", () => {
+    const built = cells.flatMap((cell) => censusShapes(cell.code).map((shape, index) => generateShape({ seed: 1 }, cell, shape, index).built));
+    expect(new Set(built.map((program) => program.id)).size).toBe(built.length);
+  });
+  it("gives `loading-on-outside` its boundary when the code brings no two values of its own", () => {
+    const cell = { code: "NO_OWNER_CLEANUP", context: "loading-on-outside" };
+    const [shape] = censusShapes(cell.code);
+    const app = generateShape({ seed: 1 }, cell, shape, 0).built.files["App.tsx"];
+    expect(app).toMatch(/<Loading [^>]*on=\{t\d+\(\)\}>/);
+    expect(app).toContain("createMemo(async");
+  });
 });
