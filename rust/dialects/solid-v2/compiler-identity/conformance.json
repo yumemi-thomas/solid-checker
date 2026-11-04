@@ -1,58 +1,54 @@
 {
   "schemaVersion": 1,
   "documentKind": "solid-compiler-semantic-facts-bootstrap-conformance",
-  "capturedAt": "2026-10-22",
+  "capturedAt": "2026-11-04",
   "upstream": {
     "repository": "https://github.com/solidjs/solid",
-    "revision": "5b1b777648a89b6e207e8bb78514d5c03420e08b",
+    "revision": "2105ffb8ca2fced55f5fac0763177fc93f97c2c2",
     "branch": "next"
   },
   "fork": {
     "repository": "https://github.com/yumemi-thomas/solid",
-    "revision": "9f5fff59c2abc4465058d96080771c82dfd91990",
-    "implementationRevision": "a4983a7130daa210bfc00f079dce57939fe14502",
-    "branch": "solid-checker/compiler-facts-rc17",
+    "revision": "ea3c78584d86e46112d9d6e3800960a1453439f3",
+    "implementationRevision": "31d8fe49b5141544eee5f78bbdca74921c64a2a5",
+    "branch": "solid-checker/compiler-facts-rc21",
     "scope": "semantic facts only",
     "upstreamPullRequest": false
   },
   "trace": {
     "version": 3,
-    "baselineEntries": 373,
+    "baselineEntries": 375,
     "independentlyGeneratedUpstreamBaselineMatched": true,
-    "javascriptSourceMapDiagnosticNeutrality": true
+    "javascriptSourceMapDiagnosticNeutrality": true,
+    "profilesDifferential": "8 DOM/SSR profiles, 3,000 outcomes, byte-identical to an untouched 2105ffb8 tree in code, maps, CSS and diagnostics"
   },
   "checker": {
     "dependency": "solidjs-compiler",
     "compilerFactsProtocol": 2,
-    "findingsBefore": 3536,
+    "findingsBefore": null,
     "findingsAfter": 3532,
-    "reviewedFindingDelta": "rc.17 lowers only `on` + an uppercase letter as a listener: SC1007 on `on-foo`/`on-event` attributes withdrawn (fixtures moved to `onCustom-event`); eslint-compat drops the `attr:`/`bool:`/`on:`/`oncapture:`/`use:` intrinsic namespaces rc.17 rejects",
+    "reviewedFindingDelta": "rc.21's compiler moves no finding: coverage on the pin alone is byte-identical to the rc.17 pin.",
     "otherFindingChanges": 0,
     "adoption": "docs/decisions.md#adr-0196"
   },
   "checks": {
-    "producerRust": "passed",
+    "producerRust": "passed: --no-default-features, 112 tests, clippy -D warnings",
     "producerJavaScript": {
-      "tests": 6826,
-      "skipped": 2,
-      "status": "passed"
+      "status": "not run on this pin: the fork's JavaScript suite needs its workspace install; output neutrality is the differential below"
     },
     "localChecker": {
       "compilerFactsIdentity": "passed",
       "coverage": {
-        "projects": 393,
-        "findings": 3532,
-        "status": "passed"
+        "status": "see the adopting commit"
       },
       "makeVerify": {
-        "status": "passed",
-        "elapsedSeconds": 180.9
+        "status": "see the adopting pull request"
       }
     }
   },
   "knownInheritedGate": {
     "command": "cargo clippy --manifest-path packages/compiler/Cargo.toml --no-default-features --all-targets --locked -- -D warnings",
     "status": "passed",
-    "reason": "rc.17 rewrote the formerly inherited collapsible_if site"
+    "reason": "rc.17 rewrote the formerly inherited collapsible_if site; rc.21 keeps it clean"
   }
 }

@@ -1,5 +1,15 @@
 # Phase 4 completion report: compiler execution facts
 
+RC.21 adoption (2026-11-04, ADR 0196): the facts API was re-applied as linear
+commits on upstream `next` at the published `solid-js@2.0.0-rc.21` release. The
+checker pins upstream `2105ffb8ca2fced55f5fac0763177fc93f97c2c2`, implementation
+`31d8fe49b5141544eee5f78bbdca74921c64a2a5` and distribution
+`ea3c78584d86e46112d9d6e3800960a1453439f3`, published as
+`yumemi-thomas/solid:solid-checker/compiler-facts-rc21`. Output, maps, CSS and
+diagnostics match an untouched `2105ffb8` tree across 3,000 outcomes in eight
+profiles. rc.21's lone dynamic SSR spread records the thunk it lowers to, and
+`compile_program` refuses tracing.
+
 RC.17 adoption (2026-10-22, ADR 0196): the facts API was re-applied as two
 linear commits on upstream `next` at the published `solid-js@2.0.0-rc.17`
 release. The checker pins upstream
@@ -27,10 +37,10 @@ request was opened against upstream Solid.
 
 | Role | Identity |
 | --- | --- |
-| Official upstream base | `solidjs/solid@5b1b777648a89b6e207e8bb78514d5c03420e08b` |
-| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc17` |
-| Semantic implementation | `a4983a7130daa210bfc00f079dce57939fe14502` |
-| Identity-only distribution commit | `9f5fff59c2abc4465058d96080771c82dfd91990` |
+| Official upstream base | `solidjs/solid@2105ffb8ca2fced55f5fac0763177fc93f97c2c2` |
+| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc21` |
+| Semantic implementation | `31d8fe49b5141544eee5f78bbdca74921c64a2a5` |
+| Identity-only distribution commit | `ea3c78584d86e46112d9d6e3800960a1453439f3` |
 | Solid 2 trace | version 3 |
 | Checker compiler-facts | protocol 2 |
 | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |

@@ -82,8 +82,8 @@ With no explicit program boundary, the nearest `package.json` decides: `"private
 SC1002 (`reactive-read-after-await`) skips an after-`await` accessor call when the async function has a straight-line call of the same symbol before its first suspension of any kind (any `await`, `for await`, `await using`). `straight_line_calls` excludes `if`, ternary, `&&`/`||`/`??`, loops, `try`, `switch` and optional chains, and is per innermost function. Member reads (store paths, props) keep the rule. A mistake can only hide a finding. Owners: rust/crates/solid-reactive-ir/src/static_rules.rs (`tracked_before_first_suspension`), rust/crates/solid-facts/src/ast/mod.rs (`straight_line_calls`).
 
 <a id="adr-0196"></a>
-## ADR 0196 — The compiler follows Solid rc.17
-Fork commit, adapter revision literals, compiler-facts identity and identity document move together; the facts API is linear commits on `next`. Pin: distribution `9f5fff59`, upstream `5b1b7776` (rc.17), implementation `a4983a71`; trace 3, protocol 2. Only `on` + uppercase lowers as a listener (`Dialect::compiler_lowers_event_attribute`). Universal/Dynamic, TSRX, `sourceNames.locations` traces refuse. Owner: rust/dialects/solid-v2/compiler/src/lib.rs.
+## ADR 0196 — The compiler follows Solid rc.21
+Fork commit, adapter revision literals, compiler-facts identity and identity document move together; the facts API is linear commits on `next`. Pin: distribution `ea3c7858`, upstream `2105ffb8` (rc.21), implementation `31d8fe49`, branch `solid-checker/compiler-facts-rc21`; trace 3, protocol 2. Fork against untouched rc.21: 3,000 outcomes over 8 profiles byte-identical in code, maps, CSS and diagnostics. rc.21's lone dynamic SSR spread records the thunk it lowers to; `compile_program` refuses tracing. Only `on` + uppercase lowers as a listener (`Dialect::compiler_lowers_event_attribute`). Universal/Dynamic, TSRX, `sourceNames.locations` traces refuse. Owner: rust/dialects/solid-v2/compiler/src/lib.rs.
 
 <a id="adr-0199"></a>
 ## ADR 0199 — A callback prop forwarded to an event runs on dispatch
