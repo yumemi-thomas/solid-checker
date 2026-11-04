@@ -64,4 +64,12 @@ recorded still hashes the same. Findings, observations and automatic warnings
 always come from the current analysis. A run whose scenario failed is not
 stored. It does not combine with `--compare-project`.
 
+`feedback batch --browser <chromium> --tooling <directory>` runs one
+`feedback run` per JSON line on stdin (`{"project", "scenario", "report"}`) in
+one process: the tooling, the Chromium process and the browser's pin are shared,
+while each run still gets its own analysis, Vite server, browser context and
+input pins, and starts from the process environment the batch opened with. It
+stops taking runs after one fails, loads an application Vite config, or leaves
+a browser context open. The runtime oracle uses it.
+
 See [the capture format and current limits](../../docs/development-feedback.md).

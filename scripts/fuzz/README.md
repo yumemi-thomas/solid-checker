@@ -113,8 +113,9 @@ chooses lean or full) on free GitHub-hosted runners, through `audit.mjs`: 40 sha
 `oracle-candidates.jsonl`, the programs its runtime differential would take), then `audit.mjs pick` builds each grid's oracle sample
 from every shard's candidates (per stratum the smallest `fnv(id)` with a fast record, as `sampleStrata` picks over a whole grid, so
 the sample is a local full run's), one runner per grid and part runs the differential on it (`--ids`, picked by id before generation;
-`ORACLE_PARTS` splits the recall grids' samples, mx-recall in 4 and lg-recall in 2, every N-th id: Chrome takes about 2.3 s a program,
-and mx-recall's 911 took 35 minutes in one job), and
+`oracleParts` gives every grid one job, then one more part at a time to the grid whose part is largest, up to `ORACLE_RUNNERS` (20, the
+account's concurrent runners: GitHub starts a matrix in no fixed order, so a queued job may be any part) while that part is over
+`ORACLE_PART_FLOOR` (200) programs; every N-th id; ADR 0617), and
 `audit.mjs report` judges the run: every shard present and whole, PROBLEMS rows, oracle behaviour differences and inconclusive or
 missing programs, outcomes a shard and its oracle grid disagree on, and the moves from the last audit of the same mode (its `audit-report-lean` or `audit-report-full` artifact; a lean night is compared with the latest lean audit, the weekly full run with the latest full one, and `report` skips a recall grid whose earlier audit was the other mode, so the lean-versus-full refusal never fails a night; the six base grids hold the same programs in both). `audit.mjs shard --recall lean|full` picks the mode, `pick` writes it into each oracle manifest, `oracle` runs the manifest's mode, and `report` records it in audit.json.
 The report fails the workflow when something needs a look and is the run's step summary. Each shard carries its warm state to the
