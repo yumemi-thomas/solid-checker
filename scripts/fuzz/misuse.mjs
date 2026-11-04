@@ -413,7 +413,7 @@ export const SPEC = {
   // boundary's notification (no authored frame is guaranteed), so it is judged by file. Recall grids only (`recallOnly`).
   LOADING_ON_OUTSIDE_HOLD: { recallOnly: true, placeless: true,
     contexts: [], recallContexts: ["loading-on-outside"], bindings: ["direct", "alias", "wrapper"],
-    setup: (variant, name) => { const trigger = signal(name("t"), 1, "src"); return [trigger, asyncDepSignal(name("a"), trigger.name)]; },
+    setup: (variant, name) => loadingSignals(name),
     call: (node, [, sig]) => local(sig.name),
   },
   ASYNC_STORE_SETTER: {
@@ -972,6 +972,12 @@ function applyLayer(layer, stmts, kit) {
   }
 }
 
+/** The `<Loading on={t()}>` boundary's values: the trigger it holds on, and an async memo that reads it. */
+function loadingSignals(name) {
+  const trigger = signal(name("t"), 1, "src");
+  return [trigger, asyncDepSignal(name("a"), trigger.name)];
+}
+
 /**
  * Places `stmts` (which hold the site) in a context. Returns { body, view } (the statements of the component body and its JSX items).
  * Contexts that a layer cannot wrap (an async compute needs its await first) take the layers inside.
@@ -1398,10 +1404,13 @@ function buildOne(kit, plan = {}) {
   // LOADING_ON_OUTSIDE_HOLD's boundary: `<Loading on={t()}>` around a read of the async memo, and the button that writes the trigger.
   const loadingFor = plan.legal ? spec.legalLoading?.[context] : undefined;
   const underLoading = loadingFor === true || (Array.isArray(loadingFor) && loadingFor.includes(variant));
-  const view = placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])]
+  // A census code with no two values of its own (`--census`) brings none to the boundary: the context makes its trigger and async memo.
+  const heldOwn = placed.loading && sigs.length < 2 ? loadingSignals(kit.name) : [];
+  const [held, heldAsync] = heldOwn.length ? heldOwn : sigs;
+  const view = placed.loading ? [loadingView(held.name, [child(kit.name("v"), read(heldAsync.name))]), ...placed.view, button(kit.name("b"), [expr(write(held.name, 2))])]
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
-    sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view,
+    sigs: [...sigs, ...heldOwn, ...(placed.sigs ?? [])], body: placed.body, view,
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
     misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
   };
