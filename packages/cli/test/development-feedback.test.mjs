@@ -155,15 +155,14 @@ test("a timeout returns a structured partial result naming the phase reached", (
   const project = leaf(root, "app");
   const binary = fakeNative(root, `echo 'compiler warning text' >&2\necho '${stage("source-discovery")}' >&2\necho '${stage("static-prepass")}' >&2\nexec sleep 30`);
   const started = Date.now();
-  // The limit outlasts the fake's own start (a shell, slow on a loaded machine), so its stage lines are read before the kill.
-  const run = feedbackCli(["--project", project, "--native-timeout", "5"], { binary });
+  const run = feedbackCli(["--project", project, "--native-timeout", "1"], { binary });
   assert(Date.now() - started < 15000, "the child was not killed at the limit");
   assert.equal(run.status, 2);
-  assert.match(run.stderr, /exceeded its 5\.0 s limit/);
+  assert.match(run.stderr, /exceeded its 1\.0 s limit/);
   const failure = run.json.failure;
   assert.equal(run.json.status, "native-failed");
   assert.equal(failure.kind, "timeout");
-  assert.equal(failure.timeoutMs, 5000);
+  assert.equal(failure.timeoutMs, 1000);
   assert.equal(failure.phase.lastCompletedStage, "static-prepass");
   assert.equal(failure.phase.completedStages, 2);
   assert.match(failure.stderr.text, /compiler warning text/);
