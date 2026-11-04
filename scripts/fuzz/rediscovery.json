@@ -2557,5 +2557,71 @@
    "lg-pending-async-forbidden-scope-settled-flush-root-x-wrapper-closure-helper"
   ],
   "rediscovered": "locally (2026-11-04): `legal.mjs --recall --contexts settled-handler,settled-flush-root`, 1,284 programs: main's release build 332 false positives, the fix none (1,238 uncertifiable, 46 clean)"
+ },
+ {
+  "finding": "rc.21: `untrack(() => m())` of a pending source the strict body created throws PENDING_ASYNC_UNTRACKED_READ; the checker certified it (ADR 0616)",
+  "found": "mx-census on rc.21, the first run of the upgrade (2026-11-04), and probes p2/p4 independently",
+  "fixed": "ADR 0616",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-untrack-x-direct-none"
+  ],
+  "rediscovered": "the rc.21 build before ADR 0616: certified false clean; the fix: agree"
+ },
+ {
+  "finding": "reads of a whole store: `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Object.values/entries/assign(s)`, `Array.from(s)`, a template substitution, `for…of` and array spreads warn STRICT_READ_UNTRACKED; the checker certified them (ADRs 0617, 0618)",
+  "found": "rules-mining CS-R15, RS-R37, measured on rc.21 (probes p1, p4, p5)",
+  "fixed": "ADRs 0617, 0618",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-deep-direct-none",
+   "mx-strict-read-untracked-body-store-json-direct-none",
+   "mx-strict-read-untracked-body-store-reflect-direct-none",
+   "mx-strict-read-untracked-body-store-values-direct-none",
+   "mx-strict-read-untracked-body-store-entries-direct-none",
+   "mx-strict-read-untracked-body-store-assign-direct-none",
+   "mx-strict-read-untracked-body-store-array-from-direct-none",
+   "mx-strict-read-untracked-body-store-template-direct-none",
+   "mx-strict-read-untracked-body-store-array-spread-direct-none"
+  ],
+  "rediscovered": "the build before these ADRs: mx-recall 894+ false cleans on these variants; with them: agree or recall-gap"
+ },
+ {
+  "finding": "`{...s}` of an empty store was a proven SC1001; rc.21 reads no key there and warns nothing (ADR 0618)",
+  "found": "probe p5, then the checker on the same shape",
+  "fixed": "ADR 0618",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-body-store-empty-spread-direct-none",
+   "lg-strict-read-untracked-body-store-empty-values-direct-none"
+  ],
+  "rediscovered": "the build before ADR 0618: a false positive on `store-empty-spread`; with it: uncertifiable"
+ },
+ {
+  "finding": "rc.21 `ON_FLUSH_IN_OWNED_SCOPE` had no rule (ADR 0622)",
+  "found": "rc.21 diagnostics.json against rc.17",
+  "fixed": "ADR 0622",
+  "grid": "mx-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-body-x-direct-none",
+   "mx-on-flush-in-owned-scope-memo-x-direct-none"
+  ],
+  "rediscovered": "the build before SC3002: 51 false cleans in mx-census; with it: 0"
+ },
+ {
+  "finding": "rc.21 `LOADING_ON_ACCESSOR` had no rule (ADR 0621)",
+  "found": "rc.21 diagnostics.json against rc.17",
+  "fixed": "ADR 0621",
+  "grid": "mx-recall",
+  "code": "LOADING_ON_ACCESSOR",
+  "ids": [
+   "mx-loading-on-accessor-loading-on-accessor-accessor-direct-none",
+   "mx-loading-on-accessor-loading-on-accessor-arrow-direct-none"
+  ],
+  "rediscovered": "the first SC5007 (a local binding proof) failed every `s-module` source; Type Facts: 0"
  }
 ]
