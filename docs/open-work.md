@@ -124,7 +124,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 
 - `leaf-owner-forbidden-call` (SC3001), recall lost: a primitive created under `untrack(() => …)` in a leaf body is not reported, though the runtime gives `PRIMITIVE_IN_FORBIDDEN_SCOPE`.
 - `leaf-owner-forbidden-call` (SC3001), SC9012 obligations (ADR 0439; 561 in the rc.17 corpus): members of fields or call results, packages with no source, parameter or destructured functions, inherited methods, project constructors and DOM dispatchers (about 25) stay open. A std-library call without arguments in an imported helper or method has no resolved call (ADR 0192); demanding it everywhere cleared 7 and moved other rules. The plain `canvas.getContext("webgl")` is trusted though it fires an event.
-- A pending read through a hook's returned member in `createTrackedEffect` (`vals.a1()`, PENDING_ASYNC_FORBIDDEN_SCOPE, 10 `mx-combo` rows): rc.17 reports it, SC5001 is an obligation on main too. The smoke manifest of 2026-10-30 still held it proven; which change lost it is not known. The manifests want a reselection from a full run.
+- A pending read through a hook's returned member in `createTrackedEffect` (`vals.a1()`, PENDING_ASYNC_FORBIDDEN_SCOPE, 10 `mx-combo` rows): rc.17 reports it, SC5001 is an obligation on main too. The smoke manifest of 2026-10-30 still held it proven; which change lost it is not known.
 
 ## 2. Decisions not to build
 
