@@ -167,6 +167,26 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",
+      "start": 2408,
+      "end": 2419,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",
+      "start": 2425,
+      "end": 2476,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",
       "start": 2589,
       "end": 2600,
       "fixes": 0

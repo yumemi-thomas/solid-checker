@@ -190,3 +190,11 @@ export function codeOfThrown(message) {
   const text = String(message ?? "");
   return thrownCodes.find(([pattern]) => pattern.test(text))?.[1] ?? null;
 }
+
+/** Outcomes that need a look: a misuse grid's and a legal grid's. */
+export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
+/**
+ * What a grid row needs a look for, or null: its outcome, or a second code on the site's lines missed in a file with no uncertifiable
+ * finding (matrix.mjs `judge`, `secondary`), a false clean of that code whatever the row's own outcome. The one test of focus, the audit and smoke.
+ */
+export const rowProblem = (row) => (PROBLEMS.includes(row.outcome) ? row.outcome : Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified") ? "secondary-false-clean" : null);

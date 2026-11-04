@@ -19,6 +19,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PROBLEMS, rowProblem } from "./codes.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { fnv } from "./rng.mjs";
 
@@ -26,7 +27,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 /** Where the manifests live. */
 export const SMOKE_DIR = join(here, "smoke");
 const AXES = ["context", "variant", "binding", "layer", "mount", "source"];
-const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 
 /** A grid's rows (programs.jsonl of its output directory). */
 export const readRows = (dir) => readFileSync(join(dir, "programs.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
@@ -47,7 +47,7 @@ export function featuresOf(row, required) {
   // A combination's extra codes and decoys each once per code (paired with every axis value they would be most of the grid).
   for (const extra of row.combo?.extras ?? []) features.push(`a:${row.code}|extra=${extra}`);
   if (row.combo) features.push(`a:${row.code}|decoys=${Boolean(row.combo.decoys)}`);
-  if (PROBLEMS.includes(row.outcome) || required.has(row.id)) features.push(`x:${row.id}`);
+  if (rowProblem(row) || required.has(row.id)) features.push(`x:${row.id}`);
   return features;
 }
 

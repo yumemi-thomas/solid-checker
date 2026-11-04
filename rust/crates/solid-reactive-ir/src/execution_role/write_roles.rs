@@ -166,6 +166,15 @@ pub(super) fn write_region_adjustment(
                 return None;
             }
             let primitive = lookup.primitive_at_call(file, call.span)?;
+            // ADR 0613: `onSettled`'s queued run is the drain's, whichever owner
+            // its call has: the leaf exemption below is no proof then.
+            if lookup
+                .dialect
+                .leaf_owner_requires_owned_call_site(primitive)
+                && drained_under_owner(primitive, index, lookup)
+            {
+                return Some(WriteRegionAdjustment::DrainedByFlush);
+            }
             if lookup.dialect.leaf_scopes_allow_writes()
                 && callback_owner_at_call(file, call, primitive, index, lookup)
                     == Some(solid_dialect::CallbackOwner::Leaf)
@@ -1589,6 +1598,15 @@ pub(super) fn nested_in_leaf_scope(
             argument.end - argument.start
         })?;
     let primitive = lookup.primitive_at_call(file, call.span)?;
+    // ADR 0613: as for the callback itself (`write_region_adjustment`), a layer
+    // inside `onSettled`'s queued run is the drain's.
+    if lookup
+        .dialect
+        .leaf_owner_requires_owned_call_site(primitive)
+        && drained_under_owner(primitive, index, lookup)
+    {
+        return Some(WriteRegionAdjustment::DrainedByFlush);
+    }
     (callback_owner_at_call(file, call, primitive, index, lookup)
         == Some(solid_dialect::CallbackOwner::Leaf))
     .then_some(WriteRegionAdjustment::LeafScope)

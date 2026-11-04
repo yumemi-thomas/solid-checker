@@ -862,12 +862,15 @@ impl Dialect for Solid2 {
     /// `createEffect` drains its first apply under that owner (a
     /// `createEffect` there raised nothing; a setter there threw
     /// `REACTIVE_WRITE_IN_OWNED_SCOPE`); one in an event handler drains with
-    /// no owner (`onCleanup` there raised `NO_OWNER_CLEANUP`).
+    /// no owner (`onCleanup` there raised `NO_OWNER_CLEANUP`). `onSettled` called
+    /// with no owner or under a leaf takes the same queue (`dist/dev.js:3058`,
+    /// `globalQueue.enqueue(EFFECT_USER, fire)`): probed, under a `flush()` in a
+    /// root body its callback's setter throws and its effect raises nothing.
     fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
         matches!(
             (primitive, argument),
             (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
-                | (Primitive::CreateReaction, 0)
+                | (Primitive::CreateReaction | Primitive::OnSettled, 0)
         )
     }
 

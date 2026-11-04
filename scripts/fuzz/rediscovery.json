@@ -2339,22 +2339,6 @@
   "rediscovered": "locally: as the NO_OWNER_EFFECT row"
  },
  {
-  "finding": "reactive-read-after-await (SC1002) missed the object of a written store member past an async compute's await (s.a in s.a.v = 1), and a member read in a function run in place there: a certified false clean as the second code of SC2003 (ADR 0612)",
-  "found": "the certified-secondary flag (focus.mjs secondary-false-clean) on the async family's recall cells",
-  "fixed": "ADR 0612",
-  "grid": "mx-recall",
-  "code": "STORE_WRITE_OUTSIDE_SETTER",
-  "ids": [
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-none",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-closure",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-helper",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-iife",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-closure-helper",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-module-helper",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-for",
-   "mx-store-write-outside-setter-effect-async-nested-assign-direct-while"
-  ],
-  "rediscovered": "locally: secondary false-clean-certified before ADR 0612, gone on the fix",
   "finding": "missing-owner (SC4001) and primitive-in-effect-callback (SC6002) proven for a primitive or cleanup in a createEffect apply that a synchronous flush() in a component body, a memo compute or a root body drains: rc.17 runs the apply under that owner and raises nothing (ADR 0613)",
   "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
   "fixed": "ADR 0613",
@@ -2416,5 +2400,11 @@
    "mx-reactive-write-in-owned-scope-effect-error-arm-flush-rerun-signal-direct-closure"
   ],
   "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "the flush veto missed a flush() in a parameter default: the census took it for module evaluation, and an apply's write rc.17 rejects stayed certified clean (ADR 0613)",
+  "found": "review of the stack, probed on rc.17",
+  "fixed": "ADR 0613",
+  "outside": "the generator writes no flush in a parameter default; fixture flush-veto-default holds it"
  }
 ]

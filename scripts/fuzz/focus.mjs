@@ -50,6 +50,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statf
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { rowProblem } from "./codes.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
@@ -83,8 +84,7 @@ export const GRIDS = {
 };
 /** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall and pair ones. */
 export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall") && !grid.endsWith("-pairs"));
-/** Outcomes that need a look: a misuse grid's and a legal grid's. */
-export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
+export { PROBLEMS } from "./codes.mjs";
 
 /**
  * One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. A grid process that
@@ -99,9 +99,8 @@ export function readGrid(out) {
   const rows = complete ? readFileSync(programs, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : readPartial(out);
   for (const row of rows ?? []) {
     outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
-    if (PROBLEMS.includes(row.outcome)) flagged.push({ id: row.id, outcome: row.outcome, detail: row.detail });
-    // Another code Chrome reports on the site's lines, missed in a certified file (matrix.mjs `judge`, `secondary`): a false clean too.
-    else if (Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified")) flagged.push({ id: row.id, outcome: "secondary-false-clean", detail: row.detail });
+    const problem = rowProblem(row);
+    if (problem) flagged.push({ id: row.id, outcome: problem, detail: row.detail });
   }
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;

@@ -668,6 +668,10 @@ pub(crate) enum OwnerEdgeKind {
     /// region written around the call ([`OWNER_CONTEXT_LATER_RUN_UNOWNED`],
     /// which leaves the region, as a render effect's later run does).
     DrainedByFlush,
+    /// ADR 0613: [`Self::QueuedLeaf`] for `onSettled` while some `flush()` of
+    /// the program may drain the queue under an owner: its queued run takes
+    /// that owner, so the leaf's context holds and "proven unowned" does not.
+    QueuedLeafDrained,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

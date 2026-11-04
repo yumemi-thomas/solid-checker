@@ -384,6 +384,11 @@ impl SemanticLookup<'_> {
                     .then_some(DispatchCaller::AwaitContinuation)
             });
         }
+        // A parameter list is in no function's body and runs at its function's
+        // call, wherever that is (ADR 0613): no caller class.
+        if crate::owners::in_parameter_list(&file.ast, call.span) {
+            return None;
+        }
         // Module evaluation: no reactive owner or window is current before a
         // function is invoked. A class element or JSX region is evaluated
         // elsewhere (a construction, a render effect).

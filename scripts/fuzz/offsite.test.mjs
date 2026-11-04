@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { offSiteVerdicts } from "./classify.mjs";
+import { rowProblem } from "./codes.mjs";
 import { readGrid } from "./focus.mjs";
 import { judgeLegalProgram } from "./legal.mjs";
 import { buildMatrix, gate, judge } from "./matrix.mjs";
@@ -105,5 +106,25 @@ describe("focus, a certified secondary false clean", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("rowProblem, the one test of focus, the audit and smoke", () => {
+  it("names a problem outcome, a certified second-code miss on any outcome, and nothing else", () => {
+    expect(rowProblem({ outcome: "false-clean" })).toBe("false-clean");
+    expect(rowProblem({ outcome: "agree", detail: { secondary: { X: "false-clean-certified" } } })).toBe("secondary-false-clean");
+    expect(rowProblem({ outcome: "agree", detail: { secondary: { X: "false-clean" } } })).toBeNull();
+    expect(rowProblem({ outcome: "clean" })).toBeNull();
+  });
+});
+
+describe("the gate, certified second-code misses", () => {
+  const row = (seed, secondary) => ({ code: "A", context: "body", seed, outcome: "agree", binding: "direct", layer: "none", detail: secondary ? { secondary } : {} });
+  const matrixOf = (rows) => buildMatrix(rows, { options: { seed: 1, perCell: 4 }, header: { label: "x" }, typedAway: {} });
+  it("fails a cell that gains one, and passes one that keeps or loses it", () => {
+    const missed = { X: "false-clean-certified" };
+    expect(gate(matrixOf([row(1)]), matrixOf([row(1, missed)])).ok).toBe(false);
+    expect(gate(matrixOf([row(1, missed)]), matrixOf([row(1, missed)])).ok).toBe(true);
+    expect(gate(matrixOf([row(1, missed)]), matrixOf([row(1)])).ok).toBe(true);
   });
 });

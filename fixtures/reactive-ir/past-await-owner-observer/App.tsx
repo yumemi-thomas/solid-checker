@@ -81,3 +81,18 @@ export function LayeredRead() {
   createEffect(() => m(), () => {});
   return <div />;
 }
+
+// A hoisted function called before the await runs on the compute's first stack, whatever its text position.
+export function Hoisted() {
+  const [s] = createStore({ a: { v: 0 } });
+  const m = createMemo(async () => {
+    helper();
+    await Promise.resolve();
+    function helper() {
+      return s.a.v; // tracked: no SC1002
+    }
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}

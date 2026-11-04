@@ -827,3 +827,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/write-past-layered-await/node_modules/**
 !fixtures/reactive-ir/past-await-owner-observer/node_modules/
 !fixtures/reactive-ir/past-await-owner-observer/node_modules/**
+!fixtures/reactive-ir/flush-veto-settled/node_modules/
+!fixtures/reactive-ir/flush-veto-settled/node_modules/**
+!fixtures/reactive-ir/flush-veto-default/node_modules/
+!fixtures/reactive-ir/flush-veto-default/node_modules/**

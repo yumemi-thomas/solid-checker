@@ -449,6 +449,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
       agreeRemote: cell.rows.filter((row) => row.outcome === "agree" && row.detail?.remote).length,
       falseCleanCertified: cell.rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
       recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, cell.rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
+      secondaryCertified: cell.rows.filter((row) => Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified")).length,
       byBinding: by("binding"), byLayer: by("layer"),
       chrome: chromeSummary(cell.rows),
       verdicts: Object.fromEntries(cell.rows.map((row) => [String(row.seed), row.outcome])),
@@ -622,6 +623,8 @@ export function gate(baseline, current) {
     if (lost.length) regressions.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}`, programs: lost });
     if (gained.length) regressions.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}`, programs: gained });
     // A violation on code tsc rejects (tsc-overlap.mjs) fails from any baseline, a typed-away one included: it is new evidence.
+    // A second code missed in a certified file is a false clean of that code (`judge`, `secondary`).
+    if ((cell.secondaryCertified ?? 0) > (base.secondaryCertified ?? 0)) regressions.push({ cell: key, why: `certified second-code misses ${base.secondaryCertified ?? 0} -> ${cell.secondaryCertified}` });
     // A program the runtime stopped firing (a template that drifted, a runtime that changed) leaves the measure: from agree that is a
     // lost agree above; from a false clean or a recall gap it would hide the miss, so it fails too.
     const silenced = list((was, is) => is === "not-fired" && !["agree", "not-fired"].includes(was) && !UNJUDGED.has(was));

@@ -25,7 +25,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { GRIDS, PROBLEMS, hostArgs, parse as parseFocus } from "./focus.mjs";
+import { GRIDS, hostArgs, parse as parseFocus } from "./focus.mjs";
+import { rowProblem } from "./codes.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
@@ -168,7 +169,8 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
         if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
         outcomes.set(row.id, row.outcome);
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
-        if (PROBLEMS.includes(row.outcome)) attention.push(`${grid}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
+        const problem = rowProblem(row);
+        if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       }
     }
     if (planned !== null && outcomes.size !== planned) attention.push(`${grid}: ${outcomes.size} programs judged of ${planned}`);

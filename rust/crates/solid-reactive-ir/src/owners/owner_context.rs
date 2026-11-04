@@ -279,6 +279,14 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
                 leaf_body_context(source)
             }
         }
+        OwnerEdgeKind::QueuedLeafDrained => {
+            let queued = if source & OWNER_CONTEXT_LEAF != 0 {
+                OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED
+            } else {
+                leaf_body_context(source)
+            };
+            queued & !OWNER_CONTEXT_PROVEN_UNOWNED
+        }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         // ADR 0613: the drain's caller decides, not the creating call's
         // owner: possibly owned, possibly not, never proven.
@@ -1476,15 +1484,16 @@ pub(crate) fn drained_callback_owner_edge_kind(
     argument: usize,
     owner: solid_dialect::CallbackOwner,
 ) -> OwnerEdgeKind {
-    if owner == solid_dialect::CallbackOwner::None
+    let kind = callback_owner_edge_kind_at(lookup, primitive, owner);
+    let drained = matches!(kind, OwnerEdgeKind::Unowned | OwnerEdgeKind::QueuedLeaf)
         && lookup
             .dialect
             .callback_runs_drained_by_flush(primitive, argument)
-        && lookup.flush_drains_under_owner()
-    {
-        OwnerEdgeKind::DrainedByFlush
-    } else {
-        callback_owner_edge_kind_at(lookup, primitive, owner)
+        && lookup.flush_drains_under_owner();
+    match kind {
+        OwnerEdgeKind::Unowned if drained => OwnerEdgeKind::DrainedByFlush,
+        OwnerEdgeKind::QueuedLeaf if drained => OwnerEdgeKind::QueuedLeafDrained,
+        kind => kind,
     }
 }
 

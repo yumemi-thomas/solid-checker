@@ -1291,6 +1291,8 @@ fn member_reads_after_await(
                     !climb.exhausted
                         && !climb.in_list
                         && !climb.among_others
+                        // A hoisted function's call may come before the await.
+                        && climb.at.start >= boundary
                         && crate::owners::owned_by_body(&file.ast, ast_function, climb.at)
                         && !crate::execution_role::climb_crosses_library_callback(
                             file,

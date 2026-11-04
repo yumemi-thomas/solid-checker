@@ -695,7 +695,7 @@ export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CO
  * reaction's callback, a deferred apply), the button writing the trigger and draining it in a `createRoot` body.
  */
 export const FLUSH_RERUN_CONTEXTS = ["effect-cleanup-flush-rerun", "render-cleanup-flush-rerun", "render-apply-flush-rerun", "effect-error-arm-flush-rerun", "reaction-flush-rerun", "effect-apply-defer-flush-rerun"];
-export const FLUSH_DRAIN_CONTEXTS = ["effect-apply-flush-body", "effect-apply-flush-memo", "effect-apply-flush-root", "effect-apply-flush-handler", ...FLUSH_RERUN_CONTEXTS];
+export const FLUSH_DRAIN_CONTEXTS = ["effect-apply-flush-body", "effect-apply-flush-memo", "effect-apply-flush-root", "effect-apply-flush-handler", "settled-flush-root", ...FLUSH_RERUN_CONTEXTS];
 /** The lazy-memo, deferred-apply and flush-drain contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
 export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun", ...FLUSH_DRAIN_CONTEXTS];
 /**
@@ -771,6 +771,11 @@ const FLUSH_DRAIN_MEASURED = {
 };
 const flushDrainContext = (at) => (["body", "memo", "root", "handler"].includes(at) ? `effect-apply-flush-${at}` : `${at}-flush-rerun`);
 const FLUSH_DRAIN_PLACEMENT = Object.fromEntries(Object.entries(FLUSH_DRAIN_MEASURED).map(([code, { misuse, legal }]) => [code, { misuse: misuse.map(flushDrainContext), legal: legal.map(flushDrainContext) }]));
+// `settled-flush-root` (2026-11-04, 34 probes on rc.17, every variant agreed): a handler's `onSettled` drained by a root's `flush()` runs
+// under the root, not as a leaf: an owner operation and a primitive are legal, a write, a store proxy write, an action and a sync node
+// handed async report, and a provider-free context read throws (ADR 0613).
+for (const code of ["CONTEXT_NOT_FOUND", "REACTIVE_WRITE_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER", "SYNC_NODE_RECEIVED_ASYNC", "ACTION_CALLED_IN_OWNED_SCOPE", "DYNAMIC_STATIC_PROMISE"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).misuse.push("settled-flush-root");
+for (const code of ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "CLEANUP_IN_FORBIDDEN_SCOPE", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "UNTRACKED_READ_AFTER_AWAIT", "RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).legal.push("settled-flush-root");
 // With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
 for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
@@ -1155,6 +1160,8 @@ function recallContext(context, stmts, kit) {
       return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), decl(m, prim("memo", fn([expr(flush()), ret(num(1))])))], view: [child(kit.name("v"), call(ref(m)))] };
     }
     case "effect-apply-flush-root": return { body: [expr(prim("root", fn([expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), expr(flush())])))], view: [] };
+    // A handler's `onSettled` queues its callback (no owner there), and a root's `flush()` drains it under the root (ADR 0613).
+    case "settled-flush-root": return { body: [], view: [button(kit.name("b"), [expr(prim("settled", fn(stmts))), expr(prim("root", fn([expr(flush())])))])] };
     case "effect-apply-flush-handler": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }))], view: [button(kit.name("b"), [expr(flush())])] };
     case "effect-cleanup-flush-rerun": case "render-cleanup-flush-rerun": {
       const t = trigger();
