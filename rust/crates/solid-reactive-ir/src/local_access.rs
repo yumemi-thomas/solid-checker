@@ -4621,6 +4621,78 @@ fn carried_leaf_owner(
     )
 }
 
+/// The calls a read at `span` owes its leaf owner to whose callback is a leaf
+/// only under an owned call site (`onSettled`, the dialect's
+/// `leaf_owner_requires_owned_call_site`), along the walk
+/// [`carried_leaf_owner`] takes. Their spans key the owner fixed point's
+/// call-site gates.
+pub(crate) fn gated_leaf_calls(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> Vec<solid_facts::core::Span> {
+    let mut calls = crate::owners::gated_leaf_calls_at(file, span, lookup);
+    if depth > 0
+        && let Some(function) = containing_ast_function(&file.ast, span)
+        && !function.generator
+        && !lookup.function_may_be_component(file, function)
+    {
+        for carrier in inline_carriers(file, function, lookup) {
+            calls.extend(gated_leaf_calls(file, carrier, lookup, depth - 1));
+        }
+    }
+    calls
+}
+
+/// An out-of-band `onSettled` (rc.17 enqueues a plain callback: `Owner` is
+/// null or a leaf at the call) is no leaf owner, so a pending read in it is no
+/// leaf-owner read, and an unproven one is not proven either. Either way the
+/// read answers as the same read written in the callback does: an open
+/// obligation. A call the fixed point proves owned stays a violation.
+pub(crate) fn apply_settled_read_gates(
+    ctx: &crate::pipeline::AnalysisContext<'_>,
+    reads: &mut [crate::AsyncRead],
+    decisions: &crate::owners::SettledGateDecisions,
+) {
+    if !reads.iter().any(|read| read.leaf_owner.is_some()) {
+        return;
+    }
+    let files: HashMap<&str, &solid_facts::FileFacts> = ctx
+        .facts
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
+    for read in reads.iter_mut().filter(|read| read.leaf_owner.is_some()) {
+        let Some(file) = files.get(read.location.path.as_ref()) else {
+            continue;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(read.location.start_byte),
+            u32::try_from(read.location.end_byte),
+        ) else {
+            continue;
+        };
+        let span = solid_facts::core::Span::new(start, end);
+        let unowned = gated_leaf_calls(file, span, ctx.semantic_lookup, CARRIED_LEAF_DEPTH)
+            .into_iter()
+            .any(|call| {
+                let key = (
+                    read.location.path.to_string(),
+                    u64::from(call.start),
+                    u64::from(call.end),
+                );
+                decisions
+                    .get(&key)
+                    .is_some_and(|decision| *decision != crate::owners::LeafGateDecision::Owned)
+            });
+        if unowned {
+            read.invocation_context_unproven = true;
+        }
+    }
+}
+
 /// ADR 0537: the inline carriers `function`'s binding is handed to by name
 /// (ADR 0531's `HandOff::Inline`): the calls that run it before returning.
 pub(crate) fn inline_carriers(

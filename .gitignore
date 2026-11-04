@@ -829,6 +829,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/past-await-owner-observer/node_modules/**
 !fixtures/reactive-ir/flush-veto-settled/node_modules/
 !fixtures/reactive-ir/flush-veto-settled/node_modules/**
+!fixtures/reactive-ir/settled-out-of-band-read/node_modules/
+!fixtures/reactive-ir/settled-out-of-band-read/node_modules/**
 !fixtures/reactive-ir/flush-veto-default/node_modules/
 !fixtures/reactive-ir/flush-veto-default/node_modules/**
 !fixtures/reactive-ir/store-read-placement/node_modules/

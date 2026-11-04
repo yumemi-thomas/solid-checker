@@ -1540,6 +1540,50 @@ pub(crate) fn containing_leaf_owner(
         .or_else(|| action_step_leaf_owner(file, span, entities, symbol_names, lookup))
 }
 
+/// The calls among those [`containing_leaf_owner`] reads at `span` whose
+/// callback is a leaf only under an owned call site: the argument `span` sits
+/// in, and the positions of a callback handed by name.
+pub(crate) fn gated_leaf_calls_at(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let leaf_gated = |call: &solid_facts::ast::CallFact, index: usize| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .leaf_owner_requires_owned_call_site(primitive)
+                    && callback_owner_at_call(file, call, primitive, index, lookup)
+                        == Some(solid_dialect::CallbackOwner::Leaf)
+            })
+    };
+    let mut calls: Vec<Span> = file
+        .ast
+        .arguments_containing(span)
+        .filter(|(call, index)| leaf_gated(call, *index))
+        .map(|(call, _)| call.span)
+        .collect();
+    let direct = crate::owners::containing_body_function(&file.ast, span);
+    let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
+        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
+    for function in [direct, climbed].into_iter().flatten() {
+        let Some((positions, _)) = crate::owners::exact_value_positions(file, function, lookup)
+        else {
+            continue;
+        };
+        for (call_span, index) in positions {
+            let call = file.ast.calls.iter().find(|call| call.span == call_span);
+            if call.is_some_and(|call| leaf_gated(call, index)) {
+                calls.push(call_span);
+            }
+        }
+    }
+    calls
+}
+
 /// ADR 0614: the leaf owner an action's first step runs under: it runs on its
 /// caller's stack (ADR 0547, ADR 0550), so the owner of its calls, when every
 /// one has it and no `yield` may come first. A step with other callers is not

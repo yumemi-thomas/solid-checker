@@ -2545,5 +2545,17 @@
    "mx-store-write-outside-setter-effect-async-finally-delete-hook-member-helper-cb-alias"
   ],
   "rediscovered": "locally (2026-11-04): the all-pairs sample (`focus.mjs --smoke --cover all`) flags all three on eb6925715's release build, and the old release build reports the same SC1002; on the fix they agree, with `no-store-mutation-outside-setter` the only finding"
+ },
+ {
+  "finding": "a pending read through a helper in a handler's `onSettled` was a proven SC5001: `containing_leaf_owner` did not ask whether the call site is owned, and rc.17 enqueues a plain callback there (ADR 0614)",
+  "found": "the per-code tier (2026-11-04), through `settled-flush-root`; main fails without the flush too",
+  "fixed": "ADR 0614",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-settled-handler-x-wrapper-none",
+   "lg-pending-async-forbidden-scope-settled-flush-root-x-wrapper-closure-helper"
+  ],
+  "rediscovered": "locally (2026-11-04): `legal.mjs --recall --contexts settled-handler,settled-flush-root`, 1,284 programs: main's release build 332 false positives, the fix none (1,238 uncertifiable, 46 clean)"
  }
 ]

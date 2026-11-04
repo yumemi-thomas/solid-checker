@@ -86,6 +86,19 @@ describe("the judge, past the row's own code (ADR 0614)", () => {
   });
 });
 
+describe("a rule that stands beside the row's code", () => {
+  const checker = { ok: true, findings: [finding("primitive-in-effect-callback", 10), finding("missing-owner", 10)] };
+  it("is not judged on the site when the code fired: its throw hides the rule's own warning (ADR 0483)", () => {
+    const verdict = judge({ code: "PRIMITIVE_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker, runtime: run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)]), built });
+    expect(verdict.outcome).toBe("agree");
+  });
+  it("is judged off the site and on a not-fired program: nothing hid it there", () => {
+    const away = { ok: true, findings: [finding("primitive-in-effect-callback", 10), finding("missing-owner", 20)] };
+    expect(judge({ code: "PRIMITIVE_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker: away, runtime: run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)]), built }).outcome).toBe("false-positive");
+    expect(judge({ code: "PRIMITIVE_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-owner", 10)] }, runtime: run([]), built }).outcome).toBe("false-positive");
+  });
+});
+
 describe("the legal grid's judge, off the site", () => {
   const legalBuilt = { ...built, sites: [{ id: "s1", line: 10, hit: "h1", code: "FLUSH_IN_EFFECT_CALLBACK" }, built.sites[1]] };
   it("a clean site with a contradicted violation on a decoy is a false positive", () => {

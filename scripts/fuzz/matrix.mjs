@@ -82,7 +82,8 @@ export function judge(input) {
   // away from them, and on a `not-fired` program so is the claiming rule's own: its site ran and the runtime reported nothing, which is what a
   // false positive looks like, not a generator problem.
   const claiming = codeRules[input.code] ?? [];
-  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !claiming.includes(finding.rule);
+  // A rule that stands beside the row's code (codes.mjs `besideCode`, ADR 0483) makes a claim the code's throw hides: the runtime stops first.
+  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || besideCode[input.code]?.includes(finding.rule));
   const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
   const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   if (!judged.length) return verdict;

@@ -780,6 +780,9 @@ const FLUSH_DRAIN_PLACEMENT = Object.fromEntries(Object.entries(FLUSH_DRAIN_MEAS
 // handed async report, and a provider-free context read throws (ADR 0613).
 for (const code of ["CONTEXT_NOT_FOUND", "REACTIVE_WRITE_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER", "SYNC_NODE_RECEIVED_ASYNC", "ACTION_CALLED_IN_OWNED_SCOPE", "DYNAMIC_STATIC_PROMISE"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).misuse.push("settled-flush-root");
 for (const code of ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "CLEANUP_IN_FORBIDDEN_SCOPE", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "UNTRACKED_READ_AFTER_AWAIT", "RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).legal.push("settled-flush-root");
+// `settled-handler`: a handler's `onSettled` with nothing to drain it but the queue. No leaf owner, and the source has settled by the click: a
+// pending read reports nothing (rc.17, 2026-11-04). A helper's read was a proven SC5001 here, older than `settled-flush-root`, which first reached it.
+for (const code of ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).legal.push("settled-handler");
 // With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
 for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
@@ -1166,6 +1169,7 @@ function recallContext(context, stmts, kit) {
     case "effect-apply-flush-root": return { body: [expr(prim("root", fn([expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), expr(flush())])))], view: [] };
     // A handler's `onSettled` queues its callback (no owner there), and a root's `flush()` drains it under the root (ADR 0613).
     case "settled-flush-root": return { body: [], view: [button(kit.name("b"), [expr(prim("settled", fn(stmts))), expr(prim("root", fn([expr(flush())])))])] };
+    case "settled-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("settled", fn(stmts)))])] };
     case "effect-apply-flush-handler": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }))], view: [button(kit.name("b"), [expr(flush())])] };
     case "effect-cleanup-flush-rerun": case "render-cleanup-flush-rerun": {
       const t = trigger();
