@@ -3088,17 +3088,21 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             );
-            // A pass the throw can land in: a compute or a tracked expression, or
-            // a function nothing places. A body's read throws its own code, and
-            // a handler or an apply has no pass.
-            if !(matches!(role, ExecutionRole::TrackedJsx | ExecutionRole::Unknown)
-                || crate::owners::tracked_computation_read(
-                    file,
-                    caught.block,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                ))
+            // A pass the throw can land in, or may: a body's read throws its own
+            // code, and a handler or an apply has no pass.
+            // A callback a component receives runs where that component calls it.
+            let handed_to_component = file.ast.jsx_containing(function.span).any(|element| {
+                file.source_text(element.name.span)
+                    .is_some_and(|name| name.starts_with(char::is_uppercase))
+            });
+            if !handed_to_component
+                && matches!(
+                    role,
+                    ExecutionRole::UntrackedRendering
+                        | ExecutionRole::ModuleInitialization
+                        | ExecutionRole::EventCallback
+                        | ExecutionRole::EffectApply
+                )
             {
                 continue;
             }
@@ -3137,6 +3141,7 @@ impl LocalAccessContext<'_, '_> {
                     && !rethrows
                     && !function.r#async
                     && role == ExecutionRole::TrackedJsx
+                    && self.computation_runs_where_written(file, function)
                     && source.is_some_and(|(symbol, (_, declaration))| {
                         self.async_sources.contains(symbol)
                             && !self.effective_async_options(symbol).declared_loading
@@ -3170,6 +3175,27 @@ impl LocalAccessContext<'_, '_> {
                 first &= !own;
             }
         }
+    }
+
+    /// `function` is the compute of a memo or an effect with no options, so it
+    /// runs where it is written: a `lazy` memo waits for its first read.
+    fn computation_runs_where_written(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        use solid_dialect::Primitive;
+        file.ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                index == 0
+                    && file.ast.peel_ts_sugar_span(call.arguments[0].span) == function.span
+                    && match self.lookup.primitive_at_call(file, call.span) {
+                        Some(Primitive::CreateMemo) => call.arguments.len() == 1,
+                        Some(Primitive::CreateEffect | Primitive::CreateRenderEffect) => true,
+                        _ => false,
+                    }
+            })
     }
 
     fn lookup_primitive_is_signal(&self, symbol: &SymbolId) -> bool {
@@ -4465,7 +4491,7 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: pending_apply.map(|apply| location(file.path.shared(), apply)),
                 async_provenance,
                 declared_loading: async_options.declared_loading,
-                options_opaque: async_options.opaque,
+                options_opaque: async_options.opaque || caught_in_try(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
                 server_rendering_unresolved: async_options.server_rendering_unresolved,
                 host_callback_timing: host_callback_timing(
@@ -5056,7 +5082,7 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: None,
                 async_provenance: member_async,
                 declared_loading: member_options.declared_loading,
-                options_opaque: member_options.opaque,
+                options_opaque: member_options.opaque || caught_in_try(file, member),
                 ssr_client_hole: member_options.ssr_client_bare,
                 server_rendering_unresolved: member_options.server_rendering_unresolved,
                 host_callback_timing: host_callback_timing(
@@ -7571,6 +7597,15 @@ enum MergeGet {
     /// A plain literal source serves it.
     Plain,
     Unproven,
+}
+
+/// ADR 0634: a `catch` around the read swallows the throw that would report it,
+/// so no read there is proven pending at the boundary or in a body.
+fn caught_in_try(file: &solid_facts::FileFacts, read: solid_facts::core::Span) -> bool {
+    file.ast
+        .try_catches
+        .iter()
+        .any(|caught| caught.block.contains(read))
 }
 
 /// ADR 0626: what a value escaped from `untrack` holds.

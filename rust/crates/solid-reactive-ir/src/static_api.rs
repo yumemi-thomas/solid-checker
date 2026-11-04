@@ -358,6 +358,41 @@ impl StaticApiContext<'_> {
                     uncertain: origin.mixed,
                 });
             }
+            // ADR 0636: `flush()`'s guard takes no event, so a handler dispatched
+            // synchronously from an effect's apply warns there. A visible
+            // dispatch makes a flush in a handler an obligation.
+            if let Some(kind) = kind
+                && self.client_build
+                && dialect.warns_inside_effect_phase(kind)
+                && self
+                    .lookup
+                    .hazard_present(crate::base::Hazard::SynchronousDispatch)
+                && !result.violations.iter().any(|violation| {
+                    violation.id == "SC2008"
+                        && violation.location == location(file.path.shared(), call.callee)
+                })
+            {
+                // A function a listener or a handler holds, not the body itself.
+                if crate::owners::containing_ast_function(&file.ast, call.callee)
+                    .is_some_and(|function| !self.lookup.function_may_be_component(file, function))
+                {
+                    result.violations.push(StaticViolation {
+                        id: "SC2008".into(),
+                        rule: "flush-in-effect-callback".into(),
+                        message: format!(
+                            "{primitive}() runs in a handler, and something here dispatches an \
+                             event synchronously: from an effect's apply it would run inside the \
+                             flush draining effects"
+                        ),
+                        hint: "Remove the flush(), or the synchronous dispatch from the apply."
+                            .into(),
+                        location: location(file.path.shared(), call.callee),
+                        analysis_context: String::new(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
+            }
             // SC3002 (ADR 0622): `onFlush` under a children-capable owner. rc.21
             // warns on `getOwner()` with no `CONFIG_CHILDREN_FORBIDDEN`, the
             // owned-scope write guard's test, so the write role places it: an
