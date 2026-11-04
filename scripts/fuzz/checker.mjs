@@ -213,7 +213,7 @@ function canonical(path) {
 
 /**
  * The hint of a read with no strict-read window (`STRICT_READ_UNWINDOWED`, rust/dialects/solid-v2/rules/src/lib.rs; ADRs 0443, 0530): a stale snapshot
- * reported on purpose, and the finding itself says the runtime does not warn. Its silence contradicts nothing, so no judge may read it as a false positive.
+ * reported on purpose, and the finding says the runtime does not warn. That is a claim: `runtimeSilent` is set only once a control run measures it (window.mjs).
  */
 export const NO_RUNTIME_WARNING = "No strict-read window is open";
 
@@ -232,7 +232,7 @@ export function parseFindings(analysis, dir) {
     .map((finding) => ({
       file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind,
       line: finding.primaryLocation.line, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
-      ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { runtimeSilent: true } : {}),
+      ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { claimsSilent: true } : {}),
     }));
 }
 

@@ -251,8 +251,7 @@ pub(super) fn direct_reference_contributions(
                         let peeled = |target: &solid_facts::core::Span| {
                             file.ast.peel_ts_sugar_span(*target) == member.span
                         };
-                        !file.ast.is_plain_write_target(member.span)
-                            && !file.ast.deleted_targets.iter().any(peeled)
+                        !file.ast.is_no_get_target(member.span)
                             && !file.ast.iteration_targets.iter().any(peeled)
                     })
                     // ADR 0293: only a head Get whose key warns is a read. An

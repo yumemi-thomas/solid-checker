@@ -2532,5 +2532,18 @@
    "mx-no-owner-boundary-tracked-loading-direct-none"
   ],
   "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "`delete store.key` past an await was SC1002: the path over after-await reads skipped write targets but not `delete` operands; `is_no_get_target` is now the one test every such path takes (ADR 0614)",
+  "found": "the all-pairs sample's first run on the final build (2026-11-04), once the judge read other rules' findings at a site",
+  "fixed": "ADR 0614",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-effect-async-delete-direct-helper-cb-named",
+   "mx-store-write-outside-setter-effect-async-finally-delete-alias-module-default",
+   "mx-store-write-outside-setter-effect-async-finally-delete-hook-member-helper-cb-alias"
+  ],
+  "rediscovered": "locally (2026-11-04): the all-pairs sample (`focus.mjs --smoke --cover all`) flags all three on eb6925715's release build, and the old release build reports the same SC1002; on the fix they agree, with `no-store-mutation-outside-setter` the only finding"
  }
 ]

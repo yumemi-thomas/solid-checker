@@ -1967,6 +1967,19 @@ impl AstFacts {
         self.is_plain_assignment_target(span) || self.destructuring_assignment_leaf(span).is_some()
     }
 
+    /// Whether the expression holding `span` never Gets it: a plain write
+    /// target or the operand of `delete` (a proxy's `deleteProperty` trap, not
+    /// its `get`). The one test for "this member is no read" that a path over
+    /// reads takes, so that no such path keeps a target kind the others drop.
+    #[must_use]
+    pub fn is_no_get_target(&self, span: Span) -> bool {
+        self.is_plain_write_target(span)
+            || self
+                .deleted_targets
+                .iter()
+                .any(|target| self.peel_ts_sugar_span(*target) == span)
+    }
+
     /// The plain destructuring assignment (`({ v: store.v } = source)`,
     /// `[store.v] = list`) whose pattern `span` is a leaf of: a written target
     /// (`write_targets`) inside an object or array pattern that is not itself

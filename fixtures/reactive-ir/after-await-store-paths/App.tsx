@@ -82,3 +82,25 @@ export function WrapperBefore() {
   }, () => {});
   return <p>x</p>;
 }
+
+// `delete` runs the proxy's `deleteProperty` trap, no Get: the leaf is no read past the await.
+export function DeletedLeaf() {
+  const [s] = createStore<{ v?: number }>({ v: 0 });
+  createEffect(async () => {
+    await Promise.resolve();
+    delete s.v; // no SC1002
+    return 1;
+  }, () => {});
+  return <p>x</p>;
+}
+
+// The path to the deleted key is still read.
+export function DeletedPath() {
+  const [s] = createStore<{ a: { v?: number } }>({ a: { v: 0 } });
+  createEffect(async () => {
+    await Promise.resolve();
+    delete s.a.v; // SC1002 on `s.a`, and SC2003
+    return 1;
+  }, () => {});
+  return <p>x</p>;
+}

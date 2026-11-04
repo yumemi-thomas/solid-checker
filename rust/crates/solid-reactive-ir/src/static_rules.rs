@@ -1034,7 +1034,7 @@ pub(super) fn tracked_store_paths_before_first_suspension(
                 .completion_sites
                 .binary_search(&member.span)
                 .is_err()
-            || file.ast.is_plain_write_target(member.span)
+            || file.ast.is_no_get_target(member.span)
         {
             continue;
         }
@@ -1311,7 +1311,7 @@ fn member_reads_after_await(
         if crate::local_access::read_as_part_of_longer_path(file, member) {
             continue;
         }
-        if file.ast.is_plain_write_target(member.span) {
+        if file.ast.is_no_get_target(member.span) {
             continue;
         }
         // ADR 0614: a receiver holding exactly a `const` (`thing.useIt`, ADR

@@ -3501,12 +3501,7 @@ impl LocalAccessContext<'_, '_> {
         // source's). Compound assignments, updates, and members nested inside
         // a target (a computed key, a destructuring default) are retained as
         // reads.
-        if file.ast.is_plain_write_target(member.span)
-            || file
-                .ast
-                .deleted_targets
-                .iter()
-                .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+        if file.ast.is_no_get_target(member.span)
             || file
                 .ast
                 .iteration_targets
@@ -5869,8 +5864,7 @@ pub(crate) fn read_as_part_of_longer_path(
     };
     file.ast.members.iter().any(|candidate| {
         file.ast.peel_ts_sugar_span(candidate.object) == member.span
-            && !(file.ast.is_plain_write_target(candidate.span)
-                || target(&file.ast.deleted_targets, candidate.span)
+            && !(file.ast.is_no_get_target(candidate.span)
                 || target(&file.ast.iteration_targets, candidate.span))
     })
 }
