@@ -94,3 +94,26 @@ export function Store() {
   });
   return <p>{[one(), two(), three()].length}</p>;
 }
+
+// A setter performs no read, whatever may run it.
+export function save(setError: (value: string) => void) {
+  const [, setLocal] = createSignal("");
+  try {
+    setLocal("x");
+    setError("y");
+  } catch {
+    return 0;
+  }
+  return 1;
+}
+
+// The untracked read reports before it throws, so a `catch` keeps SC5001.
+export function CaughtInBody() {
+  const memo = createMemo(async () => 1);
+  try {
+    memo();
+  } catch {
+    return <p>{0}</p>;
+  }
+  return <p>{1}</p>;
+}

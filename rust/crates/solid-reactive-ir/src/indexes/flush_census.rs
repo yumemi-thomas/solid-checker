@@ -214,15 +214,26 @@ impl<'a> SemanticLookup<'a> {
         file: &'a solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
-        matches!(
-            self.dispatch_caller(file, call),
-            Some(
-                DispatchCaller::FreshStack
-                    | DispatchCaller::AwaitContinuation
-                    | DispatchCaller::ModuleInitialization
-                    | DispatchCaller::TestRunner
-            )
-        ) || crate::execution_role::dispatch_in_test_only_function(file, call.span, self)
+        let placed = |at: &solid_facts::ast::CallFact| {
+            matches!(
+                self.dispatch_caller(file, at),
+                Some(
+                    DispatchCaller::FreshStack
+                        | DispatchCaller::AwaitContinuation
+                        | DispatchCaller::ModuleInitialization
+                        | DispatchCaller::TestRunner
+                )
+            ) || crate::execution_role::dispatch_in_test_only_function(file, at.span, self)
+        };
+        // ADR 0640: or on the stack of a call that does: `createRoot(() => flush())`
+        // in a test's callback, a callback a local helper runs in place.
+        placed(call)
+            || file.ast.functions_owning(call.span).any(|outer| {
+                crate::execution_role::entry_on_stack_of(file, call.span, Some(outer), self)
+                    .is_some_and(|entry| {
+                        entry != call.span && file.ast.call_at(entry).is_some_and(placed)
+                    })
+            })
     }
 
     /// The owner-free caller of a flush call: the dispatch census's positional

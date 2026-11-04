@@ -2881,5 +2881,11 @@
   "found": "the known-gap note for three pair programs with no runtime record",
   "fixed": "ADR 0628",
   "outside": "the page never settles, so no runtime record exists and a grid cannot judge it; pairShapes leaves the shape out and fixtures/reactive-ir/rc21-untrack-hook-pending holds it as an obligation"
+ },
+ {
+  "finding": "SC5008 took a resolved signal setter in a `try` for a possibly caught read, 32 corpus rows (ADR 0640)",
+  "found": "the Fable review of #173's added obligations",
+  "fixed": "ADR 0640",
+  "outside": "the rule's cells are computes, where a setter call is an owned write and no legal program; a setter in a `try` elsewhere is on no pass. fixtures/reactive-ir/rc21-caught-read holds it"
  }
 ]

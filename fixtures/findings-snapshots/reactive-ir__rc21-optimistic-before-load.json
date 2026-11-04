@@ -100,6 +100,16 @@
       "start": 1398,
       "end": 1409,
       "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1707,
+      "end": 1715,
+      "fixes": 0
     }
   ]
 }

@@ -3145,10 +3145,128 @@ fn no_store_method_write(
                 location: location(file.path.shared(), call.span),
                 analysis_context: String::new(),
                 fixes: vec![],
-                uncertain: true,
+                uncertain: standing != WriteStanding::Dropped
+                    || !store_path_holds_writing_method(file, context, symbol, callee),
             });
         }
     }
+}
+
+/// ADR 0640: the path `s.c` of `s.c.m` is, for the life of the store, the instance
+/// of a class written in the store's literal: `createStore({ c: new C() })`, its
+/// setter never named, in a function body so no other module can name it. `C`
+/// has no `extends` and no computed member, so nothing gives it a `toStringTag`
+/// that would keep rc.21 from wrapping it, and its own method `m` writes `this`.
+fn store_path_holds_writing_method(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+    callee: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(method) = ast.member_at(callee) else {
+        return false;
+    };
+    let Some(method_name) = file.source_text(method.property) else {
+        return false;
+    };
+    let mut keys = Vec::new();
+    let mut object = ast.peel_ts_sugar_span(method.object);
+    while let Some(member) = ast.member_at(object) {
+        if ast.computed_members.contains(&member.span)
+            || ast.optional_members.binary_search(&member.span).is_ok()
+        {
+            return false;
+        }
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        keys.push(key);
+        object = ast.peel_ts_sugar_span(member.object);
+    }
+    keys.reverse();
+    let Some((_, declaration)) = context.accessors.get(symbol) else {
+        return false;
+    };
+    if declaration.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Array
+            && binding.immutable
+            && binding.names.iter().any(|name| {
+                u64::from(name.span.start) == declaration.start_byte
+                    && u64::from(name.span.end) == declaration.end_byte
+            })
+    }) else {
+        return false;
+    };
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).unwrap_or(u32::MAX),
+        u32::try_from(declaration.end_byte).unwrap_or(u32::MAX),
+    );
+    if crate::indexes::at_module_scope(ast, declared) {
+        return false;
+    }
+    let setter_named = binding.array_slots.iter().skip(1).flatten().any(|setter| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.span != setter.span
+                && ast.reference_declaration(identifier.span) == Some(setter.span)
+        })
+    });
+    let Some(mut value) = binding
+        .call_initializer
+        .and_then(|initializer| ast.call_at(initializer))
+        .filter(|call| {
+            context.lookup.primitive_at_call(file, call.span)
+                == Some(solid_dialect::Primitive::CreateStore)
+        })
+        .and_then(|call| call.arguments.first())
+        .filter(|argument| !argument.spread)
+        .map(|argument| ast.peel_ts_sugar_span(argument.span))
+    else {
+        return false;
+    };
+    if setter_named {
+        return false;
+    }
+    for key in keys {
+        let Some(next) = crate::execution_role::closed_literal_slot_value(file, value, key) else {
+            return false;
+        };
+        value = ast.peel_ts_sugar_span(next);
+    }
+    let Some(built) = ast.call_at(value).filter(|call| call.construct) else {
+        return false;
+    };
+    let class_at = ast.peel_ts_sugar_span(built.callee);
+    let named = ast.reference_declaration(class_at);
+    let Some(class) = ast.classes.iter().find(|class| {
+        class.span == class_at
+            || class
+                .name
+                .as_ref()
+                .is_some_and(|name| Some(name.span) == named)
+    }) else {
+        return false;
+    };
+    class.heritage.is_none()
+        && !class.elements.iter().any(|element| element.computed)
+        && class.elements.iter().any(|element| {
+            !element.r#static
+                && element.key.and_then(|key| file.source_text(key)) == Some(method_name)
+                && element
+                    .value
+                    .and_then(|value| ast.function_at(ast.peel_ts_sugar_span(value)))
+                    .is_some_and(|function| {
+                        ast.write_targets.iter().any(|target| {
+                            function.body.contains(*target)
+                                && file
+                                    .source_text(*target)
+                                    .is_some_and(|written| written.starts_with("this."))
+                        })
+                    })
+        })
 }
 
 /// The standard-library calls that write properties of their first argument,

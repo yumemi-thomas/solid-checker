@@ -745,6 +745,8 @@ function signalText(sig, signals, used) {
     case "async-declared": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1, { loadingValue: 0 });`;
     case "async-maybe": used.add("createMemo"); return `const ${sig.name} = createMemo((): number | Promise<number> => ((globalThis as { late?: boolean }).late ? Promise.resolve(1) : 1));`;
     case "optimistic-async": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init});`;
+    // ADR 0640: a hook's tuple whose first slot is plain: only the setter's slot reaches the setter.
+    case "optimistic-tuple-hook": used.add("createOptimistic"); return `const ${sig.name}h = () => {\n    const [o, setO] = createOptimistic(async () => ${sig.init});\n    return [() => ${sig.init}, setO, o] as const;\n  };\n  const [${sig.name}, ${sig.setter}] = ${sig.name}h();`;
     case "optimistic-declared": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init}, { loadingValue: ${sig.init} });`;
     case "optimistic-async-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;

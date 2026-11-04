@@ -1383,6 +1383,11 @@ pub struct AsyncRead {
     /// refuted; SC5001 downgrades from proven violation to uncertifiable.
     #[serde(default)]
     pub options_opaque: bool,
+    /// The read sits in a `try`. rc.21 emits the untracked-read diagnostic before
+    /// it throws, so SC5001 stands (ADR 0640); a boundary warning needs the throw
+    /// to reach it, which a `catch` may stop.
+    #[serde(default)]
+    pub caught: bool,
     /// The source provably declares `ssrSource: "client"` with no
     /// `loadingValue`/`seedLoadingValue`, and the project server-renders:
     /// reading it during SSR outside a `Loading` boundary throws

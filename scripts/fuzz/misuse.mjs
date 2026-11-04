@@ -128,7 +128,7 @@ export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
  * event, so a listener dispatched synchronously from a body reads in it; an effect's window records its queue's event, so a handler
  * dispatched from an apply, like one dispatched from another handler, reads in none, and so does what a handler or an apply schedules.
  */
-const EVENT_LEGAL = ["evt-apply-dispatch", "evt-handler-dispatch", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply"];
+const EVENT_LEGAL = ["evt-apply-dispatch", "evt-handler-dispatch", "evt-created-anchor", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply"];
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -472,11 +472,11 @@ export const SPEC = {
     contexts: [], recallContexts: ["body", "memo", "effect-compute", "render-compute", "root"], bindings: BINDINGS, setup: () => [], call: () => api("onFlush", "() => {}") },
   // rc.21 (ADR 0636): an optimistic setter before its async source's first answer. A driven click lands after it: legal, an obligation.
   // `creates-here`: the creation is on the write's stack, so a handler throws too (ADR 0636); `declared`: a `loadingValue` is an answer.
-  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallVariants: ["creates-here"], recallLegalVariants: ["declared"], recallLegal: ["handler"],
-    variantContexts: { signal: ["body", "root"], store: ["body", "root"], "creates-here": ["body", "creates-in-handler"] }, legalVariantContexts: { declared: ["handler"] },
+  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallVariants: ["creates-here"], recallLegalVariants: ["declared", "tuple-plain-slot"], recallLegal: ["handler"],
+    variantContexts: { signal: ["body", "root"], store: ["body", "root"], "creates-here": ["body", "creates-in-handler"] }, legalVariantContexts: { declared: ["handler"], "tuple-plain-slot": ["handler"] },
     contexts: [], recallContexts: ["body", "root", "creates-in-handler"], bindings: ["direct", "alias", "wrapper"],
-    setup: (variant, name) => (variant === "creates-here" ? [] : [apiSignal(name("o"), 1, variant === "store" ? "optimistic-async-store" : variant === "declared" ? "optimistic-declared" : "optimistic-async", "src")]),
-    call: (node, sigs) => (node.variant === "creates-here" ? member("createOptimistic", () => `createOptimistic(async () => 1)[1](2)`, ["createOptimistic"]) : node.variant === "store" ? local(sigs[0].setter, "(d) => { d.v = 2; }") : local(sigs[0].setter, "2")),
+    setup: (variant, name) => (variant === "creates-here" ? [] : [apiSignal(name("o"), 1, variant === "store" ? "optimistic-async-store" : variant === "declared" ? "optimistic-declared" : variant === "tuple-plain-slot" ? "optimistic-tuple-hook" : "optimistic-async", "src")]),
+    call: (node, sigs) => (node.variant === "creates-here" ? member("createOptimistic", () => `createOptimistic(async () => 1)[1](2)`, ["createOptimistic"]) : node.variant === "store" ? local(sigs[0].setter, "(d) => { d.v = 2; }") : node.variant === "tuple-plain-slot" ? local(sigs[0].name) : local(sigs[0].setter, "2")),
   },
   // rc.21 (ADR 0637): a compute catches a pending read's throw and completes. `rethrow` lets it continue; a signal never throws.
   // Per pass (ADR 0637): `store-get`, `store-keys` and `latest` read too; `prior-read` and `later-read` leave a read outside the `try`,
@@ -522,7 +522,7 @@ export const SPEC = {
   RESOLVE_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("resolve", "() => 1") },
   UNTIL_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
   FLUSH_IN_ACTION: { legal: ["handler", "timer"], recallContexts: ["action-after-yield", "action-shared"], contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch"], recallLegal: ["evt-handler-dispatch", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener"], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
@@ -1119,6 +1119,14 @@ function inContext(context, stmts, kit) {
     }
     case "evt-apply-window-dispatch":
       return { body: [expr(listenExpr("window", "sc-evt", fn(stmts))), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(domExpr('window.dispatchEvent(new Event("sc-evt"))'))]) }))], view: [] };
+    // ADR 0640: an anchor a helper creates and clicks under `document.body` delivers to no listener, so another handler keeps its proof;
+    // with a `click` listener on `window` it delivers there, on the stack of the apply that clicks.
+    case "evt-created-anchor": case "evt-anchor-apply-listener": {
+      const anchor = kit.name("el"), fire = kit.name("fire");
+      const helper = decl(fire, fn([decl(anchor, domExpr('document.createElement("a")')), expr(domExpr(`document.body.append(${anchor})`)), expr(domExpr(`${anchor}.click()`)), expr(domExpr(`${anchor}.remove()`))]));
+      if (context === "evt-created-anchor") return { body: [helper, expr(call(ref(fire)))], view: [button(kit.name("b"), stmts)] };
+      return { body: [helper, expr(listenExpr("window", "click", fn(stmts))), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(fire)))]) }))], view: [] };
+    }
     case "timer-from-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("timer", fn(stmts)))])] };
     case "micro-from-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("micro", fn(stmts)))])] };
     case "timer-from-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(prim("timer", fn(stmts)))]) }))], view: [] };

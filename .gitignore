@@ -887,3 +887,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-class-method-write/node_modules/**
 !fixtures/reactive-ir/rc21-event-windows/node_modules/
 !fixtures/reactive-ir/rc21-event-windows/node_modules/**
+!fixtures/reactive-ir/rc21-created-anchor/node_modules/
+!fixtures/reactive-ir/rc21-created-anchor/node_modules/**
+!fixtures/reactive-ir/rc21-created-anchor-listener/node_modules/
+!fixtures/reactive-ir/rc21-created-anchor-listener/node_modules/**
+!fixtures/reactive-ir/rc21-created-anchor-escapes/node_modules/
+!fixtures/reactive-ir/rc21-created-anchor-escapes/node_modules/**

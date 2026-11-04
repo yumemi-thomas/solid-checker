@@ -14,12 +14,16 @@ pub(crate) enum DispatchReceiver {
     /// The global `document`, where the dialect says it reaches no JSX
     /// handler (ADR 0435).
     Document,
+    /// An element the function creates and attaches only under `document.body`
+    /// or the root element, on a path nothing in the program listens on
+    /// (ADR 0640).
+    NoListener,
 }
 
 impl DispatchReceiver {
     /// A receiver that cannot reach an element handler.
     const fn excluded(self) -> bool {
-        matches!(self, Self::Window | Self::Document)
+        matches!(self, Self::Window | Self::Document | Self::NoListener)
     }
 }
 
@@ -108,17 +112,18 @@ impl DispatchSite {
     /// takes no event (ADR 0639). The same callers exclude it as a strict-read
     /// window, but the receiver does not: a listener on `window` flushes too.
     pub(crate) const fn withholds_flush_proofs(&self) -> bool {
-        !matches!(
-            self.caller,
-            Some(
-                DispatchCaller::FreshStack
-                    | DispatchCaller::AwaitContinuation
-                    | DispatchCaller::ModuleInitialization
-                    | DispatchCaller::TestRunner
-                    | DispatchCaller::TestHelper
-                    | DispatchCaller::EventHandler
+        !matches!(self.receiver, DispatchReceiver::NoListener)
+            && !matches!(
+                self.caller,
+                Some(
+                    DispatchCaller::FreshStack
+                        | DispatchCaller::AwaitContinuation
+                        | DispatchCaller::ModuleInitialization
+                        | DispatchCaller::TestRunner
+                        | DispatchCaller::TestHelper
+                        | DispatchCaller::EventHandler
+                )
             )
-        )
     }
 }
 
@@ -319,6 +324,7 @@ impl SemanticLookup<'_> {
                         DispatchReceiver::Unknown => "unknown",
                         DispatchReceiver::Window => "window",
                         DispatchReceiver::Document => "document",
+                        DispatchReceiver::NoListener => "no listener",
                     }
                     .to_owned(),
                     caller: site.caller.map(|caller| caller.word().to_owned()),
@@ -351,8 +357,9 @@ impl SemanticLookup<'_> {
             let _guard = VetoComputation::enter();
             let mut sites = self.placed_dispatch_sites().to_vec();
             for site in &mut sites {
+                // Every receiver: the flush veto reads the caller of a `window`
+                // dispatch too.
                 if site.caller.is_none()
-                    && !site.receiver.excluded()
                     && self.file_by_path(&site.path).is_some_and(|file| {
                         crate::execution_role::dispatch_in_event_only_function(
                             file, site.span, self,
@@ -361,7 +368,6 @@ impl SemanticLookup<'_> {
                 {
                     site.caller = Some(DispatchCaller::EventHandler);
                 } else if site.caller.is_none()
-                    && !site.receiver.excluded()
                     && self.file_by_path(&site.path).is_some_and(|file| {
                         crate::execution_role::dispatch_in_test_only_function(file, site.span, self)
                     })
@@ -379,6 +385,7 @@ impl SemanticLookup<'_> {
     fn placed_dispatch_sites(&self) -> &[DispatchSite] {
         self.placed_event_dispatch.get_or_init(|| {
             let mut sites = Vec::new();
+            let mut click_listener = None;
             // The calls the base index lists as dispatches, per file in file
             // order ([`crate::base::Hazard::SynchronousDispatch`], the same
             // resolution of each call's callee), not every call of the
@@ -396,6 +403,13 @@ impl SemanticLookup<'_> {
                         continue;
                     };
                     let receiver = match name {
+                        "HTMLElement.click"
+                            if self.created_element_unattached_to_a_listener(file, call)
+                                && !*click_listener
+                                    .get_or_insert_with(|| self.program_listens_for_click()) =>
+                        {
+                            DispatchReceiver::NoListener
+                        }
                         "HTMLElement.click" => DispatchReceiver::Element,
                         "EventTarget.dispatchEvent" => self.dispatch_receiver(file, call),
                         _ => continue,
@@ -411,6 +425,154 @@ impl SemanticLookup<'_> {
                 }
             }
             sites
+        })
+    }
+
+    /// ADR 0640: the receiver of this `click()` is a `const` the function fills
+    /// from `document.createElement`, and every use of it is a property write
+    /// (no `on*`), `click()`, `remove()`, or the argument of an append to
+    /// `document.body` or the root element. Its path holds no JSX element.
+    fn created_element_unattached_to_a_listener(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let ast = &file.ast;
+        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+            return false;
+        };
+        let Some(declared) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+        else {
+            return false;
+        };
+        let created = ast
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declared)
+            })
+            .and_then(|binding| binding.call_initializer)
+            .and_then(|initializer| ast.call_at(initializer));
+        let creator =
+            created.and_then(|created| ast.member_at(ast.peel_ts_sugar_span(created.callee)));
+        if !creator.is_some_and(|creator| {
+            file.source_text(creator.property) == Some("createElement")
+                && self.global_dom_variable(file, ast.peel_ts_sugar_span(creator.object))
+                    == Some("document")
+        }) {
+            return false;
+        }
+        ast.identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.span != declared
+                    && ast.reference_declaration(identifier.span) == Some(declared)
+            })
+            .all(|identifier| {
+                let Some(used) = ast
+                    .members
+                    .iter()
+                    .find(|used| ast.peel_ts_sugar_span(used.object) == identifier.span)
+                else {
+                    return self.appended_under_the_root(file, identifier.span);
+                };
+                let property = file.source_text(used.property).unwrap_or("on");
+                if ast.computed_members.contains(&used.span) {
+                    return false;
+                }
+                let called = ast.calls_with_peeled_callee(used.span).next().is_some();
+                if called {
+                    matches!(property, "click" | "remove")
+                } else {
+                    !property.starts_with("on")
+                        && ast
+                            .assignments
+                            .iter()
+                            .any(|assignment| assignment.target.contains(used.span))
+                }
+            })
+    }
+
+    /// `value` is the one argument of `document.body.append(value)`, or of
+    /// `appendChild` on it or on `document.documentElement`.
+    fn appended_under_the_root(&self, file: &solid_facts::FileFacts, value: Span) -> bool {
+        let ast = &file.ast;
+        ast.arguments_containing(value).any(|(call, _)| {
+            call.arguments.len() == 1
+                && ast.peel_ts_sugar_span(call.arguments[0].span) == value
+                && ast
+                    .member_at(ast.peel_ts_sugar_span(call.callee))
+                    .is_some_and(|append| {
+                        matches!(
+                            file.source_text(append.property),
+                            Some("append" | "appendChild")
+                        ) && ast
+                            .member_at(ast.peel_ts_sugar_span(append.object))
+                            .is_some_and(|root| {
+                                matches!(
+                                    file.source_text(root.property),
+                                    Some("body" | "documentElement")
+                                ) && self
+                                    .global_dom_variable(file, ast.peel_ts_sugar_span(root.object))
+                                    == Some("document")
+                            })
+                    })
+        })
+    }
+
+    /// ADR 0640: something in the program may hear a `click` that bubbles to the
+    /// root: a handler on a JSX `body` or `html`, an `onclick` property, or an
+    /// `addEventListener` for `click` or an event nothing names, on a target
+    /// other than one whose declaration has no place on a DOM path.
+    fn program_listens_for_click(&self) -> bool {
+        self.files().iter().any(|file| {
+            let ast = &file.ast;
+            ast.jsx_elements.iter().any(|element| {
+                matches!(file.source_text(element.name.span), Some("body" | "html"))
+                    && element.attributes.iter().any(|attribute| {
+                        file.source_text(attribute.local_name)
+                            .is_none_or(|name| name.starts_with("on"))
+                    })
+            }) || ast.assignments.iter().any(|assignment| {
+                file.source_text(assignment.target)
+                    .is_none_or(|target| target.ends_with(".onclick"))
+            }) || ast.calls.iter().any(|call| {
+                let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+                    return false;
+                };
+                if file.source_text(member.property) != Some("addEventListener") {
+                    return false;
+                }
+                let names_another_event = call.arguments.first().is_some_and(|event| {
+                    file.source_text(event.span).is_some_and(|text| {
+                        let quoted = text.len() >= 2
+                            && matches!(text.as_bytes()[0], b'"' | b'\'')
+                            && text.as_bytes()[text.len() - 1] == text.as_bytes()[0];
+                        quoted && !text[1..text.len() - 1].eq_ignore_ascii_case("click")
+                    })
+                });
+                !names_another_event
+                    && !self
+                        .resolved_callee_call(file, call.callee)
+                        .and_then(crate::runtime_semantics::standard_call_name)
+                        .is_some_and(|name| {
+                            name.split('.').next().is_some_and(|target| {
+                                matches!(
+                                    target,
+                                    "AbortSignal"
+                                        | "BroadcastChannel"
+                                        | "EventSource"
+                                        | "MediaQueryList"
+                                        | "MessagePort"
+                                        | "WebSocket"
+                                        | "Worker"
+                                        | "XMLHttpRequest"
+                                )
+                            })
+                        })
+            })
         })
     }
 

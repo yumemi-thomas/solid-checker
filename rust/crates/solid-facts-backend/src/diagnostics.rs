@@ -1537,7 +1537,7 @@ fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
     };
     if withheld.is_empty() {
         let why = match site.receiver.as_str() {
-            "window" | "document" => format!("receiver {}", site.receiver),
+            "window" | "document" | "no listener" => format!("receiver {}", site.receiver),
             _ => format!("caller {}", site.caller.as_deref().unwrap_or("unproven")),
         };
         return format!("synchronous dispatch (ADR 0435) at {at} excluded: {why}");

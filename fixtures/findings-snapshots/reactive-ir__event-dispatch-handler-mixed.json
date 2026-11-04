@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-handler-mixed/App.tsx",
-      "start": 609,
-      "end": 630,
+      "start": 610,
+      "end": 631,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/event-dispatch-handler-mixed/App.tsx",
-      "start": 618,
-      "end": 625,
+      "start": 619,
+      "end": 626,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-handler-mixed/App.tsx",
-      "start": 642,
-      "end": 660,
+      "start": 643,
+      "end": 661,
       "fixes": 0
     }
   ]

@@ -144,3 +144,36 @@ export function DynamicMount() {
   const Mounted = dynamic(() => Remounted);
   return <Mounted />;
 }
+
+// Forms that hold one value name the source exactly: each throws.
+export function SpreadLiteral() {
+  const inner = createMemo(async () => 1);
+  const { read } = { ...{ read: inner } };
+  const one = untrack(() => read());
+  return <p>{one}</p>;
+}
+
+export function ComputedKey() {
+  const inner = createMemo(async () => 1);
+  const { read } = { ["read"]: inner };
+  const one = untrack(() => read());
+  return <p>{one}</p>;
+}
+
+export function Extracted() {
+  const inner = createMemo(async () => 1);
+  const box = { held: inner };
+  const read = box.held;
+  const one = untrack(() => read());
+  return <p>{one}</p>;
+}
+
+// A `let` written again holds no one value: open.
+export function Rewritten() {
+  const inner = createMemo(async () => 1);
+  const other = createMemo(() => 1);
+  let read: () => number = inner as never;
+  read = other;
+  const one = untrack(() => read());
+  return <p>{one}</p>;
+}

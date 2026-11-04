@@ -2,7 +2,7 @@ import { createRenderEffect, createSignal } from "solid-js";
 import { describe, it } from "vitest";
 
 const [count, setCount] = createSignal(0);
-const node = document.createElement("input");
+const node = document.querySelector("input")!;
 
 // The subject: a handler on an intrinsic element. Its effect creation is a
 // violation exactly when no dispatch can deliver it under an owner.
@@ -18,7 +18,8 @@ export function Card() {
 }
 
 // The program boundary is not declared closed (no .solid-checker/runtime.json),
-// so a module this build does not see may call the helper. The veto stays.
+// but the helper is unexported: no module this build does not see can name it,
+// so its dispatch leaves the veto (ADR 0640). An export keeps it.
 function choose(target: HTMLElement) {
   target.dispatchEvent(new Event("change"));
 }

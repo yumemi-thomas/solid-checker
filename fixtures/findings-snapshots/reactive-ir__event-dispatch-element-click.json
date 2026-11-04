@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-element-click/App.tsx",
-      "start": 468,
-      "end": 489,
+      "start": 469,
+      "end": 490,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/event-dispatch-element-click/App.tsx",
-      "start": 477,
-      "end": 484,
+      "start": 478,
+      "end": 485,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-element-click/App.tsx",
-      "start": 499,
-      "end": 517,
+      "start": 500,
+      "end": 518,
       "fixes": 0
     }
   ]

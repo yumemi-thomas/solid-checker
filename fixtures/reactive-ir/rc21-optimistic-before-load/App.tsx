@@ -48,3 +48,16 @@ export function Later() {
   const [, setValue] = createOptimistic(async () => 1);
   return <button onClick={() => setValue(2)}>x</button>;
 }
+
+// A hook's tuple: only the slot holding the setter reaches it.
+const useTuple = () => {
+  const [value, setValue] = createOptimistic(async () => 1);
+  return [() => 1, setValue, value] as const;
+};
+
+export function TupleSlots() {
+  const [plain, write] = useTuple();
+  plain();
+  write(2);
+  return <p>{1}</p>;
+}

@@ -1181,7 +1181,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // flight neither throws (SC5001) nor needs a boundary (SC5003,
             // SC5005; ADR 0430) — so the finding is no longer a *proven*
             // defect and becomes a proof obligation instead.
-            if read.options_opaque && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005")
+            if (read.options_opaque
+                && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005"))
+                || (read.caught && matches!(finding.id.as_str(), "SC5003" | "SC5005"))
             {
                 finding.kind = "uncertifiable".into();
             }

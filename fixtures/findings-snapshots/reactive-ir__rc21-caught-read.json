@@ -140,6 +140,26 @@
       "start": 2002,
       "end": 2009,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 2189,
+      "end": 2202,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 2430,
+      "end": 2436,
+      "fixes": 0
     }
   ]
 }
