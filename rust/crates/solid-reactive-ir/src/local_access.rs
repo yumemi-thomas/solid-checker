@@ -2955,7 +2955,6 @@ impl LocalAccessContext<'_, '_> {
 
     /// The action invocation a call of the action whose row is `symbol`'s
     /// makes ([`Self::push_setter_write`]).
-    #[allow(clippy::too_many_arguments)]
     /// ADR 0636: `symbol` is, or aliases, the setter of an optimistic creation
     /// that may not have answered. An alias holds the creation's declaration.
     fn optimistic_async_setter(&self, symbol: &str) -> bool {
@@ -3384,6 +3383,7 @@ impl LocalAccessContext<'_, '_> {
                 .is_some_and(|compute| compute.r#async)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_action_invocation(
         &self,
         file: &solid_facts::FileFacts,
@@ -3995,7 +3995,6 @@ impl LocalAccessContext<'_, '_> {
     /// a call of an async source makes. A read accessor transport carries
     /// (`ctx.data()`, ADR 0509) has its read row from the interprocedural
     /// summaries, and only this half here.
-    #[allow(clippy::too_many_arguments)]
     /// ADR 0629: what the value `span` names holds, where its head (`o` in
     /// `o.a.b`, or the call in `untrack(() => s.o).a`) is the result of an
     /// exact `untrack`, or of a project function returning one. `untrack`
@@ -4495,7 +4494,7 @@ impl LocalAccessContext<'_, '_> {
                     && self
                         .entities
                         .at(file.path.as_str(), name.span)
-                        .is_some_and(|symbol| hit(symbol))
+                        .is_some_and(hit)
             })
         }) {
             return true;
@@ -4660,6 +4659,7 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_async_read(
         &self,
         file: &solid_facts::FileFacts,
