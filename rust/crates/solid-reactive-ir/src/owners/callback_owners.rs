@@ -300,7 +300,7 @@ fn assemble_returned_callback_invocation_sites(
             continue;
         }
         let inherited_owner = callback_owner_at_call(use_file, outer, primitive, index, lookup)
-            .map(|owner| callback_owner_edge_kind_at(lookup, primitive, owner))
+            .map(|owner| drained_callback_owner_edge_kind(lookup, primitive, index, owner))
             .unwrap_or(OwnerEdgeKind::Preserve);
         sites.push(ReturnedCallbackInvocationSite {
             path: use_file.path.to_string(),

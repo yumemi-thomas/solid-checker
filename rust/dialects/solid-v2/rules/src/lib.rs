@@ -798,6 +798,7 @@ fn after_await_obligation(reason: Option<&solid_reactive_ir::AfterAwaitObligatio
         Some(Why::GeneratorStepped) => "it is in a generator's body, which runs only as its iterator is stepped, and the checker does not follow the stepping".to_owned(),
         Some(Why::OwnerUnresolved) => "it runs under runWithOwner with an owner the checker cannot resolve, and whether a read there warns depends on that owner".to_owned(),
         Some(Why::CalleeInexact) => "the callee is a conditional, logical, comma or assignment expression not every operand of which is proven to be this accessor".to_owned(),
+        Some(Why::AsyncSourceMayBePending) => "the source is async: read while pending it throws before any warning, read settled it warns, and which of the two this read meets is not proven".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: true }) => "this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: false }) => "whether this prop is signal-backed is not proven from its uses".to_owned(),
         None => "whether this read runs untracked after the await on this computation's run is not proven".to_owned(),

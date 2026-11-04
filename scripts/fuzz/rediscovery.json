@@ -2239,5 +2239,323 @@
    "ssr-m-nested-status"
   ],
   "rediscovered": "locally: the build before ADR 0596 gives both false-clean, the fix build agree (ssr run 2026-11-03: 10 agree, 0 false clean)"
+ },
+ {
+  "finding": "no-write-in-pure-computation (SC2001) proved a violation for a write in a function run in place (an IIFE, a helper calling its callback, a named closure's one call) past an async memo or effect compute's await: the lexical role was the compute's, and rc.17 runs the write on the later task with no owner (ADR 0611)",
+  "found": "the SC2001 async legal cells (ADR 0610) on main's checker: lg-recall 16,528 false positives in memo-async* and effect-async* (layers iife, helper, closure+helper, module-helper, closure, module imports, depth-15)",
+  "fixed": "ADR 0611",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-signal-direct-closure-cb-const",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-signal-direct-closure-cb-const",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-memo-async-finally-signal-direct-closure-cb-const",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-iife",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-effect-async-loop-signal-direct-closure-cb-const"
+  ],
+  "rediscovered": "locally: fuzz-focus CODES=REACTIVE_WRITE_IN_OWNED_SCOPE on the build before ADR 0611 gives 16,528 false-positive in lg-recall; the fix build none"
+ },
+ {
+  "finding": "no-await-primitive-in-tracked-scope (SC2004) proved a violation for resolve() past an async compute's await, where rc.17's observer guard is clear (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "lg-recall",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-none",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-closure",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-helper",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-iife",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-closure-helper",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-module-helper",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-for",
+   "lg-resolve-in-reactive-scope-memo-async-x-direct-while"
+  ],
+  "rediscovered": "locally: fuzz-focus with --contexts on the async family: false-positive before ADR 0612, none on the fix"
+ },
+ {
+  "finding": "no-await-primitive-in-tracked-scope (SC2005) proved a violation for until() past an async compute's await (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "lg-recall",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "lg-until-in-reactive-scope-memo-async-x-direct-none",
+   "lg-until-in-reactive-scope-memo-async-x-direct-closure",
+   "lg-until-in-reactive-scope-memo-async-x-direct-helper",
+   "lg-until-in-reactive-scope-memo-async-x-direct-iife",
+   "lg-until-in-reactive-scope-memo-async-x-direct-closure-helper",
+   "lg-until-in-reactive-scope-memo-async-x-direct-module-helper",
+   "lg-until-in-reactive-scope-memo-async-x-direct-for",
+   "lg-until-in-reactive-scope-memo-async-x-direct-while"
+  ],
+  "rediscovered": "locally: as the SC2004 row"
+ },
+ {
+  "finding": "missing-owner (SC4001) certified clean a primitive created past an async compute's await: the compute's region answered root_owned before the after-await path (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-memo-async-effect-direct-none",
+   "mx-no-owner-effect-memo-async-render-direct-none",
+   "mx-no-owner-effect-memo-async-effect-direct-for",
+   "mx-no-owner-effect-memo-async-effect-direct-while",
+   "mx-no-owner-effect-memo-async-effect-direct-do",
+   "mx-no-owner-effect-memo-async-effect-direct-switch",
+   "mx-no-owner-effect-memo-async-effect-direct-try-catch",
+   "mx-no-owner-effect-memo-async-effect-direct-try-finally"
+  ],
+  "rediscovered": "locally: false-clean before ADR 0612, agree on the fix"
+ },
+ {
+  "finding": "missing-owner (SC4001) certified clean onCleanup past an async compute's await (ADR 0612)",
+  "found": "the async family's recall cells (ADR 0612) on the checker before it",
+  "fixed": "ADR 0612",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-memo-async-x-direct-none",
+   "mx-no-owner-cleanup-memo-async-x-direct-for",
+   "mx-no-owner-cleanup-memo-async-x-direct-while",
+   "mx-no-owner-cleanup-memo-async-x-direct-do",
+   "mx-no-owner-cleanup-memo-async-x-direct-switch",
+   "mx-no-owner-cleanup-memo-async-x-direct-try-catch",
+   "mx-no-owner-cleanup-memo-async-x-direct-try-finally",
+   "mx-no-owner-cleanup-memo-async-x-direct-label"
+  ],
+  "rediscovered": "locally: as the NO_OWNER_EFFECT row"
+ },
+ {
+  "finding": "missing-owner (SC4001) and primitive-in-effect-callback (SC6002) proven for a primitive or cleanup in a createEffect apply that a synchronous flush() in a component body, a memo compute or a root body drains: rc.17 runs the apply under that owner and raises nothing (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "lg-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "lg-primitive-in-effect-callback-effect-apply-flush-body-effect-direct-none",
+   "lg-primitive-in-effect-callback-effect-apply-flush-memo-effect-direct-none",
+   "lg-primitive-in-effect-callback-effect-apply-flush-root-effect-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "missing-owner (SC4001) proven for onCleanup in a createEffect apply a synchronous flush() under an owner drains (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "lg-no-owner-cleanup-effect-apply-flush-body-x-direct-none",
+   "lg-no-owner-cleanup-effect-apply-flush-memo-x-direct-none",
+   "lg-no-owner-cleanup-effect-apply-flush-root-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "a write in a createEffect apply certified legal (SC2001 silent) while a synchronous flush() in a body, a memo compute or a root body drains the apply under that owner, where rc.17 throws REACTIVE_WRITE_IN_OWNED_SCOPE: a certified false clean (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-effect-apply-flush-body-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-apply-flush-memo-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-apply-flush-root-signal-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "missing-owner (SC4001) proven for useContext in a createEffect apply a synchronous flush() under an owner drains, where rc.17 reports CONTEXT_NOT_FOUND: a wrong rule (ADR 0613)",
+  "found": "probes on rc.17's fast runtime (2026-11-03, flush-owner probes, main's debug checker); the FLUSH_DRAIN_CONTEXTS recall cells (2026-11-04)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-effect-apply-flush-body-x-direct-none",
+   "mx-context-not-found-effect-apply-flush-root-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "a write certified legal in what a rerun runs from the queue's drain, with a flush() in a root body in the handler: the cleanup an apply returns, and a layer in a bundle's `error` arm, where rc.17 throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0613)",
+  "found": "ADR 0613's own check before commit: a probe of the returned cleanup; the error-arm layers from FLUSH_RERUN_CONTEXTS' first run (130 false cleans)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-effect-cleanup-flush-rerun-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-error-arm-flush-rerun-signal-direct-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): `focus.mjs --grids mx-recall,lg-recall -- --contexts <FLUSH_DRAIN_CONTEXTS>` over the 23 codes with flush-drain cells (10,422 programs); the release build of origin/main d9b914321 gives 2,400 false-positive, 1,092 false-clean and 150 wrong-rule programs, the ADR 0613 build none (nothing needs a look)"
+ },
+ {
+  "finding": "the flush veto missed a flush() in a parameter default: the census took it for module evaluation, and an apply's write rc.17 rejects stayed certified clean (ADR 0613)",
+  "found": "review of the stack, probed on rc.17",
+  "fixed": "ADR 0613",
+  "outside": "the generator writes no flush in a parameter default; fixture flush-veto-default holds it"
+ },
+ {
+  "finding": "a write or an action call in a closure nested in an onSettled callback a root's flush() drains was certified legal: the leaf exemption answered for the layer (ADR 0613)",
+  "found": "the settled-flush-root recall context, focus-final (2026-11-04, the build before the fix): 95 + 35 certified false cleans",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-settled-flush-root-signal-direct-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "the same, for an action call (ADR 0613)",
+  "found": "the settled-flush-root recall context, focus-final (2026-11-04, the build before the fix)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-settled-flush-root-x-direct-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "a store read in an intrinsic ref was certified clean: the member path kept the deferred role ADR 0520 had taken from the accessor path; a store read in a named function a carrier runs was dropped by the same path, and a store read in a layer had no in-place owner in the summaries (ADR 0522) (ADR 0614)",
+  "found": "secondary-false-clean rows of focus-final (2026-11-04, the build before the fix): 6,364 certified STRICT_READ_UNTRACKED beside STORE_WRITE_OUTSIDE_SETTER, tallied in matrix.json since ADR 0498 and failing nothing",
+  "fixed": "ADR 0614",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-ref-nested-assign-direct-none",
+   "mx-store-write-outside-setter-body-nested-assign-direct-handoff-foreach",
+   "mx-store-write-outside-setter-effect-apply-nested-assign-direct-handoff-foreach",
+   "mx-store-write-outside-setter-ref-named-nested-assign-direct-handoff-foreach",
+   "mx-store-write-outside-setter-effect-async-nested-assign-hook-member-none",
+   "mx-store-write-outside-setter-effect-async-nested-assign-wrapper-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "Loading/Errored called in a createReaction callback was SC4001 only: rc.17 warns NO_OWNER_BOUNDARY, then throws PRIMITIVE_IN_EFFECT_CALLBACK (ADR 0614)",
+  "found": "secondary-false-clean rows of focus-final (2026-11-04, the build before the fix): 746 certified",
+  "fixed": "ADR 0614",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-reaction-loading-direct-none",
+   "mx-no-owner-boundary-reaction-errored-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "resolve() certified clean in an apply a flush under a memo drains, an action's first step called from a tracked effect, an IIFE in a flow child's JSX; rc.17 throws. In an effect apply and in onSettled it reports PRIMITIVE_IN_EFFECT_CALLBACK and PRIMITIVE_IN_FORBIDDEN_SCOPE (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-effect-apply-flush-memo-x-direct-none",
+   "mx-resolve-in-reactive-scope-action-from-tracked-x-direct-none",
+   "mx-resolve-in-reactive-scope-for-x-direct-none",
+   "mx-resolve-in-reactive-scope-effect-apply-x-direct-none",
+   "mx-resolve-in-reactive-scope-settled-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "the same for until() (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-until-in-reactive-scope-effect-apply-flush-memo-x-direct-none",
+   "mx-until-in-reactive-scope-action-from-tracked-x-direct-none",
+   "mx-until-in-reactive-scope-for-x-direct-none",
+   "mx-until-in-reactive-scope-effect-apply-x-direct-none",
+   "mx-until-in-reactive-scope-settled-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "a pending read in an action's first step called from a leaf owner was certified clean (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-pending-async-forbidden-scope-action-from-settled-x-direct-none",
+   "mx-pending-async-forbidden-scope-action-from-tracked-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "SC1002 proven on an async source past an await, where rc.17 throws pending before any warning (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "LOADING_ON_OUTSIDE_HOLD",
+  "ids": [
+   "mx-loading-on-outside-hold-memo-async-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "SC5003 proven on a read in a cleanup written in a flow child: a deferred role under any JSX counted as a render (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-effect-cleanup-show-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "Loading/Errored called under a leaf owner was SC3001 silent; rc.17 reports PRIMITIVE_IN_FORBIDDEN_SCOPE (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-action-from-settled-loading-direct-none",
+   "mx-no-owner-boundary-tracked-loading-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "`delete store.key` past an await was SC1002: the path over after-await reads skipped write targets but not `delete` operands; `is_no_get_target` is now the one test every such path takes (ADR 0614)",
+  "found": "the all-pairs sample's first run on the final build (2026-11-04), once the judge read other rules' findings at a site",
+  "fixed": "ADR 0614",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-effect-async-delete-direct-helper-cb-named",
+   "mx-store-write-outside-setter-effect-async-finally-delete-alias-module-default",
+   "mx-store-write-outside-setter-effect-async-finally-delete-hook-member-helper-cb-alias"
+  ],
+  "rediscovered": "locally (2026-11-04): the all-pairs sample (`focus.mjs --smoke --cover all`) flags all three on eb6925715's release build, and the old release build reports the same SC1002; on the fix they agree, with `no-store-mutation-outside-setter` the only finding"
+ },
+ {
+  "finding": "a pending read through a helper in a handler's `onSettled` was a proven SC5001: `containing_leaf_owner` did not ask whether the call site is owned, and rc.17 enqueues a plain callback there (ADR 0614)",
+  "found": "the per-code tier (2026-11-04), through `settled-flush-root`; main fails without the flush too",
+  "fixed": "ADR 0614",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-settled-handler-x-wrapper-none",
+   "lg-pending-async-forbidden-scope-settled-flush-root-x-wrapper-closure-helper"
+  ],
+  "rediscovered": "locally (2026-11-04): `legal.mjs --recall --contexts settled-handler,settled-flush-root`, 1,284 programs: main's release build 332 false positives, the fix none (1,238 uncertifiable, 46 clean)"
  }
 ]

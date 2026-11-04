@@ -1034,7 +1034,7 @@ pub(super) fn tracked_store_paths_before_first_suspension(
                 .completion_sites
                 .binary_search(&member.span)
                 .is_err()
-            || file.ast.is_plain_write_target(member.span)
+            || file.ast.is_no_get_target(member.span)
         {
             continue;
         }
@@ -1278,28 +1278,51 @@ fn member_reads_after_await(
 ) {
     let (file, ast_function, boundary) = site;
     for member in &file.ast.members {
-        if member.span.start < boundary
-            || !ast_function.body.contains(member.span)
-            || !crate::owners::owned_by_body(&file.ast, ast_function, member.span)
-        {
+        if member.span.start < boundary || !ast_function.body.contains(member.span) {
+            continue;
+        }
+        // ADR 0612: a function written past the boundary and run in place
+        // there (an IIFE, a helper's callback, a named closure's one call)
+        // reads on the same continuation, as an accessor call there does. Not
+        // through a library callback, which may run zero times (ADR 0566).
+        let climbed = || {
+            crate::execution_role::climb_in_place_layers(file, member.span, ctx.semantic_lookup)
+                .is_some_and(|climb| {
+                    !climb.exhausted
+                        && !climb.in_list
+                        && !climb.among_others
+                        // A hoisted function's call may come before the await.
+                        && climb.at.start >= boundary
+                        && crate::owners::owned_by_body(&file.ast, ast_function, climb.at)
+                        && !crate::execution_role::climb_crosses_library_callback(
+                            file,
+                            member.span,
+                            climb.at,
+                            ctx.semantic_lookup,
+                        )
+                })
+        };
+        if !crate::owners::owned_by_body(&file.ast, ast_function, member.span) && !climbed() {
             continue;
         }
         // Only the complete member chain reads a store path; its prefixes are
-        // the same read's steps.
-        if file
-            .ast
-            .members
-            .iter()
-            .any(|candidate| candidate.object == member.span)
-        {
+        // the same read's steps. ADR 0612: the object of a written member is
+        // read on its own, as in a strict-read window (ADR 0498).
+        if crate::local_access::read_as_part_of_longer_path(file, member) {
             continue;
         }
-        if file.ast.is_plain_write_target(member.span) {
+        if file.ast.is_no_get_target(member.span) {
             continue;
         }
-        let Some(symbol) = ctx
-            .entities
-            .get(&location(file.path.shared(), member.object))
+        // ADR 0614: a receiver holding exactly a `const` (`thing.useIt`, ADR
+        // 0498) is that `const`, as for a strict read.
+        let alias = crate::local_access::member_receiver_alias(file, member.object);
+        let Some(symbol) = alias
+            .and_then(|alias| ctx.entities.at(file.path.as_str(), alias.source))
+            .or_else(|| {
+                ctx.entities
+                    .get(&location(file.path.shared(), member.object))
+            })
         else {
             continue;
         };
@@ -1312,7 +1335,22 @@ fn member_reads_after_await(
             // A key read on every run before the first suspension is a
             // dependency already; a key another path may alias is not proven
             // either way.
-            match store_tracking(symbol, store_path_text(file, member.span).as_deref()) {
+            let path = match alias {
+                Some(alias) => store_path_text(
+                    file,
+                    Span::new(alias.member.start, member.span.end),
+                )
+                .and_then(|path| {
+                    // The keys below the alias: the alias's own member is
+                    // the store's root (`store_path_tracked` compares keys
+                    // after a root's name).
+                    let rest =
+                        path.get(usize::try_from(alias.member.end - alias.member.start).ok()?..)?;
+                    Some(format!("{name}{rest}"))
+                }),
+                None => store_path_text(file, member.span),
+            };
+            match store_tracking(symbol, path.as_deref()) {
                 pre_await::Tracking::Tracked => continue,
                 pre_await::Tracking::Possible => {
                     (name, Some(crate::AfterAwaitObligation::MayBeTracked))
@@ -1341,11 +1379,17 @@ fn member_reads_after_await(
         } else {
             continue;
         };
-        let accessor = file
-            .source_text(member.span)
-            .and_then(|path| {
-                path.find('.')
-                    .map(|index| format!("{name}{}", &path[index..]))
+        let accessor = alias
+            .and_then(|alias| {
+                file.source_text(Span::new(alias.member.end, member.span.end))
+                    .filter(|keys| keys.starts_with('.'))
+                    .map(|keys| format!("{name}{keys}"))
+            })
+            .or_else(|| {
+                file.source_text(member.span).and_then(|path| {
+                    path.find('.')
+                        .map(|index| format!("{name}{}", &path[index..]))
+                })
             })
             .unwrap_or_else(|| {
                 format!(

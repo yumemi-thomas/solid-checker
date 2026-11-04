@@ -156,6 +156,8 @@ const OWNER_LIFETIME = ["root-named", "root-method", "root-hook", "root-stored",
 // action call there throws.
 const FALSE_CLEAN_CONTEXTS = ["comp-slot", "comp-rendered"];
 const ASYNC_CONTROL = ["async-loop", "async-for-await", "async-finally"];
+/** A handler's async function with the site past a possible await (ADR 0610). */
+const HANDLER_ASYNC = ["handler-async-loop", "handler-async-for-await", "handler-async-finally"];
 /** The contexts whose site sits in a callback handed to a primitive: the callback-form axis can pass it by name. */
 export const CALLBACK_CONTEXTS = ["memo", "effect-compute", "effect-apply", "render-compute", "render-apply", "tracked", "settled", "untrack", "root",
   "owner-null", "timer", "then", "micro", "memo-async", "effect-async", "owner-bound", "owner-create", "tracked-rerun", "effect-apply-rerun",
@@ -245,7 +247,10 @@ const pendingRead = (node, [sig]) => (node.variant === "latest" ? api("latest", 
 const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }") };
 
 export const SPEC = {
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
+  // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
+  // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
+    recallLegal: [...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
     call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
@@ -313,8 +318,9 @@ export const SPEC = {
     // positions: arithmetic, TS2362; an index, TS2538), misuse and legal alike; any violation there is tsc-overlap.mjs's.
     // API_VARIANTS (measured 2026-11-03): `latest(() => a1())` and `isPending(() => a1())` of a pending async memo are strict reads
     // (not a pending throw): reported where a read is, silent in a memo, a compute, JSX, `untrack` and a leaf (`legalVariantContexts`).
-    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending"],
-    bindingsFor: (variant) => (variant?.startsWith("uncalled") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    // `store-link` (ADR 0615): a store's Get, the read form a call of an accessor and a member read reach by different paths.
+    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending", "store-link"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending", "store-link"],
+    bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant === "store-link" ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
       latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"] },
     legalVariantContexts: { latest: LEAF, "is-pending": LEAF },
@@ -322,8 +328,8 @@ export const SPEC = {
     // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
     legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
     variantSources: { settled: ["module-hook-shared"] },
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
-    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : pendingRead(node, sigs)),
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" ? storeNestedSignal(name("s"), 0) : signal(name("r"), 3, "src")],
+    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
@@ -391,7 +397,8 @@ export const SPEC = {
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [signal(name("r"), 3, "src")], call: (node, [sig]) => local(sig.name),
+    recallVariants: ["store-link"], bindingsFor: (variant) => (variant === "store-link" ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    setup: (variant, name) => [variant === "store-link" ? storeNestedSignal(name("s"), 0) : signal(name("r"), 3, "src")], call: (node, [sig]) => (node.variant === "store-link" ? member(sig.name, (o) => `${o}.a`) : local(sig.name)),
   },
   // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
@@ -682,8 +689,17 @@ const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) 
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
 export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS];
 
-/** The lazy-memo and deferred-apply contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
-export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun"];
+/**
+ * ADR 0613: the site in an effect apply, with a synchronous `flush()` the program calls after the effect is created: in the body
+ * (`-body`), a memo compute (`-memo`) or a root body holding both (`-root`), where rc.17 drains the apply under that owner, and in a
+ * handler (`-handler`), where the drain has no owner (the apply's own first run is the mount's, before the click). Base shapes only.
+ * `FLUSH_RERUN_CONTEXTS`: what only a rerun runs (an apply's returned cleanup, a render effect's later apply, an `error` arm, a
+ * reaction's callback, a deferred apply), the button writing the trigger and draining it in a `createRoot` body.
+ */
+export const FLUSH_RERUN_CONTEXTS = ["effect-cleanup-flush-rerun", "render-cleanup-flush-rerun", "render-apply-flush-rerun", "effect-error-arm-flush-rerun", "reaction-flush-rerun", "effect-apply-defer-flush-rerun"];
+export const FLUSH_DRAIN_CONTEXTS = ["effect-apply-flush-body", "effect-apply-flush-memo", "effect-apply-flush-root", "effect-apply-flush-handler", "settled-flush-root", ...FLUSH_RERUN_CONTEXTS];
+/** The lazy-memo, deferred-apply and flush-drain contexts (`--recall` only, base shapes only: API_CONTEXTS above `recallContext`'s cases). */
+export const API_CONTEXTS = ["memo-lazy-unread", "memo-lazy-read-handler", "effect-apply-defer", "effect-apply-defer-rerun", ...FLUSH_DRAIN_CONTEXTS];
 /**
  * Measured on rc.17's fast runtime (2026-11-03, 162 probes, every variant of each code): a site in a lazy memo nobody reads, or in a
  * deferred apply with no rerun, never runs (legal for every code: a violation there is an unexecuted one, ADR 0458). A lazy memo read
@@ -697,16 +713,82 @@ const LAZY_HANDLER_LEGAL = ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWN
 const LAZY_HANDLER_MISUSE = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER", "SYNC_NODE_RECEIVED_ASYNC", "ACTION_CALLED_IN_OWNED_SCOPE"];
 const DEFER_RERUN_MISUSE = ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "STORE_WRITE_OUTSIDE_SETTER", "FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "DYNAMIC_STATIC_PROMISE"];
 const DEFER_RERUN_LEGAL = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
+// The async family (2026-11-04, rc.17 fast runtime, 476 probes: every base variant of each code in each context, direct, no
+// layer; a context takes a cell only where every variant agreed): past an await in an async function the body calls (`async`,
+// its loop, `for await` and `finally`), in an async memo or effect compute (`memo-async*`, `effect-async*`), or in a handler's
+// async function (`handler-async-loop`, `-finally`). A cell a code already had is unchanged; mixed or disturbed answers take none
+// (STRICT_READ_UNTRACKED and the pending codes in an async compute report UNTRACKED_READ_AFTER_AWAIT, CLEANUP_IN_FORBIDDEN_SCOPE
+// reports another code everywhere, CONTEXT_NOT_FOUND outside a compute throws). Every legal cell was measured again with its site in
+// a `try` and a marker after it: a code an async compute throws past its await only rejects the compute's promise and no diagnostic
+// says so, so `useContext` (NO_OWNER_CONTEXT, CONTEXT_NOT_FOUND) and `dynamic(..., { static: true })` in `memo-async*`/`effect-async*`
+// are neither legal (they throw) nor misuse cells (nothing reports them): they take no cell.
+const PLAIN_ASYNC = ["async", ...ASYNC_CONTROL];
+const COMPUTE_ASYNC = ["memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"];
+const HANDLER_ASYNC_PROBED = ["handler-async-loop", "handler-async-finally"];
+/** Contexts where a code the runtime only throws rejects a promise nothing logs, so its silence is no measure (the comment above; matrix.mjs censusCells). */
+export const PROMISE_SWALLOWS = [...COMPUTE_ASYNC, "resolve-thunk", "until-thunk"];
+const ASYNC_FAMILY_PLACEMENT = {
+  STRICT_READ_UNTRACKED: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  PENDING_ASYNC_UNTRACKED_READ: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  UNTRACKED_READ_AFTER_AWAIT: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  NO_OWNER_CONTEXT: { misuse: HANDLER_ASYNC_PROBED },
+  DYNAMIC_STATIC_PROMISE: { misuse: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  ...Object.fromEntries(["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "SETTLED_CLEANUP_UNOWNED", "STORE_WRITE_OUTSIDE_SETTER"].map((code) => [code, { misuse: [...COMPUTE_ASYNC, ...HANDLER_ASYNC_PROBED] }])),
+  SYNC_NODE_RECEIVED_ASYNC: { misuse: [...PLAIN_ASYNC, ...COMPUTE_ASYNC, ...HANDLER_ASYNC_PROBED] },
+  ...Object.fromEntries(["ACTION_CALLED_IN_OWNED_SCOPE", "RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK"].map((code) => [code, { legal: [...PLAIN_ASYNC, ...COMPUTE_ASYNC, ...HANDLER_ASYNC_PROBED] }])),
+};
 const API_CONTEXT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => [code, {
   misuse: [...(LAZY_HANDLER_MISUSE.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_MISUSE.includes(code) ? ["effect-apply-defer-rerun"] : [])],
   legal: ["memo-lazy-unread", "effect-apply-defer", ...(LAZY_HANDLER_LEGAL.includes(code) ? ["memo-lazy-read-handler"] : []), ...(DEFER_RERUN_LEGAL.includes(code) ? ["effect-apply-defer-rerun"] : [])],
 }]));
+/**
+ * ADR 0613, measured on rc.17's fast runtime (2026-11-04, 340 probes, every variant of each code; a cell where the variants disagree,
+ * a disturbed run or another defect gets none): with the flush in the body, a memo or a root (or, for what a rerun runs, a root body in
+ * the handler) the callback runs under that owner, so a write or an action call reports and the owner codes (NO_OWNER_*,
+ * PRIMITIVE_IN_EFFECT_CALLBACK, SETTLED_CLEANUP_UNOWNED) are silent; with it in a handler the apply runs as any apply does.
+ */
+const FLUSH_DRAIN_MEASURED = {
+  ACTION_CALLED_IN_OWNED_SCOPE: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["handler"] },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  CONTEXT_NOT_FOUND: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  DYNAMIC_STATIC_PROMISE: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "handler", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  FLUSH_IN_ACTION: { misuse: [], legal: ["effect-error-arm"] },
+  FLUSH_IN_EFFECT_CALLBACK: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "handler", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["effect-error-arm"] },
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { misuse: [], legal: ["effect-error-arm"] },
+  NO_OWNER_BOUNDARY: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  NO_OWNER_CLEANUP: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  NO_OWNER_CONTEXT: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  NO_OWNER_EFFECT: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { misuse: [], legal: ["effect-error-arm"] },
+  PENDING_ASYNC_UNTRACKED_READ: { misuse: ["body", "handler", "memo", "root"], legal: ["effect-error-arm"] },
+  PRIMITIVE_IN_EFFECT_CALLBACK: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["handler"] },
+  RESOLVE_IN_REACTIVE_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"] },
+  SETTLED_CLEANUP_UNOWNED: { misuse: ["handler"], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"] },
+  STORE_WRITE_OUTSIDE_SETTER: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "handler", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  STRICT_READ_UNTRACKED: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "handler", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: ["effect-error-arm"] },
+  SYNC_NODE_RECEIVED_ASYNC: { misuse: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "memo", "reaction", "render-apply", "render-cleanup", "root"], legal: [] },
+  UNTIL_IN_REACTIVE_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"] },
+  UNTRACKED_READ_AFTER_AWAIT: { misuse: [], legal: ["effect-error-arm"] },
+};
+const flushDrainContext = (at) => (["body", "memo", "root", "handler"].includes(at) ? `effect-apply-flush-${at}` : `${at}-flush-rerun`);
+const FLUSH_DRAIN_PLACEMENT = Object.fromEntries(Object.entries(FLUSH_DRAIN_MEASURED).map(([code, { misuse, legal }]) => [code, { misuse: misuse.map(flushDrainContext), legal: legal.map(flushDrainContext) }]));
+// `settled-flush-root` (2026-11-04, 34 probes on rc.17, every variant agreed): a handler's `onSettled` drained by a root's `flush()` runs
+// under the root, not as a leaf: an owner operation and a primitive are legal, a write, a store proxy write, an action and a sync node
+// handed async report, and a provider-free context read throws (ADR 0613).
+for (const code of ["CONTEXT_NOT_FOUND", "REACTIVE_WRITE_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER", "SYNC_NODE_RECEIVED_ASYNC", "ACTION_CALLED_IN_OWNED_SCOPE", "DYNAMIC_STATIC_PROMISE"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).misuse.push("settled-flush-root");
+for (const code of ["STRICT_READ_UNTRACKED", "NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED", "CLEANUP_IN_FORBIDDEN_SCOPE", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "UNTRACKED_READ_AFTER_AWAIT", "RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).legal.push("settled-flush-root");
+// `settled-handler`: a handler's `onSettled` with nothing to drain it but the queue. No leaf owner, and the source has settled by the click: a
+// pending read reports nothing (rc.17, 2026-11-04). A helper's read was a proven SC5001 here, older than `settled-flush-root`, which first reached it.
+for (const code of ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE"]) (FLUSH_DRAIN_PLACEMENT[code] ??= { misuse: [], legal: [] }).legal.push("settled-handler");
 // With no owner an effect in the step is NO_OWNER_EFFECT, not this code: the `effect` variant is no legal program there.
 for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallVariantsNotIn[context] = ["effect"];
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -952,9 +1034,17 @@ function inContext(context, stmts, kit) {
 function recallContext(context, stmts, kit) {
   const awaited = { loop: "loop-await", "for-await": "for-await", finally: "finally-await" };
   const trigger = () => signal(kit.name("t"), 1, "src");
-  const after = /^(memo-async|effect-async|async)-(loop|for-await|finally)$/.exec(context);
+  // ADR 0613: the handler that makes a rerun and drains it under a root.
+  const drainRerun = (t) => [expr(write(t.name, 2)), expr(prim("root", fn([expr(flush())])))];
+  const after = /^(memo-async|effect-async|async|handler-async)-(loop|for-await|finally)$/.exec(context);
   if (after) {
     const body = [ctl(awaited[after[2]], stmts)];
+    // A handler's async function: the site may follow the await (a `finally`, a loop's second pass), so it runs on the handler's
+    // stack or on a later task, with no owner either way (ADR 0610).
+    if (after[1] === "handler-async") {
+      const f = kit.name("f");
+      return { body: [decl(f, fn(body, { async: true }))], view: [button(kit.name("b"), [expr(call(ref(f)))])] };
+    }
     if (after[1] === "memo-async") {
       const m = kit.name("m");
       return { body: [decl(m, prim("memo", fn([...body, ret(num(1))], { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
@@ -1069,6 +1159,38 @@ function recallContext(context, stmts, kit) {
     case "effect-apply-defer-rerun": {
       const t = trigger();
       return { body: [expr({ ...prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }), defer: true })], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // FLUSH_DRAIN_CONTEXTS (ADR 0613): the apply holds the site; the flush after its effect drains it on the flush's stack.
+    case "effect-apply-flush-body": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), expr(flush())], view: [] };
+    case "effect-apply-flush-memo": {
+      const m = kit.name("m");
+      return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), decl(m, prim("memo", fn([expr(flush()), ret(num(1))])))], view: [child(kit.name("v"), call(ref(m)))] };
+    }
+    case "effect-apply-flush-root": return { body: [expr(prim("root", fn([expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) })), expr(flush())])))], view: [] };
+    // A handler's `onSettled` queues its callback (no owner there), and a root's `flush()` drains it under the root (ADR 0613).
+    case "settled-flush-root": return { body: [], view: [button(kit.name("b"), [expr(prim("settled", fn(stmts))), expr(prim("root", fn([expr(flush())])))])] };
+    case "settled-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("settled", fn(stmts)))])] };
+    case "effect-apply-flush-handler": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }))], view: [button(kit.name("b"), [expr(flush())])] };
+    case "effect-cleanup-flush-rerun": case "render-cleanup-flush-rerun": {
+      const t = trigger();
+      return { body: [expr(prim(context.startsWith("effect") ? "effect" : "render", fn([ret(read(t.name))]), { apply: fn([ret(fn(stmts))]) }))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "render-apply-flush-rerun": {
+      const t = trigger();
+      return { body: [expr(prim("render", fn([ret(read(t.name))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "effect-error-arm-flush-rerun": {
+      const t = trigger();
+      return { body: [expr(prim("effect", fn(stmts), { errorArm: t.name }))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "reaction-flush-rerun": {
+      const t = trigger();
+      const track = kit.name("track");
+      return { body: [decl(track, prim("reaction", fn(stmts))), expr(call(ref(track), [fn([expr(read(t.name))])]))], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
+    }
+    case "effect-apply-defer-flush-rerun": {
+      const t = trigger();
+      return { body: [expr({ ...prim("effect", fn([ret(read(t.name))]), { apply: fn(stmts) }), defer: true })], view: [button(kit.name("b"), drainRerun(t))], sigs: [t] };
     }
     // FIRE_CONTEXTS: the site's function is written in the body and run elsewhere, later: handed to a project helper that defers it
     // (a timer, a microtask, a promise callback), kept in the object a helper returns and fired from a handler, the body or a timer,
@@ -1248,7 +1370,8 @@ function buildOne(kit, plan = {}) {
   const recall = plan.legal ? recallLegalOf(code) : recallContextsOf(code);
   // A legal pair (matrix.mjs pairShapes, a later mount of a settled async source) sits in a misuse context of its code.
   const legalPair = plan.legal && plan.source?.startsWith("async-") && plan.mount !== undefined && spec.contexts.includes(context);
-  if (!contexts.includes(context) && !recall.includes(context) && !legalPair) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
+  // `plan.census` (matrix.mjs censusCells): any context, the measure being what the code does there.
+  if (!contexts.includes(context) && !recall.includes(context) && !legalPair && !plan.census) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
   // A variant one source carries (`variantSources`) is the grid's, never drawn: every random draw sees the variants it saw before.
   const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick((plan.legal ? legalVariantsOf(code) : variantsOf(code)).filter((v) => !spec.variantSources?.[v]));
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));

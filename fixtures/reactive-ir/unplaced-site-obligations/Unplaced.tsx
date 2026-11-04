@@ -32,8 +32,8 @@ export function PlacedWrites() {
 }
 
 // ---- A `for await` under a branch may never run, so the code after it may
-// still be in the body's window: unplaced, not proven past it (SC2001 and
-// SC1001 uncertifiable).
+// still be in the body's window: unplaced, not proven past it (SC1001; the write:
+// see ADR 0610).
 
 declare const flag: boolean;
 async function ConditionalLoop() {

@@ -1,0 +1,119 @@
+name: Fuzz smoke
+
+# The fuzzer's tiers below the full grids (ADR 0615; the full grids stay in fuzz-audit.yml). A pull request that can move a verdict: the census and the
+# all-pairs sample (cover.mjs), the ledger's programs and the behaviour manifests within it, at a fixed seed, so a failure belongs to the pull request.
+# Nightly, or by hand before a merge: the pairs within each code, the nightly lane on a seed of the day. A run judges a program as the audit does and
+# fails on what the audit fails on. Runtime records are keyed by program bytes, never the checker: a push to main records the fixed sample's, and a pull
+# request reads them (11.4 programs a second against 6.4 cold, on these runners).
+
+on:
+  pull_request:
+    paths:
+      - rust/**
+      - apps/solid-typefacts/**
+      - scripts/fuzz/**
+      - scripts/runtime-oracle.mjs
+      - scripts/runtime-oracle-install/**
+      - .github/workflows/fuzz-pr.yml
+  push:
+    branches: [main]
+    paths:
+      - rust/**
+      - apps/solid-typefacts/**
+      - scripts/fuzz/**
+      - scripts/runtime-oracle.mjs
+      - scripts/runtime-oracle-install/**
+      - .github/workflows/fuzz-pr.yml
+  schedule:
+    - cron: "0 19 * * *" # 04:00 JST, after the audit's start: a rotating seed of the per-code tier
+  workflow_dispatch:
+    inputs:
+      cover:
+        description: The sample (all is the pull request's, per-code the one before a merge)
+        type: choice
+        options: [per-code, all]
+        default: per-code
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 26.13.0
+  RUST_VERSION: 1.99.1
+
+jobs:
+  smoke:
+    # ubuntu-22.04 x64 so the release dependency cache CI's rust-package job writes on main restores here.
+    runs-on: ubuntu-22.04
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 180 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - run: echo "TSRS_REV=$(sed -n 's/^tsrs_core = .*rev = "\([0-9a-f]*\)".*/\1/p' apps/solid-typefacts/Cargo.toml)" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: release-ubuntu-22.04-x64
+          save-if: false
+      # Producer with build id dev, the id cargo's [env] gives the checker below.
+      - uses: ./.github/actions/typefacts
+      - id: tsrs-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/tsrs-bin
+          key: tsrs-cli-${{ env.TSRS_REV }}-rust-${{ env.RUST_VERSION }}-ubuntu-22.04
+      - name: Build tsrs CLI
+        if: steps.tsrs-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone -q https://github.com/yumemi-thomas/tsrs "$RUNNER_TEMP/tsrs"
+          git -C "$RUNNER_TEMP/tsrs" checkout -q --detach "$TSRS_REV"
+          (cd "$RUNNER_TEMP/tsrs" && cargo +$RUST_VERSION build --release -q -p tsrs_cli)
+          mkdir -p ~/tsrs-bin && cp "$RUNNER_TEMP/tsrs/target/release/tsrs" ~/tsrs-bin/
+      - run: echo "SOLID_CHECKER_TSRS_BIN=$HOME/tsrs-bin/tsrs" >> "$GITHUB_ENV"
+      - name: Build the release checker
+        run: cargo +$RUST_VERSION build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
+      - name: Installs and Chrome
+        run: |
+          (cd scripts/fuzz/install && npm ci --silent)
+          (cd scripts/runtime-oracle-install && npm ci --silent)
+          (cd packages/cli && bun install --frozen-lockfile --silent)
+          (cd scripts/runtime-oracle-install && ./node_modules/.bin/playwright install --with-deps chromium-headless-shell)
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/fuzz-cache
+          key: fuzz-pr-runtime-${{ github.sha }}
+          restore-keys: fuzz-pr-runtime-
+      - name: Smoke
+        env:
+          COVER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'all' || inputs.cover || 'per-code' }}
+          # Only the nightly lane rotates: a day's seed, printed by the run, so a failure can be run again.
+          COVER_SEED: ${{ github.event_name == 'schedule' && 'day' || '1' }}
+        run: |
+          seed=$COVER_SEED
+          [ "$seed" = day ] && seed=$(date -u +%Y%j)
+          node scripts/fuzz/focus.mjs --smoke --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
+            --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" -- --cache-dir "$HOME/fuzz-cache"
+      - uses: actions/cache/save@v4
+        if: github.event_name == 'push' && always()
+        with:
+          path: ~/fuzz-cache
+          key: fuzz-pr-runtime-${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-smoke
+          path: |
+            ${{ runner.temp }}/out/**/*.json
+            ${{ runner.temp }}/out/**/*.jsonl
+            ${{ runner.temp }}/out/**/*.log
+          retention-days: 7

@@ -2071,18 +2071,31 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // untrack, component body, event handler, apply, and module scope
         // are observer-free and stay silent (probed, rc.0).
         assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
+        // ADR 0614: `resolve` creates a computation, so the tracked effect's
+        // leaf refuses it too.
+        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 1);
         assert!(
-            findings
-                .iter()
-                .all(|finding| finding["rule"] == "no-await-primitive-in-tracked-scope"),
+            findings.iter().all(|finding| {
+                finding["rule"] == "no-await-primitive-in-tracked-scope"
+                    || finding["rule"] == "leaf-owner-forbidden-call"
+            }),
             "{findings:#?}"
         );
     }
     if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
         // rc.9's `until` carries resolve's observer guard, so the same four
-        // tracked scopes throw and the same observer-free ones -- plus the
-        // action step rc.9 documents -- stay silent.
-        assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
+        // tracked scopes throw and the same observer-free ones stay silent.
+        // ADR 0614: the action step rc.9 documents is an obligation when its
+        // callers cannot be followed: the step runs on its caller's stack.
+        assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 5);
+        assert_eq!(
+            findings_for_rule(&findings, "no-await-primitive-in-tracked-scope")
+                .iter()
+                .filter(|finding| finding["kind"] == "uncertifiable")
+                .count(),
+            1,
+            "{findings:#?}"
+        );
         // rc.9 is older than the audited rc.13 (ADR 0194): one SC9014 notice
         // beside them.
         assert_eq!(
@@ -2092,8 +2105,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
         assert!(
             findings.iter().all(|finding| {
-                (finding["rule"] == "no-await-primitive-in-tracked-scope"
-                    && finding["kind"] == "violation")
+                finding["rule"] == "no-await-primitive-in-tracked-scope"
                     || finding["rule"] == "unaudited-solid-release"
             }),
             "{findings:#?}"

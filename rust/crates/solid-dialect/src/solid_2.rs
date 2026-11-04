@@ -849,6 +849,31 @@ impl Dialect for Solid2 {
                     && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
     }
 
+    /// ADR 0613: `createEffect`'s apply (every run), `createRenderEffect`'s
+    /// apply (every run after the first, and every run when deferred) and
+    /// `createReaction`'s callback (run as its effect's apply) are run by the
+    /// queue's drain. rc.17's `flush()` (`@solidjs/signals`
+    /// `dist/dev-shared.js:2646-2721`) drains with `globalQueue.flush()` on
+    /// its caller's stack and sets no owner, and `runEffect`
+    /// (`dist/dev.js:1968-2033`) sets only the strict-read window and the
+    /// effect-callback marker, so the apply runs under the caller's
+    /// `context`. Probed on the fast runtime: a `flush()` written in a
+    /// component body, a `createMemo` compute or a `createRoot` body after a
+    /// `createEffect` drains its first apply under that owner (a
+    /// `createEffect` there raised nothing; a setter there threw
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE`); one in an event handler drains with
+    /// no owner (`onCleanup` there raised `NO_OWNER_CLEANUP`). `onSettled` called
+    /// with no owner or under a leaf takes the same queue (`dist/dev.js:3058`,
+    /// `globalQueue.enqueue(EFFECT_USER, fire)`): probed, under a `flush()` in a
+    /// root body its callback's setter throws and its effect raises nothing.
+    fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+                | (Primitive::CreateReaction | Primitive::OnSettled, 0)
+        )
+    }
+
     /// ADR 0551: `resolve(fn)` and `until(fn)` run `fn` as the compute of a
     /// `computed` that `watch` creates under a fresh `createRoot`
     /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2694-2735`, `:2756-2770`,
@@ -1317,8 +1342,11 @@ impl Dialect for Solid2 {
                 &[(0, CallbackOwner::Creates), (1, CallbackOwner::Creates)]
             }
             // `createEffect` queues its apply (`effect()` enqueues every
-            // `EFFECT_USER` run), so the apply always runs from the flush,
-            // where no owner is current.
+            // `EFFECT_USER` run), so the apply always runs from the flush. A
+            // drain the runtime schedules has no owner current; one a
+            // synchronous `flush()` makes runs under that call's owner, which
+            // the analyzer's flush census decides
+            // (`callback_runs_drained_by_flush`, ADR 0613).
             Primitive::CreateEffect => &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)],
             // `createRenderEffect` does not. `effect()` ends
             // `recompute(node, true); !options?.defer && (… || options?.schedule
@@ -1334,7 +1362,8 @@ impl Dialect for Solid2 {
             // component.
             // Every later run comes from the flush, where `getOwner()` is
             // `null` and a render effect created there raises
-            // `NO_OWNER_EFFECT`.
+            // `NO_OWNER_EFFECT`, unless a synchronous `flush()` under an
+            // owner drains it (ADR 0613).
             Primitive::CreateRenderEffect => &[
                 (0, CallbackOwner::Creates),
                 (1, CallbackOwner::InheritsFirstRun),
@@ -2200,6 +2229,14 @@ impl Dialect for Solid2 {
             | Primitive::CreateLoadingBoundary
             | Primitive::UseHead
             | Primitive::Children => CleanupRule::Always,
+            // ADR 0614, measured on rc.17 only: what these create is as
+            // refused under a leaf owner as what they create in an apply
+            // ([`Solid2::throws_creating_in_effect_callback`]).
+            Primitive::Loading | Primitive::Errored | Primitive::Resolve | Primitive::Until
+                if self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown =>
+            {
+                CleanupRule::Always
+            }
             Primitive::CreateSignal
             | Primitive::CreateStore
             | Primitive::CreateOptimistic
@@ -2687,7 +2724,16 @@ impl Dialect for Solid2 {
                 | Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
                 | Primitive::CreateRoot
-                | Primitive::CreateProjection => true,
+                | Primitive::CreateProjection
+                // ADR 0614: `Errored`/`Loading` called as a function create
+                // their boundary's computation in the call (`solid.dev.js`
+                // `Errored`, `Loading`).
+                | Primitive::Loading
+                | Primitive::Errored
+                // ADR 0614: `resolve`/`until` make a `createRoot` and a
+                // `computed` for their thunk (`dist/dev.js:2694-2735`).
+                | Primitive::Resolve
+                | Primitive::Until => true,
                 Primitive::CreateSignal | Primitive::CreateStore => first_argument_is_function,
                 _ => false,
             }

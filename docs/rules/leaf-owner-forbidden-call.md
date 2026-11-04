@@ -12,7 +12,9 @@ primitives, and `flush()` inside `createTrackedEffect` or an owner-backed
 Leaf owners manage work through their callback's return value and cannot own
 children. Consequently, `onCleanup` must be returned, derived primitives such
 as `createMemo`, `createRoot`, and function-form `createSignal` cannot attach,
-and `flush()` cannot re-enter the flush cycle. Solid throws for all three
+and `flush()` cannot re-enter the flush cycle. `Loading`/`Errored` called as
+functions and `resolve`/`until` create an owner too (rc.17 only, measured; ADR
+0614). Solid throws for all three
 operation variants in its development build only: the `@solidjs/signals`
 rc.17 production bundle (`dist/prod`) carries no such guard, so there the
 call does not throw (ADR 0434). Value-form state such as `createSignal(0)` and

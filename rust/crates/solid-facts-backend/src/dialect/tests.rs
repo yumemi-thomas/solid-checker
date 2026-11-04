@@ -118,6 +118,7 @@ fn catalog_prose_program() -> Program {
             location: location(6),
             declaration: location(7),
             execution: ExecutionRole::TrackedJsx,
+            leaf_call_site_gates: Vec::new(),
             leaf_owner: None,
             under_loading: false,
             async_provenance: true,

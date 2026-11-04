@@ -16,6 +16,7 @@ import { classify, runtimeEvents } from "./classify.mjs";
 import { costOf } from "./cost.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { runFast } from "./fast.mjs";
+import { silenceMeasured, windowProbeText } from "./window.mjs";
 import { findingsDiff, outcomeDiff } from "./hits.mjs";
 import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
@@ -288,6 +289,20 @@ export async function finishEntries({ results, live }, config, deps = {}) {
   const controls = control && live.length
     ? await fastCached(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean", built })), fast, fastOptions, cache)
     : new Map();
+  // A finding that claims the runtime is silent is excused only by a measurement (window.mjs): the control run needs a host that takes the
+  // case's files as built, and a case that ships a package is staged from disk, so neither of those is measured and its finding stays judged.
+  const claimed = instrument && (config.fast || deps.runFast)
+    ? live.filter(({ built }) => !hasPackages(built) && results.get(built.id)?.checker?.findings?.some((finding) => finding.claimsSilent))
+    : [];
+  const windows = claimed.length
+    ? await fastCached(claimed.map(({ built, caseDir }) => ({ id: `${built.id}-window`, dir: caseDir, variant: "run", built: { files: { ...built.files, "App.run.txt": windowProbeText(built.files["App.run.txt"]) } } })), fast, fastOptions, cache)
+    : new Map();
+  for (const { built } of claimed) {
+    const record = windows.get(`${built.id}-window`);
+    for (const finding of results.get(built.id).checker.findings) {
+      if (finding.claimsSilent && silenceMeasured({ finding, built, record })) finding.runtimeSilent = true;
+    }
+  }
 
   // 3. Classify.
   for (const value of results.values()) {

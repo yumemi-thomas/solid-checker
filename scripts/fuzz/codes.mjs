@@ -180,7 +180,7 @@ export const ignoredRules = ["prefer-show", "prefer-for"];
 const claimedRules = new Set(Object.values(codeRules).flat());
 
 /** True when some runtime diagnostic can contradict or confirm a violation of `rule`. */
-export const ruleHasRuntimeCounterpart = (rule) => claimedRules.has(rule);
+export const ruleHasRuntimeCounterpart = (rule) => claimedRules.has(rule) && !partlySilentRules.includes(rule);
 
 /** The codes whose diagnostics substantiate a violation of `rule`. */
 export const codesForRule = (rule) => Object.entries(codeRules).filter(([, rules]) => rules.includes(rule)).map(([code]) => code);
@@ -190,3 +190,22 @@ export function codeOfThrown(message) {
   const text = String(message ?? "");
   return thrownCodes.find(([pattern]) => pattern.test(text))?.[1] ?? null;
 }
+
+/**
+ * Rules whose violation stands beside a code as a claim of its own, so it never names that code wrongly: an effect created in an apply throws
+ * PRIMITIVE_IN_EFFECT_CALLBACK and is an unowned effect too, the leak a production build keeps (ADR 0483).
+ */
+export const besideCode = { PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"] };
+/**
+ * Rules whose defect the runtime names for only some of what they claim, so its silence contradicts nothing. `primitive-in-directive-application`:
+ * a `ref` apply has no owner (`onCleanup` there reports NO_OWNER_CLEANUP), an effect created there warns NO_OWNER_EFFECT and a memo, the same leak, warns
+ * nothing (rc.17, measured 2026-11-04).
+ */
+export const partlySilentRules = ["primitive-in-directive-application"];
+/** Outcomes that need a look: a misuse grid's and a legal grid's. */
+export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
+/**
+ * What a grid row needs a look for, or null: its outcome, or a second code on the site's lines missed in a file with no uncertifiable
+ * finding (matrix.mjs `judge`, `secondary`), a false clean of that code whatever the row's own outcome. The one test of focus, the audit and smoke.
+ */
+export const rowProblem = (row) => (PROBLEMS.includes(row.outcome) ? row.outcome : Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified") ? "secondary-false-clean" : null);

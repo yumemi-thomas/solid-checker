@@ -47,7 +47,11 @@ writes are legal (an event handler, module scope) leaves every run of its apply
 legal. A callback the dialect runs with no owner whenever it runs (a
 `createReaction` callback, a `createEffect` apply, the `error` member of an exact
 bundle of either) leaves a write legal also in a layer it runs in place (an IIFE,
-a helper calling its callback; ADRs 0540, 0548).
+a helper calling its callback; ADRs 0540, 0548). Those callbacks, a render effect's
+later runs and the cleanup an apply returns (on a rerun) have no owner only when the queue's drain is the runtime's:
+a `flush()` of the program that may run under an owner drains them under it, and
+the write there throws. Such a write is then uncertifiable program-wide (ADR
+0599; the flush veto of `primitive-in-effect-callback`).
 
 `resolve(fn)` and `until(fn)` run `fn` as the compute of a computation they
 create under a fresh root (rc.17 `dist/dev.js:2694-2770`): a write or an action
@@ -182,7 +186,15 @@ none it is **uncertifiable**. One proof makes it legal (ADR 0333): it runs
 after an await that dominates it (later in the await's block, a `try` block
 included; its `catch` or `finally` only when the block starts by awaiting a
 call of an async function with inert arguments; not in a generator, JSX or
-an instance field). That covers a literal handed to a function that
+an instance field). A write that only may follow an await in its own function
+(a `catch` or `finally` past another `try` head, code after an await in a
+branch) runs on the stack its function was entered on or on a later task with
+no owner: it takes its function's entries' role when that role is permissive
+(a handler's async function), and stays uncertifiable when an entry rejects
+(ADR 0610, `fixtures/reactive-ir/write-past-possible-await`). The same holds
+through functions run in place (an IIFE, a helper calling its callback, a named
+closure's one call) whose call follows the await, not through a primitive's
+callback such as a `createRoot` body (ADR 0611). That covers a literal handed to a function that
 stores it (`later(() => setCount(1))` with a timer calling it), a closure a
 callback returns (`keep(() => () => setCount(1))`), and a literal handed to a
 package export whose behavior is unavailable from source. The write may throw, if the

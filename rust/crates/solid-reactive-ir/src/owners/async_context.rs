@@ -1089,10 +1089,9 @@ pub(crate) fn async_read_role(
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
+                // ADR 0614: an effect's apply, or a cleanup it returns, is no
+                // render either, whichever JSX its effect is written in.
                 callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                    && dialect
-                        .callback_semantics_at(primitive, index, call.arguments.len())
-                        .tracks_reads
                     && !dialect.computation_read_is_render(primitive)
             })
             // A JSX region written inside the computation is a render again.

@@ -70,6 +70,7 @@ pub(crate) fn collect_project(
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
+        apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
     } else {
@@ -86,6 +87,7 @@ pub(crate) fn collect_project(
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
+        apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
         timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
@@ -659,6 +661,19 @@ pub(crate) enum OwnerEdgeKind {
     /// runs with no owner whatever the enclosing leaf's owner: it is proven
     /// unowned. Any other leaf callback takes [`OwnerEdgeKind::Leaf`].
     QueuedLeaf,
+    /// ADR 0613: a callback the queue's drain runs
+    /// ([`solid_dialect::Dialect::callback_runs_drained_by_flush`]: a
+    /// `createEffect` apply) while some `flush()` of the program may drain the
+    /// queue under an owner. A scheduled drain runs it with no owner, a
+    /// synchronous flush under its caller's owner, whatever the creating
+    /// call's owner: owned or not, never proven unowned, and outside any
+    /// region written around the call ([`OWNER_CONTEXT_LATER_RUN_UNOWNED`],
+    /// which leaves the region, as a render effect's later run does).
+    DrainedByFlush,
+    /// ADR 0613: [`Self::QueuedLeaf`] for `onSettled` while some `flush()` of
+    /// the program may drain the queue under an owner: its queued run takes
+    /// that owner, so the leaf's context holds and "proven unowned" does not.
+    QueuedLeafDrained,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

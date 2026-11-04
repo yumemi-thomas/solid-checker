@@ -53,6 +53,13 @@ describe("judgeLegal", () => {
     expect(judge({ runtime: failed })).toMatchObject({ outcome: "harness" });
     expect(judge({ runtime: runtime({ failure: { phase: "plan", message: "late" } }) }).outcome).toBe("clean");
   });
+  it("withholds clean from a disturbed run that never showed the site ran: its legality went unobserved", () => {
+    const thrown = { errors: [{ kind: "page-error", message: "boom", positions: [] }] };
+    expect(judge({ runtime: runtime({ ...thrown, hits: { 4: 0 } }) })).toMatchObject({ outcome: "disturbed", detail: { checker: "clean" } });
+    expect(judge({ runtime: runtime({ ...thrown, hits: null }) }).outcome).toBe("disturbed");
+    // The site ran before the throw: observed.
+    expect(judge({ runtime: runtime(thrown) }).outcome).toBe("clean");
+  });
   it("is not legal when the runtime reports the code: the template is wrong there", () => {
     const fired = runtime({ diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 10 }] }] });
     expect(judge({ runtime: fired }).outcome).toBe("not-legal");

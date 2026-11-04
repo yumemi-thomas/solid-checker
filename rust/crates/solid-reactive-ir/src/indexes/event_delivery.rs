@@ -368,7 +368,7 @@ impl SemanticLookup<'_> {
     /// written alone: no event proof, no owner graph (they depend on this).
     /// A call in a function nothing places keeps the veto: unresolved is not
     /// evidence.
-    fn dispatch_caller(
+    pub(super) fn dispatch_caller(
         &self,
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
@@ -383,6 +383,11 @@ impl SemanticLookup<'_> {
                 crate::execution_role::follows_dominating_await(file, call.span)
                     .then_some(DispatchCaller::AwaitContinuation)
             });
+        }
+        // A parameter list is in no function's body and runs at its function's
+        // call, wherever that is (ADR 0613): no caller class.
+        if crate::owners::in_parameter_list(&file.ast, call.span) {
+            return None;
         }
         // Module evaluation: no reactive owner or window is current before a
         // function is invoked. A class element or JSX region is evaluated

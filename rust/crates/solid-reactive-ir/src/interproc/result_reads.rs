@@ -340,7 +340,8 @@ fn call_result_reads(
     // ADR 0320: a call past an await on every path decides nothing.
     let continuation =
         crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup);
-    let handed = (!object_callable && in_named && !continuation)
+    // ADR 0614: an object's callable holds a carrier like any named function.
+    let handed = (in_named && !continuation)
         .then(|| {
             crate::local_access::handed_read_role(
                 file,

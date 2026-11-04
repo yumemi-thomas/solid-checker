@@ -1141,6 +1141,10 @@ fn only_rc17_signals_throw_on_a_creation_in_an_effect_callback() {
         Primitive::CreateRenderEffect,
         Primitive::CreateRoot,
         Primitive::CreateProjection,
+        Primitive::Loading,
+        Primitive::Errored,
+        Primitive::Resolve,
+        Primitive::Until,
     ] {
         assert!(
             audited.throws_creating_in_effect_callback(primitive, false),

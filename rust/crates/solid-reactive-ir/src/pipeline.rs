@@ -182,6 +182,7 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
+    pub(crate) async_sources: &'a HashSet<SymbolId>,
     pub(crate) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, u64>,
@@ -420,7 +421,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         dialect,
         rule_options.runtime.program_is_closed(),
     )
-    .with_router_install(rule_options.runtime.router_install.clone());
+    .with_router_install(rule_options.runtime.router_install.clone())
+    .with_package_instances(rule_options.runtime.package_instances.clone());
     let semantic_lookup = match memos {
         Some(store) => semantic_lookup.with_memo_store(store),
         None => semantic_lookup,
@@ -575,6 +577,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         semantic_lookup,
         source_kinds: &source_discovery.source_kinds,
         source_primitives: &source_discovery.source_primitives,
+        async_sources: &source_discovery.async_sources,
         source_owned_write: &source_discovery.source_owned_write,
         value_form_stores: &source_discovery.value_form_stores,
         reachable_calls,

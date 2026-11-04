@@ -244,8 +244,16 @@ pub(super) fn direct_reference_contributions(
                     .iter()
                     .filter(|member| member.object == reference_span)
                     // A plain assignment's target, or a destructuring leaf
-                    // (ADR 0526), is written and never read: no Get.
-                    .filter(|member| !file.ast.is_plain_write_target(member.span))
+                    // (ADR 0526), is written and never read: no Get. Nor is
+                    // a `delete` or a `for`-head target (ADR 0614), as in
+                    // `discover_member`.
+                    .filter(|member| {
+                        let peeled = |target: &solid_facts::core::Span| {
+                            file.ast.peel_ts_sugar_span(*target) == member.span
+                        };
+                        !file.ast.is_no_get_target(member.span)
+                            && !file.ast.iteration_targets.iter().any(peeled)
+                    })
                     // ADR 0293: only a head Get whose key warns is a read. An
                     // exempt Get whose backing runs nothing is no row; an
                     // undecided one is an undecided row (review round 1),
@@ -262,9 +270,8 @@ pub(super) fn direct_reference_contributions(
                             crate::local_access::StoreHeadGet::Undecided(_) => Some((member, true)),
                         }
                     })
-                    .map(|(member, undecided)| DirectReferenceContribution {
-                        owner,
-                        read: SummaryRead {
+                    .flat_map(|(member, undecided)| {
+                        let read = SummaryRead {
                             transported: false,
                             symbol: source.symbol.clone(),
                             display: SymbolId::from(format!(
@@ -285,8 +292,35 @@ pub(super) fn direct_reference_contributions(
                             ),
                             conditional: false,
                             undecided,
-                        },
-                        unique: false,
+                        };
+                        // ADR 0614: as for an accessor's call (ADR 0522).
+                        let mut rows = in_place_layer_owners(
+                            context,
+                            nodes,
+                            nodes_by_path,
+                            file,
+                            member.span,
+                            owner,
+                        )
+                        .into_iter()
+                        .map(|layer| DirectReferenceContribution {
+                            owner: layer.owner,
+                            read: SummaryRead {
+                                origin_context: nodes[layer.owner].name.clone().unwrap_or_default(),
+                                owner: nodes[layer.owner].symbol.clone(),
+                                local: layer.local,
+                                undecided: undecided || layer.undecided,
+                                ..read.clone()
+                            },
+                            unique: false,
+                        })
+                        .collect::<Vec<_>>();
+                        rows.push(DirectReferenceContribution {
+                            owner,
+                            read,
+                            unique: false,
+                        });
+                        rows
                     }),
             );
         }

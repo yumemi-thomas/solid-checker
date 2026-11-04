@@ -871,11 +871,20 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
             "strict-read-untracked",
         ),
         ("component-static-early-return.tsx", "strict-read-untracked"),
-        (
-            "signal-write-in-effect-apply.tsx",
-            "no-write-in-pure-computation",
-        ),
     ];
+    // ADR 0613: `leaf-reexport-flush.tsx`'s `reFlush()` is not proven to run
+    // with no owner, so the write in an apply is an obligation, not legal, and
+    // never a violation.
+    assert!(
+        findings.iter().all(|finding| {
+            finding["rule"] != "no-write-in-pure-computation"
+                || !finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("signal-write-in-effect-apply.tsx"))
+                || finding["kind"] == "uncertifiable"
+        }),
+        "signal-write-in-effect-apply.tsx: an uncertifiable write, no violation"
+    );
     // ADR 0516: a read after a loop that may await may follow a suspension:
     // an uncertifiable result, never a violation.
     assert!(

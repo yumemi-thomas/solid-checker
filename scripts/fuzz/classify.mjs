@@ -34,6 +34,7 @@
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
 import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCode } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
+import { registrationLines } from "./registration.mjs";
 import { STATUS as UNEXECUTED_STATUS, unexecutedCandidate } from "./unexecuted.mjs";
 
 export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"];
@@ -82,6 +83,51 @@ export function disturbances(runtime, plan) {
   if (unplaced.length) reasons.push(`a runtime diagnostic could not be placed on a line (${unplaced.slice(0, 3).join(", ")})`);
   for (const error of (runtime.errors ?? []).filter((e) => e.kind === "plan")) reasons.push(`driving plan: ${error.message}`);
   return reasons;
+}
+
+/**
+ * The grids' violations away from the site they judge (a decoy's line, a parent's, a helper call's, another use of a combination
+ * program): each against the runtime, so a false positive there is not hidden behind the site's own verdict.
+ *   substantiated   a code of the rule is reported on the finding's lines (a frame, or the line that registered the callback a frame
+ *                   is in: registration.mjs);
+ *   false-positive  the finding's lines ran (a site or glue counter above zero), the run was not disturbed, and the runtime reported no
+ *                   code of the rule anywhere, placed or not: the same contradiction the legal grid's judge reads at its site;
+ *   unconnected     a code of the rule is reported, but not on the finding's lines: the misuse's diagnostic may be the one the finding
+ *                   means (a call the frames do not show). Counted, never a failure;
+ *   unexecuted      the ledger shows the finding's lines never ran;
+ *   unjudged        no runtime counterpart, no site or glue on its lines, no hit ledger, or a disturbed run.
+ * @returns {{ finding: string, verdict: string, why?: string }[]}
+ */
+export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
+  if (!findings.length) return [];
+  const events = runtimeEvents(runtime);
+  // An `<Errored>` boundary logs a thrown code instead of rethrowing it (matrix.mjs `judge`): reported, with no position.
+  for (const text of runtime.consoleErrors ?? []) {
+    const code = codeOfThrown(String(text).replace(/^Error: /, ""));
+    if (code) events.push({ code, source: "thrown", positions: [] });
+  }
+  const disturbed = disturbances(runtime, plan ?? { clicks: [] });
+  // Without the program tree no registration is followed: a finding on a registering call is `unconnected` then, never a false positive.
+  const registered = program && built?.lineTable ? registrationLines(program, built.lineTable) : () => [];
+  const counted = [...(built?.sites ?? []), ...(built?.glue ?? [])].filter((site) => site.hit !== undefined && site.hit !== null);
+  const hits = runtime.hits ?? null;
+  return findings.map((finding) => {
+    const label = `${finding.rule}@${finding.line}`;
+    if (!ruleHasRuntimeCounterpart(finding.rule) || finding.runtimeSilent) return { finding: label, verdict: "unjudged", why: "no-counterpart" };
+    const codes = codesForRule(finding.rule);
+    const reported = events.filter((event) => codes.includes(event.code));
+    const appLines = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);
+    const connected = reported.some((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
+    if (connected) return { finding: label, verdict: "substantiated" };
+    if (disturbed.length) return { finding: label, verdict: "unjudged", why: "disturbed" };
+    const covered = counted.filter((site) => inSpan(finding, site.line));
+    if (!covered.length) return { finding: label, verdict: "unjudged", why: "no-site" };
+    const counts = covered.map((site) => hitCount(hits, site.hit));
+    if (counts.some((count) => count === null)) return { finding: label, verdict: "unjudged", why: "no-hit-ledger" };
+    if (counts.every((count) => count === 0)) return { finding: label, verdict: "unexecuted" };
+    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return { finding: label, verdict: "unconnected" };
+    return { finding: label, verdict: "false-positive" };
+  });
 }
 
 /**

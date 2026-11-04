@@ -1957,6 +1957,13 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 crate::base::reads::Section::ReflectiveDefinition => {
                     let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);
                 }
+                // ADR 0613: a reader of the flush veto records the memo that
+                // holds it. A cycle reads the whole program.
+                crate::base::reads::Section::FlushVeto => {
+                    if self.memo::<crate::indexes::FlushVetoAnswer>(&()).is_err() {
+                        whole = true;
+                    }
+                }
                 // The section's value, polled.
                 crate::base::reads::Section::ProjectPrimitives => {
                     let _ = self.probe(

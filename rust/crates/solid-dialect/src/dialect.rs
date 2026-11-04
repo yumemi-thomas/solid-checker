@@ -565,6 +565,20 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0613: whether the callback at `argument` takes its "no owner"
+    /// answer ([`CallbackOwner::None`], or the later runs of
+    /// [`CallbackOwner::InheritsFirstRun`]) from the scheduler's flush: every
+    /// such run is made by the drain of the queue, on the stack of whatever
+    /// drains it. A drain the runtime schedules starts from an empty stack;
+    /// a synchronous `flush()` drains on its caller's stack, under the
+    /// caller's owner. The analyzer withholds the ownerless proofs of such a
+    /// callback when a synchronous flush under an owner is not ruled out.
+    /// The default claims nothing.
+    fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the callback at `argument`, whenever it runs, runs as the
     /// compute of a computation the call creates for it (ADR 0551): the
     /// ambient owner is that children-capable computation, so a write guard

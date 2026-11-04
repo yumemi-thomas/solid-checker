@@ -272,9 +272,20 @@ pub(super) fn emit_file(
         let settled_after_await = settled_call.is_some_and(|call| {
             starts.contains(&u64::from(call.callee.start)) || climbed_after_await(call.span)
         });
+        // ADR 0612: a `catch` or `finally` runs unsuspended where the `try` head
+        // throws before it suspends, under the owner of the function's stack;
+        // only a head that cannot (`follows_try_head_await`) proves it past.
+        let try_tail_unproven = |site: Span| {
+            file.ast
+                .try_head_awaits
+                .iter()
+                .any(|head| head.regions.iter().any(|region| region.contains(site)))
+                && !crate::execution_role::follows_try_head_await(file, site, lookup)
+        };
         let after_await = settled_after_await
             || (continuation_placed
-                && (starts.contains(&u64::from(candidate.operation_span.start))
+                && ((starts.contains(&u64::from(candidate.operation_span.start))
+                    && !try_tail_unproven(candidate.operation_span))
                     || climbed_after_await(candidate.operation_span)));
         // ADR 0516: a settled cleanup's `onSettled` call that may follow an
         // await (a later loop iteration, a skippable await) may run with no
@@ -335,7 +346,11 @@ pub(super) fn emit_file(
         // A JSX boundary keeps the answer by detaching bits alone (ADR 0534
         // scopes the proven-run requirement to the operations that can be
         // obligations).
-        let root_owned = possible_continuation.is_none()
+        // ADR 0612: and a region's owner is the synchronous run's: past an await
+        // of its compute (`createMemo(async () => { await p; createEffect(…) })`)
+        // none is current, whatever the region provides.
+        let root_owned = !after_await
+            && possible_continuation.is_none()
             && !candidate.in_parameter_list
             && !returned_unplaced
             && if candidate.allow_uncertain {

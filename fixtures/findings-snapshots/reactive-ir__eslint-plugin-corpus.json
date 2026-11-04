@@ -112,6 +112,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-valid.tsx",
+      "start": 564,
+      "end": 576,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -239,6 +249,16 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-valid.tsx",
       "start": 629,
       "end": 636,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-valid.tsx",
+      "start": 752,
+      "end": 764,
       "fixes": 0
     },
     {
@@ -469,6 +489,46 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
       "start": 308,
       "end": 320,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
+      "start": 357,
+      "end": 372,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
+      "start": 389,
+      "end": 400,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
+      "start": 445,
+      "end": 460,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
+      "start": 488,
+      "end": 499,
       "fixes": 0
     },
     {
@@ -849,6 +909,26 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
       "start": 140,
       "end": 152,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
+      "start": 177,
+      "end": 192,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
+      "start": 211,
+      "end": 222,
       "fixes": 0
     },
     {

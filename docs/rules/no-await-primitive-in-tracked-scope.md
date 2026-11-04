@@ -129,7 +129,8 @@ const send = action(function* (text: string) {
 
 Inside a computation, read the accessor or the condition directly — that is
 what tracked reads are for. Keep `resolve()` and `until()` for imperative code:
-event handlers, an action step, `onSettled`, an effect's apply function, tests.
+event handlers, an action step, tests. On rc.17 an effect's apply, a
+`createReaction` callback and `onSettled` refuse them too (SC6002, SC3001; ADR 0614).
 A deliberate one-shot `resolve` inside a computation can be wrapped in
 `untrack()`, which clears the observer the runtime guards on (runtime-legal;
 the value still will not update).
@@ -146,14 +147,18 @@ the value still will not update).
   whose only run is its one call there; not in a parameter list, not after an
   `await`) runs with the observer active, so it is a violation (ADR 0494). A
   helper that may also be called from an event handler is not such a layer.
+  **Past an await** of an async compute (its own, or one a layer's call follows)
+  the guard's observer is gone: legal when the await dominates the call,
+  **uncertifiable** when it only may (ADR 0612).
+  An action's first step answers to the action's calls, under whatever observer each runs (ADR 0614). So does a callback a `flush()` under a computation may drain, and an IIFE in a flow child's JSX: **uncertifiable**.
   Where nothing places the call at all, the finding is **uncertifiable**. So is a call in a closure a named memo compute hands on (`[1].forEach(hf)`, `run(hf)`; ADR 0585): never a proven deferral.
 - **`onSettled` / leaf owners.** `resolve()` passes the observer guard there,
   so this rule is silent — but note that in an *owner-backed* `onSettled` the
   promise still rejects in dev with `PRIMITIVE_IN_FORBIDDEN_SCOPE` (probed):
   `resolve` creates a `createRoot` internally, and leaf owners forbid
   primitive creation. That failure belongs to the leaf-owner defect class
-  ([leaf-owner-forbidden-call](leaf-owner-forbidden-call.md)), which does not
-  currently model `resolve`'s internal root; the rejection is asynchronous
+  ([leaf-owner-forbidden-call](leaf-owner-forbidden-call.md), SC3001 since ADR
+  0614); the rejection is asynchronous
   (inside the returned promise), unlike the synchronous throws that rule
   describes.
 - **Before rc.5** (`until` only). `until` arrives in

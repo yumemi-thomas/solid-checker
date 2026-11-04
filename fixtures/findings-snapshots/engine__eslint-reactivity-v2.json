@@ -430,6 +430,16 @@
       "start": 94,
       "end": 106,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/signal-write-in-effect-apply.tsx",
+      "start": 122,
+      "end": 133,
+      "fixes": 0
     }
   ]
 }

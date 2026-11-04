@@ -10,82 +10,20 @@
  "cases": [
   {
    "id": "write-after-await",
-   "kind": "uncertifiable",
+   "kind": "clean",
    "project": "sc2001",
    "files": [
     "src/after-await.tsx"
    ],
-   "causes": [
-    "SC2001/unplaced-write/after-await",
-    "SC2001/unplaced-write/via-callers:after-await"
-   ],
-   "expect": [
-    {
-     "rule": "SC2001",
-     "family": "unplaced-write",
-     "context": "",
-     "cause": "SC2001/unplaced-write/after-await"
-    }
-   ],
+   "expect": [],
    "source": {
     "app": "donegeon-client",
     "path": "web/apps/client/src/routes/OnboardingRoute.tsx",
     "line": 80,
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
-   "status": "uncertifiable",
-   "labelWeight": 302,
-   "sites": 256,
-   "verification": {
-    "samples": [
-     {
-      "app": "ai-memory-ui",
-      "path": "src/screens/scope-messages.tsx",
-      "line": 111,
-      "rule": "SC2001",
-      "verdict": "same",
-      "mechanism": "write-after-await",
-      "note": "setPending(false) in finally after await adminCancelMessage in async cancel (:101-113), called from onClick via void cancel(row.id) (:248); same try/await/finally shape as the case."
-     },
-     {
-      "app": "donegeon-client",
-      "path": "web/apps/client/src/routes/TeamSettingsRoute.tsx",
-      "line": 278,
-      "rule": "SC2001",
-      "verdict": "different",
-      "mechanism": "write-after-await + second blocker",
-      "note": "[experiment round 3: removing the case blocker left the site: SC2001 uncertifiable: setter \"setActionError\" is called in TeamSettingsRoute, but no compiler or semantic fact places where this code runs] setActionError in catch after await api.team.cancelInvitation (:268) in async cancelInvitation, called via void from onClick (:782)."
-     },
-     {
-      "app": "ai-memory-ui",
-      "path": "src/screens/server-ops.tsx",
-      "line": 228,
-      "rule": "SC2001",
-      "verdict": "same",
-      "mechanism": "write-after-await",
-      "note": "setExportError in catch after await adminExportOkf (:224) in async runExport."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx",
-      "line": 198,
-      "rule": "SC2001",
-      "verdict": "different",
-      "mechanism": "write-after-await + second blocker",
-      "note": "[experiment round 3: removing the case blocker left the site: SC2001 uncertifiable: setter \"setState\" is called in CloudStorageProvider, but no compiler or semantic fact places where this code runs] setState in catch after several awaits (:152-190) in an async method of the actions object (an extra hop; the write itself is the after-await shape)."
-     },
-     {
-      "app": "ai-memory-ui",
-      "path": "src/routes/login.tsx",
-      "line": 100,
-      "rule": "SC2001",
-      "verdict": "same",
-      "mechanism": "write-after-await",
-      "note": "setOutcome in catch of a try containing await signIn (:77) in async handleLoginSubmit."
-     }
-    ]
-   },
-   "verifiedWeight": 0
+   "weight": 1,
+   "status": "certified"
   },
   {
    "id": "write-in-factory-member",

@@ -2658,6 +2658,23 @@ fn destructuring_assignment_leaves_are_plain_write_targets() {
 }
 
 #[test]
+fn a_member_never_read_is_a_plain_write_or_a_delete_operand() {
+    // `delete` runs the proxy's `deleteProperty` trap, no Get; the path to the
+    // deleted key is read, and a compound assignment reads its target.
+    let source = "delete store.a.b; delete (store.c as any); store.d = 1; store.e += 1;";
+    let facts = extract("targets.ts", source).unwrap();
+    let span_of = |text: &str| {
+        let start = u32::try_from(source.find(text).unwrap()).unwrap();
+        Span::new(start, start + u32::try_from(text.len()).unwrap())
+    };
+    for never_read in ["store.a.b", "store.c", "store.d"] {
+        assert!(facts.is_no_get_target(span_of(never_read)), "{never_read}");
+    }
+    assert!(!facts.is_no_get_target(span_of("store.a")));
+    assert!(!facts.is_no_get_target(span_of("store.e")));
+}
+
+#[test]
 fn retains_complete_jsx_rule_structure() {
     let source = r#"<Button use:focus style={{ fontSize: 12 }} {...props}>
   {ready && <Content />}

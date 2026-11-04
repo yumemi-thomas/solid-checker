@@ -138,6 +138,14 @@ pub(super) enum WriteRegionAdjustment {
     /// an owner-keeping callback or a created root, so neither a placement
     /// nor the lexical role is proven: the write is unplaced.
     ClimbExhausted,
+    /// ADR 0613: the write runs in a callback the queue's drain runs
+    /// ([`solid_dialect::Dialect::callback_runs_drained_by_flush`]: a
+    /// `createEffect` apply), or in a function it runs in place, while a
+    /// `flush()` of the program may drain the queue under an owner
+    /// ([`SemanticLookup::flush_drains_under_owner`]). A scheduled drain runs
+    /// it with no owner (legal), a synchronous one under its caller's owner
+    /// (rejected): unplaced, whatever the function's other callers.
+    DrainedByFlush,
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -158,6 +166,15 @@ pub(super) fn write_region_adjustment(
                 return None;
             }
             let primitive = lookup.primitive_at_call(file, call.span)?;
+            // ADR 0613: `onSettled`'s queued run is the drain's, whichever owner
+            // its call has: the leaf exemption below is no proof then.
+            if lookup
+                .dialect
+                .leaf_owner_requires_owned_call_site(primitive)
+                && drained_under_owner(primitive, index, lookup)
+            {
+                return Some(WriteRegionAdjustment::DrainedByFlush);
+            }
             if lookup.dialect.leaf_scopes_allow_writes()
                 && callback_owner_at_call(file, call, primitive, index, lookup)
                     == Some(solid_dialect::CallbackOwner::Leaf)
@@ -204,6 +221,13 @@ pub(super) fn write_region_adjustment(
                 Some(solid_dialect::CallbackOwner::InheritsFirstRun) => {
                     return Some(WriteRegionAdjustment::FirstRunAtCallSite(call.span));
                 }
+                // ADR 0613: the apply's "no owner" is the drain's, which a
+                // synchronous flush runs under its caller's owner.
+                Some(solid_dialect::CallbackOwner::None)
+                    if drained_under_owner(primitive, index, lookup) =>
+                {
+                    return Some(WriteRegionAdjustment::DrainedByFlush);
+                }
                 // ADR 0502: a render-effect apply whose first run a `schedule`
                 // (or unreadable options) may keep on the call: no placement.
                 Some(solid_dialect::CallbackOwner::Conditional)
@@ -218,8 +242,71 @@ pub(super) fn write_region_adjustment(
             }
             None
         })
+        .or_else(|| drained_returned_cleanup(file, span, lookup))
+        .or_else(|| drained_bundle_member(file, span, lookup))
         .or_else(|| detached_in_place(file, span, lookup))
         .or_else(|| nested_in_leaf_scope(file, span, lookup))
+}
+
+/// ADR 0613: the cleanup an effect's apply returns runs on a rerun from
+/// `runEffect`, in the queue's drain, so its "no owner" is the drain's too
+/// (rc.17 `dist/dev.js:2003`, probed: under a `flush()` in a root body a
+/// setter there throws `REACTIVE_WRITE_IN_OWNED_SCOPE`).
+fn drained_returned_cleanup(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    (inside_rerun_effect_cleanup(file, span, lookup) && lookup.flush_drains_under_owner())
+        .then_some(WriteRegionAdjustment::DrainedByFlush)
+}
+
+/// ADR 0613: whether the ownerless answer of the callback at `index` of
+/// `primitive` is the queue's drain's and some `flush()` of the program may
+/// drain under an owner. The veto is read only for such a callback.
+fn drained_under_owner(primitive: Primitive, index: usize, lookup: &SemanticLookup<'_>) -> bool {
+    lookup
+        .dialect
+        .callback_runs_drained_by_flush(primitive, index)
+        && lookup.flush_drains_under_owner()
+}
+
+/// ADR 0613: a write in the `error` or `effect` member of an exact effect
+/// bundle, or in a function that member runs in place. The member is no
+/// argument the in-place climb stops at, and both run from the queue's drain
+/// (`runEffect`, ADR 0548): probed, under a `flush()` in a root body a setter
+/// in an `error` arm throws `REACTIVE_WRITE_IN_OWNED_SCOPE`.
+fn drained_bundle_member(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    let at = in_place_run_site(file, span, lookup).map_or(span, |(climb, _)| climb.at);
+    let function = crate::owners::containing_ast_function(&file.ast, at)?;
+    let is_member = |member: Option<Span>| {
+        member.is_some_and(|member| file.ast.peel_ts_sugar_span(member) == function.span)
+    };
+    let held = file
+        .ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| {
+            let whole = file.ast.peel_ts_sugar_span(call.arguments[index].span);
+            whole != function.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_runs_drained_by_flush(primitive, index)
+                            && (is_member(super::bundle_error_member(
+                                lookup.dialect,
+                                primitive,
+                                call,
+                                index,
+                            )) || is_member(super::effect_apply_span(call, index)))
+                    })
+        });
+    (held && lookup.flush_drains_under_owner()).then_some(WriteRegionAdjustment::DrainedByFlush)
 }
 
 /// What the owner of the callback that runs `span` says about the write, when
@@ -362,6 +449,10 @@ fn detached_in_place(
                 }
                 if among_others {
                     return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                // ADR 0613: a synchronous flush may drain it under an owner.
+                if drained_under_owner(primitive, index, lookup) {
+                    return Some(WriteRegionAdjustment::DrainedByFlush);
                 }
                 return Some(WriteRegionAdjustment::Detached);
             }
@@ -1507,6 +1598,15 @@ pub(super) fn nested_in_leaf_scope(
             argument.end - argument.start
         })?;
     let primitive = lookup.primitive_at_call(file, call.span)?;
+    // ADR 0613: as for the callback itself (`write_region_adjustment`), a layer
+    // inside `onSettled`'s queued run is the drain's.
+    if lookup
+        .dialect
+        .leaf_owner_requires_owned_call_site(primitive)
+        && drained_under_owner(primitive, index, lookup)
+    {
+        return Some(WriteRegionAdjustment::DrainedByFlush);
+    }
     (callback_owner_at_call(file, call, primitive, index, lookup)
         == Some(solid_dialect::CallbackOwner::Leaf))
     .then_some(WriteRegionAdjustment::LeafScope)
@@ -1548,6 +1648,25 @@ pub(super) fn semantic_write_execution_role_within(
 /// `role` at `span`: an `Unknown` that is not final takes the invocation
 /// flow's role ([`write_flow_role`]), when there is one.
 pub(super) fn write_role_fallback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    decided: bool,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    let role = write_role_fallback_unvetoed(file, span, role, decided, root_body, lookup);
+    // ADR 0613: an apply role is legal for a write because the queue's drain
+    // runs it with no owner; a synchronous flush may run it under one. Every
+    // apply role (`createEffect`, `createRenderEffect`, `createReaction`) is
+    // the drain's.
+    if role == ExecutionRole::EffectApply && lookup.flush_drains_under_owner() {
+        return role_arm!("write_roles.effect-apply-drained", ExecutionRole::Unknown);
+    }
+    role
+}
+
+fn write_role_fallback_unvetoed(
     file: &solid_facts::FileFacts,
     span: Span,
     role: ExecutionRole,
@@ -1778,6 +1897,13 @@ pub(super) fn write_role_walk<'f>(
                     ExecutionRole::Unknown
                 );
             }
+            Some(WriteRegionAdjustment::DrainedByFlush) => {
+                *decided = true;
+                return role_arm!(
+                    "write_roles.write_role_walk.drained-by-flush",
+                    ExecutionRole::Unknown
+                );
+            }
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -1816,6 +1942,23 @@ pub(super) fn write_role_walk<'f>(
                         } else {
                             role_arm!("write_roles.first-run-unproven", ExecutionRole::Unknown)
                         };
+                    }
+                    // ADR 0613: a later run is the drain's, which a
+                    // synchronous flush runs under its caller's owner.
+                    _ if file.ast.call_at(call).is_some_and(|at| {
+                        lookup
+                            .primitive_at_call(file, at.span)
+                            .is_some_and(|primitive| {
+                                (0..at.arguments.len())
+                                    .any(|index| drained_under_owner(primitive, index, lookup))
+                            })
+                    }) =>
+                    {
+                        *decided = true;
+                        return role_arm!(
+                            "write_roles.first-run-later-drained",
+                            ExecutionRole::Unknown
+                        );
                     }
                     _ => break,
                 }
@@ -2045,15 +2188,36 @@ pub(super) fn write_role_walk<'f>(
             ExecutionRole::Unreported
         );
     }
+    // ADR 0611: the same past an await of a function the write's own function
+    // runs in place inside (an IIFE, a helper calling its callback, a named
+    // closure's one call, an inline standard-library callback, each on its
+    // caller's stack and owner): `await p; (() => set(1))()` in an async memo
+    // compute writes on the later task too, though the lexical role is the
+    // compute's.
+    let layered_suspension = suspension_through_in_place_layers(file, span, lookup);
+    if layered_suspension == Some(true) {
+        return role_arm!(
+            "write_roles.write_role_walk.unreported-layered",
+            ExecutionRole::Unreported
+        );
+    }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`
-    // inside a branch), so the answer is no claim rather than a legal write.
-    // An implicit suspension (`for await`) is the same, and is not proven to
-    // run at all; its callers' roles do not describe the code after it.
-    if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
-        && may_follow_suspension(file, span)
-    {
+    // inside a branch, a `catch` or `finally` whose `try` may throw before it
+    // suspends), the write runs either on the stack its function was entered
+    // on, in the role its entries give it, or past the await with no owner
+    // (Solid's write guard reads the ambient owner, which every entry point
+    // restores before a promise job can run). A rejecting role is no claim
+    // then; a permissive one is the write's on both paths, so the walk below
+    // places it (`suspendable`). An implicit suspension (`for await`) is the
+    // same, and is not proven to run at all.
+    // ADR 0611: a layer run in place past a possible await of its caller's
+    // function is the same; and whatever role a position names (a named
+    // tracked compute, an effect compute, the entries), only a permissive one
+    // holds past a possible suspension.
+    let suspendable = may_follow_suspension(file, span) || layered_suspension == Some(false);
+    if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
     }
     // A site in a parameter list (a default value, a pattern, a function written
@@ -2088,6 +2252,7 @@ pub(super) fn write_role_walk<'f>(
             visiting,
         ) {
             Some(HandleRole::Decided(role)) => {
+                let role = past_possible_suspension(role, suspendable, unknown);
                 if role == ExecutionRole::Unknown {
                     *decided = true;
                 }
@@ -2107,6 +2272,9 @@ pub(super) fn write_role_walk<'f>(
     // the effect owns, as the same compute written inline does: a write it runs
     // in place is rejected there, whatever the function's other entries do.
     if !direct.reports_disallowed_write() && named_effect_compute_runs(file, span, lookup) {
+        if suspendable {
+            return role_arm!("write_roles.walk-suspended-compute", unknown);
+        }
         return role_arm!(
             "write_roles.write_role_walk.tracked-jsx",
             ExecutionRole::TrackedJsx
@@ -2136,7 +2304,11 @@ pub(super) fn write_role_walk<'f>(
     let possible_render = direct == ExecutionRole::UntrackedRendering
         && innermost_identity_is_possible(file, span, lookup);
     if direct != ExecutionRole::Unknown && named_callback.is_none() && !possible_render {
-        return role_arm!("write_roles.walk-direct-1", direct);
+        // Past a possible suspension only a permissive role holds on both paths.
+        return role_arm!(
+            "write_roles.walk-direct-1",
+            past_possible_suspension(direct, suspendable, unknown)
+        );
     }
     let Some(innermost) = innermost else {
         return role_arm!("write_roles.walk-unknown-6", unknown);
@@ -2189,7 +2361,7 @@ pub(super) fn write_role_walk<'f>(
             .get(function.span)
             .tracked_owned
     {
-        return if current {
+        return if current && !suspendable {
             role_arm!("write_roles.named-tracked-owned", ExecutionRole::TrackedJsx)
         } else {
             unknown
@@ -2243,6 +2415,7 @@ pub(super) fn write_role_walk<'f>(
         current,
         possible_render,
         unknown,
+        suspendable,
     };
     if let Some(plan) = plan {
         *plan = Some(loop_plan);
@@ -2279,6 +2452,10 @@ pub(super) struct LoopPlan<'f> {
     /// What an unplaced walk answers: `Unknown`, or `Unreported` when the
     /// position proved a non-reporting mix.
     pub(super) unknown: ExecutionRole,
+    /// The write may follow a suspension in its own function: its entries'
+    /// role holds only on the path that does not suspend, so only a
+    /// permissive one is the write's ([`past_possible_suspension`]).
+    pub(super) suspendable: bool,
 }
 
 impl LoopPlan<'_> {
@@ -2291,6 +2468,24 @@ impl LoopPlan<'_> {
             && self.current
             && !self.possible_render
             && self.unknown == ExecutionRole::Unknown
+            && !self.suspendable
+    }
+}
+
+/// The role of a write that may follow a suspension in its own function
+/// (`suspendable`), given `role`, the role on the path that does not suspend:
+/// the other path runs on a later task with no owner, where the write is
+/// legal. So a permissive role holds on both paths, and a rejecting or
+/// unplaced one proves nothing (`unknown`).
+pub(super) fn past_possible_suspension(
+    role: ExecutionRole,
+    suspendable: bool,
+    unknown: ExecutionRole,
+) -> ExecutionRole {
+    if suspendable && (role == ExecutionRole::Unknown || role.reports_disallowed_write()) {
+        unknown
+    } else {
+        role
     }
 }
 
@@ -2327,6 +2522,7 @@ pub(super) fn caller_loop(
         current,
         possible_render,
         unknown,
+        suspendable,
     } = plan;
     let key = (file.path.to_string(), function.span);
     if !visit_insert(visiting, key.clone()) {
@@ -2357,7 +2553,13 @@ pub(super) fn caller_loop(
     });
     visiting.remove(&key);
     let (imperative, unplaced) = match folded {
-        CallerFold::Rejected(role) => return if nested || !current { unknown } else { role },
+        CallerFold::Rejected(role) => {
+            return if nested || !current || suspendable {
+                unknown
+            } else {
+                role
+            };
+        }
         CallerFold::Entries {
             imperative,
             unplaced,
@@ -2373,7 +2575,7 @@ pub(super) fn caller_loop(
     // function's entries: a use the walk did not follow (handed to a child
     // component, stored, aliased, exported) may run it in an owned scope.
     if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
-        role
+        past_possible_suspension(role, suspendable, unknown)
     } else {
         unknown
     }
@@ -2654,6 +2856,57 @@ pub(crate) enum LayerRun {
     FreshStack,
     /// Anything else: stored, handed on, or run by a call this does not know.
     Elsewhere,
+}
+
+/// ADR 0611: whether code at `span` runs past a suspension of a function it
+/// runs in place inside ([`climb_in_place_layers`]): `Some(true)` when a
+/// layer's call follows an await on every path, `Some(false)` on some path,
+/// `None` when none does. Only [`follows_dominating_await`]'s proof counts, not
+/// the climb's own `suspended`: code past an await may still run later under
+/// an owner (JSX, an instance field), which that proof excludes. A helper that
+/// also hands its callback on, or a climb cut short, proves nothing about the
+/// runs it did not follow.
+pub(crate) fn suspension_through_in_place_layers(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let mut calls = Vec::new();
+    let climb = climb_in_place_layers_recording(file, span, lookup, None, &mut calls)?;
+    if climb.among_others || climb.exhausted {
+        return None;
+    }
+    let mut answer = None;
+    for call in calls {
+        if follows_dominating_await(file, call) || follows_try_head_await(file, call, lookup) {
+            return Some(true);
+        }
+        if may_follow_suspension(file, call) {
+            answer = Some(false);
+        }
+    }
+    answer
+}
+
+/// [`suspension_through_in_place_layers`] with `span`'s own function: whether
+/// code at `span` runs on a later task than the one its enclosing callback was
+/// entered on, with no ambient owner or observer (ADRs 0333, 0611, 0612).
+pub(crate) fn past_suspension(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let layered = suspension_through_in_place_layers(file, span, lookup);
+    if layered == Some(true)
+        || follows_dominating_await(file, span)
+        || follows_try_head_await(file, span, lookup)
+    {
+        Some(true)
+    } else if layered == Some(false) || may_follow_suspension(file, span) {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn layer_run(

@@ -8,8 +8,9 @@ between, on the stack of a `createEffect` apply callback.
 ## What it does
 
 Flags `createMemo`, `createEffect`, `createRenderEffect`, `createRoot`,
-`createProjection`, and the function forms of `createSignal` and `createStore`,
-when the call runs synchronously inside the apply (second) argument of a
+`createProjection`, the function forms of `createSignal` and `createStore`,
+`Loading`/`Errored` called as functions, and `resolve` and `until`, which create
+a root and a computation for their thunk (ADR 0614), when the call runs synchronously inside the apply (second) argument of a
 `createEffect(compute, apply)` in a client build, reached directly or through
 an IIFE, an inline standard-library callback, `untrack`, or project helpers,
 a named function handed to such a callback position or a callback prop the
@@ -29,12 +30,16 @@ context === null`. A production build creates the computation with no owner, so
 nothing ever disposes it. Value-form state (`createSignal(0)`,
 `createStore({})`) creates no computation and is not flagged.
 
-**Premise (shared with `missing-owner`).** A `createEffect` apply runs from
-the drain of the effect queue with no owner. A `flush()` called synchronously
-under an owner (in a component or root body, or under `runWithOwner`) drains the
-queue there and runs the apply under that owner: then nothing throws and the
-computation is owned. Neither rule proves that no such call exists, including
-in dependency code (docs/open-work.md).
+**The flush veto (ADR 0613, shared with `missing-owner` and SC2001).** A
+`createEffect` apply runs from the drain of the effect queue with no owner. A
+`flush()` called synchronously under an owner (in a component or root body, a
+memo compute, under `runWithOwner`) drains the queue there and runs the apply
+under that owner: then nothing throws and the computation is owned. So the claim
+is a violation only while every `flush` of the program is proven to run with no
+owner (a handler, a timer, past an await, module scope, `runWithOwner(null,
+…)`) or to drain nothing (in an effect apply); any other call, or a reference
+to `flush` that is not a call, makes it uncertifiable program-wide. A flush in
+dependency code is outside the facts (premise, docs/open-work.md).
 
 ## When it is uncertifiable
 

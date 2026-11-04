@@ -29,14 +29,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { GRIDS, PROBLEMS, hostArgs, parse as parseFocus } from "./focus.mjs";
+import { GRIDS, hostArgs, parse as parseFocus } from "./focus.mjs";
+import { rowProblem } from "./codes.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-/** The full run's eight grids, in focus.mjs's order: the pair grids (`mx-pairs`, `lg-pairs`) are asked for by name, not audited. */
-export const AUDIT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-pairs"));
+/** Every grid, in focus.mjs's order, the pair grids too: a pair axis no run read cost ADR 0585 about three months (ADR 0615). */
+export const AUDIT_GRIDS = Object.keys(GRIDS);
 /** The oracle sample a focus run takes (focus.mjs defaults): per stratum, and the stratum's axes. */
 const FOCUS_DEFAULTS = parseFocus(["--codes", "all"]);
 export const ORACLE_PER_STRATUM = FOCUS_DEFAULTS.runtimeDiff;
@@ -231,7 +232,8 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
         if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
         outcomes.set(row.id, row.outcome);
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
-        if (PROBLEMS.includes(row.outcome)) attention.push(`${grid}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
+        const problem = rowProblem(row);
+        if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       }
     }
     if (planned !== null && outcomes.size !== planned) attention.push(`${grid}: ${outcomes.size} programs judged of ${planned}`);

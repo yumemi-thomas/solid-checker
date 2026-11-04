@@ -1,0 +1,3 @@
+# boundary-in-effect-callback
+
+**Claim (ADR 0614).** `Loading(props)` and `Errored(props)` create a computation in the call, so on an effect callback's stack with no owner they are SC6002 as well as SC4001: rc.17 warns `NO_OWNER_BOUNDARY`, then throws `PRIMITIVE_IN_EFFECT_CALLBACK`. Measured on rc.17: `InReaction`, `ErroredInReaction` and `InApply` report both; `Owned` and `Shadowed` report nothing. An earlier call keeps ADR 0495's uncertainty. `resolve` and `until` create a root and a computation too, and a leaf owner refuses all four (SC3001): measured by the census as `PRIMITIVE_IN_EFFECT_CALLBACK` and `PRIMITIVE_IN_FORBIDDEN_SCOPE`.

@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { GRIDS } from "./focus.mjs";
+import { requiredIds } from "./cover.mjs";
+import { GRIDS, whole } from "./focus.mjs";
 import { legalCells, legalId, legalShapes, pairLegalCells, recallLegalShapes } from "./legal.mjs";
-import { cellList, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
+import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
@@ -15,6 +16,7 @@ function gridIds(grid, code, { full = false } = {}) {
   const [script, ...args] = GRIDS[grid];
   const value = (name) => { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; };
   const mounts = mountsOption(value("--mounts")), sources = sourcesOption(value("--sources")), combine = args.includes("--combine");
+  if (args.includes("--census")) return censusCells({ codes: [code] }).flatMap((cell) => censusShapes(code).map((shape) => shapeId(cell, shape)));
   // The pair grids (`--pairs`): their cells and pair shapes (matrix.mjs pairShapes).
   if (args.includes("--pairs")) {
     if (script === "legal.mjs") return pairLegalCells({ codes: [code] }).flatMap((cell) => pairShapes(code, cell.context, { legal: true }).map((shape) => legalId(cell, { shape })));
@@ -49,6 +51,7 @@ describe("rediscovery.json", () => {
       if (!built.has(key)) built.set(key, new Set(gridIds(grid, code, { full })));
       return built.get(key);
     };
+    const required = new Set(requiredIds());
     for (const entry of registry.filter((e) => !e.outside)) {
       const generated = idsOf(entry.grid, entry.code);
       expect(entry.ids.filter((id) => !generated.has(id))).toEqual([]);
@@ -65,6 +68,8 @@ describe("rediscovery.json", () => {
         const held = new Set(JSON.parse(readFileSync(manifest, "utf8")).ids);
         expect(entry.ids.filter((id) => !held.has(id))).toEqual([]);
       }
+      // ADR 0615: a grid with no manifest had these skipped (60 of 64 rows); every sample now holds them, or the census does.
+      if (!whole(entry.grid)) expect(entry.ids.filter((id) => !required.has(id))).toEqual([]);
     }
     // Generating the programs for their ids took 200 s on CI and timed out at 300 s (PR #162); the ids alone take seconds.
   }, 60000);

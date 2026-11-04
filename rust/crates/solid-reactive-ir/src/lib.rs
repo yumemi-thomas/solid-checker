@@ -910,6 +910,10 @@ pub enum AfterAwaitObligation {
     /// A composite callee (`a || b`, `c ? a : b`) not every operand of which
     /// is proven to be this accessor.
     CalleeInexact,
+    /// The source is async (ADR 0614): pending at the read it throws
+    /// `NotReadyError` before any warning, and settled it warns; which one
+    /// the read meets is not proven.
+    AsyncSourceMayBePending,
     /// A prop read whose signal backing is not proven: the component's call
     /// sites cannot be enumerated, or the prop's use is unknown.
     PropBackingUnproven { callers_unenumerable: bool },
@@ -1409,6 +1413,11 @@ pub struct AsyncRead {
     /// callback executes during that component's strict-read window.
     #[serde(default, skip_serializing_if = "is_false")]
     pub invocation_context_unproven: bool,
+    /// The calls the read owes [`Self::leaf_owner`] to whose callback is a
+    /// leaf only under an owned call site (`onSettled`): the owner fixed
+    /// point's call-site gates, which may withdraw the leaf-owner claim.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leaf_call_site_gates: Vec<Location>,
     /// The read is rendered by a function whose callers are not all in the
     /// analyzed project (an exported component, a route handed to a router, a
     /// lazy page): no `Loading` boundary was found above it, but the boundary

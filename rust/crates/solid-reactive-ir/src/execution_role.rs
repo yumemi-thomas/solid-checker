@@ -371,7 +371,7 @@ pub(super) fn semantic_execution_role(
 /// unplaced, as does a function the ref receives that no proof applies (one
 /// nested in the applied function, a generator): an obligation, never a
 /// silent clean.
-pub(super) fn read_execution_role(
+pub(crate) fn read_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],

@@ -16,7 +16,8 @@ branches, loops, `switch`, and `try`/`finally` precisely (both-branch awaits
 dominate; a conditional or looped await does not). Store-path and props **member
 reads** are proven against the function's straight-line awaits: an await with no
 conditional, logical, loop, switch, or try construct between the function entry
-and the expression dominates every later read in the same function body. Props
+and the expression dominates every later read in the same function body. The
+object of a written member (`s.a` in `s.a.v = 1`) is such a read (ADR 0612). Props
 member reads follow the component's caller classification (see
 [strict-read-untracked](strict-read-untracked.md)): proven-static props are not
 reactive and stay silent; unprovable ones are reported as **uncertifiable**.
@@ -109,9 +110,16 @@ there, and the reads in it are then reported with the same two proofs:
 - **A synchronous helper's straight-line read.** A call after the await to an
   exactly resolved synchronous project function runs its body on the
   continuation's stack: an accessor call the body makes on every normal
-  completion (ADR 0276's completion fact) is a violation at that read. A read
-  on some paths, or one reached through a further helper, stays the
-  uncertifiable through-call obligation above.
+  completion (ADR 0276's completion fact) is a violation at that read, and so
+  is a store or prop member read in its body, at any depth of helpers, up to the
+  helper's own first await (ADR 0614). An accessor read on some paths, or one reached
+  through a further helper, stays the uncertifiable through-call obligation above.
+- **A receiver holding a `const`.** `thing.useIt.a`, where `thing.useIt` holds
+  exactly the store (ADR 0481), reads the store's key `a`, compared with the keys
+  read before the await after the root (ADR 0614).
+- **An async source.** Read pending it throws before any warning, read settled it
+  warns; which one a read past an await meets is not proven, so the finding is
+  **uncertifiable** (ADR 0614).
 - **An exact object-literal member.** `api.load()`, where `api` is a closed
   `const` object literal (no spread, computed key, accessor, `this`, export or
   escape, and every reference a plain member read that no one writes), names

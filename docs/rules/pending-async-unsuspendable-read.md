@@ -26,7 +26,9 @@ user(); }`), whose binding is never written, is read where a call of that
 function runs, through up to four such functions. A call in the component
 body's strict-read window, at module scope, or in a leaf owner is reported at
 the call, as a direct read there is (ADR 0490); a call in an event handler or
-one that never runs is not. A named function no named-callback role places is
+one that never runs is not. `onSettled` is a leaf owner only under an owned
+call site: in a handler it queues a plain callback, and a read in it, direct or
+through a helper, is an obligation. A named function no named-callback role places is
 climbed out of, never given its lexical role, and its inline carriers
 (`[1].forEach(f)`, `f.call(null)`, `` f`x` ``) are followed: the finding sits at
 the carrier (ADR 0564).
@@ -43,7 +45,8 @@ leaf owner of the carrier that runs it, not of the read's own position: the
 named callback of `onSettled(cb)` or `createTrackedEffect(cb)` runs `hf` under
 that owner through `[1].forEach(hf)`, and an `onSettled` literal around
 `[].forEach(hf)` proves nothing, since the carrier may never run `hf`
-(ADR 0580).
+(ADR 0580). An action's first step is under the leaf owner its every call runs
+in (ADR 0614).
 
 A pending read in a callback a host API retains (an `addEventListener`
 listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation

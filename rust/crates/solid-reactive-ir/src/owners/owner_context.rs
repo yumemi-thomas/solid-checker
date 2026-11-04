@@ -279,7 +279,20 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
                 leaf_body_context(source)
             }
         }
+        OwnerEdgeKind::QueuedLeafDrained => {
+            let queued = if source & OWNER_CONTEXT_LEAF != 0 {
+                OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED
+            } else {
+                leaf_body_context(source)
+            };
+            queued & !OWNER_CONTEXT_PROVEN_UNOWNED
+        }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        // ADR 0613: the drain's caller decides, not the creating call's
+        // owner: possibly owned, possibly not, never proven.
+        OwnerEdgeKind::DrainedByFlush => {
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+        }
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
         OwnerEdgeKind::MayRun => source & !OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::OwnerGuarded => source & !OWNER_CONTEXT_UNOWNED_PART,
@@ -728,7 +741,7 @@ pub(crate) fn owner_callback_edges(
         let Some(owner) = callback_owner_at_call(file, call, primitive, argument, lookup) else {
             continue;
         };
-        let kind = callback_owner_edge_kind_at(lookup, primitive, owner);
+        let kind = drained_callback_owner_edge_kind(lookup, primitive, argument, owner);
         if lookup
             .dialect
             .callback_semantics_at(primitive, argument, call.arguments.len())
@@ -1458,6 +1471,32 @@ pub(crate) fn callback_owner_edge_kind_at(
     }
 }
 
+/// ADR 0613: [`callback_owner_edge_kind_at`] for the callback at `argument`
+/// of `primitive`, where an ownerless answer the queue's drain gives
+/// ([`solid_dialect::Dialect::callback_runs_drained_by_flush`]) holds only
+/// while no `flush()` of the program may drain under an owner
+/// ([`SemanticLookup::flush_drains_under_owner`]); otherwise it is
+/// [`OwnerEdgeKind::DrainedByFlush`]. The veto is read only for such a
+/// callback.
+pub(crate) fn drained_callback_owner_edge_kind(
+    lookup: &SemanticLookup<'_>,
+    primitive: Primitive,
+    argument: usize,
+    owner: solid_dialect::CallbackOwner,
+) -> OwnerEdgeKind {
+    let kind = callback_owner_edge_kind_at(lookup, primitive, owner);
+    let drained = matches!(kind, OwnerEdgeKind::Unowned | OwnerEdgeKind::QueuedLeaf)
+        && lookup
+            .dialect
+            .callback_runs_drained_by_flush(primitive, argument)
+        && lookup.flush_drains_under_owner();
+    match kind {
+        OwnerEdgeKind::Unowned if drained => OwnerEdgeKind::DrainedByFlush,
+        OwnerEdgeKind::QueuedLeaf if drained => OwnerEdgeKind::QueuedLeafDrained,
+        kind => kind,
+    }
+}
+
 /// Compose the owner supplied by a returned function's invocation with the
 /// owner behavior of the factory callback itself. An explicit owner result on
 /// the inner callback dominates; an inheriting callback keeps the invocation
@@ -1498,6 +1537,76 @@ pub(crate) fn containing_leaf_owner(
 ) -> Option<String> {
     lexical_leaf_owner(file, span, entities, symbol_names, lookup)
         .or_else(|| named_leaf_owner(file, span, entities, symbol_names, lookup))
+        .or_else(|| action_step_leaf_owner(file, span, entities, symbol_names, lookup))
+}
+
+/// The calls among those [`containing_leaf_owner`] reads at `span` whose
+/// callback is a leaf only under an owned call site: the argument `span` sits
+/// in, and the positions of a callback handed by name.
+pub(crate) fn gated_leaf_calls_at(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let leaf_gated = |call: &solid_facts::ast::CallFact, index: usize| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .leaf_owner_requires_owned_call_site(primitive)
+                    && callback_owner_at_call(file, call, primitive, index, lookup)
+                        == Some(solid_dialect::CallbackOwner::Leaf)
+            })
+    };
+    let mut calls: Vec<Span> = file
+        .ast
+        .arguments_containing(span)
+        .filter(|(call, index)| leaf_gated(call, *index))
+        .map(|(call, _)| call.span)
+        .collect();
+    let direct = crate::owners::containing_body_function(&file.ast, span);
+    let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
+        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
+    for function in [direct, climbed].into_iter().flatten() {
+        let Some((positions, _)) = crate::owners::exact_value_positions(file, function, lookup)
+        else {
+            continue;
+        };
+        for (call_span, index) in positions {
+            let call = file.ast.calls.iter().find(|call| call.span == call_span);
+            if call.is_some_and(|call| leaf_gated(call, index)) {
+                calls.push(call_span);
+            }
+        }
+    }
+    calls
+}
+
+/// ADR 0614: the leaf owner an action's first step runs under: it runs on its
+/// caller's stack (ADR 0547, ADR 0550), so the owner of its calls, when every
+/// one has it and no `yield` may come first. A step with other callers is not
+/// this read's claim.
+fn action_step_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let step = containing_body_function(&file.ast, span)?;
+    stepped_action_generator(file, step, lookup)?;
+    if action_step_resumption(file, span, lookup).is_some() {
+        return None;
+    }
+    let calls = crate::execution_role::action_step_call_sites(file, step, lookup)?;
+    let mut owners = calls.iter().map(|call| {
+        lexical_leaf_owner(file, call.span, entities, symbol_names, lookup)
+            .or_else(|| named_leaf_owner(file, call.span, entities, symbol_names, lookup))
+    });
+    let first = owners.next()??;
+    owners.all(|owner| owner.is_some()).then_some(first)
 }
 
 /// ADR 0516: the leaf owner a callback handed by name (`onSettled(cb)`, a
