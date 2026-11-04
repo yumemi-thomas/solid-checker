@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { offSiteVerdicts } from "./classify.mjs";
 import { rowProblem } from "./codes.mjs";
 import { readGrid } from "./focus.mjs";
-import { judgeLegalProgram } from "./legal.mjs";
-import { buildMatrix, gate, judge } from "./matrix.mjs";
+import { judgeLegalProgram, legalCells } from "./legal.mjs";
+import { buildMatrix, cellList, censusCells, censusShapes, gate, generateShape, judge } from "./matrix.mjs";
 
 // A program with its site at line 10 and a decoy read at line 20, each with a counter (`hit`), and a glue call at line 30.
 const built = {
@@ -63,6 +63,26 @@ describe("the misuse grid's judge, off the site", () => {
     const verdict = judge({ code: "FLUSH_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("strict-read-untracked", 20)] }, runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 10)]), built });
     expect(verdict.outcome).toBe("false-clean");
     expect(verdict.detail.offSite).toEqual(["strict-read-untracked@20:false-positive"]);
+  });
+});
+
+describe("the judge, past the row's own code (ADR 0614)", () => {
+  const judgeOf = (code, findings, events) => judge({ code, site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run(events), built, program: undefined });
+  it("another rule's violation on the site's lines that ran with its code unreported is a false positive", () => {
+    const verdict = judgeOf("FLUSH_IN_EFFECT_CALLBACK", [finding("flush-in-effect-callback", 10), finding("strict-read-untracked", 10)], [event("FLUSH_IN_EFFECT_CALLBACK", 10)]);
+    expect(verdict).toMatchObject({ outcome: "false-positive", detail: { primary: "agree", rules: ["strict-read-untracked"], at: [10] } });
+  });
+  it("a claiming violation on a site that ran and reported nothing is a false positive, not a generator problem", () => {
+    const verdict = judgeOf("STRICT_READ_UNTRACKED", [finding("strict-read-untracked", 10)], []);
+    expect(verdict).toMatchObject({ outcome: "false-positive", detail: { primary: "not-fired", rules: ["strict-read-untracked"] } });
+  });
+  it("a finding that says the runtime does not warn is contradicted by nothing", () => {
+    expect(judgeOf("STRICT_READ_UNTRACKED", [{ ...finding("strict-read-untracked", 10), runtimeSilent: true }], []).outcome).toBe("not-fired");
+    expect(judgeOf("FLUSH_IN_EFFECT_CALLBACK", [finding("flush-in-effect-callback", 10), { ...finding("strict-read-untracked", 12), runtimeSilent: true }], [event("FLUSH_IN_EFFECT_CALLBACK", 10)]).outcome).toBe("agree");
+  });
+  it("a not-fired site that never ran stays not-fired", () => {
+    const verdict = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("strict-read-untracked", 10)] }, runtime: { ...run([]), hits: {} }, built });
+    expect(verdict.outcome).toBe("not-fired");
   });
 });
 
@@ -126,5 +146,30 @@ describe("the gate, certified second-code misses", () => {
     expect(gate(matrixOf([row(1)]), matrixOf([row(1, missed)])).ok).toBe(false);
     expect(gate(matrixOf([row(1, missed)]), matrixOf([row(1, missed)])).ok).toBe(true);
     expect(gate(matrixOf([row(1, missed)]), matrixOf([row(1)])).ok).toBe(true);
+  });
+});
+
+describe("the census (ADR 0615)", () => {
+  const pair = (cell) => `${cell.code}|${cell.context}`;
+  const cells = censusCells();
+  it("crosses a pair no cell lists, once, and every code and context a table holds", () => {
+    expect(new Set(cells.map(pair)).size).toBe(cells.length);
+    const listed = new Set([...cellList({ recall: true }), ...legalCells({ recall: true })].map(pair));
+    expect(cells.filter((cell) => listed.has(pair(cell)))).toEqual([]);
+    // What a table adds for one code reaches the others with no table entry.
+    expect(cells.map(pair)).toContain("LOADING_ON_OUTSIDE_HOLD|memo-async");
+  });
+  it("leaves out a thrown code where a promise swallows it, its silence being no measure", () => {
+    expect(cells.map(pair)).not.toContain("CONTEXT_NOT_FOUND|resolve-thunk");
+    expect(cells.map(pair)).not.toContain("DYNAMIC_STATIC_PROMISE|until-thunk");
+  });
+  it("is restricted by codes and contexts, as the grids' cells are", () => {
+    expect(censusCells({ codes: ["RESOLVE_IN_REACTIVE_SCOPE"], contexts: ["for"] })).toEqual([{ code: "RESOLVE_IN_REACTIVE_SCOPE", context: "for" }]);
+  });
+  it("gives a pair the code's plain shapes, and they build", () => {
+    const [shape] = censusShapes("RESOLVE_IN_REACTIVE_SCOPE");
+    expect(shape).toMatchObject({ binding: "direct", layer: "none", census: true });
+    const { built } = generateShape({ seed: 1 }, { code: "RESOLVE_IN_REACTIVE_SCOPE", context: "for" }, shape, 0);
+    expect(built.files["App.tsx"]).toContain("resolve(");
   });
 });

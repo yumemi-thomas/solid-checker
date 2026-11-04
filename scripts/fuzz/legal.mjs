@@ -343,7 +343,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   guardGridExit("legal");
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "runtime-diff-cap", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

@@ -211,6 +211,12 @@ function canonical(path) {
   return parent === absolute ? absolute : join(canonical(parent), absolute.slice(parent.length + 1));
 }
 
+/**
+ * The hint of a read with no strict-read window (`STRICT_READ_UNWINDOWED`, rust/dialects/solid-v2/rules/src/lib.rs; ADRs 0443, 0530): a stale snapshot
+ * reported on purpose, and the finding itself says the runtime does not warn. Its silence contradicts nothing, so no judge may read it as a false positive.
+ */
+export const NO_RUNTIME_WARNING = "No strict-read window is open";
+
 /** The findings in App.tsx, as the oracle reads them (path, rule, id, kind, line range). Paths are compared by realpath on both sides. */
 export function parseFindings(analysis, dir) {
   if (!analysis || !Array.isArray(analysis.findings)) throw new Error("no findings array");
@@ -226,6 +232,7 @@ export function parseFindings(analysis, dir) {
     .map((finding) => ({
       file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind,
       line: finding.primaryLocation.line, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
+      ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { runtimeSilent: true } : {}),
     }));
 }
 

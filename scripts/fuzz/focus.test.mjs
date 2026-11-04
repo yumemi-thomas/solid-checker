@@ -38,8 +38,8 @@ describe("readGrid", () => {
   });
 
   it("runs the six grids of the full run by default, the recall and pair grids by name", () => {
-    expect(DEFAULT_GRIDS).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo"]);
-    expect(Object.keys(GRIDS)).toEqual([...DEFAULT_GRIDS, "mx-recall", "lg-recall", "mx-pairs", "lg-pairs"]);
+    expect(DEFAULT_GRIDS).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo", "mx-census"]);
+    expect(Object.keys(GRIDS).sort()).toEqual([...DEFAULT_GRIDS, "mx-recall", "lg-recall", "mx-pairs", "lg-pairs"].sort());
   });
 });
 

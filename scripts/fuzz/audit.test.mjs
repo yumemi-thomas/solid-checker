@@ -27,7 +27,7 @@ describe("the audit's oracle sample", () => {
   it("takes focus.mjs's sample: one program per code, context and outcome", () => {
     expect(ORACLE_PER_STRATUM).toBe("1");
     expect(ORACLE_AXES).toBe("code,context,outcome");
-    expect(AUDIT_GRIDS).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo", "mx-recall", "lg-recall"]);
+    expect(AUDIT_GRIDS.toSorted()).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo", "mx-census", "mx-recall", "lg-recall"].toSorted());
   });
 });
 

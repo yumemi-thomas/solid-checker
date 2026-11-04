@@ -113,7 +113,7 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
   const hits = runtime.hits ?? null;
   return findings.map((finding) => {
     const label = `${finding.rule}@${finding.line}`;
-    if (!ruleHasRuntimeCounterpart(finding.rule)) return { finding: label, verdict: "unjudged", why: "no-counterpart" };
+    if (!ruleHasRuntimeCounterpart(finding.rule) || finding.runtimeSilent) return { finding: label, verdict: "unjudged", why: "no-counterpart" };
     const codes = codesForRule(finding.rule);
     const reported = events.filter((event) => codes.includes(event.code));
     const appLines = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);

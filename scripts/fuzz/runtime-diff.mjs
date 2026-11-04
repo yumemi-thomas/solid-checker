@@ -31,9 +31,10 @@ export function parseAxes(value) {
 
 /**
  * The rows the differential runs: up to `perStratum` per stratum of `axes` (`Infinity` for all), in the order of a hash of their id
- * (the same sample for the same grid). Rows whose evaluation failed (no fast record) are left out.
+ * (the same sample for the same grid). Rows whose evaluation failed (no fast record) are left out. `cap`: at most that many in all, the
+ * oracle being the slowest step of a sample (2.2 programs a second against a hundred evaluated): a stratum's first program before any's second.
  */
-export function sampleStrata(rows, perStratum, hasRecord = () => true, axes = DEFAULT_DIFF_AXES) {
+export function sampleStrata(rows, perStratum, hasRecord = () => true, axes = DEFAULT_DIFF_AXES, cap = Infinity) {
   const taken = new Map();
   const picked = [];
   const ordered = [...rows].sort((a, b) => fnv(String(a.id)) - fnv(String(b.id)) || (a.id < b.id ? -1 : 1));
@@ -45,7 +46,7 @@ export function sampleStrata(rows, perStratum, hasRecord = () => true, axes = DE
     taken.set(key, n + 1);
     picked.push(row);
   }
-  return picked;
+  return picked.slice(0, cap);
 }
 
 /**

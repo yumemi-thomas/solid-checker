@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { GRIDS } from "./focus.mjs";
 import { legalCells, legalId, legalShapes, pairLegalCells, recallLegalShapes } from "./legal.mjs";
-import { cellList, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
+import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
@@ -15,6 +15,7 @@ function gridIds(grid, code, { full = false } = {}) {
   const [script, ...args] = GRIDS[grid];
   const value = (name) => { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; };
   const mounts = mountsOption(value("--mounts")), sources = sourcesOption(value("--sources")), combine = args.includes("--combine");
+  if (args.includes("--census")) return censusCells({ codes: [code] }).flatMap((cell) => censusShapes(code).map((shape) => shapeId(cell, shape)));
   // The pair grids (`--pairs`): their cells and pair shapes (matrix.mjs pairShapes).
   if (args.includes("--pairs")) {
     if (script === "legal.mjs") return pairLegalCells({ codes: [code] }).flatMap((cell) => pairShapes(code, cell.context, { legal: true }).map((shape) => legalId(cell, { shape })));

@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -34,7 +34,7 @@ import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, 
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
-  BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, legalVariantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
+  BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
 } from "./misuse.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS } from "./mounts.mjs";
@@ -78,14 +78,18 @@ export function judge(input) {
   const { site, checker, runtime, built, program } = input;
   if (!built || !checker?.ok || !runtime || !["agree", "recall-gap", "not-fired", "wrong-rule", "false-clean"].includes(verdict.outcome)) return verdict;
   const region = regionOf(site);
-  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !inLines(finding, region));
+  // ADR 0614: the site's agreement answers for the row's own code, nothing else. Another rule's violation on the site's lines is judged like one
+  // away from them, and on a `not-fired` program so is the claiming rule's own: its site ran and the runtime reported nothing, which is what a
+  // false positive looks like, not a generator problem.
+  const claiming = codeRules[input.code] ?? [];
+  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !claiming.includes(finding.rule);
+  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
   const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   if (!judged.length) return verdict;
   const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.why ? `(${row.why})` : ""}`) };
   const wrong = judged.filter((row) => row.verdict === "false-positive");
-  // A false clean or a wrong rule at the site is already a problem: the off-site false positive is listed beside it. A `not-fired`
-  // program judged nothing at its site (a generator problem): its off-site rows are listed only.
-  if (!wrong.length || !["agree", "recall-gap"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
+  // A false clean or a wrong rule at the site is already a problem: the off-site false positive is listed beside it.
+  if (!wrong.length || !["agree", "recall-gap", "not-fired"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
   return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
 }
 
@@ -114,27 +118,12 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // where. With one site in the file that is this site. Chrome lists such codes in `unattributed`.
   const unplaced = events.filter((event) => SPEC[code].placeless || !attributed(event).length);
   const unattributed = (runtime.unattributed ?? []).map(String).includes(code);
-  if (!atSite.length && !unplaced.length && !unattributed) {
-    if (runtime.failure && !events.length) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
-    return { outcome: "not-fired", detail: { reported: [...new Set(runtimeEvents(runtime).map((event) => event.code))], misplaced: events.map((event) => attributed(event).map((p) => p.line)) } };
-  }
-  const placed = atSite.length ? "placed" : "unplaced";
-  const rules = codeRules[code] ?? [];
   // A combination program's other uses are legal sites of other codes: a finding on their lines is theirs, never this site's.
   const elsewhere = (finding) => others.some((lines) => inLines(finding, lines)) && !inLines(finding, region);
   const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && !elsewhere(finding));
-  const claims = (finding) => coversCode(code, finding);
-  const covering = relevant.filter((finding) => inLines(finding, region));
-  // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
-  // line itself. In a one-site program a claiming finding anywhere is this misuse's: it is an agree (or a gap) with `remote` set.
-  const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && inLines(finding, region))
-    ?? relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule));
-  const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
-  const violations = covering.filter((finding) => finding.kind === "violation");
-  const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
   // Another claimed code Chrome reports on the site's lines (a store link written in a body is a strict read too): the checker
   // missed it when no finding of its rules is in the file (`false-clean`), or declined it (`recall-gap`). The target's outcome
-  // does not see it, so it is counted on its own.
+  // does not see it, so it is counted on its own, on a `not-fired` program too (ADR 0615).
   const secondary = Object.fromEntries([...new Set(known
     .filter((event) => event.code !== code && (codeRules[event.code] ?? []).length && attributed(event).some((position) => region.includes(position.line)))
     .map((event) => event.code))]
@@ -145,13 +134,28 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
       // focus.mjs fails like the target's own (`secondary-false-clean`).
       : checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable") ? "false-clean" : "false-clean-certified"])
     .filter(([, verdict]) => verdict !== "agree"));
+  if (!atSite.length && !unplaced.length && !unattributed) {
+    if (runtime.failure && !events.length) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
+    return { outcome: "not-fired", detail: { reported: [...new Set(runtimeEvents(runtime).map((event) => event.code))], misplaced: events.map((event) => attributed(event).map((p) => p.line)), ...(Object.keys(secondary).length ? { secondary } : {}) } };
+  }
+  const placed = atSite.length ? "placed" : "unplaced";
+  const rules = codeRules[code] ?? [];
+  const claims = (finding) => coversCode(code, finding);
+  const covering = relevant.filter((finding) => inLines(finding, region));
+  // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
+  // line itself. In a one-site program a claiming finding anywhere is this misuse's: it is an agree (or a gap) with `remote` set.
+  const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && inLines(finding, region))
+    ?? relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule));
+  const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
+  const violations = covering.filter((finding) => finding.kind === "violation");
+  const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
   const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
-  const wrong = violations.filter((finding) => !corroborated(finding));
+  const wrong = violations.filter((finding) => !corroborated(finding) && !besideCode[code]?.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
@@ -190,6 +194,27 @@ export function cellList({ codes, contexts, recall = false } = {}) {
   }
   return cells;
 }
+
+const THROWN = new Set(thrownCodes.map(([, code]) => code));
+const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "LOADING_ON_OUTSIDE_HOLD"];
+/**
+ * `--census` (ADR 0614): every (code, context) no misuse or legal cell lists, in its plain shapes: a context a table added for one code, or a
+ * code a table never placed, is measured against every other as soon as it exists. The same judge reads them: the runtime says whether the
+ * pair is a misuse, so a census pair needs no cell to fail on what rowProblem flags. A pair that earns a table entry leaves the census by getting one.
+ */
+export function censusCells({ codes, contexts } = {}) {
+  const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
+  const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
+  const all = [...new Set(templates.flatMap((code) => cellsOf(SPEC[code])))];
+  return templates.filter((code) => !codes || codes.includes(code)).flatMap((code) => {
+    const listed = new Set(cellsOf(SPEC[code]));
+    // `handler-mixed` runs the site in the body too, and a pending read there halts the mount before the driven button exists: no measure.
+    const swallowed = new Set([...(THROWN.has(code) ? PROMISE_SWALLOWS : []), ...(ASYNC_READ_CODES.includes(code) ? ["handler-mixed"] : [])]);
+    return all.filter((context) => !listed.has(context) && !swallowed.has(context) && (!contexts || contexts.includes(context))).map((context) => ({ code, context }));
+  });
+}
+/** A census pair's shapes: each base variant the code's local setup takes, written directly in the context. */
+export const censusShapes = (code) => variantsOf(code).filter((variant) => !SPEC[code].variantSources?.[variant]).map((variant) => ({ variant, binding: "direct", layer: "none", census: true }));
 
 /**
  * `--recall`: the shapes the recall axes add to a cell, each new axis value crossed with the whole base grid (every variant, binding
@@ -293,7 +318,6 @@ export function pairsOption(value) {
   for (const set of sets) if (!PAIR_SETS.includes(set)) throw new Error(`--pairs: unknown pair set ${set} (${PAIR_SETS.join(", ")}, all)`);
   return sets;
 }
-const THROWN = new Set(thrownCodes.map(([, code]) => code));
 const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
 /** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
@@ -663,7 +687,7 @@ function reportGate(result) {
  */
 export async function runtimeDifferential(rows, values, perStratum, config, options, out, label) {
   const axes = parseAxes(options.runtimeDiffAxes);
-  const picked = sampleStrata(rows, perStratum, (row) => Boolean(values.get(row.id)?.runtime), axes);
+  const picked = sampleStrata(rows, perStratum, (row) => Boolean(values.get(row.id)?.runtime), axes, Number(options.runtimeDiffCap ?? Infinity));
   console.error(`${label}: runtime differential (Happy DOM vs Chrome) on ${picked.length} programs`);
   const started = Date.now();
   const results = [];
@@ -770,7 +794,7 @@ async function sweep(options, config, out) {
   const profile = gridProfile();
   const budget = budgetOf(options);
   const phaseStart = performance.now();
-  const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(","), recall: options.recall });
+  const cells = (options.census ? censusCells : cellList)({ codes: options.codes?.split(","), contexts: options.contexts?.split(","), recall: options.recall });
   let entries = [];
   // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
@@ -778,7 +802,7 @@ async function sweep(options, config, out) {
   const sources = sourcesOption(options.sources);
   // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs. `--pairs` (pairShapes): the pair grid's.
   const pairs = options.pairs ? pairsOption(options.pairs) : null;
-  const shapesOf = (cell) => (pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: recallLeanOf(options) }) : gridShapes(cell.code, cell.context, mounts, sources));
+  const shapesOf = (cell) => (options.census ? censusShapes(cell.code) : pairs ? pairShapes(cell.code, cell.context, { sets: pairs }) : options.recall ? recallShapes(cell.code, cell.context, { lean: recallLeanOf(options) }) : gridShapes(cell.code, cell.context, mounts, sources));
   // `--grid-shard i/N` without `--ids` or a sample: a shard generates only its own programs (their ids are known from the shapes),
   // the same programs as generating the whole grid and keeping the shard; `planned` counts the whole grid's.
   const sharding = gridShardOptions(options);
@@ -787,12 +811,19 @@ async function sweep(options, config, out) {
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them; on a grid, picked by id before generation.
   const ids = options.ids && options.grid ? idFilter(options.ids, "matrix", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 }) : null;
   let planned = 0;
+  const censusUnplaced = [];
   if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => {
     if (!layerKept(shape)) return;
     planned += 1;
     if (early && shardOf(shapeId(cell, shape), early.count) !== early.index) return;
     if (ids && !ids.keep(shapeId(cell, shape))) return;
-    entries.push({ cell, ...generateShape(options, cell, shape, index) });
+    // A census pair a template cannot place (an async variant in a context with no compute to hand it, say): no program, counted below.
+    try {
+      entries.push({ cell, ...generateShape(options, cell, shape, index) });
+    } catch (error) {
+      if (!options.census) throw error;
+      censusUnplaced.push(`${cell.code}/${cell.context}: ${String(error.message).slice(0, 80)}`);
+    }
   });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   if (ids) ids.check(entries);
@@ -811,6 +842,7 @@ async function sweep(options, config, out) {
   // The programs the grid selected: 0 is a grid with no shapes for these codes (focus.mjs tells it from a run that judged nothing).
   const selected = entries.length;
   profile.add("generate", performance.now() - phaseStart);
+  if (censusUnplaced.length) console.error(`matrix: census: ${censusUnplaced.length} shapes no template places (first: ${censusUnplaced[0]})`);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   // The rows judged so far, chunk by chunk (partial.mjs): what a grid process that dies before programs.jsonl leaves for focus.mjs.
@@ -970,7 +1002,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
+      const options = parseArgs(argv, { extraValues: ["budget-ms", "budget-mb", "scratch", "ids", "ids-sample", "ids-sample-seed", "grid-sample", "grid-sample-seed", "grid-sample-min", "grid-sample-codes", "grid-shard", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "runtime-diff-cap", "oracle-candidates", "chrome-concurrency", "pairs"], extraFlags: ["census", "grid", "no-chrome-cache", "combine", "chrome-strata", "recall", "recall-lean", "recall-full"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

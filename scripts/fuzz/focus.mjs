@@ -51,8 +51,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
+import { GRIDS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
-import { cellList } from "./matrix.mjs";
+import { cellList, censusCells } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
@@ -64,24 +65,11 @@ import { cacheState, machineWindow, perfLine, samplerUnavailable, startSampler, 
 import { compareLines, comparePerf, readRun } from "./perf-compare.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const MOUNTS = ["--mounts", "root,child,show,for"];
-const SOURCES = ["--sources", "props,context,module,async"];
-/** The grids of the full run (the same arguments), by name. */
-export const GRIDS = {
-  "mx-base": ["matrix.mjs", ...MOUNTS],
-  "mx-src": ["matrix.mjs", ...SOURCES],
-  "mx-combo": ["matrix.mjs", "--combine", ...MOUNTS],
-  "lg-base": ["legal.mjs", ...MOUNTS],
-  "lg-src": ["legal.mjs", ...SOURCES],
-  "lg-combo": ["legal.mjs", "--combine", ...MOUNTS],
-  // The recall axes (matrix.mjs recallAxes): asked for by name (`--grids mx-recall,lg-recall`), never by default, and lean unless `--recall-full` (matrix.mjs LEAN_DEMOTED); their false cleans
-  // are the measured known misses, not regressions.
-  "mx-recall": ["matrix.mjs", "--recall"],
-  "lg-recall": ["legal.mjs", "--recall"],
-  // The pair grids (matrix.mjs pairShapes, misuse.mjs PAIR_SETS): asked for by name too, `--sample-big` when iterating.
-  "mx-pairs": ["matrix.mjs", "--pairs", "all"],
-  "lg-pairs": ["legal.mjs", "--pairs", "all"],
-};
+export { GRIDS } from "./focus-grids.mjs";
+/** The census's oracle strata. */
+const CENSUS_ORACLE_AXES = "code,outcome";
+/** The grid that takes no manifest: it holds every program it has, and answers to nothing recorded, so a run lists all of it. */
+export const whole = (grid) => grid === "mx-census";
 /** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall and pair ones. */
 export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall") && !grid.endsWith("-pairs"));
 export { PROBLEMS } from "./codes.mjs";
@@ -305,9 +293,11 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const room = noRoom(unitPlaces({ unitDir: unit.dir, scratch: scratchRoot, roleLog: options.roleLog }));
       if (room) throw new FocusStop(`${unit.label}: not started, ${room} (prune cases/ with --prune-cases or free the disk)`);
       const started = Date.now();
-      const select = [...(unit.codes ? ["--codes", unit.codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
+      const select = [...(unit.codes ? ["--codes", unit.codes.join(",")] : []), ...(options.smoke && !whole(grid) ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
       // A recall grid is lean unless `--recall-full` (matrix.mjs LEAN_DEMOTED); the flag is the recall grids' only, the others take none.
       const recallArgs = options.recallFull && shape.includes("--recall") ? ["--recall-full"] : [];
+      // A census cell is a pair: the default strata would send most of the grid through Chrome, ten minutes against seconds of evaluation.
+      const unitHost = whole(grid) && options.runtimeDiff !== "0" ? host.map((arg) => (arg === options.oracleAxes ? CENSUS_ORACLE_AXES : arg)) : host;
       const heap = options.heapMb ?? (grid.endsWith("-recall") ? "12000" : undefined);
       const logPath = `${unit.dir}.log`;
       // The role log: one file per grid that every checker process appends whole lines to (role_log.rs), folded once the grid's rows
@@ -318,7 +308,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
       const unitSampled = sampled.length && (!unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
-      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...host, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
+      const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...unitHost, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
       const read = readGrid(unit.dir);
@@ -342,7 +332,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       if (filled) attention.push(`${unit.label}: the disk filled while the unit ran (ENOSPC in ${logPath} or its rows); its harness rows are that, not the checker. ${noRoom(unitPlaces({ unitDir: unit.dir, scratch: scratchRoot, roleLog: options.roleLog })) ?? "free space is back now"}`);
       for (const result of behaviour.slice(0, 10)) attention.push(`${unit.label}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
       // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
-      if (options.smoke && existsSync(join(unit.dir, "programs.jsonl"))) {
+      if (options.smoke && !whole(grid) && existsSync(join(unit.dir, "programs.jsonl"))) {
         const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(unit.dir));
         if (moved.worse.length || moved.other.length) console.log(`           moved from the manifest: ${moved.worse.length} worse, ${moved.other.length} better or changed`);
         if (moved.missing.length) attention.push(`${unit.label}: ${moved.missing.length} programs of the manifest gave no row (${moved.missing.slice(0, 3).join(", ")})`);
@@ -386,10 +376,10 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // A grid with no cell for these codes (a code with no legal context, say) has nothing to run.
       // lg-pairs takes the misuse cells a settled pair is legal in too (legal.mjs pairLegalCells): `--split-codes` must make a unit for
       // their codes (PENDING_ASYNC_FORBIDDEN_SCOPE has no legal cell of its own; its onSettled later-mount pairs were skipped).
-      const cells = script === "legal.mjs" ? (shape.includes("--pairs") ? pairLegalCells({ codes }) : legalCells({ codes, recall: shape.includes("--recall") })) : cellList({ codes, recall: shape.includes("--recall") });
+      const cells = whole(grid) ? censusCells({ codes }) : script === "legal.mjs" ? (shape.includes("--pairs") ? pairLegalCells({ codes }) : legalCells({ codes, recall: shape.includes("--recall") })) : cellList({ codes, recall: shape.includes("--recall") });
       if (!cells.length) { console.log(`  ${grid.padEnd(8)}    -  no cells for these codes`); continue; }
       const manifest = join(SMOKE_DIR, `${grid}.json`);
-      if (options.smoke && !existsSync(manifest)) { attention.push(`${grid}: no smoke manifest ${manifest} (smoke.mjs select)`); continue; }
+      if (options.smoke && !whole(grid) && !existsSync(manifest)) { attention.push(`${grid}: no smoke manifest ${manifest} (smoke.mjs select)`); continue; }
       // `--split-codes`: one process per code of the grid's cells, in the cells' order.
       const units = options.splitCodes ? [...new Set(cells.map((cell) => cell.code))].map((code) => ({ codes: [code], dir: join(out, grid, code), label: `${grid}/${code}` })) : [{ codes, dir: join(out, grid), label: grid }];
       for (const unit of units) runUnit(grid, script, shape, unit, manifest);

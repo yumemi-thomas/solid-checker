@@ -2406,5 +2406,131 @@
   "found": "review of the stack, probed on rc.17",
   "fixed": "ADR 0613",
   "outside": "the generator writes no flush in a parameter default; fixture flush-veto-default holds it"
+ },
+ {
+  "finding": "a write or an action call in a closure nested in an onSettled callback a root's flush() drains was certified legal: the leaf exemption answered for the layer (ADR 0613)",
+  "found": "the settled-flush-root recall context, focus-final (2026-11-04, the build before the fix): 95 + 35 certified false cleans",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-settled-flush-root-signal-direct-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "the same, for an action call (ADR 0613)",
+  "found": "the settled-flush-root recall context, focus-final (2026-11-04, the build before the fix)",
+  "fixed": "ADR 0613",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-settled-flush-root-x-direct-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "a store read in an intrinsic ref was certified clean: the member path kept the deferred role ADR 0520 had taken from the accessor path; a store read in a named function a carrier runs was dropped by the same path, and a store read in a layer had no in-place owner in the summaries (ADR 0522) (ADR 0614)",
+  "found": "secondary-false-clean rows of focus-final (2026-11-04, the build before the fix): 6,364 certified STRICT_READ_UNTRACKED beside STORE_WRITE_OUTSIDE_SETTER, tallied in matrix.json since ADR 0498 and failing nothing",
+  "fixed": "ADR 0614",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-ref-nested-assign-direct-none",
+   "mx-store-write-outside-setter-body-nested-assign-direct-handoff-foreach",
+   "mx-store-write-outside-setter-effect-apply-nested-assign-direct-handoff-foreach",
+   "mx-store-write-outside-setter-ref-named-nested-assign-direct-handoff-foreach",
+   "mx-store-write-outside-setter-effect-async-nested-assign-hook-member-none",
+   "mx-store-write-outside-setter-effect-async-nested-assign-wrapper-closure"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "Loading/Errored called in a createReaction callback was SC4001 only: rc.17 warns NO_OWNER_BOUNDARY, then throws PRIMITIVE_IN_EFFECT_CALLBACK (ADR 0614)",
+  "found": "secondary-false-clean rows of focus-final (2026-11-04, the build before the fix): 746 certified",
+  "fixed": "ADR 0614",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-reaction-loading-direct-none",
+   "mx-no-owner-boundary-reaction-errored-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): the old build's focus-final mx-recall flags these programs and main's baseline binary misses them too; on the fix `matrix.mjs --recall --ids` over all 7,264 flagged programs gives 7,134 agree, 130 recall-gap, nothing flagged"
+ },
+ {
+  "finding": "resolve() certified clean in an apply a flush under a memo drains, an action's first step called from a tracked effect, an IIFE in a flow child's JSX; rc.17 throws. In an effect apply and in onSettled it reports PRIMITIVE_IN_EFFECT_CALLBACK and PRIMITIVE_IN_FORBIDDEN_SCOPE (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-effect-apply-flush-memo-x-direct-none",
+   "mx-resolve-in-reactive-scope-action-from-tracked-x-direct-none",
+   "mx-resolve-in-reactive-scope-for-x-direct-none",
+   "mx-resolve-in-reactive-scope-effect-apply-x-direct-none",
+   "mx-resolve-in-reactive-scope-settled-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "the same for until() (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-until-in-reactive-scope-effect-apply-flush-memo-x-direct-none",
+   "mx-until-in-reactive-scope-action-from-tracked-x-direct-none",
+   "mx-until-in-reactive-scope-for-x-direct-none",
+   "mx-until-in-reactive-scope-effect-apply-x-direct-none",
+   "mx-until-in-reactive-scope-settled-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "a pending read in an action's first step called from a leaf owner was certified clean (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-pending-async-forbidden-scope-action-from-settled-x-direct-none",
+   "mx-pending-async-forbidden-scope-action-from-tracked-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "SC1002 proven on an async source past an await, where rc.17 throws pending before any warning (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "LOADING_ON_OUTSIDE_HOLD",
+  "ids": [
+   "mx-loading-on-outside-hold-memo-async-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "SC5003 proven on a read in a cleanup written in a flow child: a deferred role under any JSX counted as a render (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-effect-cleanup-show-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
+ },
+ {
+  "finding": "Loading/Errored called under a leaf owner was SC3001 silent; rc.17 reports PRIMITIVE_IN_FORBIDDEN_SCOPE (ADR 0614)",
+  "found": "the census's first runs (2026-11-04)",
+  "fixed": "ADR 0614",
+  "grid": "mx-census",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-action-from-settled-loading-direct-none",
+   "mx-no-owner-boundary-tracked-loading-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-04): `matrix.mjs --census` on the build before the fix flags the family (release of fuzz-oracle-gaps: 20 rows; second codes on not-fired rows once the judge read them); on the fix 3,220 programs, nothing flagged"
  }
 ]

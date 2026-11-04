@@ -318,8 +318,9 @@ export const SPEC = {
     // positions: arithmetic, TS2362; an index, TS2538), misuse and legal alike; any violation there is tsc-overlap.mjs's.
     // API_VARIANTS (measured 2026-11-03): `latest(() => a1())` and `isPending(() => a1())` of a pending async memo are strict reads
     // (not a pending throw): reported where a read is, silent in a memo, a compute, JSX, `untrack` and a leaf (`legalVariantContexts`).
-    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending"],
-    bindingsFor: (variant) => (variant?.startsWith("uncalled") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    // `store-link` (ADR 0615): a store's Get, the read form a call of an accessor and a member read reach by different paths.
+    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending", "store-link"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending", "store-link"],
+    bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant === "store-link" ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
       latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"] },
     legalVariantContexts: { latest: LEAF, "is-pending": LEAF },
@@ -327,8 +328,8 @@ export const SPEC = {
     // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
     legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
     variantSources: { settled: ["module-hook-shared"] },
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
-    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : pendingRead(node, sigs)),
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" ? storeNestedSignal(name("s"), 0) : signal(name("r"), 3, "src")],
+    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
@@ -396,7 +397,8 @@ export const SPEC = {
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [signal(name("r"), 3, "src")], call: (node, [sig]) => local(sig.name),
+    recallVariants: ["store-link"], bindingsFor: (variant) => (variant === "store-link" ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    setup: (variant, name) => [variant === "store-link" ? storeNestedSignal(name("s"), 0) : signal(name("r"), 3, "src")], call: (node, [sig]) => (node.variant === "store-link" ? member(sig.name, (o) => `${o}.a`) : local(sig.name)),
   },
   // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
@@ -723,6 +725,8 @@ const DEFER_RERUN_LEGAL = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OW
 const PLAIN_ASYNC = ["async", ...ASYNC_CONTROL];
 const COMPUTE_ASYNC = ["memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"];
 const HANDLER_ASYNC_PROBED = ["handler-async-loop", "handler-async-finally"];
+/** Contexts where a code the runtime only throws rejects a promise nothing logs, so its silence is no measure (the comment above; matrix.mjs censusCells). */
+export const PROMISE_SWALLOWS = [...COMPUTE_ASYNC, "resolve-thunk", "until-thunk"];
 const ASYNC_FAMILY_PLACEMENT = {
   STRICT_READ_UNTRACKED: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
   PENDING_ASYNC_UNTRACKED_READ: { legal: [...PLAIN_ASYNC, ...HANDLER_ASYNC_PROBED] },
@@ -1362,7 +1366,8 @@ function buildOne(kit, plan = {}) {
   const recall = plan.legal ? recallLegalOf(code) : recallContextsOf(code);
   // A legal pair (matrix.mjs pairShapes, a later mount of a settled async source) sits in a misuse context of its code.
   const legalPair = plan.legal && plan.source?.startsWith("async-") && plan.mount !== undefined && spec.contexts.includes(context);
-  if (!contexts.includes(context) && !recall.includes(context) && !legalPair) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
+  // `plan.census` (matrix.mjs censusCells): any context, the measure being what the code does there.
+  if (!contexts.includes(context) && !recall.includes(context) && !legalPair && !plan.census) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
   // A variant one source carries (`variantSources`) is the grid's, never drawn: every random draw sees the variants it saw before.
   const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick((plan.legal ? legalVariantsOf(code) : variantsOf(code)).filter((v) => !spec.variantSources?.[v]));
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
