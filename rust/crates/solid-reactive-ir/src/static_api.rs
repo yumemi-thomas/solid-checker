@@ -358,6 +358,38 @@ impl StaticApiContext<'_> {
                     uncertain: origin.mixed,
                 });
             }
+            // SC3002 (ADR 0622): `onFlush` under a children-capable owner. rc.21
+            // warns on `getOwner()` with no `CONFIG_CHILDREN_FORBIDDEN`, the
+            // owned-scope write guard's test, so the write role places it: an
+            // effect's apply, a leaf and an event handler have no such owner.
+            if kind == Some(Primitive::OnFlush) {
+                let allowed = crate::execution_role::allowed_callback_spans(file, self.lookup);
+                let role = crate::execution_role::semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    crate::execution_role::RootBodyGuard::Rejects,
+                );
+                if role.reports_disallowed_write() || role.reports_unplaced() {
+                    result.violations.push(StaticViolation {
+                        id: "SC3002".into(),
+                        rule: "on-flush-in-owned-scope".into(),
+                        message: "onFlush() is called in a component body or a computation; it is \
+                                  meant for event handlers and effect callbacks"
+                            .into(),
+                        hint: "Call onFlush from an event handler or an effect's apply, where a \
+                               write has an update to stay out of."
+                            .into(),
+                        location: location(file.path.shared(), call.callee),
+                        analysis_context: String::new(),
+                        fixes: vec![],
+                        uncertain: role.reports_unplaced(),
+                    });
+                }
+            }
             // SC6002 (ADR 0483): a computation or root created with no owner
             // on a createEffect apply's stack. rc.17's dev build throws
             // PRIMITIVE_IN_EFFECT_CALLBACK there (`assertNotInEffectCallback`,

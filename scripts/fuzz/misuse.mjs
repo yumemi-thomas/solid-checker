@@ -439,6 +439,16 @@ export const SPEC = {
   // rc.17 signals dev.js: a `<Loading on>` re-armed by a write while a source it waits on is also read outside it (the fallback can
   // never show). SC5006 claims it as an obligation only (ADR 0517). The site is the outside read; the diagnostic is raised from the
   // boundary's notification (no authored frame is guaranteed), so it is judged by file. Recall grids only (`recallOnly`).
+  // rc.21 (ADR 0622): `onFlush` under a children-capable owner warns. Measured on the dev build: a body, a compute, a root; silent in an
+  // apply, a leaf and a handler. Recall grids only.
+  ON_FLUSH_IN_OWNED_SCOPE: { recallOnly: true, legal: ["handler", "effect-apply", "settled", "tracked"],
+    contexts: [], recallContexts: ["body", "memo", "effect-compute", "render-compute", "root"], bindings: BINDINGS, setup: () => [], call: () => api("onFlush", "() => {}") },
+  // rc.21 (ADR 0621): `<Loading on={fn}>` warns on the boundary's first run. The site is a read under the boundary; the `on` value is
+  // the variant. Judged by file (the diagnostic is raised from the boundary). `on` is typed `any`. Recall grids only.
+  LOADING_ON_ACCESSOR: { recallOnly: true, placeless: true, variants: ["accessor", "memo", "arrow"], recallLegalVariants: ["value"], legal: ["loading-on-accessor"],
+    contexts: [], recallContexts: ["loading-on-accessor"], bindings: ["direct", "alias", "wrapper"],
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("t")) : signal(name("t"), 1, "src")], call: (node, [sig]) => local(sig.name),
+    onAttribute: (variant, sig) => (variant === "arrow" ? `() => ${sig}()` : variant === "value" ? `${sig}()` : sig) },
   LOADING_ON_OUTSIDE_HOLD: { recallOnly: true, placeless: true,
     contexts: [], recallContexts: ["loading-on-outside"], bindings: ["direct", "alias", "wrapper"],
     setup: (variant, name) => { const trigger = signal(name("t"), 1, "src"); return [trigger, asyncDepSignal(name("a"), trigger.name)]; },
@@ -1283,6 +1293,8 @@ function recallContext(context, stmts, kit) {
       const item = child(kit.name("v"), iife(fn([...stmts, ret(num(1))])));
       return { body: [], view: [item], loading: true };
     }
+    // LOADING_ON_ACCESSOR: the boundary's `on`, as the variant writes it, around the site.
+    case "loading-on-accessor": return { body: [], view: [child(kit.name("v"), iife(fn([...stmts, ret(num(1))])))], loadingOn: true };
     default: {
       // `cbp-<call>[-<form>]` (CBP_CONTEXTS): the site in a callback prop a same-file child calls.
       const prop = /^cbp-([a-z]+)(?:-([a-z]+))?$/.exec(context);
@@ -1426,7 +1438,8 @@ function buildOne(kit, plan = {}) {
   // LOADING_ON_OUTSIDE_HOLD's boundary: `<Loading on={t()}>` around a read of the async memo, and the button that writes the trigger.
   const loadingFor = plan.legal ? spec.legalLoading?.[context] : undefined;
   const underLoading = loadingFor === true || (Array.isArray(loadingFor) && loadingFor.includes(variant));
-  const view = placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])]
+  const view = placed.loadingOn ? [loadingView(null, placed.view, spec.onAttribute(variant, sigs[0].name))]
+    : placed.loading ? [loadingView(sigs[0].name, [child(kit.name("v"), read(sigs[1].name))]), ...placed.view, button(kit.name("b"), [expr(write(sigs[0].name, 2))])]
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
     sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view,

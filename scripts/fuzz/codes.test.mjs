@@ -114,7 +114,7 @@ describe("the policy table", () => {
     }
   });
   it("classifies the ones the proposal lists", () => {
-    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(25);
+    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(27);
     // SC5001 claims the leaf-owner pending read (docs/rules/pending-async-unsuspendable-read.md).
     expect(policyOf("PENDING_ASYNC_FORBIDDEN_SCOPE")).toMatchObject({ disposition: "defect-claimed", rules: ["pending-async-unsuspendable-read"], severity: "warn" });
     // Solid documents a boundary-less async mount as legal (SPEC-ASYNC-SEMANTICS A6): advisory, still claimed by SC5003 as a warning.

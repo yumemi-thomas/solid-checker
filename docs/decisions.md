@@ -1503,6 +1503,14 @@ Rules-mining CS-R15; every form measured on rc.21 in a strict window. `JSON.stri
 ## ADR 0620 — A tracked read in a compute is no obligation
 `async_read_role` maps a tracked read in a computation's callback to `Unknown`, so it is no render for SC5003; the same `Unknown` also set `invocation_context_unproven`, so `createMemo(() => m())` over an async memo was an SC5001 obligation in every project since the flag was added. A pending source suspends such a read: `tracked_computation_read` separates it from a read no role places. Owner: `owners/async_context.rs`.
 
+<a id="adr-0621"></a>
+## ADR 0621 — SC5007: `<Loading on>` handed a function
+rc.21 `LOADING_ON_ACCESSOR`. `on` is typed `any`, so `tsc` is silent. Reported on the exact `Loading` for a function literal and for a value Type Facts call a function, wherever it came from; a union that may be one is an obligation, and any other value states nothing. Owner: `loading_hold.rs`.
+
+<a id="adr-0622"></a>
+## ADR 0622 — SC3002: `onFlush` in an owned scope
+rc.21 `ON_FLUSH_IN_OWNED_SCOPE` tests the owned-scope write guard's own condition, so the write role places the call. A warning, as Solid's is. An unplaced call is uncertifiable. Owner: `static_api.rs`.
+
 <a id="adr-0623"></a>
 ## ADR 0623 — A write below a shallow store's root is the raw write
 Rules-mining CS-R38, R39, measured: `createStore(v, { shallow: true })` serves values raw, so `state.list[0].a = 2` lands and warns nothing, and `state.list = []` is dropped with `STORE_WRITE_OUTSIDE_SETTER`. SC2003 stays silent past the root of a store proven shallow by a literal option; it was uncertifiable. Owner: `upstream_compat/shared_reactivity.rs` (`shallow_store_root`).

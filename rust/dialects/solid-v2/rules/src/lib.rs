@@ -642,6 +642,12 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::FlushInEffectCallback => {
             "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
         }
+        Rule::LoadingOnAccessor => {
+            "the value passed to `on` is proven to be a function, which the boundary never calls"
+        }
+        Rule::OnFlushInOwnedScope => {
+            "the onFlush() call runs under a children-capable owner, a component body or a computation"
+        }
         Rule::LoadingOnOutsideHold => {
             "a Loading boundary with `on` holds an async source the analysis cannot prove only it reads, so whether the frame waits on an outside read of the same flight is not decided"
         }

@@ -1,5 +1,6 @@
 // Clean. Mirrors jar-hell-web web/src/pages/PackagePage.tsx:22-41,56-63: a writable derived signal, an async
 // function that writes it after an await only if `latest(gav)` still matches, called from an effect apply.
+// The app passes `on={analyzed}`, which rc.21 warns on (SC5007); this case keeps the value form.
 import { createEffect, createMemo, createSignal, latest, Loading, Show } from "solid-js";
 
 const getPackage = async (id: string) => ({ id, name: `${id}-old` });
@@ -21,7 +22,7 @@ export function Page() {
     },
   );
   return (
-    <Loading on={analyzed} fallback={<p>loading</p>}>
+    <Loading on={analyzed()} fallback={<p>loading</p>}>
       <button type="button" onClick={() => setCoordinate(coordinate() + "x")}>grow</button>
       <Show when={pkg()}>{(p) => <p>{p().name}</p>}</Show>
     </Loading>

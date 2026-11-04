@@ -330,6 +330,13 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
             {
                 add_symbol(expression, false);
             }
+            // ADR 0621: a component's `on` is judged by its resolved type:
+            // `loading-on-accessor` asks whether `<Loading on>` got a function.
+            if name == "on" && !native && attribute.namespace.is_none() {
+                let runtime_expression = file.ast.peel_ts_sugar_span(expression);
+                add_symbol(runtime_expression, false);
+                type_descriptor_spans.insert(runtime_expression);
+            }
             // A native event-handler value is judged by its resolved type:
             // `reactive-handler-frozen` (both catalogs) proves the
             // value non-callable. The

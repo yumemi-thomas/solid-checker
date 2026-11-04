@@ -281,6 +281,8 @@ const codeRules = {
   FLUSH_IN_ACTION: ["flush-in-action"],
   FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
   LOADING_ON_OUTSIDE_HOLD: ["loading-on-outside-hold"],
+  LOADING_ON_ACCESSOR: ["loading-on-accessor"],
+  ON_FLUSH_IN_OWNED_SCOPE: ["on-flush-in-owned-scope"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };
