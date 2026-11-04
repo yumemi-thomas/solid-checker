@@ -745,9 +745,11 @@ function signalText(sig, signals, used) {
     case "async-declared": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1, { loadingValue: 0 });`;
     case "async-maybe": used.add("createMemo"); return `const ${sig.name} = createMemo((): number | Promise<number> => ((globalThis as { late?: boolean }).late ? Promise.resolve(1) : 1));`;
     case "optimistic-async": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init});`;
+    case "optimistic-declared": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init}, { loadingValue: ${sig.init} });`;
     case "optimistic-async-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;
     case "deferred": used.add("createDeferred"); return `const ${sig.name} = createDeferred(async () => 1);`;
+    case "over-async": used.add("createMemo"); return `const ${sig.name}i = createMemo(async () => 1);\n  const ${sig.name} = createMemo(() => ${sig.name}i());`;
     case "store-array": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<number[]>([${sig.init}]);`;
     case "store-empty": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({});`;
     case "store-shallow": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] }, { shallow: true });`;
@@ -766,7 +768,7 @@ function signalKeys(sig) {
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "projection": return [[sig.name, "{ v: number }"]];
-    case "deferred": return [[sig.name, "Accessor<number>"]];
+    case "deferred": case "over-async": return [[sig.name, "Accessor<number>"]];
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
     case "async": case "async-dep": case "async-declared": case "async-maybe": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];

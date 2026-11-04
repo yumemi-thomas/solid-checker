@@ -370,7 +370,7 @@ export const SPEC = {
     bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
       latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"], labelled: [...STRICT_WINDOWS, "memo", "effect-compute", "render-compute", "handler"],
-      "latest-name": STRICT_WINDOWS, "is-pending-name": STRICT_WINDOWS, "latest-store": ["body"], "is-pending-store": ["body"], declared: ["body"], "maybe-sync": ["body"] },
+      "latest-name": STRICT_WINDOWS, "is-pending-name": STRICT_WINDOWS, "latest-store": ["body"], "is-pending-store": ["body"], declared: ["body", "untrack"], "maybe-sync": ["body"] },
     legalVariantContexts: { latest: LEAF, "is-pending": LEAF, "store-snapshot": STRICT_WINDOWS, "store-escaped-leaf": STRICT_WINDOWS, "merge-plain": STRICT_WINDOWS, "store-raw-root": STRICT_WINDOWS, declared: ["untrack"], ...Object.fromEntries(WHOLE_STORE_SILENT.map((form) => [form, STRICT_WINDOWS])) },
     // A pending read in JSX or a memo the JSX reads is under `<Loading>` (`legalLoading`, see PENDING_ASYNC_UNTRACKED_READ); in a render
     // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
@@ -439,10 +439,11 @@ export const SPEC = {
   // `labelled`: `untrack(fn, "label")` opens a window of its own, so it throws on any pending source.
   PENDING_ASYNC_UNTRACKED_READ: { legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"], untrack: ["module", "module-barrel", "async-prop", "async-value", "async-context", "async-loading"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     // ADR 0635: an uninitialized derive refuses key probes.
-    recallVariants: ["deferred", "labelled", "store-keys", "store-in", "store-has-own"], recallMountsNotIn: { untrack: ["dynamic"] }, bindingsFor: (variant) => (variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
-    variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"], labelled: ["body", "root"], "store-keys": ["body", "root"], "store-in": ["body", "root"], "store-has-own": ["body", "root"] },
+    recallVariants: ["deferred", "labelled", "store-keys", "store-in", "store-has-own", "over-async"], recallMountsNotIn: { untrack: ["dynamic"] }, bindingsFor: (variant) => (variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"], labelled: ["body", "root"], "store-keys": ["body", "root"], "store-in": ["body", "root"], "store-has-own": ["body", "root"], "over-async": ["body", "root", "untrack"] },
     contexts: ["body", "root", "effect-apply", "render-apply", "untrack"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
+    // `over-async`: a sync memo over an async one is pending with it (ADR 0628).
+    setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : variant === "over-async" ? apiSignal(name("a"), 0, "over-async", "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
     call: (node, sigs) => (node.variant === "store-keys" ? member(sigs[0].name, (o) => `Object.keys(${o})`) : node.variant === "store-in" ? member(sigs[0].name, (o) => `"v" in ${o}`) : node.variant === "store-has-own" ? member(sigs[0].name, (o) => `Object.hasOwn(${o}, "v")`) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : pendingRead(node, sigs)),
   },
   SYNC_NODE_RECEIVED_ASYNC: {
@@ -470,16 +471,22 @@ export const SPEC = {
   ON_FLUSH_IN_OWNED_SCOPE: { recallOnly: true, legal: ["handler", "effect-apply", "settled", "tracked"],
     contexts: [], recallContexts: ["body", "memo", "effect-compute", "render-compute", "root"], bindings: BINDINGS, setup: () => [], call: () => api("onFlush", "() => {}") },
   // rc.21 (ADR 0636): an optimistic setter before its async source's first answer. A driven click lands after it: legal, an obligation.
-  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallLegal: ["handler"],
-    contexts: [], recallContexts: ["body", "root"], bindings: ["direct", "alias", "wrapper"],
-    setup: (variant, name) => [apiSignal(name("o"), 1, variant === "store" ? "optimistic-async-store" : "optimistic-async", "src")],
-    call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(d) => { d.v = 2; }") : local(sig.setter, "2")),
+  // `creates-here`: the creation is on the write's stack, so a handler throws too (ADR 0636); `declared`: a `loadingValue` is an answer.
+  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallVariants: ["creates-here"], recallLegalVariants: ["declared"], recallLegal: ["handler"],
+    variantContexts: { signal: ["body", "root"], store: ["body", "root"], "creates-here": ["body", "creates-in-handler"] }, legalVariantContexts: { declared: ["handler"] },
+    contexts: [], recallContexts: ["body", "root", "creates-in-handler"], bindings: ["direct", "alias", "wrapper"],
+    setup: (variant, name) => (variant === "creates-here" ? [] : [apiSignal(name("o"), 1, variant === "store" ? "optimistic-async-store" : variant === "declared" ? "optimistic-declared" : "optimistic-async", "src")]),
+    call: (node, sigs) => (node.variant === "creates-here" ? member("createOptimistic", () => `createOptimistic(async () => 1)[1](2)`, ["createOptimistic"]) : node.variant === "store" ? local(sigs[0].setter, "(d) => { d.v = 2; }") : local(sigs[0].setter, "2")),
   },
   // rc.21 (ADR 0637): a compute catches a pending read's throw and completes. `rethrow` lets it continue; a signal never throws.
-  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], legalVariants: ["rethrow", "signal"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
+  // Per pass (ADR 0637): `store-get`, `store-keys` and `latest` read too; `prior-read` and `later-read` leave a read outside the `try`,
+  // so the throw leaves the pass and nothing reports.
+  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], recallVariants: ["store-get", "store-keys", "latest"], legalVariants: ["rethrow", "signal", "prior-read", "later-read"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
     contexts: [], recallContexts: ["memo", "effect-compute"], bindings: ["direct"],
-    setup: (variant, name) => [variant === "signal" ? signal(name("r"), 1, "src") : asyncSignal(name("a"))],
-    call: (node, [sig]) => member(sig.name, (o) => (node.variant === "rethrow" ? `try { ${o}(); } catch (error) { throw error; }` : `try { ${o}(); } catch { }`)),
+    setup: (variant, name) => [variant === "signal" ? signal(name("r"), 1, "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
+    call: (node, [sig]) => (node.variant === "latest" ? member(sig.name, (o) => `try { latest(${o}); } catch { }`, ["latest"]) : member(sig.name, (o) => ({
+      rethrow: `try { ${o}(); } catch (error) { throw error; }`, "prior-read": `${o}(); try { ${o}(); } catch { }`, "later-read": `try { ${o}(); } catch { } ${o}()`,
+      "store-get": `try { ${o}.v; } catch { }`, "store-keys": `try { Object.keys(${o}); } catch { }` }[node.variant] ?? `try { ${o}(); } catch { }`))),
   },
   // rc.21 (ADR 0624): `<Loading on={fn}>` warns on the boundary's first run. The site is a read under the boundary; the `on` value is
   // the variant. Judged by file (the diagnostic is raised from the boundary). `on` is typed `any`. Recall grids only.
@@ -515,7 +522,7 @@ export const SPEC = {
   RESOLVE_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("resolve", "() => 1") },
   UNTIL_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
   FLUSH_IN_ACTION: { legal: ["handler", "timer"], recallContexts: ["action-after-yield", "action-shared"], contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch"], recallLegal: ["evt-handler-dispatch", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
@@ -1094,7 +1101,7 @@ function inContext(context, stmts, kit) {
     case "timer": return { body: [expr(prim("timer", fn(stmts)))], view: [] };
     case "then": return { body: [expr(prim("then", fn(stmts)))], view: [] };
     case "micro": return { body: [expr(prim("micro", fn(stmts)))], view: [] };
-    case "handler": return { body: [], view: [button(kit.name("b"), stmts)] };
+    case "handler": case "creates-in-handler": return { body: [], view: [button(kit.name("b"), stmts)] };
     // EVENT_CONTEXTS: a listener the program dispatches to itself, and work a handler or an apply schedules.
     case "evt-body-dispatch": case "evt-apply-dispatch": case "evt-handler-dispatch": {
       const el = kit.name("el");
@@ -1104,6 +1111,14 @@ function inContext(context, stmts, kit) {
       if (context === "evt-apply-dispatch") return { body: [...made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
       return { body: made, view: [button(kit.name("b"), [fire])] };
     }
+    // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
+    case "evt-apply-helper-dispatch": {
+      const el = kit.name("el"), fire = kit.name("fire");
+      const helper = decl(fire, fn([expr(domExpr(`${el}.click()`))]));
+      return { body: [decl(el, domExpr('document.createElement("button")')), expr(listenExpr(el, "click", fn(stmts))), helper, expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(fire)))]) }))], view: [] };
+    }
+    case "evt-apply-window-dispatch":
+      return { body: [expr(listenExpr("window", "sc-evt", fn(stmts))), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(domExpr('window.dispatchEvent(new Event("sc-evt"))'))]) }))], view: [] };
     case "timer-from-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("timer", fn(stmts)))])] };
     case "micro-from-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("micro", fn(stmts)))])] };
     case "timer-from-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(prim("timer", fn(stmts)))]) }))], view: [] };

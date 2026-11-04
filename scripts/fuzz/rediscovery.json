@@ -2623,5 +2623,257 @@
    "mx-loading-on-accessor-loading-on-accessor-arrow-direct-none"
   ],
   "rediscovered": "the first SC5007 (a local binding proof) failed every `s-module` source; Type Facts: 0"
+ },
+ {
+  "finding": "rc.21 `untrack` of a memo a hook creates, in a body, throws PENDING_ASYNC_UNTRACKED_READ; the checker certified it, in closures, handed by name and through values no alias resolves too (ADR 0628)",
+  "found": "the rc.21 upgrade's probes; 184 more rows from the grid (2026-11-04)",
+  "fixed": "ADR 0628",
+  "grid": "mx-src",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-untrack-x-direct-none-s-module-hook",
+   "mx-pending-async-untracked-read-untrack-x-direct-none-s-module-hook-member",
+   "mx-pending-async-untracked-read-untrack-x-direct-none-s-module-hook-direct"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-src`: 3 false-clean; the fix: 3 agree"
+ },
+ {
+  "finding": "the same read through a layer, a let alias, a callback named or in a bundle, and a function handed inside the `untrack` (ADR 0628)",
+  "found": "grid f3a, Chrome-confirmed per group",
+  "fixed": "ADR 0628",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-untrack-x-let-alias-none",
+   "mx-pending-async-untracked-read-untrack-x-direct-none-cb-bundle",
+   "mx-pending-async-untracked-read-untrack-x-direct-handoff-foreach"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 3 false-clean; the fix: 3 recall-gap"
+ },
+ {
+  "finding": "a hook returning the creation itself: a body read was SC1001 where the run throws PENDING_ASYNC_UNTRACKED_READ (ADR 0628)",
+  "found": "probe hk-plain, rc.21",
+  "fixed": "ADR 0628",
+  "grid": "mx-src",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-body-x-direct-none-s-module-hook-direct"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-src`: 1 wrong-rule; the fix: 1 agree"
+ },
+ {
+  "finding": "a Get of a store proxy escaped from `untrack` warns and was certified (ADR 0629, CS-R19)",
+  "found": "rules mining, Chrome",
+  "fixed": "ADR 0629",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-escaped-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 1 false-clean; the fix: 1 agree"
+ },
+ {
+  "finding": "`untrack(fn, \"label\")` opens a window wherever it runs; certified (ADR 0628)",
+  "found": "probe u-settled-labelled, Chrome",
+  "fixed": "ADR 0628",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-labelled-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 1 false-clean; the fix: 1 agree"
+ },
+ {
+  "finding": "`latest(m)` and `isPending(m)` by name warn and were certified; over a pending store they warn where SC5001 was proven (ADR 0633, audit 7, 8)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0633",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-latest-name-direct-none",
+   "mx-strict-read-untracked-body-is-pending-store-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 1 false-clean, 1 wrong-rule; the fix: 2 agree"
+ },
+ {
+  "finding": "`for…of` over an array store warns and was certified: no entity at the operand (audit 9)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0621",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-for-of-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 1 false-clean; the fix: 1 agree"
+ },
+ {
+  "finding": "a declared `loadingValue` read in its creating pass warns where SC5001 was proven, through layers too (ADR 0632, audit 5)",
+  "found": "rules audit; grid f2 for the layers",
+  "fixed": "ADR 0632",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-declared-direct-none",
+   "mx-strict-read-untracked-body-declared-wrapper-none",
+   "mx-strict-read-untracked-body-declared-direct-closure"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 2 wrong-rule, 1 false-clean; the fix: 3 agree"
+ },
+ {
+  "finding": "a compute that may answer synchronously was proven pending: SC5001 where the run warns (ADR 0631, audit 2)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0631",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-maybe-sync-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 1 wrong-rule; the fix: 1 recall-gap"
+ },
+ {
+  "finding": "`merge(s, { b }).b` was a proven SC1001; a literal serves it (ADR 0630, audit 1)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0630",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-body-merge-plain-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids lg-recall`: 1 false-positive; the fix: 1 clean"
+ },
+ {
+  "finding": "a store over a raw value was a proven SC1001, directly and through a closure (ADR 0634, audit 4)",
+  "found": "rules audit; grid f3b for the closure",
+  "fixed": "ADR 0634",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-body-store-raw-root-direct-none",
+   "lg-strict-read-untracked-body-store-raw-root-direct-closure"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids lg-recall`: 2 false-positive; the fix: 1 uncertifiable, 1 clean"
+ },
+ {
+  "finding": "a declared source under `untrack` in its creating pass was a proven SC5001; silent (ADR 0632, audit 3)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0632",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-untrack-declared-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids lg-recall`: 1 false-positive; the fix: 1 clean"
+ },
+ {
+  "finding": "key probes of an uninitialized derive throw and were certified (ADR 0635, audit 10)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0635",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-body-store-keys-direct-none",
+   "mx-pending-async-untracked-read-body-store-in-direct-none",
+   "mx-pending-async-untracked-read-body-store-has-own-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 3 false-clean; the fix: 3 agree"
+ },
+ {
+  "finding": "an optimistic setter before the first answer: SC2001 on the store form, certified on the signal form (ADR 0636, audit 6, 11)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0636",
+  "grid": "mx-recall",
+  "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+  "ids": [
+   "mx-optimistic-write-before-load-body-signal-direct-none",
+   "mx-optimistic-write-before-load-body-store-direct-none",
+   "mx-optimistic-write-before-load-body-signal-alias-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 2 false-clean, 1 wrong-rule; the fix: 3 agree"
+ },
+ {
+  "finding": "a compute catching a read's throw had no rule (ADR 0637)",
+  "found": "rc.21 diagnostics.json",
+  "fixed": "ADR 0637",
+  "grid": "mx-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-memo-async-direct-none",
+   "mx-caught-reactive-read-effect-compute-async-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 2 false-clean; the fix: 2 agree"
+ },
+ {
+  "finding": "`Reflect.deleteProperty` on a store, and a class method writing `this`, warn and were certified (ADR 0638, audit 12)",
+  "found": "rules audit, reproduced in Chrome",
+  "fixed": "ADR 0638",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-reflect-delete-direct-none",
+   "mx-store-write-outside-setter-handler-class-method-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 2 false-clean; the fix: 1 agree, 1 recall-gap"
+ },
+ {
+  "finding": "`flush()` in a handler an apply dispatches warns: its guard takes no event, and the program was certified; `element.click()` was no dispatch hazard at all, with no resolved-call demand when argumentless (ADR 0639)",
+  "found": "the event axis, its first census run",
+  "fixed": "ADR 0639",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-evt-apply-dispatch-x-direct-none",
+   "mx-flush-in-effect-callback-evt-apply-helper-dispatch-x-direct-none",
+   "mx-flush-in-effect-callback-evt-apply-window-dispatch-x-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 3 false-clean; the fix: 3 recall-gap"
+ },
+ {
+  "finding": "SC5008 proved reads rc.21 never reports: an uncaught read before or after the `try` leaves the pass (ADR 0637)",
+  "found": "Fable's research, reproduced in Chrome",
+  "fixed": "ADR 0637",
+  "grid": "lg-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "lg-caught-reactive-read-memo-prior-read-direct-none",
+   "lg-caught-reactive-read-memo-later-read-direct-none"
+  ],
+  "rediscovered": "#173 has no such rule, so its clean fails nothing here: the proof it guards came from this branch's first SC5008, and the fix leaves these uncertifiable"
+ },
+ {
+  "finding": "a store Get, a key probe and `latest(a)` in a `try` in a compute warn CAUGHT_REACTIVE_READ and were certified (ADR 0637)",
+  "found": "Fable's research, reproduced in Chrome",
+  "fixed": "ADR 0637",
+  "grid": "mx-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-memo-store-get-direct-none",
+   "mx-caught-reactive-read-memo-store-keys-direct-none",
+   "mx-caught-reactive-read-memo-latest-direct-none"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 3 false-clean; the fix: 3 agree"
+ },
+ {
+  "finding": "a handler that creates an async optimistic source and writes it throws; it was an obligation at best (ADR 0636)",
+  "found": "Fable's research, reproduced in Chrome",
+  "fixed": "ADR 0636",
+  "grid": "mx-recall",
+  "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+  "ids": [
+   "mx-optimistic-write-before-load-creates-in-handler-creates-here-direct-none"
+  ],
+  "rediscovered": "an obligation on #173 and on the fix alike: the shape stays generated, and the proof it would need is in docs/open-work.md"
+ },
+ {
+  "finding": "a sync memo over an async one is pending with it: under `untrack` it throws and was certified, and a plain read was a proven SC1001 where the run throws (ADR 0628)",
+  "found": "a probe of the narrowed hook obligation, Chrome-confirmed",
+  "fixed": "ADR 0628",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-untrack-over-async-direct-none",
+   "mx-pending-async-untracked-read-body-over-async-direct-none",
+   "mx-pending-async-untracked-read-body-over-async-direct-closure"
+  ],
+  "rediscovered": "the checker of #173 (0c4df1e6d) on `focus.mjs --grids mx-recall`: 2 false-clean, 1 wrong-rule; the fix: 3 recall-gap"
  }
 ]
