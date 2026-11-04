@@ -25,12 +25,15 @@ setInterval(() => {}, 1000);
   return path;
 }
 
+// Short deadlines for what a test waits out; generous ones for what it needs to happen. A fake's own start (a Node process) or
+// answer is no claim of these tests, and under a loaded machine it can outlast 0.8 s.
 const short = { readyMs: 800, prepareMs: 800, runBaseMs: 800, runPerWaveMs: 0, closeMs: 500 };
-const options = (behaviour) => ({ tsc: "tsc", bin: "bin", concurrency: 1, slotRoot: "/tmp", executable: fake(behaviour), deadlines: short });
+const starts = { ...short, readyMs: 30_000 };
+const options = (behaviour, deadlines = starts) => ({ tsc: "tsc", bin: "bin", concurrency: 1, slotRoot: "/tmp", executable: fake(behaviour), deadlines });
 
 describe("the executor's deadlines", () => {
   it("fails a start that is never ready", async () => {
-    await expect(createExecutor(options("never-ready"))).rejects.toThrow(/not ready within/);
+    await expect(createExecutor(options("never-ready", short))).rejects.toThrow(/not ready within/);
   });
 
   it("fails a request that gets no answer, and every later one", async () => {
@@ -41,13 +44,13 @@ describe("the executor's deadlines", () => {
   });
 
   it("fails on output that is not the protocol", async () => {
-    const executor = await createExecutor(options("garbage"));
+    const executor = await createExecutor(options("garbage", { ...starts, runBaseMs: 30_000 }));
     await expect(executor.run([{ id: "a" }])).rejects.toThrow(/printed/);
     await executor.close();
   });
 
   it("answers as before when the executor answers", async () => {
-    const executor = await createExecutor(options("answers"));
+    const executor = await createExecutor(options("answers", { ...starts, runBaseMs: 30_000 }));
     expect((await executor.run([{ id: "a" }])).records).toEqual({ a: { id: "a" } });
     await executor.close();
   });
