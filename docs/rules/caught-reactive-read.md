@@ -20,7 +20,8 @@ throw on that pass in such a `try` too. A read is an accessor's call, a Get, `Ob
 
 Anything else that may throw in a `try` in a computation, or in a function nothing places, is
 uncertifiable: a memo may throw its error, and a value nothing resolves may be pending. A
-plain signal cannot throw.
+plain signal cannot throw. A `catch` that is one `throw` is silent: the compute never returns,
+and rc.21 checks only a pass that returned.
 
 ## How to fix
 

@@ -37,6 +37,26 @@ use typefacts::{Declaration, Location};
 /// (ADR 0509), dropped where accessor transport resolves the call.
 pub(crate) const UNRESOLVED_HANDED_MEMBER: &str = "handed-member-dispatch";
 
+/// The `catch` at `handler` holds a single `throw` statement and nothing else.
+fn handler_only_throws(file: &solid_facts::FileFacts, handler: solid_facts::core::Span) -> bool {
+    file.ast
+        .throw_statements
+        .iter()
+        .filter(|thrown| handler.contains(**thrown))
+        .any(|thrown| {
+            let around = |start: u32, end: u32| {
+                file.source_text(solid_facts::core::Span::new(start, end))
+                    .unwrap_or("?")
+            };
+            let before = around(handler.start, thrown.start);
+            let after = around(thrown.end, handler.end);
+            before.trim_end().ends_with('{')
+                && before.matches('{').count() == 1
+                && !before.contains(';')
+                && after.trim_start_matches([';', ' ', '\t', '\r', '\n']) == "}"
+        })
+}
+
 /// A source no pending state can reach: a signal or store of a data literal, or
 /// a memo whose sync literal compute reads nothing. `createSignal(fn)` computes,
 /// and an identifier may be a function.
@@ -3229,6 +3249,11 @@ impl LocalAccessContext<'_, '_> {
                         | ExecutionRole::EffectApply
                 )
             {
+                continue;
+            }
+            // A handler that is one `throw` leaves the pass on every path, and
+            // rc.21 only checks a pass that returned.
+            if handler_only_throws(file, caught.handler) {
                 continue;
             }
             let rethrows = file

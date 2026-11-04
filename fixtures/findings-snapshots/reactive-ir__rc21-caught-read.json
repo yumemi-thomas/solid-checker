@@ -22,16 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "caught-reactive-read",
-      "code": "SC5008",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
-      "start": 533,
-      "end": 539,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
