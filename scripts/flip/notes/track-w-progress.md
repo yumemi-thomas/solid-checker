@@ -120,6 +120,16 @@ SC2001.
   holds (190 of 335); a02/a03 are the census's. Fixture `rc21-optimistic-handed-prop`. Corpus +22 U, all inferay
   (`sweep-w2009b.json`); first cut asked every expression (31). Fuzzer outside (a context gets statements, not the setter).
 
+- **SC4002** (ADR 0713): `context_census.rs` verdicts `Free`/`Open`/`Silent` for every project context; `owner_emission.rs` pushes
+  an SC4002 static violation (uncertain, `provider-not-proven-above`) for an Open/unknown/member read under an owner unless
+  `provided_above` (same file) proves every render under `<Ctx value>` (children, no function layer; intrinsic, hook, nested
+  component, one-return wrapper; named, all refs are sites, not exported when open, const context). Static violations leave the
+  owner pass through a 4th tuple element of `find_missing_owners_incremental` into `draft.static_violations` (`owners.rs`).
+  **Merge note:** `rules/src/lib.rs` (R's) gained SC4002's evidence arm in `static_violation_wording`. Witnesses 6 of 6
+  (195 of 335). Fixture `context-provider-proof`; 17 snapshots gain obligations. `context_census_workers_process` now counts
+  violations (27) and obligations (52) apart. Fuzzer `flw-ctx-sibling`, `flw-ctx-two-renders`: old 626 false clean, new 0.
+  Corpus +48 U (`sweep-w4002.json`). Probe harness: `~/EDF/tmp/flipw/p4002/probe.mjs <name> <src.tsx>`.
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -157,14 +167,14 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   Then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
+   SC4002 done (ADR 0713). Next **SC4001** (`.../sc4001.md`: fix the run.mjs /
    patterns.mjs import-before-subscribe artifact first; the edit is the measured dead-branch false positive at
    `owner_context.rs:242`), **SC2002** then **SC2003** (`.../sc2003.md`, 5 commits) then **SC2001** last
    (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`: gate `unreached_write` on "site may run", exclude module initialization;
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w3001.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w4002.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
