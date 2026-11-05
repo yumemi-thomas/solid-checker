@@ -2507,6 +2507,11 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
             unplaced.len(),
             if fixture == "interprocedural-methods-v2" {
                 4
+            } else if fixture == "callback-forwarding" {
+                // ADR 0674: `readCount` is handed to a project call in another
+                // file, which no walk follows: an obligation at the read, and
+                // the violation at the calling component stands.
+                1
             } else {
                 0
             },

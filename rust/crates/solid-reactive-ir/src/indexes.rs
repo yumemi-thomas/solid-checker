@@ -2475,7 +2475,7 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
+    pub(crate) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
         let facts: &'a ProjectFacts = self.facts;
         // A hand-out (`hand_outs`): the slot a path names, and its file.
         let slot = self.file_table.last_slot(path);

@@ -2108,19 +2108,52 @@ impl LocalAccessContext<'_, '_> {
     /// class member's body (`class K { constructor() { r1(); } } new K();` in a
     /// component body) is such a place: the construction or the member call
     /// that runs it is followed by neither.
+    #[allow(clippy::too_many_arguments)]
     fn unreached_read(
         &self,
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
         symbol: &str,
         mention: &Location,
+        allowed: &[solid_facts::core::Span],
         result: &mut LocalAccessResult,
         seen: &mut HashSet<(Arc<str>, u64, u64)>,
     ) {
-        if let Some(accessor) = self.accessors.get(symbol)
-            && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
-            && placed_nowhere(file, call.callee, self.lookup)
-            && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
+        let Some(accessor) = self.accessors.get(symbol) else {
+            return;
+        };
+        if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
+            return;
+        }
+        // ADR 0674: a named function no call edge enters, handed by name to a
+        // carrier (`[1].map(h)`): a carrier that provably runs it places the
+        // read, and one that may not leaves it unplaced. SC1001's zero-run
+        // trade is not extended to this arm.
+        let handed = handed_async_read_role(
+            file,
+            call.callee,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        let key = (mention.path.clone(), mention.start_byte, mention.end_byte);
+        if let Some((role, Some(carrier))) = handed
+            && role.reports_untracked_read()
+            && seen.insert(key.clone())
+        {
+            self.push_accessor_read_placed(
+                file,
+                call,
+                symbol,
+                accessor,
+                role,
+                Some(carrier),
+                result,
+            );
+        } else if (placed_nowhere(file, call.callee, self.lookup)
+            || handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown))
+            && seen.insert(key)
         {
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
         }
@@ -2312,7 +2345,7 @@ impl LocalAccessContext<'_, '_> {
                         || enclosing_render_function(file, call.callee, self.lookup))))
             .then_some(1)
         }) else {
-            self.unreached_read(file, call, symbol, &mention, result, seen);
+            self.unreached_read(file, call, symbol, &mention, allowed, result, seen);
             self.unreached_write(file, call, symbol, result);
             return;
         };
@@ -7575,17 +7608,8 @@ fn placed_nowhere(
 ) -> bool {
     function_escapes_unfollowed(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
-        || crate::static_api::runs_unplaced_through_callers(
-            file,
-            span,
-            lookup,
-            UNPLACED_CALLER_DEPTH,
-            false,
-        )
+        || crate::static_api::runs_unplaced_through_callers(file, span, lookup, false)
 }
-
-/// Helpers followed out from a read, as W's nets do.
-const UNPLACED_CALLER_DEPTH: usize = 6;
 
 pub(crate) fn function_escapes_unfollowed(
     file: &solid_facts::FileFacts,
@@ -7787,6 +7811,94 @@ pub(crate) fn function_reference_hand_offs(
     Some(placed)
 }
 
+/// ADR 0674: the hand-off of every reference of `function`'s binding in the
+/// other files of the project, with its file: a reference there is no call
+/// edge of this function when it hands the function on (`[1].map(h)`,
+/// `h.call(null)`, a tag, a `const` copy). An import's own name is followed
+/// to the uses of the local binding; a re-export hands nothing over.
+pub(crate) fn foreign_reference_hand_offs<'s, 'f: 's>(
+    file: &'s solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'f>,
+) -> Vec<(&'f solid_facts::FileFacts, solid_facts::core::Span, HandOff)> {
+    use solid_facts::core::Span;
+    let named_expression =
+        function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some();
+    let name = if named_expression {
+        crate::execution_role::named_expression_binding(file, function, lookup)
+    } else {
+        crate::owners::function_binding_name(file, function)
+    };
+    let Some(name) = name else {
+        return Vec::new();
+    };
+    let Some(symbol) = lookup
+        .entities()
+        .exact(&location(file.path.shared(), name.span))
+    else {
+        return Vec::new();
+    };
+    let accounted = lookup.function_call_site_references(file.path.as_str(), function.span);
+    let mut out = Vec::new();
+    for reference in lookup.symbol_references(symbol.as_str()).iter() {
+        if reference.path.as_ref() == file.path.as_str() {
+            continue;
+        }
+        let Some(holder) = lookup.file_by_path(reference.path.as_ref()) else {
+            continue;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            continue;
+        };
+        let at = Span::new(start, end);
+        // A call or a render the call graph holds.
+        if accounted
+            .iter()
+            .any(|(site, span)| site.path == holder.path && *span == at)
+        {
+            continue;
+        }
+        let ast = &holder.ast;
+        if ast
+            .exports
+            .iter()
+            .flat_map(|export| &export.specifiers)
+            .any(|specifier| specifier.local.span == at)
+        {
+            continue;
+        }
+        if ast
+            .imports
+            .iter()
+            .flat_map(|import| &import.bindings)
+            .any(|binding| binding.local.span == at)
+        {
+            let mut placed = Vec::new();
+            binding_reference_hand_offs(holder, at, lookup, &mut placed);
+            out.extend(
+                placed
+                    .into_iter()
+                    .map(|(at, hand_off)| (holder, at, hand_off)),
+            );
+            continue;
+        }
+        if ast.bindings.iter().any(|binding| {
+            binding
+                .initializer_identifier
+                .as_ref()
+                .is_some_and(|identifier| identifier.span == at)
+        }) {
+            out.push((holder, at, HandOff::Unfollowed));
+            continue;
+        }
+        out.push((holder, at, hand_off_at(holder, at, lookup)));
+    }
+    out
+}
+
 /// [`binding_hand_offs`] with each reference's span.
 fn binding_reference_hand_offs(
     file: &solid_facts::FileFacts,
@@ -7840,6 +7952,10 @@ pub(crate) fn hand_off_at(
 ) -> HandOff {
     use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
     let ast = &file.ast;
+    // ADR 0674: `ReturnType<typeof useThing>` is erased: nothing runs there.
+    if ast.type_queries.iter().any(|query| query.contains(at)) {
+        return HandOff::Value;
+    }
     let call_with_callee = |callee: solid_facts::core::Span| {
         lookup
             .call_by_callee(file, callee)

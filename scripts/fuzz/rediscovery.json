@@ -3893,5 +3893,23 @@
    "mx-context-not-found-flw-ctx-two-renders-x-direct-none"
   ],
   "rediscovered": "the checker at 727507bda on `focus.mjs --grids mx-recall` (flip-write.mjs contexts flw-ctx-sibling, flw-ctx-two-renders): 626 false-clean of 758; the fix: 0 false-clean, 758 recall-gap"
+ },
+ {
+  "finding": "a read whose walk out to a hidden caller stopped short certified, Chrome warns: a generator's body, a parameter default, a read after an await on some paths (ADR 0674)",
+  "found": "owner's note on ADR 0673's depth bound: probes in the walk found the stops, none past the depth itself",
+  "fixed": "ADR 0674",
+  "outside": "module-level helpers, which a context cannot write: patterns values/hidden-generator, hidden-generator-held, hidden-may-await, hidden-param-default; the build at 9af0edf84 fails all 4 as NEW false-clean, the fix passes"
+ },
+ {
+  "finding": "a helper handed on by reference in a member only a coercion runs, or a helper from another file, certified: `h.call(null)`, `h.apply(null)`, `[1].map(h)`, `[1].reduce(h, 0)`, a `const` copy, a tag (ADR 0674)",
+  "found": "the cross-file gap ADR 0673 left: same file and across files both certified",
+  "fixed": "ADR 0674",
+  "outside": "needs a second file or a module-level helper: patterns values/hidden-call, hidden-apply, hidden-handed, hidden-reduce, foreign-alias, foreign-call, foreign-handed, foreign-tag; the build at 9af0edf84 fails all 8 as NEW false-clean, the fix passes"
+ },
+ {
+  "finding": "`[1].map(h)` in a component body, with a module-level `h` that reads an accessor, certified and Chrome warns (ADR 0674)",
+  "found": "probe s-map-body while testing the cross-file gap",
+  "fixed": "ADR 0674, a proved violation: the carrier provably runs",
+  "outside": "a module-level function, which a context cannot write: pattern values/handed-map-body; the build at 9af0edf84 fails it as NEW false-clean, the fix passes"
  }
 ]

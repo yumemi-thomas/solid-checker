@@ -150,6 +150,15 @@ impl<'a> SemanticLookup<'a> {
         self.function_component_status(file, function) != ComponentStatus::No
     }
 
+    /// Whether a tag renders `function`: its status is proven, not possible.
+    pub(crate) fn function_proven_component(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.function_component_status(file, function) == ComponentStatus::Proven
+    }
+
     pub(super) fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
         &self.component_statuses().0
     }

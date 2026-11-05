@@ -408,7 +408,7 @@ impl StaticApiContext<'_> {
             } else if let Some(kind) = kind
                 && dialect.throws_inside_action_step(kind)
                 && self.lookup.project_steps_action_callbacks()
-                && runs_unplaced_through_callers(file, call.span, self.lookup, 4, false)
+                && runs_unplaced_through_callers(file, call.span, self.lookup, false)
             {
                 // ADR 0708: the call runs in a function no call edge places
                 // (an object or class member, a slot, a tag, a function
@@ -498,7 +498,7 @@ impl StaticApiContext<'_> {
                 && dialect.warns_inside_effect_phase(kind)
                 && (dispatched() || {
                     unplaced = self.lookup.project_defers_callbacks()
-                        && runs_unplaced_through_callers(file, call.span, self.lookup, 4, false);
+                        && runs_unplaced_through_callers(file, call.span, self.lookup, false);
                     unplaced
                 })
                 && !result.violations.iter().any(|violation| {
@@ -684,7 +684,7 @@ impl StaticApiContext<'_> {
                         && violation.location == location(file.path.shared(), call.callee)
                 })
                 && self.lookup.project_defers_callbacks()
-                && runs_unplaced_through_callers(file, call.span, self.lookup, 4, true)
+                && runs_unplaced_through_callers(file, call.span, self.lookup, true)
                 && !self.runs_off_every_apply(file, call.span, &allowed)
             {
                 result.violations.push(StaticViolation {
@@ -1504,31 +1504,60 @@ fn action_step_body_through(
     })
 }
 
+/// Sites one question may visit. The walk is linear in the helpers above the
+/// site, so this ends only a pathological graph, and past it the answer is
+/// "unplaced": a search that stops proves nothing (ADR 0674).
+const UNPLACED_WALK_BUDGET: usize = 4096;
+
 /// ADR 0708: [`crate::execution_role::unplaced_run`] at `site`, or at an
-/// exact call of the named function around it, through `depth` helpers: a
-/// helper whose callers include an object method or slot runs wherever that
-/// member does, which no call edge places either.
-pub(crate) fn runs_unplaced_through_callers(
-    file: &FileFacts,
+/// exact call of a function around it, through every helper above: a helper
+/// whose callers include an object method or slot runs wherever that member
+/// does, which no call edge places either.
+///
+/// ADR 0674: only reaching a placed end answers false. The walk visits each
+/// function once, in any order, so a helper reached by a long path answers the
+/// same as by a short one, and the budget fails closed.
+pub(crate) fn runs_unplaced_through_callers<'s, 'f: 's>(
+    file: &'s FileFacts,
     site: Span,
-    lookup: &SemanticLookup<'_>,
-    depth: usize,
+    lookup: &SemanticLookup<'f>,
     ownerless: bool,
 ) -> bool {
     let mut visited = HashSet::default();
-    unplaced_through(file, site, lookup, depth, ownerless, &mut visited)
+    search_fails_closed(
+        (file, site),
+        UNPLACED_WALK_BUDGET,
+        |(file, site), pending| unplaced_step(file, site, lookup, ownerless, &mut visited, pending),
+    )
 }
 
-/// ADR 0673: `visited` holds each helper once: the walk fans out over every
-/// caller, so without it a helper with many callers is exponential in `depth`.
-/// A helper already asked answered false, or the walk has ended.
-fn unplaced_through(
-    file: &FileFacts,
+/// A search that can only answer false by finishing: true when `step` answers
+/// true at some node, and true when `budget` nodes were not enough.
+fn search_fails_closed<T>(
+    start: T,
+    budget: usize,
+    mut step: impl FnMut(T, &mut Vec<T>) -> bool,
+) -> bool {
+    let mut pending = vec![start];
+    let mut budget = budget;
+    while let Some(node) = pending.pop() {
+        if budget == 0 || step(node, &mut pending) {
+            return true;
+        }
+        budget -= 1;
+    }
+    false
+}
+
+/// One site of [`runs_unplaced_through_callers`]: true when it is unplaced,
+/// else the sites above it go on `pending`.
+fn unplaced_step<'s, 'f: 's>(
+    file: &'s FileFacts,
     site: Span,
-    lookup: &SemanticLookup<'_>,
-    depth: usize,
+    lookup: &SemanticLookup<'f>,
     ownerless: bool,
     visited: &mut HashSet<(String, Span)>,
+    pending: &mut Vec<(&'s FileFacts, Span)>,
 ) -> bool {
     // ADR 0710: with `ownerless`, a site a primitive's synchronous callback
     // runs (other than `untrack`'s) has the owner that primitive sets, and a
@@ -1549,24 +1578,30 @@ fn unplaced_through(
     {
         return true;
     }
-    if depth == 0 {
+    // After an await on every path the site is off every caller's stack.
+    if crate::execution_role::follows_unconditional_await(file, site)
+        || crate::execution_role::follows_dominating_await(file, site)
+        || crate::execution_role::follows_try_head_await(file, site, lookup)
+    {
         return false;
     }
     let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
-        Some(climb) if climb.in_list || climb.suspended.is_some() => return false,
+        // So after one in a layer in place.
+        Some(climb) if climb.suspended == Some(true) => return false,
         // The layers that run in place end at a call in other code: ask
-        // there.
+        // there. A layer holding the site in its parameter list (ADR 0454)
+        // runs it when a call omits the argument, and an await on some paths
+        // leaves the others on the stack.
         Some(climb) if climb.at != site => {
-            return unplaced_through(file, climb.at, lookup, depth - 1, ownerless, visited);
+            pending.push((file, climb.at));
+            return false;
         }
         Some(_) | None => site,
     };
-    let Some(function) = crate::owners::owning_function(&file.ast, at)
-        .filter(|function| function.body.contains(at) && !function.generator)
-    else {
-        return false;
-    };
-    let Some(name) = crate::owners::function_binding_name(file, function) else {
+    // The function a parameter default or a generator's body runs in: the
+    // first runs at each call, the second where the iterator is drained,
+    // which a caller at least holds.
+    let Some(function) = crate::owners::owning_function(&file.ast, at) else {
         return false;
     };
     if !visited.insert((file.path.to_string(), function.span)) {
@@ -1574,43 +1609,89 @@ fn unplaced_through(
     }
     // ADR 0673: a call in a function no edge enters (`toString`, which only a
     // coercion runs) has no call site here, so the binder names this file's.
-    let name = name.span;
-    let own: Vec<Span> = file
-        .ast
-        .calls
-        .iter()
-        .filter(|call| {
-            !call.construct
-                && file
-                    .ast
-                    .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
-                    == Some(name)
-        })
-        .map(|call| call.span)
-        .collect();
-    if own
-        .into_iter()
-        .any(|call| unplaced_through(file, call, lookup, depth - 1, ownerless, visited))
-    {
-        return true;
+    if let Some(name) = crate::owners::function_binding_name(file, function) {
+        let name = name.span;
+        pending.extend(
+            file.ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    !call.construct
+                        && file
+                            .ast
+                            .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
+                            == Some(name)
+                })
+                .map(|call| (file, call.span)),
+        );
     }
-    lookup
-        .function_call_sites(file.path.as_str(), function.span)
-        .into_iter()
-        .any(|(caller, callee)| {
-            let calls: Vec<Span> = caller
+    // ADR 0674: a reference in another file that hands the function on is no
+    // call site, and no role reads a carrier in another file: unplaced.
+    // A component's body is entered by its render, however its value travels.
+    let foreign = if lookup.function_proven_component(file, function) {
+        Vec::new()
+    } else {
+        crate::local_access::foreign_reference_hand_offs(file, function, lookup)
+    };
+    for (holder, at, hand_off) in foreign {
+        use crate::local_access::HandOff;
+        match hand_off {
+            HandOff::Call | HandOff::FreshStack | HandOff::Value => {}
+            HandOff::Inline(_) => return true,
+            HandOff::Retained | HandOff::Unfollowed => {
+                if !foreign_jsx_value(holder, at) && !foreign_quiet_primitive(holder, at, lookup) {
+                    return true;
+                }
+            }
+        }
+    }
+    for (caller, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        pending.extend(
+            caller
                 .ast
                 .calls
                 .iter()
                 .filter(|call| {
                     !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
                 })
-                .map(|call| call.span)
-                .collect();
-            calls
-                .into_iter()
-                .any(|call| unplaced_through(caller, call, lookup, depth - 1, ownerless, visited))
-        })
+                .map(|call| (caller, call.span)),
+        );
+    }
+    false
+}
+
+/// ADR 0674: whether `at` is a whole argument of a primitive at a tracked
+/// callback position: a computation's compute reads tracked.
+fn foreign_quiet_primitive(file: &FileFacts, at: Span, lookup: &SemanticLookup<'_>) -> bool {
+    file.ast.arguments_containing(at).any(|(call, index)| {
+        file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
+            && !call.arguments[index].spread
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .tracked_callback_timing(primitive, index, call.arguments.len())
+                        .is_some()
+                })
+    })
+}
+
+/// ADR 0674: whether `at` is the whole value of an attribute of an intrinsic
+/// element: the roles of a handler, a `ref` or a tracked attribute place it.
+/// A component's prop is the callee's code, so it stays unfollowed.
+fn foreign_jsx_value(file: &FileFacts, at: Span) -> bool {
+    file.ast.jsx_elements.iter().any(|element| {
+        element.member_object.is_none()
+            && file
+                .source_text(element.name.span)
+                .is_some_and(|name| name.starts_with(|first: char| first.is_ascii_lowercase()))
+            && element.attributes.iter().any(|attribute| {
+                attribute
+                    .expression
+                    .is_some_and(|expression| file.ast.peel_ts_sugar_span(expression) == at)
+            })
+    })
 }
 
 /// ADR 0710: whether the functions directly around `site` are callbacks of
@@ -1719,4 +1800,44 @@ fn member_chain_root(file: &FileFacts, span: Span) -> Option<Span> {
         return Some(current);
     }
     None
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::search_fails_closed;
+
+    /// `edges[n]` are the nodes above `n`; `unplaced` is the only node that
+    /// answers true.
+    fn search(edges: &[&[usize]], unplaced: Option<usize>, budget: usize) -> bool {
+        let mut visited = std::collections::HashSet::new();
+        search_fails_closed(0, budget, |node, pending| {
+            if Some(node) == unplaced {
+                return true;
+            }
+            if visited.insert(node) {
+                pending.extend(edges[node]);
+            }
+            false
+        })
+    }
+
+    #[test]
+    fn a_finished_search_answers_false() {
+        assert!(!search(&[&[1, 2], &[3], &[3], &[]], None, 16));
+    }
+
+    #[test]
+    fn past_the_budget_the_answer_is_not_clean() {
+        let chain: Vec<Vec<usize>> = (0..10).map(|n| vec![n + 1]).chain([vec![]]).collect();
+        let edges: Vec<&[usize]> = chain.iter().map(Vec::as_slice).collect();
+        assert!(!search(&edges, None, 11));
+        assert!(search(&edges, None, 10));
+    }
+
+    #[test]
+    fn a_diamond_answers_the_same_by_either_path() {
+        // 1 and 2 meet at 3, whose caller 4 is unplaced.
+        assert!(search(&[&[1, 2], &[3], &[3], &[4], &[]], Some(4), 16));
+        assert!(search(&[&[2, 1], &[3], &[3], &[4], &[]], Some(4), 16));
+    }
 }

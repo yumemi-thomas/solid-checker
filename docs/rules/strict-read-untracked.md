@@ -361,4 +361,6 @@ Placement climbs that exhaust their budget retain an uncertifiable read (ADR 053
 A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.
 
 A read in a function only a hidden call runs (a getter, `toString`, an iterator, a tag, a class field, a `Map` slot), directly or through named
-helpers, has no call node to place it: uncertifiable (ADR 0673).
+helpers, has no call node to place it: uncertifiable (ADR 0673). So is one in a helper handed on from such a member, or from another file
+(`h.call(null)`, `[1].map(h)`, a copy, a tag), and a generator's body, a parameter default and a read past an await on some paths below one (ADR 0674). A
+named function handed to a carrier that provably runs in a body takes the carrier's role: proved.

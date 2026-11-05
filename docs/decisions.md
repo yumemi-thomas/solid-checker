@@ -1767,7 +1767,27 @@ certified, Chrome warns. `placed_nowhere` joins the old pair with ADR 0708's `ru
 `discover_member`, role `Unknown`, blocker by the existing read wording. The helper changes for all its readers: it also asks the hand-off census, since
 `SiteReach` calls a method only a coercion runs never entered, and it reads this file's calls of the binding, since no edge leaves such a method.
 Each helper is visited once: the walk fans out over every caller, and without the set `solid-groove` went from 5 s to the 900 s kill. So a
-diamond past the depth bound may answer from its first path. This is `sc1001.md` steps 2 and 3, at the site rather than at the call.
+diamond past the depth bound may answer from its first path. ADR 0674 removes the bound. This is `sc1001.md` steps 2 and 3, at the site rather than at the call.
+
+<a id="adr-0674"></a>
+## ADR 0674 — The caller walk answers only by finishing
+
+`runs_unplaced_through_callers` answered "placed" wherever it stopped: at its depth, at a helper already visited on a longer
+path, at a parameter default, at an await on some paths, at a generator, at a function with no name. Each stop was a silent
+clean, and four were live (`hidden-generator`, `hidden-generator-held`, `hidden-may-await`, `hidden-param-default`: certified,
+Chrome warns). It is now a worklist with no depth: each function once, so order cannot change the answer, and a 4,096-site
+budget that answers "unplaced" past it. Only an await on every path ends a branch as placed. `visited` terminates it; the
+budget only guards a pathological graph.
+
+The walk read calls, so a helper in a member only a coercion runs, reached by `h.call(null)`, `[1].map(h)`, a copy or a tag,
+certified, in one file or across two. It now reads every reference of the binding. In another file a hand-off is unplaced,
+since no role reads a carrier there; a proven component stops the question, because its render enters it however its value
+travels; an intrinsic element's attribute is the handler roles' to place. A type query is `HandOff::Value`: erased, so nothing
+runs there. That removes 208 SC6002 sites, 5 SC1001 and 1 SC2006 that rested only on `ReturnType<typeof useThing>`.
+
+A named function no edge enters, handed to a carrier in a body, had no read row: `[1].map(h)` certified. A carrier that provably
+runs it now proves SC1001 (`handed_async_read_role`), and one that may not leaves it uncertifiable: the zero-run trade of ADR 0531
+does not extend to this arm. W's nets take the same walk.
 
 <a id="adr-0712"></a>
 ## ADR 0712 — SC2009 does not certify a setter handed as a prop
