@@ -1,5 +1,5 @@
-// The known open defects: real false positives and false cleans the fuzzer finds and the checker does not fix yet. Keeping them out of the
-// generators would hide them, and leaving them in would fail every run, so they are listed (known-open.json) and held here:
+// The open defects: real false positives and false cleans the fuzzer finds and the checker does not fix yet. Keeping them out of the
+// generators would hide them, and leaving them in would fail every run, so they are listed (open-defects.json) and held here:
 //   - a listed program that still fails is printed by every gate, with its count, and does not fail the run;
 //   - a program that fails and is not listed fails the run, as any problem does;
 //   - a listed program that no longer fails also fails the run, until its entry leaves the list for rediscovery.json: a fix turns the
@@ -9,8 +9,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-export const KNOWN_OPEN = join(here, "known-open.json");
-export const readKnownOpen = (path = KNOWN_OPEN) => JSON.parse(readFileSync(path, "utf8"));
+export const OPEN_DEFECTS = join(here, "open-defects.json");
+export const readOpenDefects = (path = OPEN_DEFECTS) => JSON.parse(readFileSync(path, "utf8"));
 
 /** The entry holding a grid row (`{ idPrefix, code, variantPrefix?, contexts?, outcome, item }`), or null. */
 export function heldGridEntry(list, row) {
@@ -30,5 +30,5 @@ export function gridStanding(list, row, problem) {
 export function heldLine(grid, entries) {
   const byItem = {};
   for (const entry of entries) byItem[entry.item] = (byItem[entry.item] ?? 0) + 1;
-  return `known open ${grid}: ${entries.length} programs still fail (${Object.entries(byItem).map(([item, count]) => `${item} ${count}`).join(", ")}; scripts/fuzz/known-open.json)`;
+  return `known open ${grid}: ${entries.length} programs still fail (${Object.entries(byItem).map(([item, count]) => `${item} ${count}`).join(", ")}; scripts/fuzz/open-defects.json)`;
 }

@@ -51,7 +51,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
-import { gridStanding, heldLine, readKnownOpen } from "./known-open.mjs";
+import { gridStanding, heldLine, readOpenDefects } from "./open-defects.mjs";
 import { GRIDS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
@@ -89,14 +89,14 @@ export function readGrid(out) {
   const flagged = [];
   const complete = existsSync(programs);
   const rows = complete ? readFileSync(programs, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : readPartial(out);
-  const list = readKnownOpen();
+  const list = readOpenDefects();
   const held = [];
   for (const row of rows ?? []) {
     outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
     const problem = rowProblem(row);
     const standing = gridStanding(list, row, problem);
     if (standing?.kind === "held") held.push(standing.entry);
-    else if (standing?.kind === "fixed") flagged.push({ id: row.id, outcome: "known-open-fixed", detail: { item: standing.entry.item, move: "from known-open.json to rediscovery.json" } });
+    else if (standing?.kind === "fixed") flagged.push({ id: row.id, outcome: "open-defect-fixed", detail: { item: standing.entry.item, move: "from open-defects.json to rediscovery.json" } });
     else if (problem) flagged.push({ id: row.id, outcome: problem, detail: row.detail });
   }
   if (held.length) console.log(`  ${heldLine(basename(out), held)}`);

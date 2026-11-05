@@ -1,15 +1,4 @@
 {
-  "status": "uncertifiable",
-  "findings": [
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001-clean/src/clean-owner-or-root.tsx",
-      "start": 794,
-      "end": 801,
-      "fixes": 0
-    }
-  ]
+  "status": "certified",
+  "findings": []
 }

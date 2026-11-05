@@ -1,6 +1,6 @@
 // The pattern lane: the audits' programs, verbatim, in real Chrome and the checker. Each program under patterns/<report>/<id>/ is what a
 // review ran and tsc accepted. The generators write shapes, and these are the ones they cannot write yet: each is a held input for the fixes
-// (queue.md), judged on every run against known-open.json (known-open.mjs). Chrome judges a program by its reported and thrown codes.
+// (queue.md), judged on every run against open-defects.json (open-defects.mjs). Chrome judges a program by its reported and thrown codes.
 //
 //   node scripts/fuzz/patterns.mjs [--checker <bin>] [--typefacts <bin>] [--out <dir>] [--only substring] [--update]
 //
@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { codeOfThrown, codeRules, codesForRule, coversCode, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
-import { KNOWN_OPEN, readKnownOpen } from "./known-open.mjs";
+import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
@@ -160,18 +160,18 @@ async function main() {
   const findings = await runChecker(cases, join(out, "check"), { checker, typefacts });
   const rows = cases.map(({ id }) => ({ id, ...judgePattern(records.get(id) ?? { codes: [], failure: "no record" }, findings.get(id) ?? null) }));
   writeFileSync(join(out, "patterns.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
-  const list = readKnownOpen();
+  const list = readOpenDefects();
   if (args.includes("--update")) {
     const before = new Map((list.patterns ?? []).map((entry) => [entry.id, entry]));
     list.patterns = rows.filter((row) => row.outcome !== "fine").map((row) => ({ ...(before.get(row.id) ?? {}), id: row.id, outcome: row.outcome, codes: row.codes ?? [], ...(row.rules ? { rules: row.rules } : {}), ...(row.certified !== undefined ? { certified: row.certified } : {}), ...(row.why ? { why: row.why } : {}) }));
-    writeFileSync(KNOWN_OPEN, `${JSON.stringify(list, null, 1)}\n`);
+    writeFileSync(OPEN_DEFECTS, `${JSON.stringify(list, null, 1)}\n`);
   }
-  const { held, unlisted, fixed, absent } = comparePatterns(rows, readKnownOpen());
+  const { held, unlisted, fixed, absent } = comparePatterns(rows, readOpenDefects());
   const count = (outcome) => held.filter(({ row }) => row.outcome === outcome).length;
   console.log(`patterns: ${rows.length} programs: ${rows.filter((row) => row.outcome === "fine").length} fine`);
-  console.log(`known open patterns: ${held.length} still fail (${count("false-positive")} false positive, ${count("false-clean")} false clean, ${count("no-run")} no run; scripts/fuzz/known-open.json)`);
+  console.log(`known open patterns: ${held.length} still fail (${count("false-positive")} false positive, ${count("false-clean")} false clean, ${count("no-run")} no run; scripts/fuzz/open-defects.json)`);
   for (const row of unlisted) console.log(`NEW ${row.outcome} ${row.id} ${JSON.stringify(row.codes ?? row.why ?? "")}`);
-  for (const row of fixed) console.log(`FIXED ${row.id}: move its entry from known-open.json to rediscovery.json`);
+  for (const row of fixed) console.log(`FIXED ${row.id}: move its entry from open-defects.json to rediscovery.json`);
   if (!only) for (const id of absent) console.log(`ABSENT ${id}: listed, and no such program`);
   process.exit(unlisted.length || fixed.length || (!only && absent.length) ? 1 : 0);
 }

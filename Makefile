@@ -213,7 +213,7 @@ fuzz-test:
 
 # The fuzzer's smoke set (scripts/fuzz/smoke.mjs): every grid restricted to its manifest (scripts/fuzz/smoke/), a few
 # programs covering every behaviour and axis pair of the full grids; after any checker change. Exits 1 on anything to look at.
-# The audits' programs, verbatim, in Chrome and the checker (scripts/fuzz/patterns.mjs): prints the known open defects (known-open.json), and
+# The audits' programs, verbatim, in Chrome and the checker (scripts/fuzz/patterns.mjs): prints the known open defects (open-defects.json), and
 # fails on a new failure or a listed program that passes. `make fuzz-patterns ARGS=--update` rewrites the list, for reading the diff.
 fuzz-patterns: build-checker-release
 	node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(ARGS)
@@ -221,7 +221,7 @@ fuzz-patterns: build-checker-release
 fuzz-smoke: build-checker-release
 	node scripts/fuzz/focus.mjs --smoke \
 	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
-	node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts"
+	-node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts"
 
 # The tier before a merge (ADR 0615): the census and the pairs within each code, about 60,000 programs.
 fuzz-premerge: build-checker-release

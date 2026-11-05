@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { gridStanding, heldGridEntry, readKnownOpen } from "./known-open.mjs";
+import { gridStanding, heldGridEntry, readOpenDefects } from "./open-defects.mjs";
 import { PATTERNS, comparePatterns, judgePattern, patternCases } from "./patterns.mjs";
 
 const finding = (rule, kind) => ({ rule, kind, primaryLocation: { path: "App.tsx" } });
 
 describe("the known open list", () => {
-  const list = readKnownOpen();
+  const list = readOpenDefects();
   it("says how much is open, and names a queue item and a program for each", () => {
     const count = (outcome) => list.patterns.filter((entry) => entry.outcome === outcome).length;
     console.log(`known open: ${list.patterns.length} patterns (${count("false-positive")} false positive, ${count("false-clean")} false clean), ${list.grids.length} grid families`);
