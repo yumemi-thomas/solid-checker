@@ -189,6 +189,31 @@ SC2001.
   moved; step 4's 1,441 unchanged. Fixture `store-element-flow`; ownership case `element-flow/001`. Probes
   `~/EDF/tmp/flipw/p2003e/{cases,mine}` (+ `mine-chrome.json`).
   **SC2003 is complete on W**; c15 c16 j07 j08 wait for R's census.
+- **SC2001** (ADR 0721, b929b7d2b): `unreached_write` and `transported_writes`' no-row branch also `push_setter_write`
+  (alias_withheld, multiplicity 1) under `unreached_write_may_run` (now `pub(crate)`); `static_api.rs`'s exact-target and
+  unresolved-branded `refresh` arms take the same gate (role `Unknown`, multiplicity 1). The setter row keeps
+  `handed_write_execution`'s answer: a write directly in a module tag the body runs is V (5 probes + e10, all throw in Chrome).
+  u11 closed (research probes `u11-*`, `r-u11-*` all U or V). Witnesses SC2001 18/18, all 220 of 335 (only the 12 moved).
+  Fixture `rc21-setter-unplaced`; 4 snapshots +U (TDZ/eval negatives, destructured helper, listener reach, handler-only
+  `notARootBody`). Fuzzer `flw-getter-helper` (now both codes) + `flw-module-method`: old 468 false-clean, new 0; sampled whole
+  grid (11,250) valid, nothing. fuzz-patterns 788/349 (h02, e905, e907 FIXED). Corpus +28 U, 0 V moved (`sweep-w2001.json`,
+  binaries `bins/w2001`): 23 solidjs-patterns demo components handed by value to a markdown `components` object (writes in
+  their handlers/applies: the inner carrier's role is withheld by `alias_withheld`; a refinement could keep a role a carrier
+  inside the function proves), 4 navigation-popup returned-object methods, TypeGPU.tsx:30.
+
+**Track W's rule list is complete** (SC9013 ... SC2001).
+
+## What remains for the merge
+
+- Expected-failing W witnesses (PLAN.md "Two tracks"): SC2003 `c04 c15 c16 j05 j07 j08` (c04/j05 now pass via ADR 0719;
+  c15 c16 j07 j08 wait for R's census), SC2009 `a02 a03`. HOST rows marked `open` (co-read, h10, h11, h12) are R's.
+- `rules/src/lib.rs` (R's) blocker fields / wording: SC3001 `leaf-operation-identity-unproven` (`LeafOwnerOperation`), SC4001
+  `owner-varies-by-caller` (`OwnerRequirement`), SC2002 and SC2001 `function-run-unplaced` (write/action rows keep their
+  context and the "no compiler or semantic fact places where this code runs" wording). SC4002's evidence arm already landed there.
+- SC2003 step 3: the ADR 0491 module-store question (an unexported module `const` store allowed for V-D1 only); the facts
+  schema bump (89) merges with R's as one bump.
+- SC2003 step 4's 1,441 corpus obligations (open-function arm) are reported to the owner as a cost, unchanged since.
+- Union `rediscovery.json`, regenerate snapshots after reading, take the larger doc budgets.
 
 
 ## Owner notes (2026-11-05)
@@ -229,7 +254,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
    SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). SC2003 done (ADRs 0716-0720).
-   **Next: SC2001, the last rule** (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`; R's u11 note above). Old SC4001 notes kept for reference:
+   SC2001 done (ADR 0721). **Track W's rules are done; next is the merge** (see "What remains for the merge"). Was: **Next: SC2001, the last rule** (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`; R's u11 note above). Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
    quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
