@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 692,
+      "end": 753,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -19,6 +29,16 @@
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
       "start": 744,
       "end": 751,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 812,
+      "end": 871,
       "fixes": 0
     },
     {
@@ -32,6 +52,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 931,
+      "end": 992,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -42,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 1052,
+      "end": 1113,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -49,6 +89,16 @@
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
       "start": 1104,
       "end": 1111,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 1175,
+      "end": 1239,
       "fixes": 0
     },
     {
@@ -92,6 +142,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 1817,
+      "end": 1898,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -99,6 +159,16 @@
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
       "start": 1888,
       "end": 1895,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 1988,
+      "end": 2048,
       "fixes": 0
     },
     {
@@ -112,6 +182,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 2391,
+      "end": 2450,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -119,6 +199,16 @@
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
       "start": 2441,
       "end": 2448,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 2724,
+      "end": 2784,
       "fixes": 0
     },
     {
@@ -149,6 +239,16 @@
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
       "start": 3113,
       "end": 3120,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 3414,
+      "end": 3470,
       "fixes": 0
     },
     {

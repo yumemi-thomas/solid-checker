@@ -912,6 +912,18 @@ impl Dialect for Solid2 {
                     && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
     }
 
+    /// ADR 0644: `flush`, and `render`, which calls it after `createRoot`
+    /// (`@solidjs/web@2.0.0-rc.21` `dist/web.dev.js:551`; Chrome: an apply queued
+    /// before a nested `render` runs under the caller's owner). `hydrate` reaches
+    /// `render` once hydration is done (`:1630`), and flushes in its own path;
+    /// read, since a page with no server output cannot run it.
+    fn drains_queue_on_caller_stack(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::Flush | Primitive::Render | Primitive::Hydrate
+        )
+    }
+
     /// ADR 0613: `createEffect`'s apply (every run), `createRenderEffect`'s
     /// apply (every run after the first, and every run when deferred) and
     /// `createReaction`'s callback (run as its effect's apply) are run by the
@@ -2307,6 +2319,8 @@ impl Dialect for Solid2 {
             | Primitive::CreateTrackedEffect
             | Primitive::CreateProjection
             | Primitive::CreateRoot
+            // ADR 0644: `render` is `createRoot` first (Chrome, rc.21).
+            | Primitive::Render
             | Primitive::CreateOwner
             | Primitive::MapArray
             | Primitive::RepeatMap
@@ -2810,6 +2824,8 @@ impl Dialect for Solid2 {
                 | Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
                 | Primitive::CreateRoot
+                // ADR 0644, measured in Chrome on rc.21.
+                | Primitive::Render
                 | Primitive::CreateProjection
                 // ADR 0614: `Errored`/`Loading` called as a function create
                 // their boundary's computation in the call (`solid.dev.js`

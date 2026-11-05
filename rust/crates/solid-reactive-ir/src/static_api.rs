@@ -73,6 +73,8 @@ impl StaticApiContext<'_> {
             writes: Vec::new(),
             write_action_obligations: Vec::new(),
         };
+        crate::installed_members::check_file(file, &mut result.defects);
+        crate::listener_reach::check_file(file, self.lookup, &mut result.defects);
         let allowed = allowed_callback_spans(file, self.lookup);
         let dialect = self.lookup.dialect;
         for call in &file.ast.calls {

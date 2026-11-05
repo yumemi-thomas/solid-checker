@@ -1823,8 +1823,13 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update([u8::from(
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
-                let (owner, read, flush) = self.dispatch_veto();
-                hasher.update([u8::from(owner), u8::from(read), u8::from(flush)]);
+                let (owner, read, flush, listener) = self.dispatch_veto();
+                hasher.update([
+                    u8::from(owner),
+                    u8::from(read),
+                    u8::from(flush),
+                    u8::from(listener),
+                ]);
             }
             Section::FlushVeto => {
                 hasher.update([u8::from(self.flush_veto())]);

@@ -10923,7 +10923,7 @@
   {
    "id": "clean-effect-returns-cleanup",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-effect-returns-cleanup.tsx"
    ],
@@ -14241,7 +14241,7 @@
   {
    "id": "clean-render-effect-cleanup",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-render-effect-cleanup.tsx"
    ],

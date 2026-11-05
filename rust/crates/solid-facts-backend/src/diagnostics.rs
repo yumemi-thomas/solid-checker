@@ -610,6 +610,7 @@ impl DiagnosticSession {
                 .premises
                 .push("standard runtime configuration (ADRs 0266/0268)".into());
         }
+        snapshot.premises.push("dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner".into());
         if let solid_reactive_ir::router_params::RouterParamsStatus::Applies { version } =
             &router_params
         {

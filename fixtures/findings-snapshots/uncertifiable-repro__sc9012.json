@@ -497,6 +497,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-forwarded.tsx",
+      "start": 454,
+      "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-forwarded.tsx",
       "start": 840,
       "end": 857,
       "fixes": 0
@@ -549,6 +559,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-package-type.tsx",
       "start": 645,
       "end": 653,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-path-dom.tsx",
+      "start": 509,
+      "end": 571,
       "fixes": 0
     },
     {

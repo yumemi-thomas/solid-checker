@@ -607,6 +607,13 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether a call of `primitive` drains the queue on its caller's stack,
+    /// under its caller's owner (ADR 0613, 0644). The default claims nothing.
+    fn drains_queue_on_caller_stack(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether the callback at `argument`, whenever it runs, runs as the
     /// compute of a computation the call creates for it (ADR 0551): the
     /// ambient owner is that children-capable computation, so a write guard

@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "propEl", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -147,6 +147,7 @@ function render(program, instrument) {
     }
   }
   const used = new Set(["createSignal"]);
+  const parentWeb = new Set();
   const signals = signalTable(program);
   const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg && !helper.module).map((helper) => [helper.name, helper]));
   const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
@@ -280,7 +281,7 @@ function render(program, instrument) {
   function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
-      case "dom": return e.text;
+      case "dom": for (const name of e.webNames ?? []) parentWeb.add(name); return e.text;
       case "listen": return `${e.target}.addEventListener(${JSON.stringify(e.type)}, ${expr(e.fn, depth)})`;
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));
@@ -403,6 +404,8 @@ function render(program, instrument) {
     const fnBody = (tail = []) => block(c.body, inner, null, [], tail);
     const lines = {
       "handoff-foreach": [`const hf = () => ${fnBody()};`, "[1].forEach(hf);"],
+      "handoff-foreach-empty": [`const hf = () => ${fnBody()};`, "([] as number[]).forEach(hf);"],
+      "handoff-foreach-var": [`const hf = () => ${fnBody()};`, 'const xs = JSON.parse("[]") as number[];', "xs.forEach(hf);"],
       "handoff-map": [`const hf = () => ${fnBody()};`, "[1].map(hf);"],
       "handoff-from": [`const hf = () => ${fnBody()};`, "Array.from([1], hf);"],
       "handoff-sort": [`const hf = (_a: number, _b: number) => ${fnBody(["return 0;"])};`, "[2, 1].sort(hf);"],
@@ -505,6 +508,7 @@ function render(program, instrument) {
       }
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}" onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
+      case "propEl": return [`${ind(depth)}<${item.tag} a={${expr(item.e, depth)}} />`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
       case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
       case "flow": {
@@ -597,9 +601,15 @@ function render(program, instrument) {
     // A component the mount axis renders as a child is the parent's, not the entry's: not exported (misuse.mjs MOUNTS).
     const hosted = new Set(component.sourced ?? []);
     const parameter = usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : sourceParameter(component, signals);
+    // `hoisted`: the component's signals and these statements at module scope (the program's own `const`, ADR 0645).
+    if (component.hoisted) {
+      for (const sig of component.signals) out.push(signalLine(sig));
+      within({ entry: null, inDefault: false }, () => { for (const stmt of component.hoisted) out.push(stmtText(stmt, 0)); });
+      out.push("");
+    }
     out.push(`${component.mount ? "" : "export "}function ${component.name}(${parameter}) {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
-      for (const sig of component.signals) if (!hosted.has(sig.name)) out.push(`${INDENT}${signalLine(sig)}`);
+      for (const sig of component.signals) if (!hosted.has(sig.name) && !component.hoisted) out.push(`${INDENT}${signalLine(sig)}`);
       for (const line of sourcePrelude(component, signals, used)) out.push(`${INDENT}${line}`);
       for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
@@ -611,7 +621,6 @@ function render(program, instrument) {
   out.push(...kids);
   // The parents of the mount axis: each renders its child component in its own JSX.
   // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
-  const parentWeb = new Set();
   for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
     // A module source keeps its values in helpers.ts: a parent of the mount axis then renders the component bare.
     const source = component.source && parentSource(component.source) ? component.source : undefined;

@@ -2154,6 +2154,9 @@ mod dom_dispatch_tests {
             "HTMLDialogElement.showModal",
             "HTMLDialogElement.close",
             "AbortController.abort",
+            "HTMLInputElement.select",
+            "ChildNode.remove",
+            "Node.removeChild",
         ] {
             assert!(
                 synchronously_dispatching_dom_member(dispatching),
@@ -2167,10 +2170,8 @@ mod dom_dispatch_tests {
             "Element.getAttribute",
             "Element.scrollIntoView",
             "Element.scrollTo",
-            "HTMLInputElement.select",
             "HTMLFormElement.submit",
             "Element.setAttribute",
-            "ChildNode.remove",
             "ParentNode.append",
             "Node.appendChild",
             "Animatable.animate",

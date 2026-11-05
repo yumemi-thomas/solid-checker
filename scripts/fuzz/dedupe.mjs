@@ -35,7 +35,7 @@ function describe(node, helperForms) {
     case "own": return node.site ? null : `own:${node.op}${node.handle ? ":handle" : ""}`;
     case "contain": return `contain:${node.kind}${node.use ? `:${node.use}` : ""}${node.async ? ":async" : ""}`;
     case "try": case "flush": return node.k;
-    case "iife": case "obj": case "field": case "button": case "hbutton": case "child": case "attr": case "ref": case "flow": case "handler-expr": case "cbprop": case "show": case "for": case "return": return node.k;
+    case "iife": case "obj": case "field": case "button": case "hbutton": case "child": case "propEl": case "attr": case "ref": case "flow": case "handler-expr": case "cbprop": case "show": case "for": case "return": return node.k;
     default: return null;
   }
 }

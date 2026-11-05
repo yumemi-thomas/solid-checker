@@ -58,8 +58,10 @@ mod execution_role;
 mod findings;
 mod identity;
 mod indexes;
+mod installed_members;
 mod interproc;
 mod late_chunks;
+mod listener_reach;
 mod literal_member_slots;
 mod loading_hold;
 pub(crate) mod local_access;
@@ -842,6 +844,12 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// …)`): the calls it reaches are not followed. Its `callee` is the
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
+/// ADR 0645: a listener whose code a dispatch may run under an owner or in a
+/// strict-read window, and which calls what no rule follows from it.
+pub const LISTENER_REACH: &str = "listener-reach";
+/// ADR 0643: a prototype or an accessor installed where no Get or write of the
+/// object is followed to it.
+pub const INSTALLED_MEMBER: &str = "installed-member";
 /// ADR 0368 review: a project call the dependency-source program answers as
 /// a call error and the project's own program does not
 /// (`ProjectFacts::dependency_source_call_errors`).

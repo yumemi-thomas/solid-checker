@@ -10,6 +10,16 @@
       "start": 146,
       "end": 153,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/reflect-alias/App.tsx",
+      "start": 304,
+      "end": 310,
+      "fixes": 0
     }
   ]
 }

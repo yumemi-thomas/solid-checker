@@ -208,6 +208,24 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::LISTENER_REACH => (
+            format!(
+                "{callee} registers a listener that calls project code, and the program holds a synchronous dispatch not proven to run with no owner and no strict-read window, so that code may run on the dispatcher's stack; no proof follows the listener to the reads and writes it reaches, so whether they are legal can be neither proven nor ruled out"
+            ),
+            "Dispatch from an event handler, a timer or after an await, or register the listener where it is the only caller (ADR 0645).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::INSTALLED_MEMBER => (
+            format!(
+                "{callee} installs a prototype or an accessor on an object, and no Get or write of that object is followed to what it installed: a store as a prototype makes each of them the store's, and an installed setter makes a plain write a call; whether one runs where Solid warns can be neither proven nor ruled out"
+            ),
+            "Read the store or call the setter by name, where the rules can see it (ADR 0643).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
             format!(
                 "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"

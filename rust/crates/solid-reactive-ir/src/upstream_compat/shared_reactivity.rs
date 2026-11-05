@@ -3273,11 +3273,12 @@ fn store_path_holds_writing_method(
 /// by the exact declaration Type Facts resolved the callee to (a project
 /// function named `assign`, a shadowed `Object` and an unresolved callee are
 /// silent): `Object.assign(target, …)`, `Reflect.set(target, key, value)` and
-/// `Object.defineProperty(target, key, descriptor)`.
-const STANDARD_LIBRARY_WRITES: [(&str, &str); 4] = [
+/// `Object.defineProperty(target, key, descriptor)`, or `Reflect`'s.
+const STANDARD_LIBRARY_WRITES: [(&str, &str); 5] = [
     ("assign", "ObjectConstructor.assign"),
     ("set", "Reflect.set"),
     ("defineProperty", "ObjectConstructor.defineProperty"),
+    ("defineProperty", "Reflect.defineProperty"),
     ("deleteProperty", "Reflect.deleteProperty"),
 ];
 

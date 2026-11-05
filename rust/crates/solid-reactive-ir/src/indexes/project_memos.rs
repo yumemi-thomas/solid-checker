@@ -410,8 +410,8 @@ whole_program! {
     /// veto records this answer, not the program, and reruns only when the
     /// bits do (early cutoff: an equal rerun keeps its revision). Fail
     /// closed on a cycle: every proof withheld.
-    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool, bool),
-    cycle: (true, true, true),
+    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool, bool, bool),
+    cycle: (true, true, true, true),
     direct: |lookup| lookup.dispatch_veto(),
     |ctx| Ok(ctx.project(|lookup| lookup.dispatch_veto()))
 }

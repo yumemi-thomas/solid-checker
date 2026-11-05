@@ -465,6 +465,13 @@ impl<'l, 'a> Walk<'l, 'a> {
     /// that package's `exports` conditions, which this does not select.
     fn instance_of(&self, file: &FileFacts, callee: Span) -> Option<&'l str> {
         let (path, module) = self.declaring_file(file, callee)?;
+        // ADR 0644: `render` runs on the queue of the one `solid-js` copy the
+        // program holds; with two, which it is is not attested.
+        if module == "@solidjs/web" {
+            let mut copies = self.instances.solid_js_by_file.values().map(String::as_str);
+            let first = copies.next()?;
+            return copies.all(|copy| copy == first).then_some(first);
+        }
         if module != "solid-js" && !module.starts_with("solid-js/") {
             return None;
         }

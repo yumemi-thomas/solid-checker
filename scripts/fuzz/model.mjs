@@ -79,7 +79,9 @@ export const jsx = () => ({ k: "jsx" });
 /** `createOwner()` (the recall axes' bound owner: `const o = createOwner(); runWithOwner(o, ...)`). */
 export const createOwnerExpr = () => ({ k: "createOwner" });
 /** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
-export const domExpr = (text) => ({ k: "dom", text });
+/** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641). */
+export const propEl = (tag, e) => ({ k: "propEl", tag, e });
+export const domExpr = (text, web) => ({ k: "dom", text, ...(web ? { webNames: web } : {}) });
 /** `el.addEventListener(type, fn)`: a listener the program dispatches to itself. */
 export const listenExpr = (target, type, fn) => ({ k: "listen", target, type, fn });
 
@@ -101,7 +103,9 @@ export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", 
   "handoff-assign-param", "handoff-assign-returned", "handoff-assign-this"];
 /** T2 `depth`: the site under N closures each called in place, N at and around the engine's 16-layer climb bound. */
 export const DEPTH_FORMS = ["depth-15", "depth-16", "depth-17"];
-export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
+/** A carrier that runs its callback zero times, or for a length nothing states (ADRs 0563, 0566, 0580): a program's site there runs nothing. */
+export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
+export const CTL_FORMS = [...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
 export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
@@ -366,6 +370,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           checkBlock(item.handler, scopeOf(scope), "free");
           break;
         }
+        case "propEl": typeOf(item.e, scope); break;
         case "child": case "attr": {
           const type = typeOf(item.e, scope);
           if (type && type.t !== "num") fail(`${where}: a JSX ${item.k} must be a number, not ${type.t}`);

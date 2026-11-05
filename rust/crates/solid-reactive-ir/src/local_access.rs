@@ -331,95 +331,12 @@ pub(crate) fn handed_value(
             None => t
                 .lookup
                 .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
-                .is_some_and(|(hook_file, hook)| {
-                    !returned_slot_is_literal_function(hook_file, hook, binding, declaration)
-                }),
+                .is_some(),
         };
     }
     binding
         .initializer
         .is_some_and(|initializer| handed_value(t, file, initializer, depth - 1))
-}
-
-/// Whether the slot of `binding` named at `declaration` is, in the one
-/// return of `hook` (a literal), a function literal written there: its body
-/// is visible, and the call graph follows a call of it (ADR 0282), so the
-/// handed-member net is not needed for it.
-fn returned_slot_is_literal_function(
-    file: &solid_facts::FileFacts,
-    hook: &solid_facts::ast::FunctionFact,
-    binding: &solid_facts::ast::BindingFact,
-    declaration: solid_facts::core::Span,
-) -> bool {
-    let Some(returned) = crate::interproc::accessor_provenance::single_return(file, hook) else {
-        return false;
-    };
-    let returned = file.ast.peel_ts_sugar_span(returned);
-    // The whole result (`const task = make(); task()`): a function literal
-    // the hook returns, directly or through a `const` it binds to one.
-    if binding.shape == solid_facts::ast::BindingShape::Identifier {
-        if file.ast.function_at(returned).is_some() {
-            return true;
-        }
-        let Some(declaration) = file.ast.reference_declaration(returned) else {
-            return false;
-        };
-        return file.ast.bindings.iter().any(|local| {
-            local.immutable
-                && local.shape == solid_facts::ast::BindingShape::Identifier
-                && local.names.iter().any(|name| name.span == declaration)
-                && !crate::indexes::binding_written(file, declaration)
-                && local.initializer.is_some_and(|initializer| {
-                    file.ast
-                        .function_at(file.ast.peel_ts_sugar_span(initializer))
-                        .is_some()
-                })
-        });
-    }
-    let Some(structure) = file
-        .ast
-        .returns
-        .iter()
-        .chain(
-            file.ast
-                .functions
-                .iter()
-                .filter_map(|function| function.expression_return.as_ref()),
-        )
-        .find(|candidate| {
-            candidate
-                .argument
-                .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument) == returned)
-        })
-        .and_then(|candidate| candidate.structure.as_deref())
-        .filter(|structure| structure.complete_literal)
-    else {
-        return false;
-    };
-    let value = match binding.shape {
-        solid_facts::ast::BindingShape::Array => binding
-            .array_slots
-            .iter()
-            .position(|slot| slot.as_ref().is_some_and(|slot| slot.span == declaration))
-            .and_then(|index| structure.elements.get(index).copied().flatten()),
-        solid_facts::ast::BindingShape::Object => binding
-            .object_slots
-            .iter()
-            .find(|slot| slot.local.span == declaration)
-            .and_then(|slot| {
-                structure
-                    .properties
-                    .iter()
-                    .find(|property| property.name.as_str() == slot.property.as_str())
-                    .map(|property| property.value)
-            }),
-        solid_facts::ast::BindingShape::Identifier => None,
-    };
-    value.is_some_and(|value| {
-        file.ast
-            .function_at(file.ast.peel_ts_sugar_span(value))
-            .is_some()
-    })
 }
 
 /// Do not apply an incoming-prop witness to a replaced or escaping root.
@@ -1313,9 +1230,10 @@ impl LocalAccessContext<'_, '_> {
 
     /// ADR 0630: where a Get of `key` on the `merge` view `expression` lands.
     /// rc.21's `merge` walks its sources last to first, one `in` each
-    /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js`), and a last source that
-    /// covers the union is returned as it is, so a key an object literal holds
-    /// after the store is that literal's data: no read.
+    /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js`), and the Get lands on the
+    /// last source that has the key, so a key an object literal holds after
+    /// the store is that literal's data: no read. (Several sources return the
+    /// last one as it is only in the no-Proxy fallback.)
     fn merge_view_get(
         &self,
         file: &solid_facts::FileFacts,
@@ -1934,6 +1852,25 @@ impl LocalAccessContext<'_, '_> {
         self.discover_caught_reads(file, &allowed, &mut result);
         self.discover_optimistic_reach(file, &mut result);
         self.discover_dynamic_jsx(file, &mut result);
+        // ADR 0646: a read in a function only a carrier that may run it zero
+        // times runs proves nothing, on whichever path made its row.
+        for read in &mut result.reads {
+            if read.callback_invocation_unproven
+                || read.location.path.as_ref() != file.path.as_str()
+            {
+                continue;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(read.location.start_byte),
+                u32::try_from(read.location.end_byte),
+            ) else {
+                continue;
+            };
+            if named_carrier_may_not_run(file, solid_facts::core::Span { start, end }, self.lookup)
+            {
+                Arc::make_mut(read).callback_invocation_unproven = true;
+            }
+        }
         result
     }
 
@@ -7131,6 +7068,24 @@ pub(crate) fn escapes_nested(
 /// ADR 0580: how many named functions [`carried_leaf_owner`] follows out
 /// through their inline carriers.
 const CARRIED_LEAF_DEPTH: usize = 4;
+
+/// ADR 0646: the function around `span` runs only through inline carriers, and
+/// none is proven to run it (`const hf = () => count(); [].forEach(hf);`). A
+/// read there may never run, so it proves nothing (ADR 0563's rule for a
+/// literal, ADR 0566's for a read after an await).
+pub(crate) fn named_carrier_may_not_run(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        let carriers = inline_carriers(file, function, lookup);
+        !carriers.is_empty()
+            && !carriers
+                .iter()
+                .any(|carrier| crate::carrier_runs::carrier_provably_runs(file, *carrier, lookup))
+    })
+}
 
 /// ADR 0580: the leaf owner a read at `span` runs under, and whether a
 /// carrier on the way may run it zero times. A read written in a named

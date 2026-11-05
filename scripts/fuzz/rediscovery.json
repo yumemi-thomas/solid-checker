@@ -326,7 +326,12 @@
   "finding": "A read in flush(fn) in a component also handed out as a plain function ([1].map(Row)) was proven SC1001: the undecided-component funnel carved out flush's callback (ADR 0542)",
   "found": "review of full-7's 12 dynamic-mount STORE_WRITE_OUTSIDE_SETTER wrong-rule rows (those stay: ADR 0530 proves dynamic-only entries)",
   "fixed": "t3/verify-fuzz-recall",
-  "outside": "no mount hands a component to plain code as a function value; fixture undecided-flush-callback holds the case (old build: violation)"
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-handed-flush-signal-direct-none"
+  ],
+  "rediscovered": "the shape came after the fix: the current build is right on it, and no pre-fix build was rerun; the fixture recorded the old answer"
  },
  {
   "finding": "An action body's read in its first synchronous slice took the deferred role: called from an effect apply or a createReaction callback (and after a plain-value yield) rc.17 warns STRICT_READ_UNTRACKED \"an effect callback\" (ADR 0547)",
@@ -435,7 +440,13 @@
   "finding": "track() of a tracker a hook makes and returns, called where the hook's call has no owner, was silent; a tracker returned from a function-declared hook was not followed (ADR 0551)",
   "found": "follow-up of ADR 0549's open-work misses",
   "fixed": "ADR 0551",
-  "outside": "the generator's reaction-track variant takes the tracker from helpers.ts's top level or a component; no template makes it inside a hook called from a handler. Fixture reaction-creation-owner (HookCalls) holds it (f31337fa8 and 4215de157: silent; ADR 0551: a violation at the handler's track(), the hook-made creation an obligation)"
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-handler-reaction-track-hook-direct-none",
+   "mx-no-owner-effect-timer-reaction-track-hook-direct-none"
+  ],
+  "rediscovered": "the shape came after the fix: the current build is right on it, and no pre-fix build was rerun; the fixture recorded the old answer"
  },
  {
   "finding": "mx-recall CONTEXT_NOT_FOUND judged 330 programs false-clean whose only finding at the useContext read is SC4001's obligation: SC4002's provider proof is gated on an owner proof, so that obligation is the checker declining the code; the judge listed it as unrelated (codes.mjs had no declining rules)",
@@ -1105,7 +1116,13 @@
   "finding": "a callback a standard-library carrier may run zero times (`([] as number[]).forEach(hf)`, `props.xs.forEach(hf)`, an inline literal, `[].map(() => user())` in JSX, `items().forEach` in onSettled, a NodeList) was proven: SC5001/SC5003, SC3001, and ADR 0561's SC4001/SC4002 violations where rc.17 runs nothing (ADR 0563)",
   "found": "research report pending-fc 2026-11-03 (probes p1, p5-p7) and the carrier-provably-runs slice's probes",
   "fixed": "ADR 0563",
-  "outside": "no grid generates an empty or unknown-length receiver yet: the layers handoff-foreach-empty (legal grid), handoff-foreach-var, handoff-timeout and handoff-void are proposed for the merge with claude/fuzz-pattern-coverage, which owns scripts/fuzz now; fixtures owner-carrier-provably-runs, async-carrier-provably-runs, leaf-carrier-provably-runs and async-carrier-call-attributed hold the shapes"
+  "grid": "lg-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "lg-no-owner-cleanup-zero-await-empty-x-direct-none",
+   "lg-no-owner-cleanup-zero-await-var-x-direct-none"
+  ],
+  "rediscovered": "the shape came after the fix: the current build is right on it, and no pre-fix build was rerun; the fixture recorded the old answer"
  },
  {
   "finding": "a function written in an async computation after its await and run there through a project hand-off (`run(hf)`, `ho.m()` over `{ m: hf }`, `ho.m = () => …`, a parameter-filled or factory-returned object, `this.m` in a local class) had no SC1002 row and no obligation: the region walk follows literals, `.call`/`.apply`, standard inline carriers and exact helper calls only, and nothing pushed an obligation for the rest (ADR 0565)",
@@ -1457,7 +1474,13 @@
   "finding": "SC1002 proved a read in a callback a standard-library carrier may run zero times (`([] as number[]).forEach(hf)`, `props.xs.forEach(hf)`, an awaited array's `filter`, a `Set` `forEach`) under its feasible-path premise, where rc.17 runs nothing and warns nothing (ADR 0566, the owner's zero-false-positive decision)",
   "found": "the await-fc write-up (carrier-provably-runs/await-fc.md, 2026-11-03), measured with ADR 0563's predicate",
   "fixed": "ADR 0566",
-  "outside": "no grid generates an empty or unknown-length receiver yet (the proposed handoff-foreach-empty and handoff-foreach-var layers belong to claude/fuzz-pattern-coverage, which owns scripts/fuzz now); fixture after-await-carrier-runs holds the shapes, and the 30 direct-binding agree programs of the inline-carrier layers keep their violation locally"
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-zero-await-empty-memo-direct-none",
+   "lg-strict-read-untracked-zero-await-var-memo-direct-none"
+  ],
+  "rediscovered": "the shape came after the fix: the current build is right on it, and no pre-fix build was rerun; the fixture recorded the old answer"
  },
  {
   "finding": "CONTEXT_NOT_FOUND: useContext of a `createContext<number | undefined>(undefined)` context with no provider was a certified clean; rc.17 getContext treats an undefined default as none (ADR 0575)",
@@ -1742,7 +1765,13 @@
   "finding": "ADR 0580 (found reading the family above): `onSettled(() => { const hf = () => a1(); [].forEach(hf); })` was a proven SC5001 though hf never runs (the lexical leaf owner, no carrier check)",
   "found": "claude/fix-pair-falsecleans investigation",
   "fixed": "ADR 0580",
-  "outside": "no grid layer hands a named function to an empty-receiver carrier inside a leaf callback; fixture async-carried-leaf-owner (SettledInlineEmpty, SettledNamedEmpty) holds it"
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-zero-settled-empty-x-direct-none",
+   "lg-pending-async-forbidden-scope-zero-settled-var-x-direct-none"
+  ],
+  "rediscovered": "the shape came after the fix: the current build is right on it, and no pre-fix build was rerun; the fixture recorded the old answer"
  },
  {
   "finding": "ADR 0581: an object literal arrow slot whose text spells `this` (a nested class writing this.m) resolved to no function, so SC1002 (memo-async, effect-async) had nothing at the site",
@@ -2886,6 +2915,358 @@
   "finding": "SC5008 took a resolved signal setter in a `try` for a possibly caught read, 32 corpus rows (ADR 0640)",
   "found": "the Fable review of #173's added obligations",
   "fixed": "ADR 0640",
-  "outside": "the rule's cells are computes, where a setter call is an owned write and no legal program; a setter in a `try` elsewhere is on no pass. fixtures/reactive-ir/rc21-caught-read holds it"
+  "grid": "lg-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "lg-caught-reactive-read-effect-compute-owned-setter-array-slot-none",
+   "lg-caught-reactive-read-effect-compute-owned-setter-computed-key-none"
+  ],
+  "rediscovered": "the shape came after the fix: the current build is right on it, and no pre-fix build was rerun; the fixture recorded the old answer"
+ },
+ {
+  "finding": "SC5003 proved `<C a={m()} />` at a component tag, whose prop is a getter nothing read: Chrome reports nothing (ADR 0641)",
+  "found": "the Fable review of the unjudged findings",
+  "fixed": "ADR 0641",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "lg-pending-async-untracked-read-prop-unread-cap-x-direct-none"
+  ],
+  "rediscovered": "80c55318c: 1 unexecuted; the fix: uncertifiable"
+ },
+ {
+  "finding": "a component tag spelled `Sinks.Sink` or `sinks.sink` was no component to SC5003, so the read stayed proven (ADR 0641)",
+  "found": "the Fable review of the unjudged findings",
+  "fixed": "ADR 0641",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "lg-pending-async-untracked-read-prop-unread-lower-x-direct-none",
+   "lg-pending-async-untracked-read-prop-unread-member-x-direct-none"
+  ],
+  "rediscovered": "80c55318c: 2 unexecuted; the fix: uncertifiable"
+ },
+ {
+  "finding": "a handler delivered synchronously by focus, blur, select, remove and the other calls of ADR 0642 was certified from a body, a compute or onSettled (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "owner review, Chrome-confirmed",
+  "fixed": "ADR 0642",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-body-fire-blur-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-focus-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-focus-member-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-focus-wrapper-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-modal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-popover-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-remove-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-reset-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-select-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-steal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-submit-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-fire-validity-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-blur-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-focus-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-focus-member-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-focus-wrapper-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-modal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-popover-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-remove-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-reset-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-select-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-steal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-submit-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-compute-fire-validity-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-blur-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-focus-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-focus-member-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-focus-wrapper-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-modal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-popover-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-remove-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-reset-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-select-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-steal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-submit-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-memo-fire-validity-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-blur-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-focus-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-focus-member-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-focus-wrapper-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-modal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-popover-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-remove-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-reset-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-select-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-steal-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-submit-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-untrack-fire-validity-installed-set-alias-direct-none"
+  ],
+  "rediscovered": "7e9b9d5ee: 144 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a handler delivered synchronously by focus, blur, select, remove and the other calls of ADR 0642 was certified from a body, a compute or onSettled (STRICT_READ_UNTRACKED)",
+  "found": "owner review, Chrome-confirmed",
+  "fixed": "ADR 0642",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-body-fire-blur-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-focus-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-focus-member-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-focus-wrapper-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-modal-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-popover-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-remove-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-reset-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-select-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-steal-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-submit-installed-get-create-direct-none",
+   "mx-strict-read-untracked-evt-body-fire-validity-installed-get-create-direct-none"
+  ],
+  "rediscovered": "7e9b9d5ee: 84 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a Get through a `__proto__` key or assignment holding a store warned and was certified (ADR 0643)",
+  "found": "the Fable cross-check (four/crosscheck.md), Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-proto-literal-direct-none",
+   "mx-strict-read-untracked-body-store-proto-member-direct-none",
+   "mx-strict-read-untracked-body-store-proto-merge-direct-none",
+   "mx-strict-read-untracked-body-store-proto-string-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 72 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a write through a `__proto__` key, `o.__proto__ = store`, a method reparenting `this`, or a handed key: must stay uncertifiable under any literal proof (ADR 0643)",
+  "found": "the second Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-proto-key-handed-direct-none",
+   "mx-store-write-outside-setter-body-proto-literal-direct-none",
+   "mx-store-write-outside-setter-body-proto-member-direct-none",
+   "mx-store-write-outside-setter-body-proto-method-this-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 54 false-clean, 18 recall-gap; the fix: recall-gap"
+ },
+ {
+  "finding": "a Get on `Object.create(store)` or after `Object.setPrototypeOf(o, store)` warned and was certified (ADR 0643)",
+  "found": "the Fable cross-check (four/crosscheck.md), Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-proto-create-direct-none",
+   "mx-strict-read-untracked-body-store-proto-setprototypeof-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 36 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a write on `Object.create(store)`, after `setPrototypeOf`, by `Object.assign` onto one, or `Reflect.set` with a store receiver warned and was certified (ADR 0643)",
+  "found": "the second Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-proto-assign-onto-direct-none",
+   "mx-store-write-outside-setter-body-proto-create-direct-none",
+   "mx-store-write-outside-setter-body-proto-receiver-direct-none",
+   "mx-store-write-outside-setter-body-proto-setprototypeof-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 72 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "`Reflect.defineProperty(store, …)` warned and was certified; proved SC2003 (ADR 0643)",
+  "found": "probing related forms, Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-reflect-define-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 18 false-clean; the fix: agree"
+ },
+ {
+  "finding": "a signal setter installed by defineProperty, defineProperties, Reflect, Object.create or an alias, then written, threw and was certified (ADR 0643)",
+  "found": "the Fable cross-check (four/crosscheck.md), Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-body-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-body-installed-set-create-direct-none",
+   "mx-reactive-write-in-owned-scope-body-installed-set-reflect-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 54 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a signal getter installed as an accessor, then read, warned and was certified (ADR 0643)",
+  "found": "probing related forms, Chrome-confirmed",
+  "fixed": "ADR 0643",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-installed-get-create-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 18 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "ADR 0640 census missed a bare addEventListener, a `.call` of the method and a literal key (ADR 0645)",
+  "found": "the Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0645",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-evt-anchor-apply-alias-x-direct-none",
+   "mx-flush-in-effect-callback-evt-anchor-apply-bare-x-direct-none",
+   "mx-flush-in-effect-callback-evt-anchor-apply-computed-x-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 3 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "ADR 0640 took any created tag: a label delivers its control, a checkbox fires change (ADR 0645)",
+  "found": "the Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0645",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-evt-created-checkbox-x-direct-none",
+   "mx-flush-in-effect-callback-evt-created-label-x-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 2 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "code a listener reaches was certified on a dispatch with an owner or a window: a method, a bound member, a handleEvent object, a function that is also a JSX handler (STRICT_READ_UNTRACKED, ADR 0645)",
+  "found": "the Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0645",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-lst-body-bind-installed-get-create-direct-none",
+   "mx-strict-read-untracked-lst-body-object-installed-get-create-direct-none",
+   "mx-strict-read-untracked-lst-body-shared-installed-get-create-direct-none",
+   "mx-strict-read-untracked-lst-body-module-installed-get-create-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 44 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "code a listener reaches was certified on a dispatch with an owner or a window: a method, a bound member, a handleEvent object, a function that is also a JSX handler (REACTIVE_WRITE_IN_OWNED_SCOPE, ADR 0645)",
+  "found": "the Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0645",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-lst-body-bind-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-lst-body-object-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-lst-body-shared-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-lst-body-module-installed-set-alias-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 15 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a nested render drains an apply under the caller's owner: its write threw and was certified (ADR 0644)",
+  "found": "the second Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0644",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-rnd-body-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-rnd-foreach-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-rnd-memo-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-rnd-root-installed-set-alias-direct-none",
+   "mx-reactive-write-in-owned-scope-rnd-wrapper-installed-set-alias-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 30 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "onCleanup in an apply a nested render drains is owned and silent; SC4001 proved it: a false positive (ADR 0644)",
+  "found": "the second Opus arbitration, Chrome-confirmed",
+  "fixed": "ADR 0644",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "lg-no-owner-cleanup-rnd-body-x-direct-none",
+   "lg-no-owner-cleanup-rnd-foreach-x-direct-none",
+   "lg-no-owner-cleanup-rnd-memo-x-direct-none",
+   "lg-no-owner-cleanup-rnd-root-x-direct-none",
+   "lg-no-owner-cleanup-rnd-wrapper-x-direct-none"
+  ],
+  "rediscovered": "2394b10cd: 5 false-positive; the fix: uncertifiable"
+ },
+ {
+  "finding": "render in an apply or a leaf throws what createRoot throws there and was certified (PRIMITIVE_IN_EFFECT_CALLBACK, ADR 0644)",
+  "found": "probing render in Chrome",
+  "fixed": "ADR 0644",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-effect-apply-render-direct-none"
+  ],
+  "rediscovered": "5b8a1d7b5: 30 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "render in an apply or a leaf throws what createRoot throws there and was certified (PRIMITIVE_IN_FORBIDDEN_SCOPE, ADR 0644)",
+  "found": "probing render in Chrome",
+  "fixed": "ADR 0644",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-settled-render-direct-none",
+   "mx-primitive-in-forbidden-scope-tracked-render-direct-none"
+  ],
+  "rediscovered": "5b8a1d7b5: 30 false-clean; the fix: agree"
+ },
+ {
+  "finding": "a function-literal slot of a project hook dropped the handed net while an unrelated member of the name was written, so the read was certified (c1 report, S0)",
+  "found": "the return-shape research (c1/report.md), Chrome-confirmed",
+  "fixed": "S0: `returned_slot_is_literal_function` removed",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-memo-hook-fn-slot-written-none",
+   "mx-strict-read-untracked-root-memo-hook-fn-slot-written-none"
+  ],
+  "rediscovered": "the build before S0: 24 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a read in `const hf = …; [].forEach(hf)` was a proven SC1001 where Chrome runs nothing (ADR 0646)",
+  "found": "the zero-run shapes of this slice",
+  "fixed": "ADR 0646",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-zero-body-empty-memo-direct-none",
+   "lg-strict-read-untracked-zero-body-var-memo-direct-none"
+  ],
+  "rediscovered": "the build before ADR 0646: 6 unexecuted; the fix: uncertifiable"
+ },
+ {
+  "finding": "`resolve` under onSettled reports PRIMITIVE_IN_FORBIDDEN_SCOPE; a first fix moved both owners to the observer guard, a certified second-code false clean (ADR 0641)",
+  "found": "the Fable review of the unjudged findings",
+  "fixed": "ADR 0641",
+  "grid": "mx-census",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-settled-x-direct-none",
+   "mx-resolve-in-reactive-scope-action-from-settled-x-direct-none"
+  ],
+  "rediscovered": "the g15 build: 2 programs secondary false-clean-certified; 7e9b9d5ee and later: none"
+ },
+ {
+  "finding": "`until` under onSettled reports PRIMITIVE_IN_FORBIDDEN_SCOPE; a first fix moved both owners to the observer guard, a certified second-code false clean (ADR 0641)",
+  "found": "the Fable review of the unjudged findings",
+  "fixed": "ADR 0641",
+  "grid": "mx-census",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-until-in-reactive-scope-settled-x-direct-none",
+   "mx-until-in-reactive-scope-action-from-settled-x-direct-none"
+  ],
+  "rediscovered": "the g15 build: 2 programs secondary false-clean-certified; 7e9b9d5ee and later: none"
  }
 ]

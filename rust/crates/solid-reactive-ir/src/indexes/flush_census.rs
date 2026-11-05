@@ -14,6 +14,8 @@
 //! run with no owner, or one reference that is not a call (the function
 //! handed on, aliased or re-exported), vetoes the proofs program-wide. A
 //! flush a dependency calls is outside the facts (the documented premise).
+//! `render` and `hydrate` drain the same way (ADR 0644), so they are in the
+//! census: [`solid_dialect::Dialect::drains_queue_on_caller_stack`].
 
 use super::event_delivery::DispatchCaller;
 use super::*;
@@ -112,13 +114,15 @@ impl<'a> SemanticLookup<'a> {
         let mut sites = Vec::new();
         if !self
             .project_primitives()
-            .contains(&solid_dialect::Primitive::Flush)
+            .iter()
+            .any(|primitive| self.dialect.drains_queue_on_caller_stack(*primitive))
         {
             return sites;
         }
         let is_flush = |name: Option<crate::PrimitiveName>| {
-            name.as_ref().and_then(crate::PrimitiveName::primitive)
-                == Some(solid_dialect::Primitive::Flush)
+            name.as_ref()
+                .and_then(crate::PrimitiveName::primitive)
+                .is_some_and(|primitive| self.dialect.drains_queue_on_caller_stack(primitive))
         };
         for file in self.files() {
             // A package analyzed as source (ADRs 0284, 0300) is dependency
@@ -137,7 +141,10 @@ impl<'a> SemanticLookup<'a> {
                 .calls
                 .iter()
                 .filter(|call| {
-                    self.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Flush)
+                    self.primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            self.dialect.drains_queue_on_caller_stack(primitive)
+                        })
                 })
                 .map(|call| (file.ast.peel_ts_sugar_span(call.callee), call))
                 .collect::<Vec<_>>();
@@ -147,7 +154,9 @@ impl<'a> SemanticLookup<'a> {
                     span: call.span,
                     called: true,
                     caller: self.flush_caller(file, call),
-                    drains_nothing: self.flush_in_effect_phase(file, call),
+                    drains_nothing: self.primitive_at_call(file, call.span)
+                        == Some(solid_dialect::Primitive::Flush)
+                        && self.flush_in_effect_phase(file, call),
                 });
             }
             // A reference that is not the callee of one of those calls (an
