@@ -446,13 +446,6 @@ impl SemanticLookup<'_> {
                         {
                             DispatchReceiver::NoListener
                         }
-                        // ADR 0642: that element's uses hold no `focus`, so it
-                        // never has focus to lose, whatever listens above it.
-                        "ChildNode.remove"
-                            if self.created_element_unattached_to_a_listener(file, call) =>
-                        {
-                            DispatchReceiver::NoListener
-                        }
                         "EventTarget.dispatchEvent" => self.dispatch_receiver(file, call),
                         _ => DispatchReceiver::Element,
                     };

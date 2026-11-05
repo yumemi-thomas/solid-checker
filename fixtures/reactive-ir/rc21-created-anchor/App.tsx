@@ -6,7 +6,6 @@ function download(url: string) {
   anchor.download = "x";
   document.body.append(anchor);
   anchor.click();
-  anchor.remove();
 }
 
 export function Page() {
