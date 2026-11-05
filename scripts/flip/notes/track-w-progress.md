@@ -113,6 +113,13 @@ SC2001.
   named blocker `leaf-operation-identity-unproven` needs a field on `LeafOwnerOperation` (lib.rs, R's) and its wording
   (rules lib.rs); today it reuses the uncertain/possible wording. Witnesses 13 of 13 keep.
 
+- **SC2009** (ADR 0712): `local_access.rs` `discover_optimistic_reach`: each non-intrinsic JSX element's prop/spread value
+  leaves (through `?:`/`&&`/`||`/`??`, to a name, member or call; a written function skipped) asked `callee_reaches` of an
+  async optimistic setter: uncertain at the value, blocker `optimistic-reach-unresolved`. Plus the plan's transported edit
+  (saved patch), deduped in `reactive_analysis.rs` against the file's own pass; no fixture reaches it (backstop). Witness a04
+  holds (190 of 335); a02/a03 are the census's. Fixture `rc21-optimistic-handed-prop`. Corpus +22 U, all inferay
+  (`sweep-w2009b.json`); first cut asked every expression (31). Fuzzer outside (a context gets statements, not the setter).
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -142,7 +149,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
 `static_api.rs` is the helper-aware form of `unplaced_run`, reuse it for SC2008/SC6002):
 2. SC2006, SC2008, SC6002 done (ADRs 0708-0710). SC6001 needs no flip (plan).
 3. SC3001 done (ADR 0711).
-4. **SC2009** (started, nothing committed). Found: `transported_writes` (local_access.rs, W's `:4050` area) does not carry a
+4. SC2009 done (ADR 0712). Old notes kept for reference: Found: `transported_writes` (local_access.rs, W's `:4050` area) does not carry a
    setter through a JSX prop: `<K s={setO} />` then `props.s(2)` in K is certified with and without the `as` cast, so the plan's
    edit there cannot close a04. Patch for the hook/context transport half (an SC2009 obligation, blocker
    `optimistic-reach-unresolved`, when `optimistic_async_setter(symbol)` in the transported loop, plus
