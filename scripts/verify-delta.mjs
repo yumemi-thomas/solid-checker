@@ -24,7 +24,7 @@
 // "verified" rests on.
 //
 // The mapping fails closed. A path that matches no row -- `scripts/`, the
-// `Makefile`, `schema/`, `rust/Cargo.toml`, `docs/rules/`, anything new --
+// `Makefile`, `schema/`, `rust/Cargo.toml`, anything new --
 // escalates to the full `make verify`, and prints which path did it. An
 // unmapped path can change any answer in the repository, so guessing that it
 // changes none is the one failure mode this script must not have.
@@ -189,6 +189,21 @@ export const CHECKS = {
       "installs and the pinned headless shell the way verify's first step does, and fails on any skipped test " +
       "(only the tsrs-only files may skip, when no tsrs binary exists)",
     command: ["bun", "scripts/fuzz/test-lane.mjs", "--provision"],
+  },
+  "doc-budget": {
+    why:
+      "the size and allow-list budgets over docs/, fixture READMEs and the agent-facing prose; it asks git " +
+      "what is ignored, so `.gitignore` is an input too",
+    command: ["bun", "scripts/doc-budget.mjs"],
+  },
+  "rule-pages": {
+    why:
+      "what reads docs/rules/: the rules crate's every_rule_has_a_documentation_page, and the fuzzer's " +
+      "codes.test.mjs, which needs a page per rule a code names and reads one page's text",
+    commands: [
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-v2-rules", "--lib", "every_rule_has_a_documentation_page"],
+      ["bun", "scripts/fuzz/test-lane.mjs", "--provision", "scripts/fuzz/codes.test.mjs"],
+    ],
   },
   "ir-tools-test": {
     why: "the lint and the harness are scripts with their own unit tests",
@@ -391,12 +406,20 @@ export const ROWS = [
     owner: "the differential fuzzer (operator tooling; its unit tests are a verify lane)",
     checks: ["fuzz-tests"],
   },
+  // A rule page is prose the budgets and two tests read; the CLI tests and
+  // emitted findings name its URL, which no check resolves. A renamed page is
+  // what `rule-pages` catches.
+  { prefix: "docs/rules/", owner: "the rule pages", checks: ["doc-budget", "rule-pages"] },
+  // `.gitignore` decides what git lists, and three checks ask git: the dialect
+  // stubs (coverage), the reproduction set's tracked files (repro-budget) and
+  // the doc budgets. Every other input is walked from the filesystem or is one
+  // of the ignored classes in the header, whose caveat stands.
+  { prefix: ".gitignore", owner: "what git lists", checks: ["doc-budget", "coverage", "repro-budget"] },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
-  // paths checked to be unread by code belong here. `docs/rules/` is read by
-  // the CLI tests and emitted in every finding's URL, and other `docs/`
-  // subtrees feed manifests and hints, so the rest of `docs/` stays unmapped.
+  // paths checked to be unread by code belong here. Other `docs/` subtrees
+  // feed manifests and hints, so the rest of `docs/` stays unmapped.
   ...[
     "docs/adr/",
     "docs/typefacts/adr/",
@@ -455,6 +478,7 @@ export function planFor(paths) {
     // is already current.
     "build-typefacts",
     ...UNIVERSAL,
+    ...["doc-budget", "rule-pages"].filter((id) => selected.has(id)),
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
@@ -680,6 +704,8 @@ export const LANES = {
   "ir-edit-fuzz": "gates",
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
+  "doc-budget": "preflight",
+  "rule-pages": "rust",
   // Builds nothing and needs no checker; ~3 minutes, so a preflight-lane neighbour would delay the gates: its own lane.
   "fuzz-tests": "fuzz",
   // The CLI launcher falls back to `make build-rust` when it finds no
