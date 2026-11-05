@@ -3634,5 +3634,17 @@
    "mx-strict-read-untracked-body-store-dstr-merge-direct-none"
   ],
   "rediscovered": "patterns: 3 left open-defects.json at ADR 0657; the generator shape is a wrapped initializer, store-dstr-merge"
+ },
+ {
+  "finding": "SC5008 read proven calls only: `try { props.v() }`, `try { props.v }` and a literal's getter warned CAUGHT_REACTIVE_READ, certified (ADR 0658)",
+  "found": "the flip audit",
+  "fixed": "ADR 0658",
+  "grid": "mx-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-memo-get-literal-direct-none",
+   "mx-caught-reactive-read-memo-hook-call-direct-none"
+  ],
+  "rediscovered": "e8b8c7ce7: 12 false cleans of get-literal; ADR 0658: 0"
  }
 ]

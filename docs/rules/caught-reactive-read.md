@@ -27,3 +27,7 @@ and rc.21 checks only a pass that returned.
 
 Branch on readiness with `isPending()`, show ahead with `latest()`, or let the read
 suspend. Handle errors with `<Errored>` or `createEffect`'s `error` option.
+
+A `try` around code no call shows reading is uncertifiable too, blocker
+`caught-read-unproven` (ADR 0658): a call of a value a caller or a hook handed over, a Get of
+a prop or of such a value, and a local literal's accessor.

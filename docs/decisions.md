@@ -1632,3 +1632,7 @@ A function with no binding name was skipped, so `[function () { return s() ? <a 
 <a id="adr-0657"></a>
 ## ADR 0657 — SC1003 opens every destructure no exact root reaches
 The rule read a one-parameter pattern and `const {a} = root`. A second parameter, an assignment, a `for…of`, `const [{a}] = [props]`, a rest pattern, `merge(…, props)`, a default and a hook's store certified while Chrome warned. The first parameter is now read whatever follows, and every other form is uncertifiable, `destructure-root-unproven`. A member read is not a root, so `createSignal(props.x)` stays out. A hook whose returns are all closed literals is proved plain. A helper stays a site: unlike the exact-root arm, this claims nothing about its run, and the fuzzer found 56 false cleans behind that gate. `o12`, a helper's parameter, waits for the census. Owner: `static_rules.rs`.
+
+<a id="adr-0658"></a>
+## ADR 0658 — SC5008 reads what no call shows
+The block's reads were its calls of proven sources, and a handed callee was skipped, so `try { props.v() }`, `try { props.v }` and a literal's getter certified while rc.21 warned `CAUGHT_REACTIVE_READ`. A call of a handed value stays a site, and a Get of a handed root or of a literal with an accessor is one. Both are uncertifiable, `caught-read-unproven`. `member_get_may_read` is shared with SC5006. Owner: `local_access.rs`.

@@ -15,7 +15,9 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 | SC1004 | done, ADR 0656 | -30 SC1001 U, +29 SC1004 U, same sites, 0 V moved | witnesses 2 of 2; `outside` |
 | SC1003 | done, ADR 0657 | +129 U, 0 V moved | witnesses 9 of 10, `o12` waits for the census as the plan says; old grid 144 false cleans, new 0; 3 V-D5 patterns left the open list, 390 open |
 
-Next: `async.md`'s order for SC5008, SC5006, SC5003+SC5001, which also owns `lazy`, `cases3-p03`, and `patterns.mjs:130` first. Latest sweep: `sweep-1003.json`, 16,431 U, 383 V.
+| SC5008 | done, ADR 0658 | +179 U, 0 V moved | witnesses 4 of 4; old grid 12 false cleans, new 0 |
+
+Next, owner's order: (1) one shared commit for Track W, `client_root_present` and the server-only arm (`ssr/report.md` D1, D2, D13, its section 3 table); (2) convert `ssr/hyd.json`, `ssr/srv.json` into witnesses with a server column, and make `judgeSsr` read more than SC7005; (3) SC5006, SC5003+SC5001 by `async.md`, plus `lazy` with SSR in `mount-form-window`; (4) SC1002, SC8014, SC8015, SC1001 (add the arm fact and a `NoHydration` blocker: `unplaced_run` misses D1, D3, because both are `MayRun`), SC9012. Latest sweep: `sweep-5008.json`.
 
 `sc1001.md`, `f0.md`, `sc9012-census.md` beat the plan: reread the row's section before each rule. They add to rules in between: SC5003+SC5001 owns `dynamic_component_entry`, the `<Dynamic>` hint, check `cases3-p03` there, and maybe C-D4 (`n01 n03 n06`); SC1001 has 10 steps and needs `patterns.mjs:130`; H-D5 lands before the census; `check.mjs` needs SC9012 for 9 ids (W's 8 and `o12`) in the census commit.
 

@@ -603,13 +603,16 @@ export const SPEC = {
   // rc.21 (ADR 0637): a compute catches a pending read's throw and completes. `rethrow` lets it continue; a signal never throws.
   // Per pass (ADR 0637): `store-get`, `store-keys` and `latest` read too; `prior-read` and `later-read` leave a read outside the `try`,
   // so the throw leaves the pass and nothing reports.
-  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], recallVariants: ["store-get", "store-keys", "latest"], legalVariants: ["rethrow", "signal", "prior-read", "later-read", "owned-setter"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
+  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], recallVariants: ["store-get", "store-keys", "latest", "hook-call", "get-literal"], legalVariants: ["rethrow", "signal", "prior-read", "later-read", "owned-setter"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
     contexts: [], recallContexts: ["memo", "effect-compute"], bindings: ["direct"],
     setup: (variant, name) => [variant === "owned-setter" ? apiSignal(name("w"), 0, "owned") : variant === "signal" ? signal(name("r"), 1, "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
     // ADR 0640: a setter in a `try` is no read: `ownedWrite` is the one compute a setter call is legal in.
     call: (node, [sig]) => (node.variant === "owned-setter" ? member(sig.setter, (o) => `try { ${o}(1); } catch { }`) : node.variant === "latest" ? member(sig.name, (o) => `try { latest(${o}); } catch { }`, ["latest"]) : member(sig.name, (o) => ({
       rethrow: `try { ${o}(); } catch (error) { throw error; }`, "prior-read": `${o}(); try { ${o}(); } catch { }`, "later-read": `try { ${o}(); } catch { } ${o}()`,
-      "store-get": `try { ${o}.v; } catch { }`, "store-keys": `try { Object.keys(${o}); } catch { }` }[node.variant] ?? `try { ${o}(); } catch { }`))),
+      "store-get": `try { ${o}.v; } catch { }`, "store-keys": `try { Object.keys(${o}); } catch { }`,
+      // ADR 0658: no accessor call the block shows: a value a hook handed over, and a literal's getter.
+      "hook-call": `const useRead = () => ${o}; const read = useRead(); try { read(); } catch { }`,
+      "get-literal": `const held = { get v() { return ${o}(); } }; try { held.v; } catch { }` }[node.variant] ?? `try { ${o}(); } catch { }`))),
   },
   // rc.21 (ADR 0624): `<Loading on={fn}>` warns on the boundary's first run. The site is a read under the boundary; the `on` value is
   // the variant. Judged by file (the diagnostic is raised from the boundary). `on` is typed `any`. Recall grids only.
