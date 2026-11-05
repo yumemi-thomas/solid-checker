@@ -48,9 +48,10 @@ import { spawnSync } from "node:child_process";
 import { Worker } from "node:worker_threads";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
+import { gridStanding, heldLine, readKnownOpen } from "./known-open.mjs";
 import { GRIDS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
@@ -88,11 +89,17 @@ export function readGrid(out) {
   const flagged = [];
   const complete = existsSync(programs);
   const rows = complete ? readFileSync(programs, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : readPartial(out);
+  const list = readKnownOpen();
+  const held = [];
   for (const row of rows ?? []) {
     outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
     const problem = rowProblem(row);
-    if (problem) flagged.push({ id: row.id, outcome: problem, detail: row.detail });
+    const standing = gridStanding(list, row, problem);
+    if (standing?.kind === "held") held.push(standing.entry);
+    else if (standing?.kind === "fixed") flagged.push({ id: row.id, outcome: "known-open-fixed", detail: { item: standing.entry.item, move: "from known-open.json to rediscovery.json" } });
+    else if (problem) flagged.push({ id: row.id, outcome: problem, detail: row.detail });
   }
+  if (held.length) console.log(`  ${heldLine(basename(out), held)}`);
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
   const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind)));

@@ -975,3 +975,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-created-anchor-listener/node_modules/**
 !fixtures/reactive-ir/rc21-created-anchor-escapes/node_modules/
 !fixtures/reactive-ir/rc21-created-anchor-escapes/node_modules/**
+!scripts/fuzz/patterns/**/node_modules/
+!scripts/fuzz/patterns/**/node_modules/**

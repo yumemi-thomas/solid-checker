@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { GRIDS, hostArgs, parse as parseFocus } from "./focus.mjs";
 import { rowProblem } from "./codes.mjs";
+import { gridStanding, heldLine, readKnownOpen } from "./known-open.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
@@ -241,6 +242,8 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
   const grids = {};
   const rows = new Map();
   for (const grid of AUDIT_GRIDS) {
+    const held = [];
+    const knownOpen = readKnownOpen();
     const outcomes = new Map();
     const tally = {};
     let planned = null;
@@ -257,9 +260,13 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
         outcomes.set(row.id, row.outcome);
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
         const problem = rowProblem(row);
-        if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
+        const standing = gridStanding(knownOpen, row, problem);
+        if (standing?.kind === "held") held.push(standing.entry);
+        else if (standing?.kind === "fixed") attention.push(`${grid}: known-open-fixed ${row.id}: move ${standing.entry.item} from known-open.json to rediscovery.json`);
+        else if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       }
     }
+    if (held.length) console.log(heldLine(grid, held));
     if (planned !== null && outcomes.size !== planned) attention.push(`${grid}: ${outcomes.size} programs judged of ${planned}`);
     if (planned !== null && planned > 0 && outcomes.size === 0) attention.push(`${grid}: no program judged`);
     // The oracle grid: its sample compared in Chrome, every program of the manifest, each with the outcome its shard gave it.

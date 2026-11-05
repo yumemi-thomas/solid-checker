@@ -299,8 +299,25 @@ const member = (object, text, imports = []) => ({ kind: "member", object, text, 
  *   call(node, sigs) -> api | local | member
  */
 /** Store proxy operations (`STORE_WRITE_OUTSIDE_SETTER` `recallVariants`): the text of each on `object`; `nested` needs the nested store. */
+/**
+ * V-D1: a write expression with no `[[Set]]` on this run, silent in Chrome, and legal in every context. `array`: the store is `[0]`.
+ * What keeps its proof is in STORE_OPERATIONS: `logical-or` writes, and a two-element `items` sorts.
+ */
+const STORE_NO_OPS = {
+  "noop-nullish": { text: (o) => `${o}.v ??= 5` },
+  "noop-and": { text: (o) => `${o}.v &&= 5` },
+  "noop-assign-null": { text: (o) => `Object.assign(${o}, null)` },
+  "noop-assign-empty-var": { text: (o) => `(() => { const patch = {}; Object.assign(${o}, patch); })()` },
+  "noop-assign-inherited": { text: (o) => `Object.assign(${o}, Object.create({ v: 2 }))` },
+  "noop-sort-one": { array: true, text: (o) => `${o}.sort()` },
+  "noop-reverse-one": { array: true, text: (o) => `${o}.reverse()` },
+  "noop-fill-range": { array: true, text: (o) => `${o}.fill(0, 5)` },
+  "noop-fill-empty-range": { array: true, text: (o) => `${o}.fill(0, 1, 1)` },
+  "noop-copy-within": { array: true, text: (o) => `${o}.copyWithin(0, 5)` },
+};
 const STORE_OPERATIONS = {
   compound: { text: (o) => `${o}.v += 1` },
+  "logical-or": { text: (o) => `${o}.v ||= 5` },
   increment: { text: (o) => `${o}.v++` },
   bracket: { text: (o) => `${o}["v"] = 7` },
   "object-assign": { text: (o) => `Object.assign(${o}, { v: 7 })` },
@@ -424,14 +441,15 @@ export const SPEC = {
     // an optimistic store's draft write is legal.
     recallVariants: [...Object.keys(STORE_OPERATIONS), "optional-link", "optional-link-leaf", "async-setter", "optimistic-store", "projection"],
     // ADR 0626: a shallow store serves values raw, so a write past its root lands and warns nothing; a root write is dropped as ever.
-    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft", "shallow-nested", "shallow-items"],
-    setup: (variant, name) => [variant === "class-method" ? storeClassSignal(name("s"), 0) : variant?.startsWith("shallow-") ? storeShallowSignal(name("s"), 0) : API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft", "shallow-nested", "shallow-items", ...Object.keys(STORE_NO_OPS)],
+    setup: (variant, name) => [STORE_NO_OPS[variant]?.array ? storeArraySignal(name("s"), 0) : variant === "class-method" ? storeClassSignal(name("s"), 0) : variant?.startsWith("shallow-") ? storeShallowSignal(name("s"), 0) : API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
     call: (node, [sig]) => member(sig.name, (object) => {
       const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
       if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
       if (node.variant === "in-setter") return `${sig.setter}(() => { ${object}.v = 7; })`;
       if (node.variant === "draft") return `${sig.setter}((draft) => { draft.v = 7; })`;
       if (STORE_OPERATIONS[node.variant]) return STORE_OPERATIONS[node.variant].text(object);
+      if (STORE_NO_OPS[node.variant]) return STORE_NO_OPS[node.variant].text(object);
       if (node.variant === "shallow-nested") return `${object}.a.v = 7`;
       if (node.variant === "shallow-items") return `${object}.items.push(7)`;
       if (node.variant === "copy-spread") return `({ ...${object} }).v = 7`;
