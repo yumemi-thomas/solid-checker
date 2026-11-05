@@ -152,6 +152,17 @@ SC2001.
   (`sweep-w2002.json`). **Merge note:** named blocker `function-run-unplaced` needs a row field or wording branch in lib.rs (R's).
   Runner for research probes: `node ~/EDF/tmp/flipw/research-sc2001/runp.mjs <dir> <absolute bindir>` (bindir holds the checker
   and `solid-typefacts`).
+- **SC2003 step 1 of 5** (ADR 0716, 1232c2f2c): for-heads. `shared_reactivity.rs` `no_direct_mutation` chains each
+  `write_targets` leaf inside an `iteration_targets` head; `iteration_head_proven_nonempty` (array literal with a value element,
+  separated by exactly `of`/`in`) decides V, else U `store-operation-may-not-write`. Ownership case
+  `no-store-mutation-outside-setter/loop-head/001` (upstream has no such rule; insert cases.json entries as text: re-serializing
+  rewrites `\u00ef` escapes; a case needs `expect.absent`). fuzz-patterns `values/d6-for-of-target` FIXED (moved to rediscovery).
+  Witnesses SC2003 5/13, all 204. Corpus 0 moved (`sweep-w2003a.json`). Fixture `store-for-head-write`.
+  **SC2003 next (from `~/EDF/tmp/flipw/research-sc4002/sc2003.md` section 3):** step 2 std-lib alias by declaration
+  (`no_store_standard_library_write` `shared_reactivity.rs` ~:3300, drop the member-callee prefilter, keep the qualified-name test;
+  plus `.call` on a prototype method, `values/d1n-array-proto-call`) -> j04; step 3 V-D1 fold (`scripts/flip/notes/v-d1-checker.patch`,
+  replace its text search by a new `AssignmentFact.logical`, bump `AST_FACTS_SCHEMA`) ; step 4 sink-driven parameter/callback flow
+  (c04 j05 j06); step 5 element flows. c15 c16 j07 j08 stay failing (R's census).
 
 ## Owner notes (2026-11-05)
 
@@ -190,7 +201,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **Next: SC2003** (`~/EDF/tmp/flipw/research-sc4002/sc2003.md`, 5 commits),
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: step 1 done (ADR 0716), next step 2** (see the SC2003 entry above),
    then SC2001 last. Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
@@ -213,7 +224,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w2002.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2003a.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
