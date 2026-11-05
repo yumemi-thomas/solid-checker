@@ -196,6 +196,18 @@ export const CHECKS = {
       "what is ignored, so `.gitignore` is an input too",
     command: ["bun", "scripts/doc-budget.mjs"],
   },
+  "flip-tools": {
+    why:
+      "nothing in the build, the gates or the tests reads scripts/flip/, so a typo there would surface only " +
+      "when someone runs it. check.mjs itself needs a release build and fails by design until both tracks " +
+      "merge, so this checks that its scripts parse and its data is JSON, no more",
+    commands: [
+      ["node", "--check", "scripts/flip/check.mjs"],
+      ["node", "--check", "scripts/flip/run.mjs"],
+      ["node", "--check", "scripts/flip/tsc.mjs"],
+      ["jq", "empty", "scripts/flip/witnesses.json", "scripts/flip/tsc-rejected.json"],
+    ],
+  },
   "rule-pages": {
     why:
       "what reads docs/rules/: the rules crate's every_rule_has_a_documentation_page, and the fuzzer's " +
@@ -410,6 +422,11 @@ export const ROWS = [
   // emitted findings name its URL, which no check resolves. A renamed page is
   // what `rule-pages` catches.
   { prefix: "docs/rules/", owner: "the rule pages", checks: ["doc-budget", "rule-pages"] },
+  // The flip's working files: nothing else reads them, and `scripts/flip/` goes
+  // with the flip. The notes and the plan are prose, the rest are its tools.
+  { prefix: "scripts/flip/", owner: "the flip's tools (read by no build, gate or test)", checks: ["flip-tools"] },
+  { prefix: "scripts/flip/notes/", owner: "prose read by no check", checks: [] },
+  { prefix: "scripts/flip/PLAN.md", owner: "prose read by no check", checks: [] },
   // `.gitignore` decides what git lists, and three checks ask git: the dialect
   // stubs (coverage), the reproduction set's tracked files (repro-budget) and
   // the doc budgets. Every other input is walked from the filesystem or is one
@@ -478,7 +495,7 @@ export function planFor(paths) {
     // is already current.
     "build-typefacts",
     ...UNIVERSAL,
-    ...["doc-budget", "rule-pages"].filter((id) => selected.has(id)),
+    ...["doc-budget", "flip-tools", "rule-pages"].filter((id) => selected.has(id)),
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
@@ -705,6 +722,7 @@ export const LANES = {
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
   "doc-budget": "preflight",
+  "flip-tools": "preflight",
   "rule-pages": "rust",
   // Builds nothing and needs no checker; ~3 minutes, so a preflight-lane neighbour would delay the gates: its own lane.
   "fuzz-tests": "fuzz",

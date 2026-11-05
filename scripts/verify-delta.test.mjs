@@ -198,6 +198,19 @@ test("a rule page reaches what reads it, and `.gitignore` what asks git", () => 
   assert.equal(planFor(["docs/rules.md"]).full, true);
 });
 
+test("the flip's notes are prose, and its tools reach their own check", () => {
+  for (const path of ["scripts/flip/notes/track-r-progress.md", "scripts/flip/PLAN.md"]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts"]);
+  }
+  for (const path of ["scripts/flip/check.mjs", "scripts/flip/witnesses.json"]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "flip-tools"]);
+  }
+});
+
 test("prose no check reads runs the universal set only", () => {
   for (const path of [
     "AGENTS.md",
