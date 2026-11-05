@@ -3797,5 +3797,11 @@
   "found": "flip plan SC2003 row; values/d6-for-of-target",
   "fixed": "ADR 0716",
   "outside": "a recall context places the site and cannot respell it as a loop head: the spelling of the write is a SPEC variant in misuse.mjs, outside this track's file. fuzz-patterns: values/d6-for-of-target left open-defects.json at ADR 0716; the witnesses and fixture store-for-head-write pin the rest"
+ },
+ {
+  "finding": "SC2003: Object.assign called through a const alias on a store (`const as = Object.assign; as(s, { a: 2 })`) certified: the standard-library write needed a member callee before asking the declaration (flip witness SC2003 j04; ADR 0717)",
+  "found": "flip plan SC2003 row",
+  "fixed": "ADR 0717",
+  "outside": "a recall context places the site and cannot respell the write as an aliased call: the spelling is a SPEC variant in misuse.mjs, outside this track's file; the witness and fixture store-standard-library-alias pin it"
  }
 ]

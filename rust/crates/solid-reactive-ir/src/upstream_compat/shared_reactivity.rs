@@ -3612,15 +3612,16 @@ fn no_store_standard_library_write(
 ) {
     for call in &file.ast.calls {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let Some(member) = file.ast.member_at(callee) else {
-            continue;
-        };
-        if call.construct
-            || file.ast.computed_members.binary_search(&callee).is_ok()
-            || !STANDARD_LIBRARY_WRITES
+        // A member callee is prefiltered by its name; an identifier one
+        // (`const as = Object.assign; as(store, …)`, ADR 0717) is judged by
+        // the declaration alone, as every callee is below.
+        let named = match file.ast.member_at(callee) {
+            Some(member) => STANDARD_LIBRARY_WRITES
                 .iter()
-                .any(|(name, _)| *name == text(file, member.property))
-        {
+                .any(|(name, _)| *name == text(file, member.property)),
+            None => crate::owners::is_identifier_span(file, callee),
+        };
+        if call.construct || file.ast.computed_members.binary_search(&callee).is_ok() || !named {
             continue;
         }
         let Some(declaration) =

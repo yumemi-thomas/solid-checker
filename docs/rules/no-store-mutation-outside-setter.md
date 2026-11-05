@@ -193,7 +193,8 @@ exact dynamic factory (ADR 0542), and in a local closure every reference of
 which is a plain call there (ADR 0571).
 
 `Object.assign`, `Reflect.set`, `Object.defineProperty` and `Reflect.deleteProperty` on a
-store are writes (ADRs 0526, 0638). A class method a store path holds runs with the proxy as
+store are writes (ADRs 0526, 0638), also through a `const` alias (`const set = Reflect.set`,
+ADR 0717), judged by the declaration. `Array.prototype.sort.call(store)` is not followed. A class method a store path holds runs with the proxy as
 `this`, so a write of `this.x` in it is uncertifiable (ADR 0638). A write through a `merge` of
 several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0630, 0634).
 
