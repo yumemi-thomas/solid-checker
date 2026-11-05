@@ -51,6 +51,20 @@ SC2001.
 - Picked from claude/flip-reads: `ce6a831b2`, `ae2327986` (stale tests; R's progress-file hunk dropped), `ef46d0ac6`
   (verify-delta maps rule pages and `.gitignore`), `aaaf31cad` (maps `scripts/flip/`).
 
+- **First merge** (5ddaadd4b, claude/flip-reads cee52c939): conflicts in decisions.md (both kept), rediscovery.json (union, 173),
+  one snapshot (R's side, regenerated: +W's two SC7005 obligations). Then 90c6e5e73: two SC7005 process tests updated to ADR 0703
+  (they escaped SC7005's verify-delta); 059beb67a: fixture README budget 480,000 -> 484,000. make verify after: all lanes pass
+  but load-timing tests (development-feedback 1 s timeout, fuzz exec), each passing alone. Witnesses after merge: 178 of 335
+  (incl. 24 HOST); 49 more hold (all R's rules), 0 of W's regressed; 4 HOST fail as R marked `open` (h10, h11, h12 NoHydration,
+  co-read): h11 is an SC2001 violation the hydration host contradicts, R's to close.
+- **D13 / client_build**: R's merge already did it (`static_api.rs:40`: `!selects_server_build() || client_root_present`, the
+  `lib.rs` comment fixed). No W edit.
+- **SC7006 D12** (ADR 0706): `valid_use_server.rs` `captured_bindings`: a value reference in an extracted, nested server
+  function whose declaration is in an enclosing function (or is its own name) is a violation, proven from the binder; rc.21
+  `transformDirectives` measured on 12 shapes. Fixture `valid-use-server-capture`. Corpus 0 moved.
+- **Post-merge baseline sweep**: `~/EDF/tmp/flipw/sweep-merge.json` (059beb67a, binaries `bins/wmerge`): 16,835 (16,452 U,
+  383 V). Diff later rules against it.
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -66,6 +80,9 @@ SC2001.
   on the server). SC7007 follow-up: namespace calls (`import * as api`), runtime measured with the report's `h/sf.mjs`, add its
   D4, D5, D10, D11. SC7006 follow-up: the capture error D12 (reassigning `export let` is no boot failure: ADR 0702 agrees).
   Track R adds the shared facts `client_root_present` and a server-only arm: take them at the merge, do not build W's own.
+- Research notes: `~/EDF/tmp/flipw/research-sc4002/{sc4002,sc4001,sc2003}.md` (SC4001: clean half already done by ADR 0534, a
+  measured false positive at owner_context.rs:242, harness artifact in run.mjs first; SC2003: no new for_targets fact, for-head
+  writes need a non-empty iterable, V-D1 patch applies, W closes 8 of 12; SC4002: Open state + lexical + wrapper proof).
 - SC2001 research done (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`): gate `unreached_write` on "site may run" (not
   `unplaced_run`, which misses u11), exclude module initialization, setters are not forced Unknown by `alias_withheld`;
   order SC2002 first, SC2001 last; no reachability edit; 1 corpus site newly U. SC4002/SC4001/SC2003 research running
@@ -73,7 +90,7 @@ SC2001.
 
 ## Next
 
-SC7007 and SC7006 SSR follow-ups and `client_build` once the SSR report lands; then SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
+SC7007 SSR follow-up (D9 namespace calls and dynamic import, D10 call-not-import opt-in, D11 -0, D4 leading undefined, D5 first run under SSR; `h/sf.mjs` is not on this machine), then SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
 `~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)

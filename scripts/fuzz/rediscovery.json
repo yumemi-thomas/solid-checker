@@ -3705,5 +3705,11 @@
   "found": "the SSR and hydration audit",
   "fixed": "ADR 0659",
   "outside": "the grids run one client host and need a two-host judge: scripts/flip/host-witnesses.json holds them on the measured hosts, `check.mjs HOST` 1 of 24 before, 20 after, the rest marked `open` for their rule; fixture rc21-server-arms each branch"
+ },
+ {
+  "finding": "valid-use-server (SC7006) certified a function-level server function that captures a binding an enclosing function declares, a compile error on both builds (SSR audit D12, scripts/flip/notes/ssr/report.md; ADR 0706)",
+  "found": "the SSR premise audit (d01, d02, d24, d25), rerun here with @solidjs/compiler@2.0.0-rc.21 transformDirectives on twelve shapes",
+  "fixed": "ADR 0706",
+  "outside": "SC7006's oracle is the compiler's directive pass, not a runtime: no grid compiles \"use server\" (scripts/fuzz/README.md, the SSR host section, already says so). Fixture valid-use-server-capture holds the seven errors and four compiling shapes"
  }
 ]

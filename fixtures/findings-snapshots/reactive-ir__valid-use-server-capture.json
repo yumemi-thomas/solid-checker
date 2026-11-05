@@ -1,0 +1,175 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 325,
+      "end": 326,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 341,
+      "end": 342,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 443,
+      "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 459,
+      "end": 460,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 536,
+      "end": 537,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 586,
+      "end": 587,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 693,
+      "end": 694,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 710,
+      "end": 711,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 839,
+      "end": 840,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 857,
+      "end": 858,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 966,
+      "end": 967,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 989,
+      "end": 990,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 1134,
+      "end": 1135,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/captures.ts",
+      "start": 1152,
+      "end": 1153,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/compiles.ts",
+      "start": 224,
+      "end": 225,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/compiles.ts",
+      "start": 370,
+      "end": 371,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-capture/compiles.ts",
+      "start": 509,
+      "end": 510,
+      "fixes": 0
+    }
+  ]
+}
