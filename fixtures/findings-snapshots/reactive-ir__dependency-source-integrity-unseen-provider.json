@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-unseen-provider/App.tsx",
+      "start": 731,
+      "end": 741,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

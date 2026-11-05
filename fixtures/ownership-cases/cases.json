@@ -3089,6 +3089,40 @@
     "absent": []
    },
    "note": "Kept divergence (ADR 0653): eslint-plugin-solid 0.14.5 reads only a tracked root. A member of a value a hook returned may be a store member in rc.21, where Chrome warns STRICT_READ_UNTRACKED and the handler freezes, so with no proven root it is an uncertifiable, blocker handler-root-unproven."
+  },
+  {
+   "id": "no-destructure/solid-v2/open-root/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const C = (props: { a: number }) => { const [{ a }] = [props]; return <i>{a}</i>; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "[{ a }]"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0657): eslint-plugin-solid 0.14.5 reads the parameter pattern only. In rc.21 a destructure through a wrapper Gets the prop at setup and Chrome warns STRICT_READ_UNTRACKED, so a pattern whose value holds a prop or store root is an uncertifiable, blocker destructure-root-unproven."
   }
  ]
 }

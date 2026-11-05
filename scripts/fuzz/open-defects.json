@@ -505,7 +505,7 @@
    "codes": [
     "STRICT_READ_UNTRACKED"
    ],
-   "certified": true
+   "certified": false
   },
   {
    "id": "api/r06-values-at",
@@ -3096,15 +3096,6 @@
    "certified": true
   },
   {
-   "id": "values/d5-defaults-destructure",
-   "item": "V-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d5-helper-props",
    "item": "V-D5",
    "outcome": "false-clean",
@@ -3133,24 +3124,6 @@
   },
   {
    "id": "values/d5-object-values",
-   "item": "V-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d5-omit-destructure",
-   "item": "V-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d5-report-merge",
    "item": "V-D5",
    "outcome": "false-clean",
    "codes": [

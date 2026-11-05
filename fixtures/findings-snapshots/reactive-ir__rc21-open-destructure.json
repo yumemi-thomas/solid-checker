@@ -1,0 +1,85 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 78,
+      "end": 83,
+      "fixes": 1
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 192,
+      "end": 197,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 216,
+      "end": 226,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 246,
+      "end": 254,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 294,
+      "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 404,
+      "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 578,
+      "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 658,
+      "end": 665,
+      "fixes": 0
+    }
+  ]
+}

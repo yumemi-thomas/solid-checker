@@ -19,7 +19,7 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, STATIC_SOURCES, SYNC_COMPUTES, flipReadContext } from "./flip-read.mjs";
+import { FLIP_READ_CONTEXTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, flipReadContext } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
@@ -365,6 +365,7 @@ const WHOLE_STORE_READS = {
   "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
   "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
   "store-for-of": { reads: true, array: true, text: (o) => `for (const x of ${o}) { void x; }` },
+  ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },
   "store-has": { text: (o) => `"v" in ${o}` },
   "store-has-own": { text: (o) => `Object.hasOwn(${o}, "v")` },

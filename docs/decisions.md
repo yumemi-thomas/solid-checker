@@ -1628,3 +1628,7 @@ The rule needed a proven accessor and exempted every argument, so `String(c)`, `
 <a id="adr-0656"></a>
 ## ADR 0656 — SC1004 needs no name
 A function with no binding name was skipped, so `[function () { return s() ? <a /> : <b />; }][0]` went unjudged while Chrome warned. The name was only a label. A function that is possibly a component is uncertain as before, so handed callbacks such as a table's `render` move from SC1001 to SC1004 at the same site, uncertifiable both ways. Owner: `static_rules.rs`.
+
+<a id="adr-0657"></a>
+## ADR 0657 — SC1003 opens every destructure no exact root reaches
+The rule read a one-parameter pattern and `const {a} = root`. A second parameter, an assignment, a `for…of`, `const [{a}] = [props]`, a rest pattern, `merge(…, props)`, a default and a hook's store certified while Chrome warned. The first parameter is now read whatever follows, and every other form is uncertifiable, `destructure-root-unproven`. A member read is not a root, so `createSignal(props.x)` stays out. A hook whose returns are all closed literals is proved plain. A helper stays a site: unlike the exact-root arm, this claims nothing about its run, and the fuzzer found 56 false cleans behind that gate. `o12`, a helper's parameter, waits for the census. Owner: `static_rules.rs`.

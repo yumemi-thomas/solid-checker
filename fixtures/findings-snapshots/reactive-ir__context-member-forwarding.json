@@ -42,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/App.tsx",
+      "start": 963,
+      "end": 995,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -59,6 +69,26 @@
       "path": "fixtures/reactive-ir/context-member-forwarding/App.tsx",
       "start": 1200,
       "end": 1213,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/App.tsx",
+      "start": 1292,
+      "end": 1307,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/App.tsx",
+      "start": 1443,
+      "end": 1458,
       "fixes": 0
     },
     {

@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
+      "start": 756,
+      "end": 764,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

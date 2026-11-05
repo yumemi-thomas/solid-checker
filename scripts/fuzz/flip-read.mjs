@@ -21,6 +21,14 @@ export const SYNC_COMPUTES = {
   "cmp-options": 'async () => 1, ({ sync: true }) as { sync: boolean }',
 };
 
+// ADR 0657: a destructure no exact root reaches. Each is a Get of the store at setup.
+export const STORE_DESTRUCTURES = {
+  "store-dstr-assign": { reads: true, text: (o) => `let v = 0; ({ v } = ${o}); void v;` },
+  "store-dstr-array": { reads: true, text: (o) => `const [{ v }] = [${o}]; void v;` },
+  "store-dstr-for-of": { reads: true, text: (o) => `for (const { v } of [${o}]) void v;` },
+  "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v } = merge(${o}, { w: 1 }); void v;` },
+};
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
 };

@@ -3608,5 +3608,31 @@
   "found": "the flip audit",
   "fixed": "ADR 0656",
   "outside": "the grid places a site statement inside a named `App`, and here the read is the returned test of an anonymous function: a context cannot make that test the site. scripts/flip/witnesses.json holds q02, fixture rc21-anonymous-component each branch"
+ },
+ {
+  "finding": "SC1003 read a one-parameter pattern and `const {a} = root`: an assignment, `const [{a}] = [props]`, a `for…of`, `merge(…, props)` and a helper's destructure warned in Chrome, certified (ADR 0657)",
+  "found": "the flip audit; the helper arm found by these shapes",
+  "fixed": "ADR 0657",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-dstr-assign-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-array-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-for-of-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-assign-direct-closure"
+  ],
+  "rediscovered": "cda383b34: 144 false cleans; first cut: 56 in helpers; ADR 0657: 0"
+ },
+ {
+  "finding": "V-D5: `omit`, `merge` and a default destructured over props warned in Chrome, certified: d5-defaults-destructure, d5-omit-destructure, d5-report-merge (ADR 0657)",
+  "found": "the values audit",
+  "fixed": "ADR 0657",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none"
+  ],
+  "rediscovered": "patterns: 3 left open-defects.json at ADR 0657; the generator shape is a wrapped initializer, store-dstr-merge"
  }
 ]
