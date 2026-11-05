@@ -203,7 +203,15 @@ export function codeOfThrown(message) {
  * Rules whose violation stands beside a code as a claim of its own, so it never names that code wrongly: an effect created in an apply throws
  * PRIMITIVE_IN_EFFECT_CALLBACK and is an unowned effect too, the leak a production build keeps (ADR 0483).
  */
-export const besideCode = { PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"] };
+export const besideCode = {
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"],
+  // ADR 0641: masked, not reported. In these programs Chrome reports only the row's code, because the first throw stops the run; each
+  // twin with that cause removed reports the other rule's code. `createEffect(fn, undefined)`, given an apply: PRIMITIVE_IN_EFFECT_CALLBACK
+  // in an apply or a reaction, PRIMITIVE_IN_FORBIDDEN_SCOPE in a leaf. A helper shared with a tracked effect, the effect removed:
+  // NO_OWNER_CLEANUP and NO_OWNER_EFFECT, three times each.
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: ["missing-owner"], CLEANUP_IN_FORBIDDEN_SCOPE: ["missing-owner"],
+  MISSING_EFFECT_FN: ["primitive-in-effect-callback", "leaf-owner-forbidden-call"],
+};
 /**
  * Rules whose defect the runtime names for only some of what they claim, so its silence contradicts nothing. `primitive-in-directive-application`:
  * a `ref` apply has no owner (`onCleanup` there reports NO_OWNER_CLEANUP), an effect created there warns NO_OWNER_EFFECT and a memo, the same leak, warns

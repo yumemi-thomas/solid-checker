@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { partlySilentRules, besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -152,12 +152,15 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
-  if (claimingViolation) return { outcome: "agree", detail };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
   const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
-  const wrong = violations.filter((finding) => !corroborated(finding) && !besideCode[code]?.includes(finding.rule));
+  const wrong = violations.filter((finding) => !corroborated(finding) && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
+  // A claiming violation does not excuse another rule's on these lines: on the `agree` path the second finding is judged the same way
+  // (`leaf-owner-forbidden-call` beside `no-await-primitive-in-tracked-scope`, ADR 0641).
+  const beside = wrong.filter((finding) => !rules.includes(finding.rule));
+  if (claimingViolation) return beside.length ? { outcome: "wrong-rule", detail: { ...detail, beside: true, rules: [...new Set(beside.map((finding) => finding.rule))] } } : { outcome: "agree", detail };
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
@@ -504,6 +507,8 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
     // The violations away from the site, by verdict (`judge`, classify.mjs `offSiteVerdicts`): `unconnected` ones are the next lead.
     offSite: Object.fromEntries(["false-positive", "unconnected", "unexecuted", "unjudged"].map((verdict) => [verdict, rows.flatMap((row) => row.detail?.offSite ?? []).filter((label) => label.split(":")[1].startsWith(verdict)).length])),
+    // Per (rule, verdict, reason), what `gate` holds down (ADR 0641): a rise in violations nothing judged is a blind spot growing.
+    offSiteByReason: offSiteByReason(rows),
     byFeature: featureTable(rows), typedAway, cells: out,
   };
 }
@@ -605,6 +610,22 @@ export function codeStatuses(matrix) {
 // ---------------------------------------------------------------------------------------------------------------------
 // The gate
 
+/** Counts of a run's off-site violations by `rule|verdict|why`. */
+export function offSiteByReason(rows) {
+  const counts = {};
+  for (const row of rows) for (const entry of row.detail?.offSite ?? []) {
+    const key = `${String(entry.finding).replace(/@\d+$/, "")}|${entry.verdict}|${entry.why ?? ""}`;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The keys of `current` that rose above `baseline`; a baseline without the table holds nothing. */
+export function offSiteRises(baseline, current) {
+  if (!baseline || !current) return [];
+  return Object.entries(current).filter(([key, count]) => count > (baseline[key] ?? 0)).map(([key, count]) => ({ key, baseline: baseline[key] ?? 0, count }));
+}
+
 /** Outcomes that judge nothing about the checker: the type check rejected the program, or the run failed (the machine, not the program). */
 const UNJUDGED = new Set(["typed-away", "harness"]);
 
@@ -670,7 +691,10 @@ export function gate(baseline, current) {
     if (cell.agree > base.agree) improvements.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}` });
     if (cell["false-clean"] < base["false-clean"]) improvements.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}` });
   }
-  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure, retired, newPrograms };
+  const rises = offSiteRises(baseline.offSiteByReason, current.offSiteByReason);
+  // A code missed in a file with no uncertifiable finding is a certified false clean whatever the row's own outcome, and no baseline excuses it.
+  const certified = Object.entries(current.secondary ?? {}).filter(([, verdicts]) => verdicts["false-clean-certified"]).map(([code, verdicts]) => ({ code, ...verdicts["false-clean-certified"] }));
+  return { ok: regressions.length === 0 && rises.length === 0 && certified.length === 0, regressions, improvements, baselineUnjudged, infrastructure, retired, newPrograms, offSiteRises: rises, certifiedSecondary: certified };
 }
 
 function reportGate(result) {

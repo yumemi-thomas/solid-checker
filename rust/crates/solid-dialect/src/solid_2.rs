@@ -468,6 +468,14 @@ impl Dialect for Solid2 {
         self.triple_exports == releases::TripleExports::Rc21
     }
 
+    // rc.21: `resolve` and `until` from `createTrackedEffect` throw "Cannot call
+    // resolve inside a reactive scope", the observer guard, with no leaf-owner
+    // mechanism (Chrome, ADR 0641). rc.17 is measured otherwise (ADR 0614).
+    fn leaf_call_throws_observer_guard(&self, primitive: Primitive) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
+            && matches!(primitive, Primitive::Resolve | Primitive::Until)
+    }
+
     // rc.21 records the queue's event in an effect's window (`strictReadEvent`)
     // and compares `globalThis.event`. Measured in Chrome (ADR 0639): a handler
     // an apply dispatches reads silently. A body's window takes any event.

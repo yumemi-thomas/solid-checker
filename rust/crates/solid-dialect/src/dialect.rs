@@ -302,6 +302,13 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether a leaf owner's forbidden call of this primitive throws the
+    /// observer guard's code (`resolve`, `until`), not the leaf owner's.
+    fn leaf_call_throws_observer_guard(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether an effect's apply opens a strict-read window for its queue's
     /// event alone, so a handler it dispatches reads under another event, in
     /// no window.

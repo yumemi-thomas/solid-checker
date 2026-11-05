@@ -35,6 +35,14 @@ export function parseAxes(value) {
  * oracle being the slowest step of a sample (2.2 programs a second against a hundred evaluated): a stratum's first program before any's second.
  */
 export function sampleStrata(rows, perStratum, hasRecord = () => true, axes = DEFAULT_DIFF_AXES, cap = Infinity) {
+  // A row with a violation the judge could not settle always runs in Chrome: the grid's verdict alone says nothing of it (ADR 0641).
+  const unsettled = rows.filter((row) => hasRecord(row) && row.detail?.offSite?.some((entry) => ["unjudged", "unexecuted", "unconnected"].includes(entry.verdict)));
+  const sampled = sampleStrataOf(rows, perStratum, hasRecord, axes, cap);
+  const taken = new Set(sampled.map((row) => row.id));
+  return [...sampled, ...unsettled.filter((row) => !taken.has(row.id))];
+}
+
+function sampleStrataOf(rows, perStratum, hasRecord, axes, cap) {
   const taken = new Map();
   const picked = [];
   const ordered = [...rows].sort((a, b) => fnv(String(a.id)) - fnv(String(b.id)) || (a.id < b.id ? -1 : 1));

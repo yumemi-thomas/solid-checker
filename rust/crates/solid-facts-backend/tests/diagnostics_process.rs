@@ -2073,14 +2073,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // untrack, component body, event handler, apply, and module scope
         // are observer-free and stay silent (probed, rc.0).
         assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
-        // ADR 0614: `resolve` creates a computation, so the tracked effect's
-        // leaf refuses it too.
-        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 1);
+        // ADR 0641: on rc.21 the tracked effect's throw is the observer guard's,
+        // so the claim is this rule's alone, not the leaf owner's.
+        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 0);
         assert!(
-            findings.iter().all(|finding| {
-                finding["rule"] == "no-await-primitive-in-tracked-scope"
-                    || finding["rule"] == "leaf-owner-forbidden-call"
-            }),
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "no-await-primitive-in-tracked-scope"),
             "{findings:#?}"
         );
     }

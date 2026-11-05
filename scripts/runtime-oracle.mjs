@@ -412,9 +412,14 @@ function batchProcess() {
       const dead = Boolean(exited) && !this.retired;
       child.stdin.end();
       const answer = await next(60000);
+      // A process can print its closing line and never exit (a final run sat here 8 minutes at 0% CPU): the line answers for
+      // its cases, and only the exit is lost.
+      let lingered = false;
+      const linger = setTimeout(() => { lingered = true; child.kill("SIGKILL"); }, 30000);
       await exit;
+      clearTimeout(linger);
       const closing = (() => { try { return JSON.parse(answer.line ?? "null"); } catch { return null; } })();
-      this.clean = dead || (closing?.closed === true && exited.status === 0);
+      this.clean = dead || (closing?.closed === true && (exited.status === 0 || lingered));
       if (!this.clean) this.closeError = failure("the batch process did not close cleanly").error;
       return this.clean;
     },

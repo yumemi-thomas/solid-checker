@@ -748,6 +748,17 @@ pub struct LeafOwnerOperation {
     pub via: Option<String>,
 }
 
+impl LeafOwnerOperation {
+    /// ADR 0641: the call throws the observer guard's code here. Only
+    /// `createTrackedEffect` has an observer: `onSettled` runs its callback under
+    /// `untrack`, so the same call there throws the leaf owner's.
+    #[must_use]
+    pub fn observer_guarded(&self) -> bool {
+        matches!(self.kind, LeafOwnerOperationKind::ObserverGuarded(_))
+            && self.owner == "createTrackedEffect"
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind", content = "primitive")]
 pub enum LeafOwnerOperationKind {
@@ -758,6 +769,8 @@ pub enum LeafOwnerOperationKind {
     Cleanup,
     Flush,
     Primitive(String),
+    /// A call whose throw here is the observer guard's (`resolve`, `until`).
+    ObserverGuarded(String),
     /// The leaf owner receives a callback whose exact synchronous body is not
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
@@ -1388,6 +1401,10 @@ pub struct AsyncRead {
     /// to reach it, which a `catch` may stop.
     #[serde(default)]
     pub caught: bool,
+    /// The read is the value of a component's prop or children: a getter, which
+    /// runs where the child reads it, if it does (ADR 0641).
+    #[serde(default)]
+    pub component_prop: bool,
     /// The source provably declares `ssrSource: "client"` with no
     /// `loadingValue`/`seedLoadingValue`, and the project server-renders:
     /// reading it during SSR outside a `Loading` boundary throws

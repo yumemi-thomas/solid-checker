@@ -14,7 +14,8 @@ children. Consequently, `onCleanup` must be returned, derived primitives such
 as `createMemo`, `createRoot`, and function-form `createSignal` cannot attach,
 and `flush()` cannot re-enter the flush cycle. `Loading`/`Errored` called as
 functions and `resolve`/`until` create an owner too (rc.17 only, measured; ADR
-0614). Solid throws for all three
+0614; on rc.21 their throw under `createTrackedEffect` is the observer guard's, so there they are
+[no-await-primitive-in-tracked-scope](no-await-primitive-in-tracked-scope.md)'s, ADR 0641). Solid throws for all three
 operation variants in its development build only: the `@solidjs/signals`
 rc.17 production bundle (`dist/prod`) carries no such guard, so there the
 call does not throw (ADR 0434). Value-form state such as `createSignal(0)` and

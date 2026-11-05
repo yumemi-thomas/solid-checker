@@ -336,7 +336,10 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
-        LeafOwnerOperationKind::Primitive(primitive) => (
+        LeafOwnerOperationKind::Primitive(primitive)
+        | LeafOwnerOperationKind::ObserverGuarded(primitive)
+            if !operation.observer_guarded() =>
+        (
             Rule::LeafOwnerForbiddenCall,
             format!(
                 "reactive primitive {primitive} is created inside {}; {} is a leaf owner with no children, so nested primitives are never tracked or disposed, and Solid throws in dev",
@@ -344,6 +347,22 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
             format!(
                 "Create the primitive in the component body (or another owning scope) and read its accessor inside {}.",
+                operation.owner
+            ),
+        ),
+        LeafOwnerOperationKind::Primitive(primitive)
+        | LeafOwnerOperationKind::ObserverGuarded(primitive) => (
+            if primitive == "until" {
+                Rule::UntilInTrackedScope
+            } else {
+                Rule::ResolveInTrackedScope
+            },
+            format!(
+                "{primitive}() runs inside {}, under an active observer; Solid throws \"Cannot call {primitive} inside a reactive scope\"",
+                operation.owner
+            ),
+            format!(
+                "Call {primitive}() from imperative code, such as an event handler, not from {}.",
                 operation.owner
             ),
         ),

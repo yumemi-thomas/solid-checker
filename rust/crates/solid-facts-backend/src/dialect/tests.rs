@@ -125,6 +125,7 @@ fn catalog_prose_program() -> Program {
             declared_loading: false,
             options_opaque: false,
             caught: false,
+            component_prop: false,
             ssr_client_hole: false,
             server_rendering_unresolved: false,
             host_callback_timing: false,

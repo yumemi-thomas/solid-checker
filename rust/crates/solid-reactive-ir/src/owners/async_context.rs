@@ -1015,9 +1015,12 @@ pub(crate) fn ref_application_on_intrinsic(file: &solid_facts::FileFacts, span: 
     })
 }
 
-/// Whether a JSX element is a component: a capitalized or dotted tag. Its
-/// children and spreads are not the intrinsic element's own, so a ref written
-/// inside them is not placed by the intrinsic element's owner.
+/// Whether a JSX element is a component, by the tag's form as the JSX transform
+/// reads it: a member tag whatever its head's case (`<props.Comp>`), or any name
+/// that does not start with a lowercase letter (`<Comp>`, `<_Comp>`). A plain
+/// lowercase name and a namespaced or hyphenated one are intrinsic. Its children
+/// and spreads are not the intrinsic element's own, so a ref written inside them
+/// is not placed by the intrinsic element's owner.
 pub(crate) fn is_component_element(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
@@ -1026,7 +1029,9 @@ pub(crate) fn is_component_element(
         .source
         .get(element.name.span.start as usize..element.name.span.end as usize)
         .unwrap_or_default();
-    tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase())
+    !tag.is_empty()
+        && (tag.contains('.')
+            || (!tag.contains([':', '-']) && !tag.starts_with(|c: char| c.is_ascii_lowercase())))
 }
 
 /// Whether `span` lies inside a component element, in its children, spreads

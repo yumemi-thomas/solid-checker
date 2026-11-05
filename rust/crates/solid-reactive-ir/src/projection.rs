@@ -663,6 +663,13 @@ pub fn project_findings(
             program
                 .leaf_operations
                 .iter()
+                // A call written in the tracked scope has the rule's own finding.
+                .filter(|operation| {
+                    !operation.observer_guarded()
+                        || !program.static_violations.iter().any(|violation| {
+                            !violation.uncertain && violation.location == operation.location
+                        })
+                })
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
@@ -1186,6 +1193,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 || (read.caught && matches!(finding.id.as_str(), "SC5003" | "SC5005"))
             {
                 finding.kind = "uncertifiable".into();
+            }
+            // ADR 0641: rc.21 warns from a render effect that hits the pending
+            // value, and a component's prop is a getter: the child decides
+            // whether one ever reads it. Nothing here follows it to the child.
+            if read.component_prop && finding.id == "SC5003" {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "{}; this read is a component prop, a getter the child may read in a render, in an effect, or never",
+                    finding.message
+                );
             }
             // ADR 0632: a declared value is served through the first flight,
             // so a read past the creating pass throws, or warns in a leaf, only

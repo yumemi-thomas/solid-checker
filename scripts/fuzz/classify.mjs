@@ -99,6 +99,10 @@ export function disturbances(runtime, plan) {
  * @returns {{ finding: string, verdict: string, why?: string }[]}
  */
 export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
+  // A component's entry at or above `line`: the top-level host of a line no counter sits on.
+  const hostEntry = (ledger, line) => (ledger ?? [])
+    .filter((row) => row.kind === "entry" && (row.enclosing === null || row.enclosing === undefined) && row.line !== undefined && row.line <= line)
+    .sort((one, two) => two.line - one.line)[0];
   if (!findings.length) return [];
   const events = runtimeEvents(runtime);
   // An `<Errored>` boundary logs a thrown code instead of rethrowing it (matrix.mjs `judge`): reported, with no position.
@@ -118,10 +122,23 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     const reported = events.filter((event) => codes.includes(event.code));
     const appLines = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);
     const connected = reported.some((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
-    if (connected) return { finding: label, verdict: "substantiated" };
+    // A placeless code has no line of its own (ASYNC_OUTSIDE_LOADING_BOUNDARY names the first pending effect's owner path): reported
+    // anywhere in the file, it is the finding's (ADR 0641).
+    const placeless = [...reported.map((event) => event.code), ...unattributedCodes(runtime).filter((code) => codes.includes(code))].some(isPlacelessCode);
+    if (connected || placeless) return { finding: label, verdict: "substantiated" };
     if (disturbed.length) return { finding: label, verdict: "unjudged", why: "disturbed" };
     const covered = counted.filter((site) => inSpan(finding, site.line));
-    if (!covered.length) return { finding: label, verdict: "unjudged", why: "no-site" };
+    // No counter on the line (a JSX tag or attribute): its host's entry says whether it ran (ADR 0641). The host is the innermost
+    // function entry at or above the line; the ledger has no end lines, so a line after a closed closure takes the component's.
+    if (!covered.length) {
+      const host = hostEntry(built?.ledger, finding.line);
+      if (!host) return { finding: label, verdict: "unjudged", why: "no-site" };
+      const entered = hitCount(hits, host.hit);
+      if (entered === null) return { finding: label, verdict: "unjudged", why: "no-hit-ledger" };
+      if (entered === 0) return { finding: label, verdict: "unexecuted", why: "host" };
+      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return { finding: label, verdict: "unconnected" };
+      return { finding: label, verdict: "false-positive", why: "host-ran" };
+    }
     const counts = covered.map((site) => hitCount(hits, site.hit));
     if (counts.some((count) => count === null)) return { finding: label, verdict: "unjudged", why: "no-hit-ledger" };
     if (counts.every((count) => count === 0)) return { finding: label, verdict: "unexecuted" };

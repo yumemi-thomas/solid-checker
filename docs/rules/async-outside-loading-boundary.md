@@ -20,7 +20,9 @@ is a proven violation only when every render chain was followed to a
 `render()`/`hydrate()` root without meeting a boundary; a chain that ends at a
 function nothing in the project renders (an exported component, a page handed
 to a router) is **uncertifiable**, because the boundary may be written where
-the analysis cannot see.
+the analysis cannot see. A read written in what a component tag receives is uncertifiable too:
+a prop is a getter, so the child decides whether a render ever reads it (ADR 0641). A control-flow
+tag runs it in a render, and stays proven.
 
 A read written directly in a named local function (`const wrapUse = () =>
 { user(); }`) is rendered where a call of that function sits in rendered JSX,

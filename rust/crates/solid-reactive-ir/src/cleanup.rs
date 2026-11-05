@@ -644,6 +644,9 @@ fn forbidden_operation_kind(
     leaf_forbids(dialect, file, call, kind).then(|| match kind {
         Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
         Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
+        _ if dialect.leaf_call_throws_observer_guard(kind) => {
+            crate::LeafOwnerOperationKind::ObserverGuarded(primitive.to_string())
+        }
         _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
     })
 }

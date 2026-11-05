@@ -56,7 +56,7 @@ export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
   context: ["context", "context-destructured"],
   module: ["module", "module-hook", "module-hook-member", "module-hook-shared", "module-hook-direct"],
-  async: ["async-prop", "async-value", "async-context", "async-loading"],
+  async: ["async-prop", "async-value", "async-value-member", "async-context", "async-loading"],
   // The recall axes (`--recall`): the values through a barrel module that re-exports `helpers.ts` (`lib.ts`), or a hook that is
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
   files: ["module-barrel", "module-default-hook"],
@@ -67,7 +67,7 @@ export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct"];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module");
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
-const valueSource = (source) => source === "prop-value" || source === "async-value";
+const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member";
 
 /**
  * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
@@ -112,7 +112,7 @@ export function sourcesOption(value) {
  */
 export function sourcedName(source, name) {
   switch (source) {
-    case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-loading": return `props.${name}`;
+    case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
     case "prop-merge": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
     case "context": case "async-context": return `ctx.${name}`;
@@ -437,7 +437,7 @@ export const SPEC = {
   // `untrack` (ADRs 0619, 0628): rc.21 throws for a source the body running it created, directly or through a hook it calls. A module
   // source or a parent's is another owner's: the read suspends, so no code (and a body re-run onto a fresh memo never ends).
   // `labelled`: `untrack(fn, "label")` opens a window of its own, so it throws on any pending source.
-  PENDING_ASYNC_UNTRACKED_READ: { legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"], untrack: ["module", "module-barrel", "async-prop", "async-value", "async-context", "async-loading"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+  PENDING_ASYNC_UNTRACKED_READ: { legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"], untrack: ["module", "module-barrel", "async-prop", "async-value", "async-value-member", "async-context", "async-loading"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     // ADR 0635: an uninitialized derive refuses key probes.
     recallVariants: ["deferred", "labelled", "store-keys", "store-in", "store-has-own", "over-async"], recallMountsNotIn: { untrack: ["dynamic"] }, bindingsFor: (variant) => (variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"], labelled: ["body", "root"], "store-keys": ["body", "root"], "store-in": ["body", "root"], "store-has-own": ["body", "root"], "over-async": ["body", "root", "untrack"] },
@@ -457,7 +457,7 @@ export const SPEC = {
   },
   // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
-  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun"],
+  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun", "effect-apply-guard-open"],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
     recallVariants: ["signal-fn", "projection"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
@@ -1092,6 +1092,8 @@ function inContext(context, stmts, kit) {
         sigs: [trigger],
       };
     }
+    // ADR 0641: the guard open, so the site a `-guarded` row never runs is judged once it runs.
+    case "effect-apply-guard-open": return { body: [expr(prim("effect", fn([ret(num(2))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
     case "render-apply-guarded": return { body: [expr(prim("render", fn([ret(num(1))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
     case "tracked": return { body: [expr(prim("tracked", fn(stmts)))], view: [] };
     case "settled": return { body: [expr(prim("settled", fn(stmts)))], view: [] };

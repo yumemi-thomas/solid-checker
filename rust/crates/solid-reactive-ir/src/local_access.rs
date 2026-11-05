@@ -3559,10 +3559,10 @@ impl LocalAccessContext<'_, '_> {
             // A pass the throw can land in, or may: a body's read throws its own
             // code, and a handler or an apply has no pass.
             // A callback a component receives runs where that component calls it.
-            let handed_to_component = file.ast.jsx_containing(function.span).any(|element| {
-                file.source_text(element.name.span)
-                    .is_some_and(|name| name.starts_with(char::is_uppercase))
-            });
+            let handed_to_component = file
+                .ast
+                .jsx_containing(function.span)
+                .any(|element| crate::owners::is_component_element(file, element));
             if !handed_to_component
                 && matches!(
                     role,
@@ -4304,6 +4304,7 @@ impl LocalAccessContext<'_, '_> {
                             declared_loading: false,
                             options_opaque: false,
                             caught: false,
+                            component_prop: false,
                             ssr_client_hole: options.ssr_client_bare,
                             server_rendering_unresolved: options.server_rendering_unresolved,
                             host_callback_timing: false,
@@ -4348,6 +4349,7 @@ impl LocalAccessContext<'_, '_> {
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
                     caught: false,
+                    component_prop: false,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
                     host_callback_timing: host_callback_timing(
@@ -5256,6 +5258,7 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
                 caught: caught_in_try(file, timing_at),
+                component_prop: self.read_in_component_prop(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
                 server_rendering_unresolved: async_options.server_rendering_unresolved,
                 host_callback_timing: host_callback_timing(
@@ -5849,6 +5852,7 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
                 caught: caught_in_try(file, member),
+                component_prop: self.read_in_component_prop(file, member),
                 ssr_client_hole: member_options.ssr_client_bare,
                 server_rendering_unresolved: member_options.server_rendering_unresolved,
                 host_callback_timing: host_callback_timing(
@@ -6267,6 +6271,26 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// ADR 0641: `read` is written in what a component tag receives, its props or
+    /// children, not a control-flow tag's, which the dialect runs in a render.
+    fn read_in_component_prop(
+        &self,
+        file: &solid_facts::FileFacts,
+        read: solid_facts::core::Span,
+    ) -> bool {
+        file.ast.jsx_containing(read).any(|element| {
+            crate::owners::is_component_element(file, element)
+                && crate::jsx_primitive_name(
+                    file,
+                    element,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup.dialect,
+                )
+                .is_none()
+        })
+    }
+
     /// The role at the call that enters the layers around `span`, where each
     /// layer runs only in place: an IIFE, a helper's inline callback.
     fn role_through_in_place_layers(
@@ -6656,6 +6680,7 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: false,
                 options_opaque: false,
                 caught: false,
+                component_prop: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
                 host_callback_timing: false,

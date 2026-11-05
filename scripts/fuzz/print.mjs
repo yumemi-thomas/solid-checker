@@ -617,7 +617,9 @@ function render(program, instrument) {
     const source = component.source && parentSource(component.source) ? component.source : undefined;
     const keys = source ? sourceKeys(component, signals) : [];
     const attrs = keys.map(([key]) => ` ${key}={${key}${sourcedRead(source) === "value" ? "()" : ""}}`).join("") + (source === "prop-omit" ? " extra={1}" : "");
-    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />` : `<${component.name}${attrs} />`;
+    // ADR 0641: a member tag is a component whatever its head's case, so a lowercase one passes a getter as a capitalized one does.
+    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />`
+      : source === "async-value-member" ? `<ui${index + 1}.${component.name}${attrs} />` : `<${component.name}${attrs} />`;
     const tag = source?.includes("context") ? `<ValCtx value={{ ${keys.map(([key]) => key).join(", ")} }}>`
       : source === "async-loading" ? (used.add("Loading"), "<Loading fallback={0}>") : null;
     const wrapped = tag ? [tag, `${INDENT}${passed}`, tag.startsWith("<ValCtx") ? "</ValCtx>" : "</Loading>"] : [passed];
@@ -628,6 +630,7 @@ function render(program, instrument) {
       : wrapped);
     if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
     const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
+    if (source === "async-value-member") out.push(`const ui${index + 1} = { ${component.name} };`, "");
     out.push(`export function P${index + 1}() {`, ...created, ...(parts?.prelude ?? []).map((line) => `${INDENT}${line}`), `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The source's types and its context, above the components that name them.

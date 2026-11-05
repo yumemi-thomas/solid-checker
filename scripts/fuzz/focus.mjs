@@ -228,7 +228,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
   export function parse(argv) {
     const split = argv.indexOf("--");
     const own = split < 0 ? argv : argv.slice(0, split);
-    const options = { grids: DEFAULT_GRIDS.join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,outcome", sample: "0.015", sampleSeed: String(Date.now() % 1000000007), extra: split < 0 ? [] : argv.slice(split + 1) };
+    const options = { grids: DEFAULT_GRIDS.join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,source,mount,outcome", sample: "0.015", sampleSeed: String(Date.now() % 1000000007), extra: split < 0 ? [] : argv.slice(split + 1) };
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
