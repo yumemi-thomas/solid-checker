@@ -3829,7 +3829,7 @@
 "SC7005/helper": {
 "rule": "SC7005",
 "kind": "clean",
-"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction h() { httpStatus(410); }\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); h(); return <b>{n}</b>; }\nexport default function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n",
+"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction h() { httpStatus(410); }\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); h(); return <b>{n}</b>; }\nexport function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n",
 "runtime": {
 "ssrStatus": 200,
 "note": "httpStatus(410) dropped: the head committed at the shell"
@@ -3840,7 +3840,7 @@
 "SC7005/method": {
 "rule": "SC7005",
 "kind": "clean",
-"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nconst o = { h() { httpStatus(410); } };\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); o.h(); return <b>{n}</b>; }\nexport default function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n",
+"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nconst o = { h() { httpStatus(410); } };\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); o.h(); return <b>{n}</b>; }\nexport function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n",
 "runtime": {
 "ssrStatus": 200,
 "note": "httpStatus(410) dropped: the head committed at the shell"
@@ -3851,7 +3851,7 @@
 "SC7005/memo": {
 "rule": "SC7005",
 "kind": "clean",
-"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const m = createMemo(() => { const n = v(); httpStatus(410); return n; }); return <b>{m()}</b>; }\nexport default function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n",
+"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const m = createMemo(() => { const n = v(); httpStatus(410); return n; }); return <b>{m()}</b>; }\nexport function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n",
 "runtime": {
 "ssrStatus": 200,
 "note": "httpStatus(410) dropped: the head committed at the shell"
@@ -3862,7 +3862,7 @@
 "SC7005/wrapper": {
 "rule": "SC7005",
 "kind": "clean",
-"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); httpStatus(410); return <b>{n}</b>; }\nfunction W(props: { children: any }) { return <Loading fallback={<p>l</p>}>{props.children}</Loading>; }\nexport default function App() { return <main><W><Inner /></W></main>; }\n",
+"source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); httpStatus(410); return <b>{n}</b>; }\nfunction W(props: { children: any }) { return <Loading fallback={<p>l</p>}>{props.children}</Loading>; }\nexport function App() { return <main><W><Inner /></W></main>; }\n",
 "runtime": {
 "ssrStatus": 200,
 "note": "httpStatus(410) dropped: the head committed at the shell"

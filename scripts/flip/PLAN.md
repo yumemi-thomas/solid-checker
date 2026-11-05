@@ -4,16 +4,27 @@ Owner's rule, both ways. **Clean only with proof, warn only with proof.** What i
 named blocker: never a silent clean, never an assumed violation. Prefer proving where the fact is local. Counts are not a reason
 to narrow or skip a rule. Delete this directory when both tracks are merged.
 
-Line numbers are from `5b8a1d7b5`. The base is later: find each spot by the quoted code.
+Line numbers are from `5b8a1d7b5`. The base is `claude/flip-base`, later than that: find each spot by the quoted code. Rust did not
+change between `6730781e7` and the base, except the shared commit. The base carries **none** of `notes/queue.md` section 1 (Q1-Q6):
+the last agent added their programs to the fuzzer instead, listed in `scripts/fuzz/open-defects.json`. They are this plan's work.
 
-Files here: `PLAN.md`, `witnesses.json` (311 programs: source, Chrome result, checker result before), `check.mjs`, `run.mjs`.
+Files here: `PLAN.md`, `witnesses.json` (source, Chrome result, checker result before), `check.mjs`, `run.mjs`, `tsc.mjs`, and
+`notes/`, copied from the first machine; read `notes/README.md` before following a path in them.
 `docs/` is an allow-list under `scripts/doc-budget.mjs`, so this lives in `scripts/flip/`.
 
 ```
 node scripts/flip/check.mjs SC5007        # judges one rule's witnesses against a fresh release checker
-node scripts/flip/check.mjs all           # at 5b8a1d7b5: 213 fail by design (201 clean, 5 warn, 7 pref); all keep/regress hold
-node scripts/flip/run.mjs <casesDir> out.json   # real Chrome: <casesDir>/<id>/App.tsx, optional `export async function after()`
+node scripts/flip/check.mjs all           # at the base: 213 fail by design (201 clean, 5 warn, 7 pref); every keep and regress holds
+node scripts/flip/check.mjs SC5007 --chrome     # also real Chrome, against the recorded runtime codes
+node scripts/flip/run.mjs <casesDir> out.json [--jobs N]   # real Chrome: <casesDir>/<id>/App.tsx, optional `export async function after()`
+node scripts/flip/tsc.mjs <dir>...        # tsrs on every App.tsx below <dir>; a program tsc rejects is no defect (invariant 1)
 ```
+
+One rule with Chrome takes seconds; `check.mjs` and `run.mjs` default to half the cores (`--jobs N`, `--jobs 1` sequential). Each Chrome
+worker is its own browser process with one page open, because these programs depend on focus. Parallel and sequential agreed on 20
+focus programs over 3 runs, and all witnesses with recorded runtime codes match. `check.mjs` type-checks every witness first, and needs
+`make runtime-oracle-install`, `packages/cli` installed (`bun install --frozen-lockfile`) for fuzz tests, and a `tsrs` build
+(`SOLID_CHECKER_TSRS_BIN` or a checkout beside the repo).
 
 Kinds in `witnesses.json`: `clean` (was certified, runtime complained), `warn` (violation the runtime contradicts), `keep` (true
 finding must stay), `regress` (open today, must stay open), `pref` (preference site with no runtime truth).
@@ -29,10 +40,10 @@ One rule, both directions, one local commit. The tree is green after each commit
 4. `node scripts/corpus-sweep.mjs --manifest scripts/corpus/rc21-manifest.json --apps-root <frozen apps> --order-from <last>`, then
    `node scripts/corpus-sweep-compare.mjs <before> <after> --list 200`. **Read that rule's moved findings** before going on. A moved
    finding you cannot explain stops the track.
-5. `make coverage`, read, `make coverage-update`, `make ownership-gate`; `make verify-delta`. Rule page, `docs/open-work.md`,
+5. `make fuzz-patterns`: a program this rule turned green fails the run until its entry leaves `scripts/fuzz/open-defects.json`. Run
+   `make fuzz-patterns ARGS=--update`, read the diff, and add the `rediscovery.json` entry. Every `open-defects.json` item is this plan's input.
+6. `make coverage`, read, `make coverage-update`, `make ownership-gate`; `make verify-delta`. Rule page, `docs/open-work.md`,
    a short ADR. Report in the commit message. Local commit, no push unless told.
-
-`run.mjs` was moved to repo-relative paths and has not been run since; `check.mjs` has. The Chrome results in `witnesses.json` are from the original harness.
 
 Stop conditions: a `keep` witness fails; a moved violation is true in Chrome and you have no local proof left to try; a false
 positive appears anywhere. Machine rules stay: one heavy run at a time, `sc-heavy` lock, no broad `pkill`.
@@ -49,13 +60,15 @@ One commit, no behaviour change, kept small on purpose.
 | Two generator stubs | `scripts/fuzz/flip-read.mjs`, `flip-write.mjs`, wired into the grid list | neither track edits the other's or `misuse.mjs` |
 | Copy this directory | `scripts/flip/` | the other machine reads only the branch |
 
+Done on `claude/flip-base`. `unplaced_run` has no caller yet: the first rule to adopt it tests it through its witnesses.
+
 `unplaced_run`: `SiteReach::site(…) != Unreached` and a layer from the site out to the function that holds it is any of: an object
 method, accessor or slot (`object_slot_value` misses accessors, `property.data` is false there), a class member, field initializer
 or constructor (a field initializer has no containing function: test `ast.classes` elements), a tag function, a function in an
 array or `Map` literal, or `function_escapes_unfollowed`. Hidden call sites (getter, `toString`, `valueOf`, `Symbol.iterator`,
 tag) have no call node, which is why this is decided from the function, not the call.
 
-Also check first what the fixes head already carries from `queue.md` section 1 (below as Q1-Q6), and skip what is done.
+`notes/queue.md` section 1 appears below as Q1-Q6. None is fixed at the base.
 
 ## Two tracks
 
@@ -63,7 +76,7 @@ Also check first what the fixes head already carries from `queue.md` section 1 (
 SC5006, SC5003 + SC5001 (one commit, one fact), SC1002, SC8014, SC8015, SC1001, **then SC9012 last**.
 
 **Track W, writes and owners** (roles, stacks, servers): SC7001, SC2004/5, SC3002, SC7006, SC7005, SC7007, SC2006, SC2008, SC6002,
-SC6001, SC3001, SC2009, SC4002, SC4001, SC2002, SC2003, **then SC2001 last**.
+SC6001, SC3001, SC2009, SC4002, SC4001, SC2002, SC2003, **then SC2001 last**. The DOM dispatch list comes right before SC2006.
 
 Project-level, on neither: SC9005, SC9014, SC9015, SC9016 need no edit. SC9013 goes first on W (one small edit in the backend).
 
@@ -117,6 +130,24 @@ on the real SSR host (`scripts/fuzz/ssr-host.mjs`, status 200 not 410): `helper 
 loop like `primitive_value_references` over references of a server-function symbol not in callee position, emit
 `Unresolved`, blocker `server-function-value-handed`, unless a serializer is proven. Warn: P E proven; a call in a server scope
 is excluded. Runtime not measured: the harness plugin does not extract `"use server"`. Say so in the commit.
+
+**DOM dispatch list (`cleanup.rs` `synchronously_dispatching_dom_member`).** One commit, owned by W because the table is in `cleanup.rs`,
+before the rules that read it (SC2006, SC2008, SC3001, SC4001, listener reach). `notes/missing.md`'s measured loop found members that
+dispatch on the caller's stack and the table lacks. Measured in Chrome by the surface agent, **never run through the checker**: run each
+first, and record a real disagreement.
+
+| Member | Dispatches | State needed | Base |
+|---|---|---|---|
+| `ChildNode.replaceWith` | `blur`, `focusout` | focused element | not in the table |
+| `Node.replaceChild` | `blur`, `focusout` | focused child | not in the table |
+| `ParentNode.replaceChildren` | `blur`, `focusout` | focused descendant | not in the table |
+| `HTMLFormElement.submit` | `formdata` | any form | not in the table |
+| `reportError` | `error` | none | not in the table; a global, no receiver |
+| `HTMLSelectElement.remove` | `blur`, `focusout` | focused | `("HTMLSelectElement", "remove")` was added by `ea0a63fdb`. `missing.md`'s base is older: confirm through the checker, then close it or say why |
+| `History.go`, `Location.assign`/`reload`/`replace` | `beforeunload` | navigation | lowest, same treatment |
+
+Generator: add each to the dispatch cases, through `flip-write.mjs`. Edit: add the rows, by exact declaration as the table already does.
+A member with a state requirement is a hazard, so unknown state stays an obligation, never a proof it does not fire.
 
 **SC2006.** Clean: `action_step_body` is `None` for methods (`action_step_body_through` filter), a function handed by name, a
 module-level class (`crate::owners::containing_ast_function(&file.ast, anchor)?`). Edit: after `:293`, `kind` throws in a step,
@@ -236,6 +267,9 @@ mounted after it settled, quiet, V. V only when the read is on the creating pass
 uncertain, blocker `source-pending-unproven`. Warn SC5001, Q2, **M assumed.** `p-dyn`: quiet, suspends, retries, V. `<Dynamic>`, and
 `clientOnly` before load, are no-window mounts; the `component` prop joins the exclusive-mount census; `clientOnly` uncertain. Q6: the
 inversion follows. Blocker `mount-form-window`. Measured throw on 11 other mounts.
+**`<Portal>` has no default coverage** (`notes/redundancy.md`): it is generated only by the weekly `--recall-full`, so no default or nightly
+grid holds it, and `web.dev.js`'s `Portal` and `portalImpl` have none. This commit adds a `portal` program to a kept grid and crosses it with
+the SC5001 mount set (body read, write, pending read). W's owner claims under `<Portal>` run after the merge.
 
 **SC1002.** Clean: `c05` census. `c08` `.then(rd)`: extend `after_await.rs`'s literal callback to a resolved named function. `c12`: async
 helper calling its parameter after await, from a compute (`:591` `continue`): uncertain, blocker `handed-read-after-await`. Warn:
@@ -292,11 +326,20 @@ The other 135 keep: SC1001 118 (apply, `Show`/`For` callbacks, `ref`, seeds, bod
 
 ## Tool warning
 
-`api-census/tsc.sh` always printed `tsc=0`: `$?` is read after `$(basename)`. Read `tsc.txt`. All 311 witnesses here passed that
-check. Earlier audits relied on the same script; 20 of their programs have non-empty `tsc.txt`.
+`api-census/tsc.sh` printed `tsc=0` for every program: it read `$?` after `$(basename)`. `tsc.mjs` replaces it, on tsrs. Every witness here
+passes it. `scripts/fuzz/patterns.mjs` does not type-check, though its header says its programs were tsc-accepted, and 161 of 1,137 fail:
+
+| Class in `tsc-rejected.json` | Programs | Open defects among them | What to do |
+|---|---:|---:|---|
+| `rejected`: the program's own code | 44 | 22 (12 false clean, 8 false positive, 2 no run) | **Not a defect as written (invariant 1).** Do not flip for it. Reword so tsc accepts it and it still fails, or take it out of `open-defects.json` with the reason |
+| `incidental-import`: an unused `JSX` or `createOwner` import | 110 | 11 | The defect stands. Drop the import when its rule's commit touches it |
+| `fz-pkg` | 7 | | Pass with the program's own `node_modules` copied |
+
+The 20 the first audit flagged are all `rejected`, including all 6 `k-*-reconcileKey`: `reconcile` takes 1 argument, so that column of
+C-D2's table goes. `createOwner` is not exported by rc.21's `solid-js`; this bears on the SC3001 identity row.
 
 ## Not checked
 
-SC7007 at runtime. SC7006's `let` edit on a server. SC4002 as a violation (needs a closed program). Every `continue` in `cleanup.rs`
+The surface candidates through the checker. SC7007 at runtime. SC7006's `let` edit on a server. SC4002 as a violation (needs a closed program). Every `continue` in `cleanup.rs`
 line by line: SC3001 rests on 13 programs, not a full reading. `effect_phase.rs` `None` arms beyond the method path. Rows with `Live: none`
 have no proven defect, only a reachable default.
