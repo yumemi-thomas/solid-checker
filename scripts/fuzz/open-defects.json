@@ -1638,15 +1638,6 @@
    "certified": true
   },
   {
-   "id": "values/d3-curried-var",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d3-map-call",
    "item": "V-D3",
    "outcome": "false-clean",
