@@ -142,6 +142,16 @@ SC2001.
   `await`-ordinary. Costs: `f?.()`, guard/local-function branches, module `try` are U (Chrome warns). Witnesses 195 (same).
   Fuzzer `flw-mixed-dead`: old 384 FP of 1152, new 0. Corpus 0 moved (`sweep-w4001.json`). Fixture `owner-unowned-run-unproven`.
   **Merge note:** blocker `owner-varies-by-caller` + wording need an `OwnerRequirement` field (lib.rs, R's).
+- **SC2002** (ADR 0715, 797d0d630): `local_access.rs` `unreached_write` (no-row arm) and `transported_writes`' no-row branch push
+  the action row with `alias_withheld` (Unknown -> U) when `unreached_write_may_run` (free fn at the file's end: in a function or
+  non-static field initializer, and `SiteReach` not Unreached). SC2001's commit adds `push_setter_write` to both (plus
+  `static_api.rs` refresh arms, per research). Witnesses SC2002 7/7, all 200 of 335. Fixture `rc21-action-unplaced` (stubs in
+  node_modules + .gitignore lines). arrow-bound-helper-reachability: 4 new U (a reassigned `let`, plus 3 never-called helpers
+  the multi-file reach query does not prove unreached). Fuzzer `flw-getter-helper` (hoisted): old 78 false-clean, new 0; 552
+  typed-away (binding variants declared in the component); full grid 28,098 programs, nothing needs a look. Corpus 0 moved
+  (`sweep-w2002.json`). **Merge note:** named blocker `function-run-unplaced` needs a row field or wording branch in lib.rs (R's).
+  Runner for research probes: `node ~/EDF/tmp/flipw/research-sc2001/runp.mjs <dir> <absolute bindir>` (bindir holds the checker
+  and `solid-typefacts`).
 
 ## Owner notes (2026-11-05)
 
@@ -180,7 +190,8 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). **Next: SC2002.** Old SC4001 notes kept for reference:
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **Next: SC2003** (`~/EDF/tmp/flipw/research-sc4002/sc2003.md`, 5 commits),
+   then SC2001 last. Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
    quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
@@ -202,7 +213,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w4001.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2002.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
