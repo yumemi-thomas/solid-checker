@@ -306,6 +306,108 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
     }
 }
 
+/// ADR 0704: a server function read as a value rather than called (`const s =
+/// save`, `{ save }`, `run(save)`, `save.call(…)`) reaches calls the call loop
+/// never sees, and their arguments cross the client transport unchecked. Each
+/// such reference in client code is an obligation, blocker
+/// `server-function-value-handed`, unless the project's rich-argument
+/// serializer is proven. A reference resolves to its function exactly, as
+/// [`member_of_server_function`] does.
+fn handed_server_function_values(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    serializer_proof: &OnceLock<SerializerProof>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    let mut handed = Vec::new();
+    for identifier in &ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+            continue;
+        }
+        let span = identifier.span;
+        if ast
+            .calls
+            .iter()
+            .any(|call| ast.peel_ts_sugar_span(call.callee) == span)
+            || ast.type_queries.iter().any(|query| query.contains(span))
+            || ast.type_names.iter().any(|name| name.contains(span))
+            || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+            || ast
+                .functions
+                .iter()
+                .any(|scope| scope.body.contains(span) && scope.has_directive(USE_SERVER))
+        {
+            continue;
+        }
+        // The object of a member read hands nothing on, except a member that
+        // invokes it with other arguments (`.call`, `.apply`, `.bind`); an
+        // unresolved member is the call loop's obligation already
+        // (`member_of_server_function`), a resolved one another declaration.
+        if let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == span)
+            && !matches!(
+                file.source_text(member.property),
+                Some("call" | "apply" | "bind")
+            )
+        {
+            continue;
+        }
+        // Through the binder's declaration first: the compiler answers a
+        // shorthand property (`{ save }`) with the property's symbol, the
+        // binder with the value binding's.
+        let Some(symbol) = ast
+            .reference_declaration(span)
+            .and_then(|declaration| ctx.entities.value_symbol(file, declaration))
+            .or_else(|| ctx.entities.value_symbol(file, span))
+        else {
+            continue;
+        };
+        let Some((declaration_file, function)) =
+            ctx.semantic_lookup.function_for_symbol(symbol.as_str())
+        else {
+            continue;
+        };
+        let server_function = function.has_directive(USE_SERVER)
+            || (declaration_file
+                .ast
+                .module_directives
+                .iter()
+                .any(|directive| directive.value == USE_SERVER)
+                && declaration_file.path != file.path);
+        // The declaration's own name is not a handed value.
+        if server_function
+            && !(declaration_file.path == file.path
+                && function.name.as_ref().is_some_and(|name| name.span == span))
+        {
+            handed.push(span);
+        }
+    }
+    if handed.is_empty()
+        || *serializer_proof.get_or_init(|| project_rich_argument_serializer(ctx))
+            == SerializerProof::Enabled
+    {
+        return;
+    }
+    handed.sort_by_key(|span| (span.start, span.end));
+    handed.dedup();
+    for span in handed {
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::ServerFunctionRichArgument {
+                transport: RichArgumentTransport::Unresolved {
+                    reason: "the server function is handed on as a value, and the calls it reaches are not followed, so whether their arguments cross the transport as JSON is unproven".to_string(),
+                },
+            },
+            location: location(file.path.shared(), span),
+            analysis_context: crate::blockers::SERVER_FUNCTION_VALUE_HANDED.into(),
+            fixes: vec![],
+            uncertain: true,
+        });
+    }
+}
+
 /// One file's defects of [`server_function_rich_argument`], and whether the
 /// file found the project's serializer installed, which ends the rule.
 fn rich_arguments_in_file(
@@ -543,6 +645,7 @@ fn rich_arguments_in_file(
             });
         }
     }
+    handed_server_function_values(ctx, file, serializer_proof, &mut defects);
     (defects, false)
 }
 

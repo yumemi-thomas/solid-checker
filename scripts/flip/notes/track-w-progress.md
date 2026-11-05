@@ -34,6 +34,13 @@ SC2001.
   `ssr.mjs` (`m-helper`, `m-method`, `m-memo`, `m-wrapper`); old build 8 false clean, new 18 agree, 0 false clean, 12
   uncertifiable. Cost: shell content (`l-*`, fixture negatives `ShellStatus`, `FallbackNote`, `ShellDeep`, `FallbackDeep`) is
   now an obligation; the shell-root proof (render-entry identity, every caller, cross-file) is open work. Corpus 0 moved (CSR).
+- **SC7007** (ADR 0704): `server_rules.rs` `handed_server_function_values`, per client file inside the existing loop: every
+  identifier reference that is not a callee, type, declaration/module surface, in server code, or the object of a member other
+  than `.call`/`.apply`/`.bind`, resolved through the binder's declaration then `value_symbol` (a shorthand `{ save }` gets the
+  property's symbol from the compiler) and `function_for_symbol`; a server function there is uncertain, blocker
+  `server-function-value-handed`, unless the serializer is proven. First cut walked symbol references project-wide: the IR read
+  ratchet (`make ir-read-lint`) refused the raw `facts.files`/`file_by_path` reads, so it was rewritten. Witnesses b02-b05 hold
+  (109 of 311). Corpus 0 moved (a `loadUserData.keyFor` member read moved and was excluded). Runtime not measured.
 - Picked from claude/flip-reads: `ce6a831b2`, `ae2327986` (stale tests; R's progress-file hunk dropped), `ef46d0ac6`
   (verify-delta maps rule pages and `.gitignore`), `aaaf31cad` (maps `scripts/flip/`).
 
@@ -47,9 +54,19 @@ SC2001.
 - j08 (SC2003) goes to Track R.
 - Use `make verify-delta` per rule; full `make verify` only at merges.
 
+- SSR audit (owner, 2026-11-05; report lands in `scripts/flip/notes/ssr/` on claude/flip-reads): fix `client_build` before
+  SC2008 and SC6002 (a hydrated project gives a false clean; `lib.rs:289`'s comment is wrong: createRenderEffect runs its apply
+  on the server). SC7007 follow-up: namespace calls (`import * as api`), runtime measured with the report's `h/sf.mjs`, add its
+  D4, D5, D10, D11. SC7006 follow-up: the capture error D12 (reassigning `export let` is no boot failure: ADR 0702 agrees).
+  Track R adds the shared facts `client_root_present` and a server-only arm: take them at the merge, do not build W's own.
+- SC2001 research done (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`): gate `unreached_write` on "site may run" (not
+  `unplaced_run`, which misses u11), exclude module initialization, setters are not forced Unknown by `alias_withheld`;
+  order SC2002 first, SC2001 last; no reachability edit; 1 corpus site newly U. SC4002/SC4001/SC2003 research running
+  (`~/EDF/tmp/flipw/research-sc4002/`).
+
 ## Next
 
-SC7007, DOM dispatch list, then SC2006. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
+SC7007 and SC7006 SSR follow-ups and `client_build` once the SSR report lands; DOM dispatch list (research section 6: both `cleanup.rs` and `runtime_semantics.rs` `delivers_synchronously`), then SC2006. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
 `~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)

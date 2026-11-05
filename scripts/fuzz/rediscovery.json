@@ -3570,5 +3570,11 @@
    "ssr-m-wrapper-status"
   ],
   "rediscovered": "locally: the build before ADR 0703 gives all 8 false-clean, the fix agree (ssr run 2026-11-05: 18 agree, 0 false clean, 12 uncertifiable)"
+ },
+ {
+  "finding": "server-function-rich-argument (SC7007) judged only calls whose callee resolves to a server function: an alias, a shorthand object slot, a higher-order argument and save.call(undefined, new Date()) certified (flip SC7007 witnesses b02-b05, ADR 0704)",
+  "found": "the flip plan's SC7007 row (scripts/flip/PLAN.md)",
+  "fixed": "ADR 0704",
+  "outside": "no runtime code: the rejection is the server-functions client's (isJSONSafe, @solidjs/web/server-functions client.js), and no host compiles \"use server\" references (scripts/fuzz/README.md, SSR host section). The four witnesses (check.mjs SC7007) and fixture server-function-handed-value are the pin"
  }
 ]

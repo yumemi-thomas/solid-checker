@@ -25,6 +25,11 @@ finite numeric-literal domains, and unions made only from those categories.
 Bigint/symbol/undefined-only domains are proven violations. Broad numbers,
 mixed safe/unsafe primitive unions, spreads, structurally typed objects,
 arrays, and missing compiler facts remain uncertifiable.
+A server function read as a value rather than called (an alias, a shorthand
+object slot, a higher-order argument, `save.call(…)`) reaches calls this rule
+does not follow, so each such reference outside server code is uncertifiable,
+blocker `server-function-value-handed` (ADR 0704), unless the serializer is
+proven. The runtime is not measured: no host compiles `"use server"`.
 Type assertions, `satisfies`, non-null assertions, and parentheses are
 transparent to this transport proof: the checker classifies the peeled runtime
 value with compiler facts demanded at that exact span. Consequently
