@@ -45,9 +45,13 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 
 | Step 9 | `8a2de6a8e`, ADRs 0681, 0682; subclass ADR 0683 | ADR 0683: +68 U `app-game` (67 SC9012, 1 SC2003), 0 V, `sweep-sub.json`, 18,570 U, 376 V | `T-mount-from-cleanup` now uncertifiable `refused-creation-unrun`; `e511` uncertifiable `callee-callback-timing`; `g04` uncertifiable `function-run-unplaced` + `invocation-context-unproven`; `d05 d06 g24` uncertifiable, `d02 d04` close too. Patterns 298 open (25 FP, 270 FC, 3 no run) |
 
+| H-D5 | `e9390bbde`, ADR 0684 | 0 moved | now uncertifiable: a component handed on by its own reference. `w6 x1 x2 x3 x5` |
+| H-D4 | `0a2df93f6`, ADR 0685 | 0 moved | now uncertifiable: `valueOf`, `__defineGetter__`, `__defineSetter__` on a closed object. 3 FP, 2 FC left |
+| F0 steps 1-3 | ADR 0686, `interproc/completeness.rs` | +125 SC9012 U, 0 V moved, 0 removed, `sweep-f0.json`, 18,695 U, 376 V | 22 false cleans left, 266 open (22 FP, 241 FC, 3 no run). `v42` passes, 222 of 336. Left of F0: `handed_value`'s call arms (`v08 f01 f12`), `ArrayMembers` (`f02`), ADR 0509's text |
+
 Grid at `a92553232`, `mx-recall` whole set, STRICT_READ_UNTRACKED: 62,480 programs, 0 false positive, 152 false cleans, the two known `ref-*` groups; 12 oracle runs inconclusive, not read.
 
-Next agent: H-D5, F0 (H-D4 with it), F-C, F-D, the census, the bounds audit. Baseline sweep `sweep-sub.json`, build `rsub/`. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
+Next agent: F0 steps 4-6, F-C, F-D, the census, the bounds audit. Baseline sweep `sweep-f0.json`, build `rf0/`. `make coverage` prints only the first moved row of a fixture: compare snapshots row by row before an update. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
 
 Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open. `a92553232`'s says 24 false positives left the list; it was 23 (67 to 44, 342 to 319 open).
 

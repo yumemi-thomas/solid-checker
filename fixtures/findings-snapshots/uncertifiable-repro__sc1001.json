@@ -66,6 +66,16 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
+      "start": 1168,
+      "end": 1176,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/clean-context-provider.tsx",
       "start": 522,
       "end": 530,
@@ -299,6 +309,16 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
       "start": 902,
       "end": 917,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
+      "start": 980,
+      "end": 991,
       "fixes": 0
     },
     {

@@ -57,6 +57,7 @@ pub(crate) mod property_gets;
 #[path = "accessor_provenance.rs"]
 pub(crate) mod accessor_provenance;
 
+pub(crate) mod completeness;
 mod parameter_use;
 use parameter_use::*;
 mod retained_literal;

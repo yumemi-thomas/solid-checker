@@ -353,15 +353,6 @@
    "certified": true
   },
   {
-   "id": "api/v42-F0-hook-param",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "api/v43-member-class-instance-module",
    "item": "C-D3 value-use",
    "outcome": "false-clean",
@@ -949,15 +940,6 @@
    ]
   },
   {
-   "id": "returns/q3-typed-body-param-direct",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "returns/q4-typed-module-field",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
@@ -1039,133 +1021,7 @@
    "certified": true
   },
   {
-   "id": "returns/r20-param-control",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t1-typed-slot-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t10-inner-closure-hook-local",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t11-cross-hook-forward",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t13-module-let-function",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "returns/t14-closure-over-object-field",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t2-typed-const-shorthand-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t4-typed-slot-helper-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t5-typed-slot-store-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t6-untyped-slot-store-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/t8-closure-captured-local-alias",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v01-slot-arrow-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v03-returned-closure",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v06-typed-accessor-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v07-destructured-slot",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
    "codes": [
@@ -1193,33 +1049,6 @@
   },
   {
    "id": "returns/v12-map",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v16-prop-param",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v18-setter-param-write-in-memo",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v20-two-callers",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
    "codes": [
@@ -2097,15 +1926,6 @@
    "certified": true
   },
   {
-   "id": "values/d3-curried-var",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d3-map-call",
    "item": "V-D3",
    "outcome": "false-clean",
@@ -2457,15 +2277,6 @@
    "certified": true
   },
   {
-   "id": "values/t3-helper-module-curried",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/t4-eq-empty",
    "item": "V-D4",
    "outcome": "false-clean",
@@ -2530,15 +2341,6 @@
   },
   {
    "id": "values/t5-helper-module",
-   "item": "V-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t5-helper-wrapper-call",
    "item": "V-D5",
    "outcome": "false-clean",
    "codes": [

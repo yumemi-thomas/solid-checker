@@ -224,7 +224,7 @@ pub(crate) fn collect_project<'facts>(
                 target,
                 crate::interproc::accessor_provenance::Callable::Accessor(symbol)
                     if source.async_sources.contains(symbol)
-            )
+            ) && target_summary_complete(ctx, target)
         })
         .map(|(callee, _)| callee)
         .chain(interprocedural.write_call_targets.keys())
@@ -327,10 +327,7 @@ pub(crate) fn collect_project<'facts>(
         ) else {
             continue;
         };
-        if let Some(file) = ctx
-            .semantic_lookup
-            .file_by_path(read.location.path.as_ref())
-        {
+        if let Some(file) = analyzed_file(ctx, read.location.path.as_ref()) {
             read.project_consumer_non_strict =
                 consumers.proves_non_strict(file, solid_facts::core::Span::new(start, end));
         }
@@ -394,9 +391,7 @@ pub(crate) fn collect_project<'facts>(
                 && (read.transported
                     || read.origin.is_some()
                     || read.declaration.path != read.location.path
-                    || ctx
-                        .semantic_lookup
-                        .file_by_path(read.declaration.path.as_ref())
+                    || analyzed_file(ctx, read.declaration.path.as_ref())
                         .and_then(|file| {
                             let start = u32::try_from(read.declaration.start_byte).ok()?;
                             let end = u32::try_from(read.declaration.end_byte).ok()?;
@@ -413,9 +408,7 @@ pub(crate) fn collect_project<'facts>(
                 // ADR 0632: a declared source's creating pass reads the served
                 // value through a local function too: no row, the strict read
                 // stands.
-                && !ctx
-                    .semantic_lookup
-                    .file_by_path(read.location.path.as_ref())
+                && !analyzed_file(ctx, read.location.path.as_ref())
                     .is_some_and(|file| {
                         let span = solid_facts::core::Span::new(
                             u32::try_from(read.location.start_byte).unwrap_or(0),
@@ -435,9 +428,7 @@ pub(crate) fn collect_project<'facts>(
                     })
                 // A read inside a pending probe (`isPending(() => read())`)
                 // is the legal way to meet the source pending.
-                && !ctx
-                    .semantic_lookup
-                    .file_by_path(read.location.path.as_ref())
+                && !analyzed_file(ctx, read.location.path.as_ref())
                     .and_then(|file| {
                         let start = u32::try_from(read.location.start_byte).ok()?;
                         let end = u32::try_from(read.location.end_byte).ok()?;
@@ -499,10 +490,7 @@ pub(crate) fn collect_project<'facts>(
         if read.apply_first_run_pending {
             continue;
         }
-        let Some(file) = ctx
-            .semantic_lookup
-            .file_by_path(read.location.path.as_ref())
-        else {
+        let Some(file) = analyzed_file(ctx, read.location.path.as_ref()) else {
             read.creation_pass_unproven = true;
             read.root_pass_unproven = true;
             continue;
@@ -564,6 +552,40 @@ pub(crate) fn collect_project<'facts>(
     upstream_compat::check_project(ctx, draft);
     timings.upstream_compat = compat_started.elapsed();
     interprocedural.factory_instances
+}
+
+/// F0, ADR 0686: a transported target drops the handed obligation only if its
+/// summary sees all it reaches. A setter, an action and an accessor are exact.
+fn target_summary_complete(
+    ctx: &AnalysisContext<'_>,
+    target: &crate::interproc::accessor_provenance::Callable,
+) -> bool {
+    use crate::interproc::accessor_provenance::Callable;
+    let complete = |path: &str, span: solid_facts::core::Span| {
+        analyzed_file(ctx, path).is_some_and(|file| {
+            file.ast
+                .functions
+                .iter()
+                .find(|function| function.span == span)
+                .is_some_and(|function| {
+                    crate::interproc::completeness::summary_complete(
+                        file,
+                        function,
+                        ctx.semantic_lookup,
+                    )
+                })
+        })
+    };
+    match target {
+        Callable::Function { path, span } => complete(path, *span),
+        Callable::ArrayMembers(members) => members.iter().all(|(path, span)| complete(path, *span)),
+        _ => true,
+    }
+}
+
+/// The analyzed file at `path`: a selected slot, or a missing-path probe.
+fn analyzed_file<'c>(ctx: &AnalysisContext<'c>, path: &str) -> Option<&'c solid_facts::FileFacts> {
+    ctx.semantic_lookup.file_by_path(path)
 }
 
 #[cfg(test)]

@@ -20,6 +20,16 @@
       "start": 490,
       "end": 506,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 781,
+      "end": 786,
+      "fixes": 0
     }
   ]
 }

@@ -36,6 +36,16 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/escaped-spread-use.tsx",
+      "start": 881,
+      "end": 888,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/exported-component.tsx",
       "start": 290,
       "end": 427,
