@@ -97,10 +97,24 @@ SC2001.
   order SC2002 first, SC2001 last; no reachability edit; 1 corpus site newly U. SC4002/SC4001/SC2003 research running
   (`~/EDF/tmp/flipw/research-sc4002/`).
 
-## Next
+## Next (a fresh agent starts here)
 
-SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
-`~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
+Head 70bc53c26, pushed. Order left, per PLAN.md "Track W" and the research:
+1. **SC2006** (research `~/EDF/tmp/flipw/research/track-w-next.md` does not cover it; PLAN row: after `:293` in
+   `action_step_body`, `unplaced_run(call.span)` plus a stepped callback -> uncertain, blocker `function-run-unplaced`;
+   witnesses a02 a03 a05 a06 a08 a09 a10). `client_build` is already fixed by R (no prerequisite left).
+2. **SC2008**, **SC6002** (PLAN rows; `unplaced_run` in `execution_role/site_reach.rs` has no caller yet).
+3. **SC3001** (trace `Primitive::CreateOwner` at solid-three `core/index.tsx:118`, inferay `PerformanceRecorder:199`).
+4. **SC2009**, then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
+   patterns.mjs import-before-subscribe artifact first; the edit is the measured dead-branch false positive at
+   `owner_context.rs:242`), **SC2002** then **SC2003** (`.../sc2003.md`, 5 commits) then **SC2001** last
+   (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`: gate `unreached_write` on "site may run", exclude module initialization;
+   u11 closes there).
+Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
+`make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
+latest `sweep-7007ssr.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+`cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
+Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
 ## Machine state (this Mac)
 
@@ -115,13 +129,13 @@ SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: 
   expected rc.21 entries; seroval 1.7.0 is nested under `@solidjs/web` with 1.6.7 at the root, the one layout point a
   machine could hoist differently. Not fully explained; the owner said to use this machine's sweep as the baseline and never
   rebuild or edit the corpus again. Baseline report `~/EDF/tmp/flipw/sweep-base.json` (also the `--order-from`).
-- Base build for comparisons: worktree `~/EDF/tmp/flipw/base-wt` (895fbf806, own target), binaries `~/EDF/tmp/flipw/bins/base/`.
+- Comparison builds: worktree `~/EDF/tmp/flipw/base-wt` (now at 059beb67a, own target; `git -C` it to another commit and build
+  there), binaries under `~/EDF/tmp/flipw/bins/` (`base` = 895fbf806, `wmerge` = 059beb67a, `w7007ssr` = 70bc53c26).
 
 ## Surprises
 
-- Pre-existing at the base (fail at 895fbf806 too, not W's): `dispatch_veto_reads_process::changing_a_receivers_type_in_another_file_moves_the_veto`
-  and `rule_quality_process::eslint_plugin_solid_two_corpus_matches_native_rule_semantics` (SC9012 count 5 vs 3). So `make verify`
-  fails at the base. `invocation_flow_process::a_relinked_pnpm_store_entry_is_resolved_again` and `scripts/fuzz/exec.test.mjs`
-  failed under load and pass alone.
-- `make verify-delta` escalates to full `make verify` whenever `docs/rules/` or `.gitignore` changes (no row maps them).
+- Load-timing tests fail under a full verify and pass alone: `scripts/fuzz/exec.test.mjs` (deadlines), packages/cli
+  `development-feedback.test.mjs` (1 s timeout), `invocation_flow_process` file-stamp tests. Rerun alone, never change limits.
+- `verify-delta` stops at the first failing check: run the ones after it by hand (usually only `wasm-compile`).
+- rustfmt reflows edited code: a later scripted edit that matches the old text silently fails; match by function name.
 - `scripts/flip/tsc.mjs` needs an `App` export; to type-check a fixture, copy its source to a temp dir and append one.
