@@ -10906,7 +10906,7 @@
   {
    "id": "clean-primitive-in-component-body",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-primitive-in-component-body.tsx"
    ],
@@ -14209,7 +14209,7 @@
   {
    "id": "clean-module-root-memo",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-module-root-memo.tsx"
    ],
@@ -14224,8 +14224,8 @@
   },
   {
    "id": "clean-owner-or-root",
-   "kind": "clean",
-   "project": "sc4001",
+   "kind": "uncertifiable",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-owner-or-root.tsx"
    ],
@@ -14236,7 +14236,18 @@
     "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "causes": [
+    "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/tuple-element-of-call-project"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "returned-callable-outside-source-universe",
+     "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/tuple-element-of-call-project"
+    }
+   ]
   },
   {
    "id": "clean-render-effect-cleanup",
@@ -14257,7 +14268,7 @@
   {
    "id": "clean-root-dispose",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-root-dispose.tsx"
    ],
@@ -14273,7 +14284,7 @@
   {
    "id": "clean-tracked-effect",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-tracked-effect.tsx"
    ],

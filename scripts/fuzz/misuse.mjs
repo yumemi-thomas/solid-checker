@@ -168,13 +168,19 @@ const DENIED = {
   "dny-focus-selection": { tag: "div", on: "onFocus", attrs: "contenteditable", prep: [], trigger: "getSelection()!.collapse(EL, 0)" },
   "dny-blur-select-remove": { tag: "select", on: "onBlur", prep: ["EL.focus()"], trigger: "(EL as HTMLSelectElement).remove()" },
   // Events of the measured list, so listed calls: `execCommand` needs a focused editable, `ElementInternals` a form-associated element.
+  // ADR 0642: `click` and `dispatchEvent` on a receiver no declaration names: the runtime receiver may be an element (`d08`-`d12`).
+  "dny-click-any": { tag: "button", on: "onClick", prep: [], trigger: "EL.click()" },
+  "dny-dispatch-any": { tag: "button", on: "onClick", prep: [], trigger: 'EL.dispatchEvent(new MouseEvent("click", { bubbles: true }))' },
+  "dny-click-structural": { tag: "button", on: "onClick", prep: [], trigger: "const x: { click(): void } = EL; x.click()" },
+  "dny-click-interface": { tag: "button", on: "onClick", prep: [], trigger: "interface Clickable { click(): void } const x: Clickable = EL; x.click()" },
+  "dny-click-param": { tag: "button", on: "onClick", prep: [], trigger: "((x: any) => x.click())(EL)" },
   "dny-input-exec": { tag: "input", on: "onInput", prep: ["EL.focus()"], trigger: 'document.execCommand("insertText", false, "x")' },
   "dny-invalid-internals": { tag: "x-sc", on: "onInvalid", declares: true, prep: [], trigger: 'const internals: ElementInternals = EL.internals; internals.setValidity({ valueMissing: true }, "m"); internals.checkValidity()' },
 };
 /** Solid's own DOM work: the focused element leaves on the stack of a `flush()`, a disposer or `insert`, with no call of the program's naming it. */
 const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer"];
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click"];
 const DENIED_OTHER = ["dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
@@ -1271,6 +1277,7 @@ function laterRoot(kit, prep, trigger, solid, web) {
 }
 function deniedContext(context, stmts, kit) {
   const b = kit.name("b"), el = anyEl(b);
+  if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
   if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
   const spec = DENIED[context];

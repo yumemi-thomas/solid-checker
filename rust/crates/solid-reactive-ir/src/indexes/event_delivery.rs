@@ -183,6 +183,19 @@ impl Drop for VetoComputation {
     }
 }
 
+/// A member call spelled as a dispatch: `el.click()`, `el.dispatchEvent(e)`.
+pub(crate) fn spelled_dispatch(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+    !call.construct
+        && file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))
+            .is_some_and(|member| match file.source_text(member.property) {
+                Some("click") => call.arguments.is_empty(),
+                Some("dispatchEvent") => call.arguments.len() == 1,
+                _ => false,
+            })
+}
+
 impl SemanticLookup<'_> {
     /// Whether some module of the program calls direct `eval`, which can read
     /// or write any binding it sees: read once per build.
@@ -432,10 +445,31 @@ impl SemanticLookup<'_> {
                     .filter(|(hazard, _)| *hazard == crate::base::Hazard::SynchronousDispatch)
                     .filter_map(|(_, ordinal)| file.ast.calls.get(*ordinal as usize))
                 {
-                    let Some(name) = self
+                    let name = self
                         .resolved_callee_call(file, call.callee)
-                        .and_then(crate::runtime_semantics::standard_call_name)
-                    else {
+                        .and_then(crate::runtime_semantics::standard_call_name);
+                    // ADR 0642: a `click` or `dispatchEvent` no declaration
+                    // names: `any`, an interface or a type literal's signature
+                    // says nothing of the runtime receiver, which may be an
+                    // element. A project method with a body is no hazard.
+                    let Some(name) = name else {
+                        if self
+                            .function_called_at(
+                                file.path.as_str(),
+                                file.ast.peel_ts_sugar_span(call.callee),
+                            )
+                            .is_none()
+                            && !self.declared_with_a_body(file, call)
+                        {
+                            sites.push(DispatchSite {
+                                path: file.path.to_string(),
+                                span: call.span,
+                                receiver: DispatchReceiver::Unknown,
+                                caller: self
+                                    .dispatch_caller(file, call)
+                                    .or_else(|| self.dispatch_in_effect_apply(file, call.span)),
+                            });
+                        }
                         continue;
                     };
                     let receiver = match name {
@@ -461,6 +495,38 @@ impl SemanticLookup<'_> {
             }
             sites
         })
+    }
+
+    /// The call's selected declaration is a method or a function-valued
+    /// property the program writes: it has a body, unlike an interface's or a
+    /// type literal's signature.
+    fn declared_with_a_body(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        self.resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| {
+                let Some(file) = self.file_by_path(declaration.location.path.as_ref()) else {
+                    return false;
+                };
+                let at = |span: Span| u64::from(span.start) == declaration.location.start_byte;
+                file.ast.functions.iter().any(|function| {
+                    at(function.span)
+                        || function
+                            .method_name
+                            .as_ref()
+                            .is_some_and(|name| at(name.span))
+                        || function.name.as_ref().is_some_and(|name| at(name.span))
+                }) || file.ast.object_properties.iter().any(|property| {
+                    (at(property.key) || at(property.span))
+                        && file
+                            .ast
+                            .function_at(file.ast.peel_ts_sugar_span(property.value))
+                            .is_some()
+                })
+            })
     }
 
     /// ADR 0640: the receiver of this `click()` is a `const` the function fills

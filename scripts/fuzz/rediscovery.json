@@ -3440,5 +3440,35 @@
    "mx-reactive-write-in-owned-scope-dny-invalid-internals-refresh-direct-none"
   ],
   "rediscovered": "503efaa84: 6 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "`click` and `dispatchEvent` on `any`, a structural type or an interface were no hazard, though the runtime receiver may be an element (STRICT_READ_UNTRACKED)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-click-any-memo-direct-none",
+   "mx-strict-read-untracked-dny-click-interface-memo-direct-none",
+   "mx-strict-read-untracked-dny-click-param-memo-direct-none",
+   "mx-strict-read-untracked-dny-click-structural-memo-direct-none",
+   "mx-strict-read-untracked-dny-dispatch-any-memo-direct-none"
+  ],
+  "rediscovered": "91ecc5757: 70 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "`click` and `dispatchEvent` on `any`, a structural type or an interface were no hazard, though the runtime receiver may be an element (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-click-any-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-click-interface-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-click-param-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-click-structural-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-dispatch-any-refresh-direct-none"
+  ],
+  "rediscovered": "91ecc5757: 15 false-clean; the fix: recall-gap"
  }
 ]

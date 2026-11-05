@@ -122,6 +122,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
+      "start": 412,
+      "end": 448,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -162,6 +172,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
+      "start": 746,
+      "end": 754,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -179,6 +199,26 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
       "start": 411,
       "end": 424,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
+      "start": 613,
+      "end": 634,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
+      "start": 622,
+      "end": 629,
       "fixes": 0
     },
     {
@@ -299,6 +339,26 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
       "start": 679,
       "end": 692,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
+      "start": 733,
+      "end": 749,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
+      "start": 742,
+      "end": 748,
       "fixes": 0
     },
     {

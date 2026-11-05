@@ -694,6 +694,10 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
         if resolved
             .and_then(crate::runtime_semantics::standard_call_name)
             .is_some_and(crate::runtime_semantics::delivers_synchronously)
+            || (resolved
+                .and_then(crate::runtime_semantics::standard_call_name)
+                .is_none()
+                && crate::indexes::spelled_dispatch(file, call))
         {
             entries.push((Hazard::SynchronousDispatch, ordinal(index)));
         }

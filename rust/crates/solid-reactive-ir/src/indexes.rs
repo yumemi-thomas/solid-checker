@@ -36,6 +36,7 @@ mod components;
 pub(crate) use components::unproven_component_status;
 mod compound;
 mod event_delivery;
+pub(crate) use event_delivery::spelled_dispatch;
 mod flush_census;
 mod hand_outs;
 pub(crate) use hand_outs::{

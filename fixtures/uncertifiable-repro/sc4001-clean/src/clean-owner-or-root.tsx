@@ -1,4 +1,4 @@
-// Clean. Mirrors dashiboard-ui dashiboard-ui/src/persist.ts:48-50: `getOwner() ? fn() : createRoot(fn)` owns a
+// Mirrors dashiboard-ui dashiboard-ui/src/persist.ts:48-50: `getOwner() ? fn() : createRoot(fn)` owns a
 // memo and an effect wherever the caller runs, at module scope or in a component.
 import { createEffect, createMemo, createRoot, createSignal, getOwner } from "solid-js";
 
