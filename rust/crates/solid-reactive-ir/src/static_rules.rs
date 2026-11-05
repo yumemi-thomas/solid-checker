@@ -559,9 +559,11 @@ fn open_destructures(
         .collect()
 }
 
-/// Whether a destructure may run at setup. A proven fresh role reads current
+/// Whether a destructure may be a claim at all. A proven fresh role reads current
 /// values when it runs; a helper's role is not proven either way, so unlike the
 /// exact-root arm a helper stays a site: this is uncertifiable, not a claim.
+/// ADR 0670: an apply, a `ref` and an untracked callback read fresh too, but in a
+/// strict window, where a store's Get warns: they stay sites.
 fn may_snapshot_at_setup(
     ctx: &AnalysisContext<'_>,
     file: &solid_facts::FileFacts,
@@ -580,10 +582,7 @@ fn may_snapshot_at_setup(
         crate::ExecutionRole::TrackedJsx
             | crate::ExecutionRole::EventCallback
             | crate::ExecutionRole::DeferredCallback
-            | crate::ExecutionRole::UntrackedCallback
             | crate::ExecutionRole::UntrackedUnwindowed
-            | crate::ExecutionRole::EffectApply
-            | crate::ExecutionRole::DirectiveApply
     )
 }
 
@@ -1920,7 +1919,7 @@ fn result_access_obligation(
 
 /// Whether the binding declared at `declaration` is a parameter of a function
 /// in this file.
-fn declared_as_parameter(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+pub(crate) fn declared_as_parameter(file: &solid_facts::FileFacts, declaration: Span) -> bool {
     file.ast.functions.iter().any(|function| {
         function
             .parameters

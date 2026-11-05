@@ -1704,3 +1704,13 @@ An object method, class member or array slot has no binding to follow, so a read
 ## ADR 0668 — A `Loading` covers what it holds
 
 `loading_cover_at` took any `Loading` in a component's body as cover: for the component's own tag at its caller, and for a read beside it. Both false cleans: Chrome warns. A component covers a site as its child, and only with `children` read inside the `Loading`, else `Unresolved`; a `Loading` beside a non-JSX site is `Unresolved`, beside a JSX read it proves nothing. `ASYNC_OUTSIDE_LOADING_BOUNDARY` gets recall cells: 690 of 3,990 misuse programs certify today, each a transported read in tracked JSX, held in `open-defects.json` for the census.
+
+<a id="adr-0669"></a>
+## ADR 0669 — A named promise handler, and a parameter after an await
+
+A `.then` handler handed by name is followed as a literal is. A parameter called after an await may be an accessor, so it is an uncertifiable SC1002, blocker `handed-read-after-await`; `handed_value` does not count parameters and stays so until the census. `c05`, a `Map`-held accessor, stays open for the census.
+
+<a id="adr-0670"></a>
+## ADR 0670 — A destructure in a strict window stays a site
+
+ADR 0657's generic arm dropped applies, `ref`s and untracked callbacks as fresh reads. They are, but a store's Get there warns, so they stay uncertifiable. The grid held 596 such false cleans, unlisted when ADR 0665 landed; 152 remain, a `ref` in a row, by name or from a factory, held in `open-defects.json`.

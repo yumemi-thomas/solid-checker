@@ -211,6 +211,28 @@ pub(super) fn run<'a>(
     unlisted_async_computations(ctx, &reach, draft);
 }
 
+/// A parameter of a callback a primitive runs (`createRoot((dispose) => …)`): the
+/// primitive supplies it, so no caller hands it an accessor.
+fn primitive_parameter(ctx: &AnalysisContext<'_>, file: &FileFacts, declaration: Span) -> bool {
+    file.ast.functions.iter().any(|function| {
+        function
+            .parameters
+            .iter()
+            .flat_map(|parameter| &parameter.names)
+            .any(|name| name.span == declaration)
+            && file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && ctx
+                            .semantic_lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some()
+                })
+    })
+}
+
 /// ADR 0517: an async compute the producer lists no fact for (an object
 /// literal's member, `createMemo(box.compute)` over `{ compute: async () =>
 /// … }` or `{ async compute() {} }`), named exactly at a tracked position
@@ -820,6 +842,35 @@ impl<'f, 'a> Reach<'f, 'a> {
                     let mut obligation = typed_after_await_obligation(file, candidate.callee);
                     obligation.analysis_context = "handed-read-after-await".to_owned();
                     draft.push_defect(obligation);
+                } else if let Some((file, candidate)) = ast_call
+                    && symbol.is_none_or(|symbol| {
+                        !ctx.setters.contains_key(symbol) && !ctx.actions.contains_key(symbol)
+                    })
+                    && file
+                        .ast
+                        .reference_declaration(file.ast.peel_ts_sugar_span(candidate.callee))
+                        .is_some_and(|declaration| {
+                            super::declared_as_parameter(file, declaration)
+                                && !primitive_parameter(ctx, file, declaration)
+                        })
+                    && walk
+                        .reported
+                        .insert((call.path.to_string(), call.start_byte, call.end_byte))
+                {
+                    // ADR 0669: a parameter is a value a caller supplied too.
+                    draft.push_defect(StaticDefect {
+                        kind: StaticDefectKind::ReactiveReadAfterAwait {
+                            accessor: file
+                                .source_text(candidate.callee)
+                                .unwrap_or("this parameter")
+                                .to_owned(),
+                            obligation: Some(AfterAwaitObligation::HandedParameter),
+                        },
+                        location: location(file.path.shared(), candidate.callee),
+                        analysis_context: crate::blockers::HANDED_READ_AFTER_AWAIT.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
                 }
                 continue;
             };
@@ -2022,7 +2073,16 @@ impl<'f, 'a> Reach<'f, 'a> {
                     if argument.spread {
                         continue;
                     }
-                    let Some(callback) = callback_argument_literal(file, argument.span) else {
+                    // ADR 0669: a project function handed by name runs as a literal does.
+                    let Some((handler_file, callback)) =
+                        callback_argument_literal(file, argument.span)
+                            .map(|callback| (file, callback))
+                            .or_else(|| {
+                                (argument.value == ArgumentValueKind::Identifier)
+                                    .then(|| self.named_function(file, argument.span))
+                                    .flatten()
+                            })
+                    else {
                         continue;
                     };
                     if callback.r#async || callback.generator {
@@ -2041,9 +2101,16 @@ impl<'f, 'a> Reach<'f, 'a> {
                         } else {
                             AfterAwaitObligation::IntrinsicMayBeReplaced
                         };
-                        self.report_conditional_region(draft, walk, file, callback, depth, &reason);
+                        self.report_conditional_region(
+                            draft,
+                            walk,
+                            handler_file,
+                            callback,
+                            depth,
+                            &reason,
+                        );
                     } else {
-                        self.report_region(draft, walk, file, callback, depth);
+                        self.report_region(draft, walk, handler_file, callback, depth);
                     }
                 }
                 let receiver = file.ast.peel_ts_sugar_span(receiver);

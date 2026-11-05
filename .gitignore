@@ -1009,3 +1009,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-deferred-mount/node_modules/**
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/**
+!fixtures/reactive-ir/rc21-after-await-handed/node_modules/
+!fixtures/reactive-ir/rc21-after-await-handed/node_modules/**

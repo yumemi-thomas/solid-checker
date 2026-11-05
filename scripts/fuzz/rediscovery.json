@@ -3785,5 +3785,34 @@
   "found": "writing the fixture for ADR 0666",
   "fixed": "ADR 0668",
   "outside": "the grids' views have one mount and no sibling `Loading`. A generator context would need a second site. Fixture rc21-open-provenance holds both"
+ },
+ {
+  "finding": "a `.then` handler handed by name certified: SC1002 c08 (ADR 0669)",
+  "found": "the flip audit",
+  "fixed": "ADR 0669",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-then-named-x-direct-none"
+  ],
+  "rediscovered": "false-clean on 513 of 648 on the old build, 20 on the new, held in open-defects.json"
+ },
+ {
+  "finding": "a parameter called after an await certified: SC1002 c12 (ADR 0669)",
+  "found": "the flip audit",
+  "fixed": "ADR 0669",
+  "outside": "a context wraps statements, so the site cannot itself be the parameter's call. Witness SC1002/c12-param and fixture rc21-after-await-handed hold it"
+ },
+ {
+  "finding": "a store destructure in an apply, a plain `ref` or an action certified; found by the grid at ADR 0665, unlisted (ADR 0670)",
+  "found": "the ADR 0668 rerun of mx-recall",
+  "fixed": "ADR 0670",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-store-dstr-assign-direct-closure",
+   "mx-strict-read-untracked-ref-store-dstr-for-of-direct-none"
+  ],
+  "rediscovered": "596 false-clean on the old build, 152 on the new, held in open-defects.json"
  }
 ]

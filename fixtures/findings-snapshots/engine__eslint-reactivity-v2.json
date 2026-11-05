@@ -46,6 +46,16 @@
       "code": "SC1002",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-local-accessor.tsx",
+      "start": 185,
+      "end": 189,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-loop-reentry.tsx",
       "start": 277,
       "end": 282,
@@ -89,6 +99,16 @@
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-parameter.tsx",
       "start": 198,
       "end": 202,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-plain-function.tsx",
+      "start": 153,
+      "end": 157,
       "fixes": 0
     },
     {

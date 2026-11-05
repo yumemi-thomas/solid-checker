@@ -4,7 +4,7 @@
 //   flipReadContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
 //   FLIP_READ_LEGAL     { [code]: [context, ...] }, appended to that code's recallLegal
 //   FLIP_READ_VARIANTS  { [code]: { [variant]: { kind, contexts } } }, a source of that kind, in those contexts, added to the code's recall variants
-import { apiSignal, button, child, decl, domExpr, expr, fn, iife, jsxExpr, mounted, num, ret } from "./model.mjs";
+import { apiSignal, button, call, child, decl, domExpr, expr, fn, iife, jsxExpr, mounted, num, prim, ref, ret } from "./model.mjs";
 
 // ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
 export const STATIC_SOURCES = {
@@ -36,6 +36,8 @@ export const FLIP_READ_CONTEXTS = {
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn"],
   PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
+  // ADR 0669: a memo's promise chain with a handler handed by name.
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named"],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
@@ -77,6 +79,11 @@ const holderForms = (k) => ({
 });
 
 export function flipReadContext(context, stmts, kit) {
+  if (context === "then-named") {
+    const [f, m] = [kit.name("f"), kit.name("m")];
+    const flight = domExpr(`new Promise<number>((done) => setTimeout(() => done(1), 1)).then(${f})`);
+    return { body: [decl(f, fn([...stmts, ret(num(1))])), decl(m, prim("memo", fn([ret(flight)]))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
   const held = holderForms("K")[context];
   if (held) {
     const k = kit.name("K");

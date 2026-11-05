@@ -934,6 +934,9 @@ pub enum AfterAwaitObligation {
     /// A promise handler that runs only on one settlement, or on a receiver
     /// not proven to hold the computation's flight.
     HandlerMayNotRun,
+    /// The callee is a parameter: what a caller hands may be an accessor
+    /// (ADR 0669).
+    HandedParameter,
     /// An `async` function returned without `await` whose first await is not
     /// proven pending: its continuation may run before the computation holds
     /// its promise.
