@@ -30,16 +30,6 @@
       "start": 1158,
       "end": 1168,
       "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
-      "start": 1186,
-      "end": 1197,
-      "fixes": 0
     }
   ]
 }

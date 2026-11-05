@@ -720,8 +720,9 @@ fn parse_runtime_rendering(value: &str) -> Result<RuntimeRendering, Box<dyn std:
         "csr" => Ok(RuntimeRendering::Csr),
         "string-ssr" => Ok(RuntimeRendering::StringSsr),
         "streaming-ssr" => Ok(RuntimeRendering::StreamingSsr),
+        "hydrated" => Ok(RuntimeRendering::Hydrated),
         _ => Err(format!(
-            "unknown rendering mode {value:?}; expected csr, string-ssr, or streaming-ssr"
+            "unknown rendering mode {value:?}; expected csr, string-ssr, streaming-ssr, or hydrated"
         )
         .into()),
     }
@@ -775,7 +776,7 @@ fn print_help() {
                                         in an HTML Window realm, which decides their\n\
                                         `typeof window`/`typeof document` guards.\n\
                                         Requires --runtime-target browser\n\
-           --rendering <csr|string-ssr|streaming-ssr>\n\
+           --rendering <csr|string-ssr|streaming-ssr|hydrated>\n\
                                         Select the rendering mode explicitly\n\
            --runtime-condition <NAME>   Select an exact package/runtime condition\n\
            --framework-transform <NAME> Select an explicit framework/compiler transform\n\

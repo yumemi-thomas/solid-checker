@@ -578,6 +578,12 @@ impl FindingWording {
 pub trait CatalogWording {
     fn capabilities(&self) -> CatalogCapabilities;
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording;
+    /// ADR 0659: whether this rule's claim is what the client runtime does, so
+    /// it holds only where a client build runs the site.
+    fn claims_client_runtime(&self, code: &str) -> bool {
+        let _ = code;
+        false
+    }
 }
 
 /// Projects all enabled tables and reports construction/ordering time.
@@ -785,6 +791,9 @@ pub fn project_findings(
             program.runtime_configuration.apply(finding);
         }
     }
+    findings.retain_mut(|finding| {
+        !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
+    });
     finish_findings(findings, total_started, construction_started)
 }
 

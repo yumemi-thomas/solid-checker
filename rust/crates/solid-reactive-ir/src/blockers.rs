@@ -8,6 +8,12 @@
 /// class element, a value handed where nothing follows it.
 pub(crate) const FUNCTION_RUN_UNPLACED: &str = "function-run-unplaced";
 
+/// ADR 0659: only server entries are visible, nothing was selected, and a
+/// client entry may sit outside the project.
+pub(crate) const CLIENT_ROOT_UNPROVEN: &str = "client-root-unproven";
+/// ADR 0659: a site under a build constant no selection decides here.
+pub(crate) const BUILD_CONSTANT_ARM: &str = "build-constant-arm";
+
 // Track W.
 pub(crate) const SOLID_VERSION_UNCLASSIFIED: &str = "solid-version-unclassified";
 pub(crate) const RESPONSE_HEAD_POSITION_UNPROVEN: &str = "response-head-position-unproven";

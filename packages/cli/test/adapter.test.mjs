@@ -484,8 +484,10 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
     frameworkTransforms: ["use-server"]
   }));
   plugin._testing.loadSnapshot(context({ target: "node", rendering: "string-ssr" }));
+  plugin._testing.loadSnapshot(context({ rendering: "hydrated" }));
   const invocations = readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse);
-  assert.equal(invocations.length, 2);
+  assert.equal(invocations.length, 3);
+  assert.deepEqual(invocations[2].slice(-2), ["--rendering", "hydrated"]);
   assert.deepEqual(invocations[0].slice(-12), [
     "--format", "json",
     "--runtime-target", "browser",

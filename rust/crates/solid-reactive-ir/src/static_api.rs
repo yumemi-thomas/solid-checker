@@ -37,7 +37,8 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         value_form_stores: ctx.value_form_stores,
         accessors: ctx.accessors,
         reachable_calls: ctx.reachable_calls,
-        client_build: !ctx.rule_options.runtime.selects_server_build(),
+        client_build: !ctx.rule_options.runtime.selects_server_build()
+            || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect),
         package_instances: &ctx.rule_options.runtime.package_instances,
     };
     for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {

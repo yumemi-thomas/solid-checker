@@ -190,7 +190,11 @@ impl ServerRenderingPremise {
         imports_server_entry: bool,
     ) -> Self {
         match rendering {
-            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr) => Self::Renders,
+            Some(
+                RuntimeRendering::StringSsr
+                | RuntimeRendering::StreamingSsr
+                | RuntimeRendering::Hydrated,
+            ) => Self::Renders,
             Some(RuntimeRendering::Csr) => Self::ProvenClientOnly,
             None if imports_server_entry => Self::Renders,
             None => Self::Unresolved,
