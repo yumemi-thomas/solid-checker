@@ -499,7 +499,8 @@
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
@@ -553,7 +554,8 @@
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
@@ -616,7 +618,8 @@
         "unresolvedObligations": 1
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ]
     },
     "w3-dependency-source-program": {
@@ -693,6 +696,7 @@
       },
       "premises": [
         "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner",
         "package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create"
       ]
     },
@@ -770,6 +774,7 @@
       },
       "premises": [
         "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner",
         "package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create"
       ]
     },
@@ -837,7 +842,8 @@
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
@@ -900,7 +906,8 @@
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 2,
@@ -963,7 +970,8 @@
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
