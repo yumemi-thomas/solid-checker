@@ -434,7 +434,7 @@ fn read_execution_role_unlogged(
     if let Some(applied) =
         ref_applied_read_role(file, span, allowed, entities, symbol_names, lookup)
     {
-        return applied;
+        return dynamic_read_role(file, span, applied, lookup);
     }
     if role == ExecutionRole::DirectiveApply {
         return role_arm!(
@@ -675,6 +675,11 @@ pub(crate) fn dynamic_component_entry(
             span = climb.at;
         }
         let function = containing_ast_function(&file.ast, span)?;
+        // An intrinsic's `ref` runs during the body that creates the element.
+        if let Some(element) = crate::owners::ref_applied_element(file, function, lookup) {
+            span = element.span;
+            continue;
+        }
         let inherited = file
             .ast
             .arguments_containing(function.span)

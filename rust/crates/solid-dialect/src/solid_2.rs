@@ -2437,6 +2437,13 @@ impl Dialect for Solid2 {
         primitive == Primitive::CreateRenderEffect
     }
 
+    /// Measured on rc.21: `getOwner()` is null in `createEffect`'s apply on the
+    /// first run and on a rerun, and `NO_OWNER_CLEANUP` fires on both.
+    /// `createRenderEffect`'s apply has an owner on its first run.
+    fn apply_never_owned(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateEffect
+    }
+
     /// Source: `@solidjs/web@2.0.0-rc.9` exports `render(code, element)` and
     /// `hydrate(fn, node)`, whose first argument is the root of the mounted
     /// tree and which have no other caller.

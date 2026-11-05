@@ -590,6 +590,18 @@ fn refused_entry(file: &solid_facts::FileFacts, entry: Span, lookup: &SemanticLo
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 return false;
             };
+            // ADR 0681: a cleanup registered where no owner exists never runs.
+            if lookup
+                .dialect
+                .callback_runs_only_in_disposal(primitive, index)
+                && in_extent_of(file, call.span, lookup, &|call, primitive, index| {
+                    lookup.dialect.apply_never_owned(primitive)
+                        && effect_apply_argument(lookup.dialect, primitive, call.arguments.len())
+                            == Some(index)
+                })
+            {
+                return true;
+            }
             let semantics =
                 lookup
                     .dialect
@@ -619,6 +631,21 @@ fn creation_refused_at(
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    in_extent_of(file, site, lookup, &|call, primitive, index| {
+        effect_apply_argument(lookup.dialect, primitive, call.arguments.len()) == Some(index)
+            || callback_owner_at_call(file, call, primitive, index, lookup)
+                == Some(solid_dialect::CallbackOwner::Leaf)
+    })
+}
+
+/// Whether `site` is in the own extent of a callback `refuses` names: through
+/// the layers that run in place, and short of an await or a possible suspension.
+fn in_extent_of(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    refuses: &dyn Fn(&solid_facts::ast::CallFact, solid_dialect::Primitive, usize) -> bool,
+) -> bool {
     // The creation may sit in layers the apply or leaf callback runs in place
     // (an IIFE, a helper calling its callback): rc.17's guard holds for the
     // whole callback run, so those layers are refused too. A layer that also
@@ -646,12 +673,7 @@ fn creation_refused_at(
             .any(|(call, index)| {
                 lookup
                     .primitive_at_call(file, call.span)
-                    .is_some_and(|primitive| {
-                        effect_apply_argument(lookup.dialect, primitive, call.arguments.len())
-                            == Some(index)
-                            || callback_owner_at_call(file, call, primitive, index, lookup)
-                                == Some(solid_dialect::CallbackOwner::Leaf)
-                    })
+                    .is_some_and(|primitive| refuses(call, primitive, index))
             });
         if refused {
             return true;

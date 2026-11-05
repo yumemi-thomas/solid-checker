@@ -48,7 +48,7 @@ export const FLIP_READ_LEGAL = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers"],
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag"],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
@@ -104,6 +104,12 @@ export function flipReadContext(context, stmts, kit) {
       case "root-named-foreach": return { body: [held, expr(domExpr(`[1].forEach(${h})`))], view: [] };
       default: return { body: [held], view: [button(kit.name("b"), [expr(call(ref(h)))]), button(kit.name("b"), [expr(call(ref(h)))])] };
     }
+  }
+  // ADR 0681: `createEffect`'s apply has no owner, so this cleanup never registers and `K` never mounts.
+  if (context === "apply-cleanup-mount") {
+    const k = kit.name("K");
+    const hold = `onCleanup(() => { render(() => <${k} />, document.createElement("div")); })`;
+    return { body: [decl(k, fn([...stmts, ret(domExpr("<i />"))])), expr(domExpr(`createEffect(() => 1, () => { ${hold}; })`, ["render"], ["createEffect", "onCleanup"]))], view: [] };
   }
   if (context === "arm-tag") {
     const k = kit.name("K");

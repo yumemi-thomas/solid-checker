@@ -891,17 +891,6 @@
    "certified": true
   },
   {
-   "id": "queue/T-mount-from-cleanup",
-   "item": "T-mount-from-cleanup",
-   "outcome": "false-positive",
-   "codes": [
-    "NO_OWNER_CLEANUP"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "queue/T-untrack-label",
    "item": "T-untrack-label",
    "outcome": "false-clean",
@@ -1644,15 +1633,6 @@
    "certified": true
   },
   {
-   "id": "types/e511-ref-dynamic",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "types/e703-cleanup-component-write",
    "item": "T-D1",
    "outcome": "false-positive",
@@ -1755,15 +1735,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "types/g04-sc5001-dynamic-helper",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "pending-async-unsuspendable-read"
-   ]
   },
   {
    "id": "types/g12-cleanup-comp-store-write",

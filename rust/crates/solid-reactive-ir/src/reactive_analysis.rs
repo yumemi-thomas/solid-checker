@@ -514,6 +514,26 @@ pub(crate) fn collect_project<'facts>(
             read.creation_pass_unproven = true;
             continue;
         };
+        // ADR 0682: a read attributed at a call in a body `<Dynamic>` mounts has
+        // that body's window, as a direct read there has (ADR 0662).
+        if read.execution == crate::ExecutionRole::UntrackedRendering {
+            let span = solid_facts::core::Span::new(start, end);
+            let role = crate::execution_role::dynamic_read_role(
+                file,
+                span,
+                read.execution,
+                ctx.semantic_lookup,
+            );
+            if role == crate::ExecutionRole::UntrackedUnwindowed {
+                read.under_loading = crate::owners::read_loading_cover(
+                    ctx.semantic_lookup,
+                    file,
+                    span,
+                    ctx.symbol_names,
+                ) == crate::owners::LoadingCover::Covered;
+            }
+            read.execution = role;
+        }
         read.creation_pass_unproven = !crate::owners::read_in_creation_pass(
             ctx.semantic_lookup,
             file,

@@ -1267,6 +1267,12 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether `primitive`'s apply has no owner on any run, so `onCleanup` there
+    /// warns and registers nothing. Default `false`: no fact, no such proof.
+    fn apply_never_owned(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// ADR 0503: a mount primitive that runs its component code on its own
     /// synchronous stack, outside every flush, lane and transition, when it is
     /// called outside them (`render`, not `hydrate`, whose code may start

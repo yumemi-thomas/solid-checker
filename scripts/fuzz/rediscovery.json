@@ -3964,5 +3964,23 @@
    "lg-strict-read-untracked-root-named-then-signal-direct-none"
   ],
   "rediscovered": "the checker at 32fb19025 on legal.mjs --recall (flip-read.mjs contexts root-named-timer, root-named-then): 1,720 false positive, 224 unexecuted; the fix 3,720 programs, 0 of either, root-two-handlers 1,860 clean or open on both builds. A helper called only from two handlers fails only as pattern api/root-two-handlers, NEW false-positive on the build before"
+ },
+ {
+  "finding": "a read reached only through `onCleanup` in a createEffect apply was V, and the callback never registers (Chrome: NO_OWNER_CLEANUP, the read never runs); a `ref` under `<Dynamic>` claimed a warning Chrome never gives",
+  "found": "sc1001.md step 9, queue Q5; T-D3",
+  "fixed": "ADR 0681",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-apply-cleanup-mount-signal-direct-none",
+   "lg-strict-read-untracked-apply-cleanup-mount-signal-direct-helper"
+  ],
+  "rediscovered": "the checker at 3ecc26a9b on legal.mjs --recall (flip-read.mjs context apply-cleanup-mount): 14 false positive, 788 unexecuted; the fix 1,860 programs, 0 of either. The `ref` half is held by patterns types/e511-ref-dynamic, NEW false-positive on the build before"
+ },
+ {
+  "finding": "a helper's pending read in a body `<Dynamic>` mounts under `<Loading>`: V SC5001, Chrome retries and renders, because a row attributed at a call kept the lexical role",
+  "found": "open-defects T-D3, types/g04-sc5001-dynamic-helper",
+  "fixed": "ADR 0682",
+  "outside": "the row needs source and helper at module scope: an in-body helper does not fail on the build before (630 programs, 0 false positive), and a `hoisted` helper naming the site's source fails the generator's validator. Pattern types/g04-sc5001-dynamic-helper is NEW false-positive on the build before"
  }
 ]
