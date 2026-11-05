@@ -134,7 +134,7 @@ export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
  * a helper and a member. A project method or a local function called `focus` delivers nothing (`project`, `shadow`).
  */
 /** A fire cell is about the call that delivers: one shape of the read or write inside it, not the whole cross of what the grids vary. */
-export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread)-/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && !shape.source && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
+export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && !shape.source && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
 const FIRES = ["focus", "select", "blur", "remove", "steal", "reset", "submit", "validity", "modal", "popover", "focus-wrapper", "focus-member"];
 /**
  * ADR 0645: what a listener reaches, on the stack of what delivers it. A window listener that calls a member (`method`), a bound member, an
@@ -347,7 +347,7 @@ const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", "evt-apply-owned-flush", ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
     recallLegal: [...EVENT_LEGAL, ...RENDER_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
@@ -1209,6 +1209,25 @@ function listenerContext(position, form, stmts, kit) {
   }
 }
 
+/**
+ * `evt-apply-owned-flush` (`g10`): a later root's body flushes under its owner, the drained apply clicks, and the JSX handler has that owner.
+ * ADR 0639's effect window takes only its event, so a read there is silent; the write throws.
+ */
+function ownedFlushContext(stmts, kit) {
+  const go = apiSignal(kit.name("t"), 0, "owned", "src");
+  const b = kit.name("b"), host = kit.name("el");
+  return {
+    sigs: [go],
+    body: [
+      decl(host, domExpr('document.createElement("div")')),
+      expr(prim("effect", fn([ret(read(go.name))]), { apply: fn([expr(domExpr(`v && document.querySelector<HTMLElement>('[data-act="${b}"]')!.click()`))]) })),
+      decl("Later", domExpr(`() => { ${go.setter}(1); flush(); return <i />; }`, undefined, ["flush"])),
+      expr(prim("timer", fn([expr(domExpr(`render(() => <Later />, ${host})`, ["render"]))]))),
+    ],
+    view: [button(b, stmts)],
+  };
+}
+
 /** An apply a nested `render` drains (`rnd-*`, ADR 0644): the site is in the apply, queued before the mount runs. */
 function renderContext(where, stmts, kit) {
   const mount = domExpr('render(() => null, document.createElement("div"))', ["render"]);
@@ -1257,6 +1276,7 @@ function zeroRunContext(where, form, stmts, kit) {
 }
 
 function inContext(context, stmts, kit) {
+  if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
   if (zero) return zeroRunContext(zero[1], zero[2], stmts, kit);
   // ADR 0641: a component's prop is a getter nothing reads, whatever spells the tag: a capital, a member, a lowercase member.

@@ -81,7 +81,7 @@ export const createOwnerExpr = () => ({ k: "createOwner" });
 /** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
 /** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641). */
 export const propEl = (tag, e) => ({ k: "propEl", tag, e });
-export const domExpr = (text, web) => ({ k: "dom", text, ...(web ? { webNames: web } : {}) });
+export const domExpr = (text, web, solid) => ({ k: "dom", text, ...(web ? { webNames: web } : {}), ...(solid ? { solidNames: solid } : {}) });
 /** `el.addEventListener(type, fn)`: a listener the program dispatches to itself. */
 export const listenExpr = (target, type, fn) => ({ k: "listen", target, type, fn });
 

@@ -281,7 +281,7 @@ function render(program, instrument) {
   function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
-      case "dom": for (const name of e.webNames ?? []) parentWeb.add(name); return e.text;
+      case "dom": for (const name of e.webNames ?? []) parentWeb.add(name); for (const name of e.solidNames ?? []) used.add(name); return e.text;
       case "listen": return `${e.target}.addEventListener(${JSON.stringify(e.type)}, ${expr(e.fn, depth)})`;
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));

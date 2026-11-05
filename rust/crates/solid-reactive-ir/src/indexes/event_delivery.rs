@@ -108,6 +108,12 @@ impl DispatchSite {
             )
     }
 
+    /// A delivery in an effect's apply that reaches a handler. Its read proof
+    /// holds only while no flush drains under an owner.
+    pub(crate) const fn delivers_in_effect_apply(&self) -> bool {
+        !self.receiver.excluded() && matches!(self.caller, Some(DispatchCaller::EffectApply))
+    }
+
     /// ADR 0645: whether a listener may run on this site's stack under an owner
     /// or in a strict-read window. `window` and `document` reach no JSX handler,
     /// so the proofs above leave them out, but a listener is on them.
@@ -292,7 +298,11 @@ impl SemanticLookup<'_> {
     /// window.
     pub(crate) fn synchronous_event_read_dispatch_present(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
-        self.dispatch_veto().1
+        let veto = self.dispatch_veto();
+        // An apply's delivery has no window and no owner only while the queue
+        // drains on an empty stack: under an owned flush it has that owner,
+        // and the handler's write throws (`g10`, ADR 0639 with ADR 0613).
+        veto.1 || (veto.4 && self.flush_drains_under_owner())
     }
 
     /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
@@ -317,11 +327,11 @@ impl SemanticLookup<'_> {
     /// call anywhere that resolves to a dispatch (the hazard
     /// [`crate::base::Hazard::SynchronousDispatch`]) neither holds, whatever
     /// the censuses say, and they are not computed.
-    pub(crate) fn dispatch_veto(&self) -> (bool, bool, bool, bool) {
+    pub(crate) fn dispatch_veto(&self) -> (bool, bool, bool, bool, bool) {
         #[cfg(debug_assertions)]
         VetoComputation::assert_not_computing();
         if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
-            return (false, false, false, false);
+            return (false, false, false, false, false);
         }
         let sites = self.event_dispatch_sites();
         (
@@ -329,6 +339,7 @@ impl SemanticLookup<'_> {
             sites.iter().any(DispatchSite::withholds_read_proofs),
             sites.iter().any(DispatchSite::withholds_flush_proofs),
             sites.iter().any(DispatchSite::withholds_listener_proofs),
+            sites.iter().any(DispatchSite::delivers_in_effect_apply),
         )
     }
 

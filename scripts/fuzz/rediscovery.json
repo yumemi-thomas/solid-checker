@@ -3268,5 +3268,18 @@
    "mx-until-in-reactive-scope-action-from-settled-x-direct-none"
   ],
   "rediscovered": "the g15 build: 2 programs secondary false-clean-certified; 7e9b9d5ee and later: none"
+ },
+ {
+  "finding": "an effect apply's delivery under an owned flush has that owner, and the JSX handler's write threw while certified (`g05`, `g10`): ADR 0639's apply class ignored ADR 0613's veto",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "this slice, ADR 0642",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-apply-owned-flush-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-apply-owned-flush-store-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-apply-owned-flush-refresh-direct-none"
+  ],
+  "rediscovered": "b05b96574: 3 false-clean; the fix: 3 recall-gap"
  }
 ]
