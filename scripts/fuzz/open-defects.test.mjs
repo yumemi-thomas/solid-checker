@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { gridStanding, heldGridEntry, readOpenDefects } from "./open-defects.mjs";
+import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { PATTERNS, comparePatterns, judgePattern, patternCases } from "./patterns.mjs";
 
 const finding = (rule, kind) => ({ rule, kind, primaryLocation: { path: "App.tsx" } });
@@ -47,5 +48,7 @@ describe("the pattern judge", () => {
   it("an obligation answers a code, and a failed page is no verdict", () => {
     expect(judgePattern({ codes: ["STRICT_READ_UNTRACKED"] }, [finding("strict-read-untracked", "uncertifiable")]).outcome).toBe("fine");
     expect(judgePattern({ codes: [], failure: "x" }, []).outcome).toBe("no-run");
+    // sc1001.md step 0: the checker says no window is open, and the lane measured the quiet.
+    expect(judgePattern({ codes: [] }, [{ ...finding("strict-read-untracked", "violation"), hint: `${NO_RUNTIME_WARNING} here.` }]).outcome).toBe("fine");
   });
 });

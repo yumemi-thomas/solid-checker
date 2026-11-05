@@ -3911,5 +3911,11 @@
   "found": "probe s-map-body while testing the cross-file gap",
   "fixed": "ADR 0674, a proved violation: the carrier provably runs",
   "outside": "a module-level function, which a context cannot write: pattern values/handed-map-body; the build at 9af0edf84 fails it as NEW false-clean, the fix passes"
+ },
+ {
+  "finding": "the pattern lane called a read SC1001 reports with the no-window hint a false positive: the checker says the runtime does not warn, the program stays quiet in Chrome, and `judgePattern` never read the hint. 24 entries: a read in a mapArray/repeat run, a `<Dynamic>` mount, a no-name window",
+  "found": "sc1001.md section 2, step 0",
+  "fixed": "patterns.mjs reads the hint where the lane holds the Chrome record: a measurement, no behaviour change",
+  "outside": "not a defect of the checker: nothing to generate. A finding with the hint where Chrome warned is still judged by its code, so the lane cannot hide a true contradiction"
  }
 ]

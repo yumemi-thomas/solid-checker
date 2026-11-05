@@ -247,33 +247,6 @@
    ]
   },
   {
-   "id": "api/d01-Dynamic-only",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/d08-Dynamic-store-read",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/d10-Dynamic-helper-read",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/k-bodyDirect-reconcileKey",
    "item": "C-D2",
    "outcome": "false-positive",
@@ -303,25 +276,7 @@
    ]
   },
   {
-   "id": "api/k-host-mapArrayRun",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/k-host-reconcileKey",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-host-repeatRun",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -339,25 +294,7 @@
    ]
   },
   {
-   "id": "api/k-micro-mapArrayRun",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/k-micro-reconcileKey",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-micro-repeatRun",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -384,34 +321,7 @@
    ]
   },
   {
-   "id": "api/k-namedTimer-mapArrayRun",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-namedTimer-repeatRun",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/k-namedTimer-runWithOwner",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-then-mapArrayRun",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -429,34 +339,7 @@
    ]
   },
   {
-   "id": "api/k-then-repeatRun",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-timer-mapArrayRun",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/k-timer-reconcileKey",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-timer-repeatRun",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -960,15 +843,6 @@
    "certified": true
   },
   {
-   "id": "census/b01-Dynamic-read",
-   "item": "section-4 census:b",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "census/c03-window-arrow-nested-reconcile",
    "item": "section-4 census:c",
    "outcome": "false-positive",
@@ -1203,26 +1077,6 @@
    "certified": true
   },
   {
-   "id": "census/g04-Dynamic-write",
-   "item": "section-4 census:g",
-   "outcome": "false-positive",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "census/g05-Dynamic-child-of-plain",
-   "item": "section-4 census:g",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "census/h03-mutation-observer",
    "item": "section-4 census:h",
    "outcome": "false-positive",
@@ -1248,17 +1102,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "census/j12-Dynamic-mount",
-   "item": "section-4 census:j",
-   "outcome": "false-positive",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "census/k03-window-createRoot",
@@ -2041,51 +1884,6 @@
    "certified": true
   },
   {
-   "id": "types/c01-dynamic-stale",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "types/c04-dynamic-alias",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "types/c10-dynamic-helper",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "types/c11-dynamic-store",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "types/c18-dynamic-body-read",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "types/c37-dispose-in-body-cleanup-read",
    "item": "T-D1",
    "outcome": "false-clean",
@@ -2216,25 +2014,7 @@
    "item": "T-other",
    "outcome": "no-run",
    "codes": [],
-   "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e807-map-name-empty/entry.tsx"
-  },
-  {
-   "id": "types/e809-map-name-empty2",
-   "item": "T-other",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "types/e814-repeat-name-empty",
-   "item": "T-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
+   "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e807-map-name-empty/App.tsx"
   },
   {
    "id": "types/e905-custom-connected",
@@ -2259,7 +2039,7 @@
    "item": "T-other",
    "outcome": "no-run",
    "codes": [],
-   "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e911-on-colon/entry.tsx"
+   "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e911-on-colon/App.tsx"
   },
   {
    "id": "types/f14-children-helper-read-in-body",
@@ -2530,15 +2310,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "types/x20-dynamic-only-component-read",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "types/x30-thenable-cast-to-promise",
