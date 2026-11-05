@@ -3,9 +3,18 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { gridStanding, heldGridEntry, readOpenDefects } from "./open-defects.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
-import { PATTERNS, comparePatterns, judgePattern, patternCases } from "./patterns.mjs";
+import { PATTERNS, comparePatterns, expectedSilent, judgePattern, patternCases } from "./patterns.mjs";
 
 const finding = (rule, kind) => ({ rule, kind, primaryLocation: { path: "App.tsx" } });
+
+describe("expected-silent.json (ADR 0696)", () => {
+  it("passes a listed program while its rule stays reported, and fails it when the rule goes", () => {
+    const rules = ["no-store-mutation-outside-setter"];
+    expect(expectedSilent({ outcome: "false-positive", rules }, rules).outcome).toBe("fine");
+    expect(expectedSilent({ outcome: "fine", codes: [] }, rules).outcome).toBe("false-clean");
+    expect(expectedSilent({ outcome: "false-positive", rules: ["other"] }, undefined).outcome).toBe("false-positive");
+  });
+});
 
 describe("the known open list", () => {
   const list = readOpenDefects();

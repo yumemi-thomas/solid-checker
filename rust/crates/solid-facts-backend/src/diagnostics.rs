@@ -498,6 +498,18 @@ impl DiagnosticSession {
                 );
             }
         }
+        // ADR 0696: proved silent, the one reach the whole program decides.
+        findings.retain(|finding| {
+            finding.kind != "violation"
+                || finding.id.starts_with("SC80")
+                || !solid_reactive_ir::site_unreached(
+                    &program,
+                    finding.primary_location.path.as_ref(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+                .is_some_and(|site| site.absent_prop)
+        });
         // ADR 0458: a violation at a site no execution reaches claims what
         // happens where nothing happens. Style rules claim nothing about
         // execution, and SC2008 claims a no-op wherever it runs.

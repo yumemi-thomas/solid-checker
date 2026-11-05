@@ -204,6 +204,8 @@ export function codeOfThrown(message) {
  * PRIMITIVE_IN_EFFECT_CALLBACK and is an unowned effect too, the leak a production build keeps (ADR 0483).
  */
 export const besideCode = {
+  // ADR 0696, owner: a destructure over a pending prop is a true read, and Chrome warns under the pending code.
+  PENDING_ASYNC_UNTRACKED_READ: ["no-destructure"],
   PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"],
   // ADR 0641: masked, not reported. In these programs Chrome reports only the row's code, because the first throw stops the run; each
   // twin with that cause removed reports the other rule's code. `createEffect(fn, undefined)`, given an apply: PRIMITIVE_IN_EFFECT_CALLBACK

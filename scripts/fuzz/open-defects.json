@@ -891,28 +891,6 @@
    "certified": true
   },
   {
-   "id": "returns/c16-spread-unread-key",
-   "item": "H-other",
-   "outcome": "false-positive",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "rules": [
-    "no-destructure"
-   ]
-  },
-  {
-   "id": "returns/c16-spread-unread-key-L",
-   "item": "H-other",
-   "outcome": "false-positive",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "rules": [
-    "no-destructure"
-   ]
-  },
-  {
    "id": "returns/fc-05-array-foreach",
    "item": "H-D2",
    "outcome": "false-clean",
@@ -929,15 +907,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "returns/h17-callback-prop-conditional-absent",
-   "item": "H-other",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "returns/q4-typed-module-field",

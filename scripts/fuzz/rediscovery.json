@@ -4090,5 +4090,21 @@
   "found": "fuzz-patterns values/d2-identity-return, d2n-find-var-write, d2n-find-write, d2n-for-jsx-row-write, d2n-forof-write, d2n-memo-filter-write, d2n-memo-of-store-write, d2n-object-values-write, d2n-root-array-forof, t2-for-row-root-array, t2-for-row-write, t6-for-row-helper",
   "fixed": "ADR 0720",
   "outside": "STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name (`st.x = …`), and a flip-write.mjs context places the site without respelling it, so no context can root the write at a call's result or a loop element. The 12 fuzz-patterns entries left open-defects.json at ADR 0720; fixture store-element-flow pins the rest"
+ },
+ {
+  "finding": "owner ruling, ADR 0696: c16 and c16-spread-unread-key-L were listed false positives. The read is true and Chrome warns PENDING_ASYNC_UNTRACKED_READ, so no-destructure stands beside that code",
+  "found": "patterns returns/c16-*",
+  "fixed": "ADR 0696: the judge's besideCode, the finding unchanged",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "outside": "outside: not a defect, nothing to generate. Both programs stay in the pattern lane and pass there"
+ },
+ {
+  "finding": "owner ruling, ADR 0696: h17, a callback prop run only behind a prop no caller passes, every caller visible: a violation Chrome never shows",
+  "found": "patterns returns/h17-callback-prop-conditional-absent",
+  "fixed": "ADR 0696: proved silent",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "outside": "patterns: the build before reports it, the fix does not; guards returns/h17-guard-* hold passed, maybe, exported, spread and default. The generator shape needs the text variants of the next commit, and lands there"
  }
 ]

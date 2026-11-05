@@ -1607,6 +1607,10 @@ pub struct UnreachedSite {
     /// literal test rules out); else the function running it never runs.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dead_code: bool,
+    /// ADR 0696: proved silent: it runs only behind a prop no caller passes,
+    /// every caller being in view.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub absent_prop: bool,
     /// Unreached only because the runtime refuses a creation on the way: a
     /// root, primitive or component created in an effect apply or a leaf
     /// callback (ADR 0475).

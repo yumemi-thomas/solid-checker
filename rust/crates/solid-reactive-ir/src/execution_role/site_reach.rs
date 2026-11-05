@@ -67,6 +67,8 @@ pub(crate) enum UnreachedReason {
     /// The site follows an unconditional exit, or sits in an arm a literal
     /// test rules out.
     DeadCode,
+    /// ADR 0696: it runs only behind a prop every visible caller leaves out.
+    AbsentProp,
     /// The function that runs the site is never created or never entered.
     NeverEntered,
 }
@@ -129,6 +131,137 @@ struct Approximation<'a> {
 /// `MayRun` (ADR 0560: and every later answer of the query is undecided).
 const DEPTH_LIMIT: usize = 64;
 
+/// ADR 0696 (owner's ruling): a function a component's prop holds, whose every
+/// call in the component is [`behind_absent_prop`].
+fn prop_runs_only_behind_absent_prop(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    component_prop_invocations(file, function, lookup).is_some_and(|(component, calls)| {
+        !calls.is_empty()
+            && calls
+                .iter()
+                .all(|call| behind_absent_prop(component, *call, lookup))
+    })
+}
+
+/// ADR 0696: `site` runs only when a prop of the component holding it is truthy
+/// (`if (p.on)`, `p.on && …`, `p.on ? … : …`), and no caller passes that prop.
+fn behind_absent_prop(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    ast.if_regions
+        .iter()
+        .filter(|region| region.consequent.contains(site))
+        .map(|region| region.test)
+        .chain(
+            ast.logical_expressions
+                .iter()
+                .filter(|logical| {
+                    logical.operator == solid_facts::ast::LogicalOperatorKind::And
+                        && logical.right.contains(site)
+                })
+                .map(|logical| logical.left),
+        )
+        .chain(
+            ast.conditional_expressions
+                .iter()
+                .filter(|conditional| conditional.consequent.contains(site))
+                .map(|conditional| conditional.test),
+        )
+        .any(|test| prop_never_passed(file, test, lookup))
+}
+
+/// Whether `test` is a member of a component's own props parameter, and every
+/// reference to the component is a JSX tag in view that passes no such prop.
+/// A spread, an unseen caller, a default on the parameter or a write answer no.
+fn prop_never_passed(
+    file: &solid_facts::FileFacts,
+    test: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(member) = ast
+        .member_at(ast.peel_ts_sugar_span(test))
+        .filter(|member| !ast.computed_members.contains(&member.span))
+    else {
+        return false;
+    };
+    let Some(declared) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object)) else {
+        return false;
+    };
+    let Some(component) = ast.functions.iter().find(|function| {
+        function.parameters.first().is_some_and(|parameter| {
+            parameter.pattern == declared && parameter.initializer.is_none()
+        })
+    }) else {
+        return false;
+    };
+    let Some(prop) = file.source_text(member.property) else {
+        return false;
+    };
+    let written = ast.assignments.iter().any(|assignment| {
+        assignment.target.contains(member.object) || assignment.target == declared
+    });
+    if written
+        || crate::indexes::binding_written(file, declared)
+        || lookup.program_has_eval()
+        || !lookup.function_value_is_current(file, component)
+        || (!lookup.program_closed && module_exports(file, component, lookup))
+    {
+        return false;
+    }
+    let Some(name) = crate::owners::function_binding_name(file, component) else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+        return false;
+    };
+    let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+        return false;
+    };
+    let path = file.path.as_str();
+    // Recorded queries (ADR 0713's census): every reference is a site the call
+    // graph accounts for, and each site is a tag.
+    let accounted = lookup
+        .function_call_site_references(path, component.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller.path.as_str().to_owned(), callee.start, callee.end))
+        .collect::<HashSet<_>>();
+    let every_reference_a_site = references.iter().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        (reference.path.as_ref() == path && start == name.span.start && end == name.span.end)
+            || accounted.contains(&(reference.path.as_ref().to_owned(), start, end))
+    });
+    let sites = lookup.function_call_sites(path, component.span);
+    every_reference_a_site
+        && !sites.is_empty()
+        && sites.iter().all(|(caller, site)| {
+            caller
+                .ast
+                .jsx_elements
+                .iter()
+                .find(|element| element.name.span == *site)
+                .is_some_and(|element| {
+                    element.spreads.is_empty()
+                        && !(prop == "children" && !element.children.is_empty())
+                        && !element.attributes.iter().any(|attribute| {
+                            attribute.namespace.is_some()
+                                || caller.source_text(attribute.local_name) == Some(prop)
+                        })
+                })
+        })
+}
+
 impl<'l, 'a> SiteReach<'l, 'a> {
     pub(crate) fn new(lookup: &'l SemanticLookup<'a>) -> Self {
         Self {
@@ -179,6 +312,14 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     fn site_within(&self, file: &solid_facts::FileFacts, site: Span) -> Reach {
         if file.ast.unreachable_contains(site) {
             return Reach::Unreached(UnreachedReason::DeadCode);
+        }
+        // ADR 0696: a fact of the whole program.
+        if behind_absent_prop(file, site, self.lookup)
+            || crate::owners::owning_function(&file.ast, site).is_some_and(|function| {
+                prop_runs_only_behind_absent_prop(file, function, self.lookup)
+            })
+        {
+            return Reach::Unreached(UnreachedReason::AbsentProp);
         }
         match crate::owners::owning_function(&file.ast, site) {
             Some(function) if !self.runs(file, function) => {
@@ -909,6 +1050,7 @@ pub(crate) fn unreached_report_sites(
             let undecided = crate::UnreachedSite {
                 location: location.clone(),
                 dead_code: false,
+                absent_prop: false,
                 refused_creation: false,
                 lazy_unread: false,
                 undecided: true,
@@ -921,6 +1063,7 @@ pub(crate) fn unreached_report_sites(
                     plain => Some(crate::UnreachedSite {
                         location: location.clone(),
                         dead_code: reason == UnreachedReason::DeadCode,
+                        absent_prop: reason == UnreachedReason::AbsentProp,
                         refused_creation: plain == Reach::MayRun,
                         lazy_unread: false,
                         undecided: false,
@@ -932,6 +1075,7 @@ pub(crate) fn unreached_report_sites(
                     Reach::Unreached(_) => Some(crate::UnreachedSite {
                         location: location.clone(),
                         dead_code: false,
+                        absent_prop: false,
                         refused_creation: false,
                         lazy_unread: true,
                         undecided: false,

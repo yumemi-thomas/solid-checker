@@ -8,13 +8,13 @@
 // positive: a violation of a rule with a runtime counterpart none of whose codes Chrome reported; the lane has no hit counters, so whether
 // the site ran is the entry's to say. `--update` rewrites the `patterns` half of the list from this run: for a person, reading the diff.
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
-import { codeOfThrown, codeRules, codesForRule, coversCode, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { besideCode, codeOfThrown, codeRules, codesForRule, coversCode, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,11 +129,18 @@ export function judgePattern({ codes, failure }, findings) {
   if (failure || findings === null) return { outcome: "no-run", why: failure ?? "no checker report" };
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const claimed = codes.filter((code) => (codeRules[code] ?? []).length);
-  const missed = claimed.filter((code) => !relevant.some((finding) => coversCode(code, finding)));
-  const contradicted = relevant.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !finding.claimsSilent && !String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) && !codesForRule(finding.rule).some((code) => codes.includes(code)));
+  const missed = claimed.filter((code) => !relevant.some((finding) => coversCode(code, finding) || (finding.kind === "violation" && besideCode[code]?.includes(finding.rule))));
+  const contradicted = relevant.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !finding.claimsSilent && !String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) && !codesForRule(finding.rule).some((code) => codes.includes(code)) && !codes.some((code) => besideCode[code]?.includes(finding.rule)));
   if (contradicted.length) return { outcome: "false-positive", codes: claimed, rules: [...new Set(contradicted.map((finding) => finding.rule))] };
   if (missed.length) return { outcome: "false-clean", codes: missed, certified: !relevant.some((finding) => finding.kind === "uncertifiable") };
   return { outcome: "fine", codes: claimed };
+}
+
+/** ADR 0696: a program whose rules must stay reported though the run shows nothing: that is its pass, and anything else fails it. */
+export function expectedSilent(verdict, rules) {
+  if (!rules) return verdict;
+  const held = verdict.outcome === "false-positive" && rules.every((rule) => verdict.rules?.includes(rule));
+  return held ? { outcome: "fine", codes: [] } : { ...verdict, outcome: "false-clean", why: `expected ${rules.join(", ")} reported` };
 }
 
 export function comparePatterns(rows, list) {
@@ -161,7 +168,8 @@ async function main() {
   const cases = patternCases().filter((entry) => !only || entry.id.includes(only));
   const records = await runChrome(cases, join(out, "chrome"));
   const findings = await runChecker(cases, join(out, "check"), { checker, typefacts });
-  const rows = cases.map(({ id }) => ({ id, ...judgePattern(records.get(id) ?? { codes: [], failure: "no record" }, findings.get(id) ?? null) }));
+  const expected = JSON.parse(readFileSync(join(here, "expected-silent.json"), "utf8")).patterns;
+  const rows = cases.map(({ id }) => ({ id, ...expectedSilent(judgePattern(records.get(id) ?? { codes: [], failure: "no record" }, findings.get(id) ?? null), expected[id]) }));
   writeFileSync(join(out, "patterns.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
   const list = readOpenDefects();
   if (args.includes("--update")) {
