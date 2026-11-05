@@ -128,7 +128,17 @@ export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
  * event, so a listener dispatched synchronously from a body reads in it; an effect's window records its queue's event, so a handler
  * dispatched from an apply, like one dispatched from another handler, reads in none, and so does what a handler or an apply schedules.
  */
-const EVENT_LEGAL = ["evt-apply-dispatch", "evt-handler-dispatch", "evt-created-anchor", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply"];
+/**
+ * The fire axis (ADR 0642, measured in Chrome): what delivers a listener on its caller's stack besides `click` and `dispatchEvent`. `steal`
+ * moves focus to another element, so the handler at risk is on the element that loses it; `-wrapper` and `-member` are the same call through
+ * a helper and a member. A project method or a local function called `focus` delivers nothing (`project`, `shadow`).
+ */
+/** A fire cell is about the call that delivers: one shape of the read or write inside it, not the whole cross of what the grids vary. */
+export const fireShape = (context) => (shape) => !context.includes("-fire-") || (!shape.mount && !shape.source && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
+const FIRES = ["focus", "select", "blur", "remove", "steal", "reset", "submit", "validity", "modal", "popover", "focus-wrapper", "focus-member"];
+const firesAt = (...positions) => positions.flatMap((position) => FIRES.map((fire) => `evt-${position}-fire-${fire}`));
+const FIRE_LEGAL = [...firesAt("apply", "handler"), "evt-body-fire-project", "evt-body-fire-shadow"];
+const EVENT_LEGAL = ["evt-apply-dispatch", "evt-handler-dispatch", "evt-created-anchor", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply", ...FIRE_LEGAL];
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -286,7 +296,7 @@ const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch"],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", ...firesAt("body", "memo", "compute", "untrack")],
     recallLegal: [...EVENT_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
@@ -350,7 +360,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"], recallContexts: ["evt-body-dispatch"], recallLegal: [...EVENT_LEGAL],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body")], recallLegal: [...EVENT_LEGAL],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -421,7 +431,7 @@ export const SPEC = {
   // rc.17 dev-shared.js: a pending read inside createTrackedEffect or onSettled serves the committed value (and throws while uninitialized).
   // `deferred` (API_VARIANTS, measured 2026-11-03): a `createDeferred(async () => 1)` source read while pending reports both codes
   // where an async memo does.
-  PENDING_ASYNC_FORBIDDEN_SCOPE: { recallContexts: ["tracked-rerun"], recallVariants: ["deferred"], variantContexts: { deferred: LEAF },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { recallContexts: ["tracked-rerun", ...firesAt("settled")], recallVariants: ["deferred"], variantContexts: { deferred: LEAF },
     contexts: LEAF, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : asyncSignal(name("a"))], call: (node, sigs) => pendingRead(node, sigs),
   },
@@ -1066,7 +1076,55 @@ function loadingSignals(name) {
  * Places `stmts` (which hold the site) in a context. Returns { body, view } (the statements of the component body and its JSX items).
  * Contexts that a layer cannot wrap (an async compute needs its await first) take the layers inside.
  */
+/** The element, the listener and the call of a fire (FIRES), with `handler` the listener's body. */
+function fireParts(fire, handler, kit) {
+  const el = kit.name("el");
+  const base = fire.replace(/-(wrapper|member)$/, "");
+  const made = (tag) => [decl(el, domExpr(`document.createElement("${tag}")`)), expr(domExpr(`document.body.append(${el})`))];
+  const on = (event) => expr(listenExpr(el, event, fn(handler)));
+  const focused = expr(domExpr(`${el}.focus()`));
+  if (fire === "steal") {
+    const other = kit.name("el");
+    return { setup: [...made("input"), decl(other, domExpr('document.createElement("input")')), expr(domExpr(`document.body.append(${other})`)), on("blur"), focused], fire: expr(domExpr(`${other}.focus()`)) };
+  }
+  if (base === "focus") {
+    if (fire === "focus-wrapper") { const go = kit.name("fire"); return { setup: [...made("input"), on("focus"), decl(go, fn([focused]))], fire: expr(call(ref(go))) }; }
+    if (fire === "focus-member") { const box = kit.name("box"); return { setup: [...made("input"), on("focus"), decl(box, domExpr(`{ held: ${el} }`))], fire: expr(domExpr(`${box}.held.focus()`)) }; }
+    return { setup: [...made("input"), on("focus")], fire: focused };
+  }
+  switch (fire) {
+    case "select": return { setup: [...made("input"), on("focus")], fire: expr(domExpr(`${el}.select()`)) };
+    case "blur": case "remove": return { setup: [...made("input"), on("blur"), focused], fire: expr(domExpr(`${el}.${fire}()`)) };
+    case "reset": return { setup: [...made("form"), on("reset")], fire: expr(domExpr(`${el}.reset()`)) };
+    case "submit": return { setup: [...made("form"), on("submit"), expr(domExpr(`${el}.addEventListener("submit", (event) => event.preventDefault())`))], fire: expr(domExpr(`${el}.requestSubmit()`)) };
+    case "validity": return { setup: [...made("input"), expr(domExpr(`${el}.required = true`)), on("invalid")], fire: expr(domExpr(`${el}.checkValidity()`)) };
+    case "modal": return { setup: [...made("dialog"), on("beforetoggle")], fire: expr(domExpr(`${el}.showModal()`)) };
+    case "popover": return { setup: [...made("div"), expr(domExpr(`${el}.popover = "auto"`)), on("beforetoggle")], fire: expr(domExpr(`${el}.showPopover()`)) };
+    default: throw new Error(`no fire ${fire}`);
+  }
+}
+
+/** A fire at a position (`evt-<position>-fire-<fire>`): the stack the delivery runs on. */
+function fireContext(position, fire, stmts, kit) {
+  const v = () => kit.name("v");
+  if (fire === "project") { const lens = kit.name("lens"); return { body: [decl(lens, domExpr("new (class { focus() { return 1; } })()")), expr(domExpr(`${lens}.focus()`))], view: [button(kit.name("b"), stmts)] }; }
+  if (fire === "shadow") { const focus = "focus"; return { body: [decl(focus, fn([ret(num(1))])), expr(call(ref(focus)))], view: [button(kit.name("b"), stmts)] }; }
+  const { setup, fire: call_ } = fireParts(fire, stmts, kit);
+  switch (position) {
+    case "body": return { body: [...setup, call_], view: [] };
+    case "memo": { const m = kit.name("m"); return { body: [...setup, decl(m, prim("memo", fn([call_, ret(num(1))])))], view: [child(v(), call(ref(m)))] }; }
+    case "compute": return { body: [...setup, expr(prim("effect", fn([call_, ret(num(1))]), { apply: fn([]) }))], view: [] };
+    case "settled": return { body: [...setup, expr(prim("settled", fn([call_])))], view: [] };
+    case "untrack": { const m = kit.name("m"); return { body: [...setup, decl(m, prim("memo", fn([expr(prim("untrack", fn([call_]))), ret(num(1))])))], view: [child(v(), call(ref(m)))] }; }
+    case "apply": return { body: [...setup, expr(prim("effect", fn([ret(num(1))]), { apply: fn([call_]) }))], view: [] };
+    case "handler": return { body: setup, view: [button(kit.name("b"), [call_])] };
+    default: throw new Error(`no fire position ${position}`);
+  }
+}
+
 function inContext(context, stmts, kit) {
+  const fired = /^evt-(body|memo|compute|settled|untrack|apply|handler)-fire-(.+)$/.exec(context);
+  if (fired) return fireContext(fired[1], fired[2], stmts, kit);
   const v = () => kit.name("v");
   const asView = (items) => items;
   switch (context) {

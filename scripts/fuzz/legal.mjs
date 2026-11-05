@@ -35,7 +35,7 @@ import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf, writeOracleC
 import { budgetOf } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
-import { LAYERS, LEGAL_CODES, RECALL_TEMPLATE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf } from "./misuse.mjs";
+import { LAYERS, LEGAL_CODES, RECALL_TEMPLATE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, legalVariantsOf, recallLegalOf, fireShape } from "./misuse.mjs";
 import { axesKey, cellList, combined, mountSuffix, mountsOption, pairShapes, pairsOption, recallAxes, recallLeanOf, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
@@ -153,7 +153,7 @@ export function pairLegalCells({ codes } = {}) {
 export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** `--recall`: the shapes the recall axes add to a legal cell (matrix.mjs `recallAxes`), on the legal grid's base shapes. */
-export const recallLegalShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true, lean });
+export const recallLegalShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code), { legal: true, lean }).filter(fireShape(context));
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 /** A legal program's id, from its cell and its shape or index alone (before it is generated): `--grid-shard` picks by it. */

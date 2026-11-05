@@ -887,6 +887,16 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-class-method-write/node_modules/**
 !fixtures/reactive-ir/rc21-event-windows/node_modules/
 !fixtures/reactive-ir/rc21-event-windows/node_modules/**
+!fixtures/reactive-ir/rc21-sync-focus/node_modules/
+!fixtures/reactive-ir/rc21-sync-focus/node_modules/**
+!fixtures/reactive-ir/rc21-sync-focus-member/node_modules/
+!fixtures/reactive-ir/rc21-sync-focus-member/node_modules/**
+!fixtures/reactive-ir/rc21-sync-focus-wrapper/node_modules/
+!fixtures/reactive-ir/rc21-sync-focus-wrapper/node_modules/**
+!fixtures/reactive-ir/rc21-sync-project-focus/node_modules/
+!fixtures/reactive-ir/rc21-sync-project-focus/node_modules/**
+!fixtures/reactive-ir/rc21-sync-shadowed-focus/node_modules/
+!fixtures/reactive-ir/rc21-sync-shadowed-focus/node_modules/**
 !fixtures/reactive-ir/rc21-prop-boundary/node_modules/
 !fixtures/reactive-ir/rc21-prop-boundary/node_modules/**
 !fixtures/reactive-ir/rc21-resolve-leaf/node_modules/

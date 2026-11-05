@@ -181,3 +181,5 @@ does not make later revalidation reads safe.
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — tracked async reads without fallback UI
 - [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) — calls forbidden by a leaf owner's lifetime
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous untracked-read analogue
+
+A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.

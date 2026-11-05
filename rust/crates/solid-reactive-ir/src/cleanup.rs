@@ -1248,7 +1248,9 @@ fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
 /// `show`/`showModal`/`close`/`requestClose`, `AbortController.abort`
 /// (`abort` on its signal), `XMLHttpRequest.open`/`abort`/`send`
 /// (`readystatechange`, `abort`, `loadstart`), `FileReader.abort` (`abort`,
-/// `loadend`) and `Document.execCommand` (`input`).
+/// `loadend`), `Document.execCommand` (`input`) and, measured against ADR 0329's
+/// "tree mutation stays trusted", what moves focus without naming it (ADR 0642):
+/// `remove`/`removeChild` of a focused element (`blur`) and `select` (`focus`).
 /// `lib.dom` also declares `dispatchEvent`, `focus` and `blur` as globals for
 /// `window`.
 fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
@@ -1261,6 +1263,9 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
     ) || matches!(
         (owner, member),
         ("HTMLFormElement", "reset" | "requestSubmit")
+            | ("ChildNode", "remove")
+            | ("Node", "removeChild")
+            | ("HTMLInputElement" | "HTMLTextAreaElement", "select")
             | (
                 "HTMLElement",
                 "showPopover" | "hidePopover" | "togglePopover"

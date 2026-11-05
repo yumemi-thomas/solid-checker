@@ -410,9 +410,15 @@ impl SemanticLookup<'_> {
                         {
                             DispatchReceiver::NoListener
                         }
-                        "HTMLElement.click" => DispatchReceiver::Element,
+                        // ADR 0642: that element's uses hold no `focus`, so it
+                        // never has focus to lose, whatever listens above it.
+                        "ChildNode.remove"
+                            if self.created_element_unattached_to_a_listener(file, call) =>
+                        {
+                            DispatchReceiver::NoListener
+                        }
                         "EventTarget.dispatchEvent" => self.dispatch_receiver(file, call),
-                        _ => continue,
+                        _ => DispatchReceiver::Element,
                     };
                     sites.push(DispatchSite {
                         path: file.path.to_string(),
