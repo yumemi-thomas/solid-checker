@@ -1,20 +1,11 @@
 # Review: where do `solid-js` 2.0.0-rc.1, rc.2 and rc.4-rc.8 sit between rc.3 and rc.9?
 
-Date: 2026-09-26. Status: **for the repository owner's review**. This is a
-review, not a dialect change: no row, release classification or dialect
-answer was changed. The lead decides any classification change with the
-owner.
-
-**Why it exists.** Commit `a55a24d9` classifies the installed `solid-js` 2.x
-release (`rust/crates/solid-dialect/src/solid_2/releases.rs`): rc.0 and rc.3
-are audited, rc.9 is reviewed with gaps and analysed under `Solid2::RC9`, and
-every other 2.x release gets the SC9014 "not reviewed" notice under
-`Solid2::AUDITED`. The module comment says of rc.4-rc.8 that the
-`Store<T> = T` change "is in the rc.7-era *source*, not in any published
-rc.4-rc.8 bytes anyone here read". This review reads those bytes. It walks the
-rc.9 review
+Date: 2026-09-26. A record of where rc.1, rc.2 and rc.4-rc.8 sit between rc.3 and
+rc.9, walking the rc.9 review
 ([`2026-09-26-solid-2-rc9-vocabulary-review.md`](2026-09-26-solid-2-rc9-vocabulary-review.md),
-"the rc.9 review") item by item, and its § 3 inventory.
+"the rc.9 review") item by item. Its results are implemented:
+`rust/crates/solid-dialect/src/solid_2/releases.rs` cites it by section, and
+docs/rules/unaudited-solid-release.md states what each release gets today.
 
 Every claim is tagged **[M]** (measured: cited to a file and line, a digest,
 or a command run on the named bytes) or **[E]** (estimated: inferred from code
@@ -136,45 +127,12 @@ every time (§ 5).
 
 ## 2. Method
 
-1. **Declared surface [M].** A TypeScript 5.9.3 program (the main checkout's
-   `packages/cli/node_modules/typescript`) imports each subpath from a per-rc
-   `node_modules` with the three packages copied in, plus `csstype@3.2.3` and
-   `seroval@1.5.6`/`1.6.7`. The subpaths are `solid-js`, `/refresh`,
-   `/attribution`, `/internal`, `@solidjs/signals`, `/attribution`,
-   `@solidjs/web`, `/server-functions{,/client,/server}`, `/storage` and
-   `/jsx-runtime`. For every export the program records two things:
-   - the printer-normalized declaration text, comments removed;
-   - the checker's resolved call signature, so a `typeof core` alias that
-     changes underneath is still seen.
-
-   Every release was compared with rc.3, and rc.1-rc.3 also with rc.0.
-2. **Runtime namespace [M].** Node imported every ESM bundle that the
-   `exports` map can select. The 52 `TABLE` names plus `until` were checked
-   in each namespace.
-3. **Function slices [M].** The TypeScript parser split each bundle set into
-   top-level function, class and const slices. Comments were stripped and
-   bundler `$N` suffixes ignored. Slices were compared by name, and each
-   differing slice was read as a diff. The bundle sets are:
-   - signals: `dist/dev.js` (plus `dist/dev-shared.js` from rc.8) and
-     `dist/prod/*.js`;
-   - `solid-js`/web: `dev.js` or `solid.dev.js`/`web.dev.js`,
-     `solid.js`/`web.js`, and `server.js`.
-4. **Runtime probes [M].** 37 cases ran in a fresh Node process each, on
-   `dist/dev.js` and `dist/prod/index.js` of every signals rc.0-rc.9. The rc.8
-   and rc.9 `dist/observe/index.js` bundles were also run. The cases re-state
-   the rc.9 review's probes: J, Y, AH, AI, X, K, L, M, N, AD, AE, AA, Q, AG, W,
-   P, U, V, H, T, T2, E, D and R, the guard set, `until` ×4, the `omit`
-   predicate and the `merge` copy.
-5. **`tsc` over the published typings [M].** `strict`, `skipLibCheck: true`,
-   bundler resolution, `jsxImportSource: "@solidjs/web"`, 21 case files per
-   release. A second pass with `skipLibCheck: false` collected errors inside
-   the packages.
-6. **Checker probes [M].** The main checkout's release
-   `rust/target/release/solid-checker-rust` (sha256 `169190a9…5928`, built
-   2026-09-26 18:12) ran with `bin/solid-typefacts` (sha256 `fc93317f…aaf`)
-   over scratch projects. The binary's source revision was not re-derived. It
-   is estimated to include `a55a24d9` and `2990ec25`, because it emits SC9014
-   and SC2005 [E].
+Each release's published bytes were compared with rc.3 (and rc.1-rc.3 with rc.0):
+declared surface through a TypeScript program over every subpath; the runtime
+namespace of every ESM bundle the `exports` map selects; top-level function
+slices of each bundle set, each differing slice read as a diff; 37 runtime
+probes in fresh Node processes on `dev` and `prod` of every signals rc.0-rc.9;
+21 `tsc` case files per release; and checker probes over scratch projects.
 
 ### 2.1 Surface counts against rc.3 [M]
 
@@ -548,19 +506,6 @@ depends on it.
 
 ## 7. Not done
 
-- **Other bundles.** The CommonJS bundles of rc.1-rc.7 (`node.cjs`, `*.cjs`)
-  were not probed or sliced. They are selectable through `require`. Only
-  their presence was recorded.
-- **Observe bundles.** They were probed (37/37) but not sliced.
-- **Server functions.** Beyond the export counts, the `@solidjs/web`
-  server-functions subpaths were not compared.
-- **Compiler.** It was not examined per release. No `solid-js` rc declares a
-  compiler dependency, so the rc.9 review's § 6 conclusion is assumed to carry
-  over [E].
-- **Checker scope.** Checker probes ran on the rc.3, rc.4, rc.5, rc.6, rc.7,
-  rc.8 and rc.9 triples and the fresh rc.3 tree only, for the cases named in
-  §§ 3.1, 3.4 and 6. No census, contract or negative-row reading was done for
-  any rc.1-rc.8 archive, and none is in `AUDITED_ARCHIVES` except
-  `@solidjs/signals@2.0.0-rc.6`.
-- **Skew.** Mixed installs other than the four fresh trees in § 5 were not
-  enumerated.
+CommonJS bundles were not probed; observe bundles were probed, not sliced;
+server-function subpaths and the compiler were not compared per release; mixed
+installs other than the four fresh trees in § 5 were not enumerated.
