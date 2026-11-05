@@ -3735,5 +3735,11 @@
   "found": "the corpus move ADR 0652 left open, ViewerToolbar `props.onOpen`",
   "fixed": "ADR 0663",
   "outside": "the defect needs the member to be the setter itself, and a context's statements can only be wrapped: `go: () => { stmts }` is opened on its own, so old and new agree on all 1,758 programs of a `sibling-type` context, tried and removed. The program is scripts/fuzz/patterns/values/sibling-type-go: `node scripts/fuzz/patterns.mjs` fails it on the old build and passes it on this one. Fixture rc21-sibling-member-type holds each branch"
+ },
+ {
+  "finding": "`clientOnly` and `lazy` with a server pass read as a windowed mount: SC1001 and SC5001 violations where the first mount is quiet: api/d05, d19, census/b03, j16 (ADR 0664)",
+  "found": "the flip audit, async.md, and the SSR audit's D7",
+  "fixed": "ADR 0664",
+  "outside": "`clientOnly` needs a second module, and a generated program is one file with no `import()`. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Host witnesses co-read, lz-pending; fixture rc21-deferred-mount holds each branch"
  }
 ]

@@ -23,12 +23,15 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 
 | Merge | `059beb67a` from Track W, the first merge | 0 moved by the merge | `make verify` green, `check.mjs all` 181 of 335 (no keep, regress or warn fails), HOST 20 of 24, patterns 381 open |
 | Member types | ADR 0663 | +17 U, all SC9012, 0 V moved | ViewerToolbar explained: a member's type answered for its receiver. `outside`, program in `patterns/values/sibling-type-go` |
+| `clientOnly`, `lazy` + SSR | ADR 0664, `async.md` step 4 | see below | `ExecutionPaths` `DeferredMount` arms; HOST 22 of 25, 3 `NoHydration` rows left; 4 patterns left the open list, 377 open |
 
-Next, owner's order: (1) done, ADR 0659, `ExecutionPaths`, `--rendering hydrated`; (2) done, `scripts/flip/host-witnesses.json`, `check.mjs HOST` 20 of 24, the other 4 marked `open`; `judgeSsr` reads every client rule; (3) SC5003+SC5001 by `async.md`, steps 0-3, 5 done, next step 4 `clientOnly` and `lazy` with SSR (`D7`), then 6, 7, 8, plus `lazy` with SSR in `mount-form-window`; (4) SC1002, SC8014, SC8015, SC1001 (add the arm fact and a `NoHydration` blocker: `unplaced_run` misses D1, D3, because both are `MayRun`), SC9012. Latest sweep: `sweep-dynsw.json`, 16,610 U, 383 V.
+Next, owner's order: (1) done, ADR 0659, `ExecutionPaths`, `--rendering hydrated`; (2) done, `scripts/flip/host-witnesses.json`, `check.mjs HOST` 20 of 24, the other 4 marked `open`; `judgeSsr` reads every client rule; (3) SC5003+SC5001 by `async.md`, steps 0-5 done, next 6, 7, 8 and the fuzz contexts (`dyn-jsx-*`, `portal-*`, `*-later`, `BODY_LABEL`, `<Portal>` in a kept grid); (4) SC1002, SC8014, SC8015, SC1001 (add the arm fact and a `NoHydration` blocker: `unplaced_run` misses D1, D3, because both are `MayRun`), SC9012. Latest sweep: `sweep-co.json`, 16,652 U, 383 V (the merge added 25, W's ADR 0705; ADR 0663 added 17).
 
 `sc1001.md`, `f0.md`, `sc9012-census.md` beat the plan: reread the row's section before each rule. They add to rules in between: SC5003+SC5001 owns `dynamic_component_entry`, the `<Dynamic>` hint, check `cases3-p03` there, and maybe C-D4 (`n01 n03 n06`); SC1001 has 10 steps and needs `patterns.mjs:130`; H-D5 lands before the census; `check.mjs` needs SC9012 for 9 ids (W's 8 and `o12`) in the census commit.
 
 Open for the census: `const hook = c ? useThing : useThing; const t = hook(); createMemo(() => { t.go(1); ... })` is certified and Chrome throws (`research/probes/v1/a`, `v2/a-nosib`). A hook picked by a conditional reaches no `handed_value` arm. Not a sibling-type case. Close it with F0 or the census, and add it to the fuzzer there.
+
+Handoff at ADR 0664: helpers `chk.sh` (scratch, oracle path fixed), `rd.py <cmp> <sweep> x` (each added site with its source line), `rm/` (merge build), `r9012/`, `rco/`. Do first: step 6 (`computation_provenance`, four discovery sites, wording flag, C-D4), then 7 (`lazy` tag row), 8 (`j06`), the fuzz contexts. Step 6 reaches W: an `any`-computed `createOptimistic` starts to hold, tell W in the commit.
 
 Surprises:
 - ADR 0659 limits to carry: a site in a helper only an arm calls keeps its finding; dependency source is the client graph on both paths; the sweep still runs `csr`.
@@ -38,6 +41,9 @@ Surprises:
 - `type_descriptor_spans` also turns on callability, and a descriptor is evidence other consumers read: demanding one on a coerced operand moved an unrelated SC9012. Use `callability_only_spans` when only callability is wanted.
 - `ir-read-lint` matches by name: `.functions.iter()` in a file that declares a `functions` map counts as a hash iteration.
 - `diagnostics_process.rs` pins per-fixture finding counts: extending a fixture moves them. `make coverage` does not show this; `nt.sh` does.
+- `make verify` selects `repro-causes`, `verify-delta` does not for a rule change. Run it when a rule moves or rewords a finding: `fixtures/uncertifiable-repro/cases.json` pins causes, and 5 had gone stale before the first merge. W's messages too: `uncertifiable-causes.mjs` matches wording.
+- A generator context can only wrap `stmts`: a member that must itself be the setter is outside it. Keep such a program in `scripts/fuzz/patterns/`, where the old build fails it as `NEW false-clean`.
+- A JSX element in a context's `body` is created, not rendered. `children(() => <X />)()` forces it.
 - `ce6a831b2` and `ae2327986` are base repairs for Track W: 3 process tests, the read ratchet, WASM parity. All left behind by deliberate changes; `make verify` had never run on the base.
 - `cases.json` and `rediscovery.json` are append-only: edit by text. `json.dumps` reformats the whole file and makes a certain merge conflict worse.
 - The branch cut had 3 red Rust tests (none ran `make verify` there); fixed in the commit `test(flip-base): ...`, for Track W to pick up. Rust tests are 1,252 of 1,252 from then on; `nt.sh` prints anything new. Pass `BASE=<last rule commit>` to verify-delta, or it maps thousands of paths against `origin/main`.

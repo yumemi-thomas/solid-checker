@@ -1,0 +1,1 @@
+A `clientOnly` module's own body has no one window: its first mount goes through a gate memo, a later one calls it. `ClientBody`'s reads are uncertifiable, blocker `mount-form-window`, and `.then` makes the whole of `Picked` so. `Child` has its window back and `LazyBody`, with no server pass here, keeps its violation. ADR 0664.

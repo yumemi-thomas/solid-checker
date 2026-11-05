@@ -792,6 +792,7 @@ pub fn project_findings(
         }
     }
     findings.retain_mut(|finding| {
+        program.execution_paths.apply_deferred_mount(finding);
         !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
     });
     finish_findings(findings, total_started, construction_started)

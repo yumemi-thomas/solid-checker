@@ -72,7 +72,8 @@ async function judge(id) {
     const seen = [...(w.runtime.client ?? []), ...(w.runtime.server ?? [])];
     const claimed = new Set(seen.flatMap((code) => codeRules[code] ?? []));
     const unearned = (out.findings ?? []).filter((f) => f.kind === "violation" && ruleHasRuntimeCounterpart(f.rule) && !claimed.has(f.rule));
-    const missed = [...claimed].filter((rule) => !(out.findings ?? []).some((f) => f.rule === rule));
+    // One rule of a code covers it: STRICT_READ_UNTRACKED maps to four, and a program shows one of them.
+    const missed = seen.filter((code) => (codeRules[code] ?? []).length && !(out.findings ?? []).some((f) => codeRules[code].includes(f.rule)));
     ok = !unearned.length && !missed.length;
     if (!ok) { fail++; rows.push(`FAIL host    ${id}: ${w.open ? `open (${w.open}) ` : ""}unearned ${unearned.map((f) => f.id).join(" ") || "none"}, missed ${missed.join(" ") || "none"}; ${now.join(" ") || "no findings"}`); }
     return;

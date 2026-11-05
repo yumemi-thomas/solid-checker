@@ -140,8 +140,23 @@
   "runtime": {
    "client": [],
    "server": []
+  }
+ },
+ "HOST/lz-pending": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { Loading, lazy } from \"solid-js\";\nconst L = lazy(() => import(\"./X\"));\nexport const App = () => <main><Loading fallback=\"f\"><L /></Loading></main>;\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "X.tsx": "import { createMemo } from \"solid-js\";\nexport default function X() {\n  const m = createMemo(async () => { await new Promise((r) => setTimeout(r, 5)); return 5; });\n  const v = m();\n  return <i>xp {v}</i>;\n}\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
   },
-  "open": "SC5003+SC5001: clientOnly before load, mount-form-window"
+  "runtime": {
+   "client": [
+    "STRICT_READ_UNTRACKED"
+   ],
+   "server": []
+  }
  },
  "HOST/co-write": {
   "rule": "HOST",

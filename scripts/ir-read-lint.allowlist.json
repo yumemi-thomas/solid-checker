@@ -70,7 +70,7 @@
     "files()": 3
   },
   "rust/crates/solid-reactive-ir/src/execution_paths.rs": {
-    "facts.files": 2
+    "facts.files": 3
   },
   "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
     "files()": 1

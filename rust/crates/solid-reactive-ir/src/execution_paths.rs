@@ -31,6 +31,11 @@ pub enum ArmSide {
     /// Under a build constant no selection decides here (`typeof window`,
     /// `isDev`, `process.env`, `import.meta.env`).
     BuildConstant,
+    /// The body of a component `clientOnly` loads, or `lazy` where a server pass
+    /// exists. Its first mount goes through a gate memo or resumes served
+    /// content, a later one calls it in a window, so no read claim holds here
+    /// (ADR 0664). A child's own body has its window back.
+    DeferredMount,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -59,11 +64,38 @@ impl ExecutionPaths {
                 && arm.start_byte <= site.start_byte
                 && site.end_byte <= arm.end_byte
         };
-        let arms = || self.arms.iter().filter(inside);
+        let arms = || {
+            self.arms
+                .iter()
+                .filter(inside)
+                .filter(|arm| arm.side != ArmSide::DeferredMount)
+        };
         arms()
             .find(|arm| arm.side == ArmSide::ServerOnly)
             .or_else(|| arms().next())
             .map(|arm| arm.side)
+    }
+
+    /// ADR 0664: a read claim in a body whose mount form is open.
+    pub(crate) fn apply_deferred_mount(&self, finding: &mut Finding) {
+        let site = &finding.primary_location;
+        if finding.kind == "violation"
+            && matches!(finding.id.as_str(), "SC1001" | "SC5001" | "SC5003")
+            && self.arms.iter().any(|arm| {
+                arm.side == ArmSide::DeferredMount
+                    && arm.path == site.path.as_ref()
+                    && arm.start_byte <= site.start_byte
+                    && site.end_byte <= arm.end_byte
+            })
+        {
+            finding.kind = "uncertifiable".into();
+            finding.message = format!(
+                "this body is mounted by a loader whose first mount and later mounts differ in whether a read window is open, so this claim is not proven either way; if a window is open: {}",
+                finding.message
+            );
+            crate::blockers::MOUNT_FORM_WINDOW.clone_into(&mut finding.analysis_context);
+            finding.fixes.clear();
+        }
     }
 
     /// Answers one finding of a rule that claims the client runtime: `false`
@@ -136,8 +168,66 @@ pub(crate) fn execution_paths(
     let mut arms = Vec::new();
     for file in &facts.files {
         file_arms(file, dialect, &mut arms);
+        deferred_mount_arms(facts, file, runtime, dialect, &mut arms);
     }
     ExecutionPaths { client, arms }
+}
+
+/// ADR 0664: the bodies a client-only or resumed loader mounts. A module named
+/// only through a shape this does not read gives the whole file: the mount is
+/// open, so nothing in it is claimed.
+fn deferred_mount_arms(
+    facts: &solid_facts::ProjectFacts,
+    file: &solid_facts::FileFacts,
+    runtime: &RuntimeEnvironment,
+    dialect: &dyn solid_dialect::Dialect,
+    arms: &mut Vec<BuildArm>,
+) {
+    let server_pass = runtime.selects_server_build()
+        || matches!(runtime.rendering, Some(RuntimeRendering::Hydrated));
+    for load in &file.ast.module_loads {
+        let Some(specifier) = load.specifier.as_deref() else {
+            continue;
+        };
+        let loaded = file.ast.arguments_containing(load.span).any(|(call, _)| {
+            named_import(file, dialect, call.callee, "clientOnly")
+                || (server_pass && named_import(file, dialect, call.callee, "lazy"))
+        });
+        if !loaded {
+            continue;
+        }
+        let Some(path) = solid_facts::resolve_relative_module_path(
+            file.path.as_str(),
+            specifier,
+            facts.files.iter().map(|target| target.path.as_str()),
+        ) else {
+            continue;
+        };
+        let Some(target) = facts
+            .files
+            .iter()
+            .find(|target| target.path.as_str() == path)
+        else {
+            continue;
+        };
+        let body = target
+            .ast
+            .exports
+            .iter()
+            .find(|export| {
+                export.kind == solid_facts::ast::ExportKind::Default
+                    && export.module.is_none()
+                    && target.ast.functions_within(export.span).next().is_some()
+            })
+            .map(|export| (u64::from(export.span.start), u64::from(export.span.end)));
+        let (start_byte, end_byte) = body.unwrap_or((0, u64::MAX));
+        arms.push(BuildArm {
+            path: path.to_owned(),
+            start_byte,
+            end_byte,
+            side: ArmSide::DeferredMount,
+        });
+    }
 }
 
 fn client_path(

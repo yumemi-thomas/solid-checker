@@ -183,3 +183,5 @@ does not make later revalidation reads safe.
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous untracked-read analogue
 
 A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.
+
+A body `clientOnly` loads, or `lazy` where a server pass exists, is uncertifiable, blocker `mount-form-window`: the first mount has no window and a later one does (ADR 0664).

@@ -203,15 +203,6 @@
    ]
   },
   {
-   "id": "api/d05-clientOnly-first",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/d08-Dynamic-store-read",
    "item": "C-D1/T-D3",
    "outcome": "false-positive",
@@ -227,15 +218,6 @@
    "codes": [],
    "rules": [
     "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/d19-pending-clientOnly",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "pending-async-unsuspendable-read"
    ]
   },
   {
@@ -967,15 +949,6 @@
    ]
   },
   {
-   "id": "census/b03-clientOnly-read",
-   "item": "section-4 census:b",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "census/b04-lazy-read",
    "item": "section-4 census:b",
    "outcome": "false-clean",
@@ -1313,17 +1286,6 @@
     "ASYNC_OUTSIDE_LOADING_BOUNDARY"
    ],
    "certified": true
-  },
-  {
-   "id": "census/j16-clientOnly-mount",
-   "item": "section-4 census:j",
-   "outcome": "false-positive",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "census/k03-window-createRoot",
