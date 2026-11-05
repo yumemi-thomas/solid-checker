@@ -981,3 +981,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-content-competition/node_modules/**
 !fixtures/reactive-ir/reactive-handler-frozen-roots/node_modules/
 !fixtures/reactive-ir/reactive-handler-frozen-roots/node_modules/**
+!fixtures/reactive-ir/rc21-sync-compute-open/node_modules/
+!fixtures/reactive-ir/rc21-sync-compute-open/node_modules/**

@@ -392,7 +392,14 @@ fn retired_policy1_async_summary_no_longer_supplies_behavior() {
             .join("tests/fixtures/stale-async-summary/tsconfig.json"),
         Some("solid-v2"),
     );
-    assert!(findings.iter().all(|finding| finding["id"] != "SC7002"));
+    // The retired summary proves nothing, so no violation. ADR 0655: an import
+    // with no proof either way is uncertifiable, never a silent clean.
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC7002")
+            .all(|finding| finding["kind"] == "uncertifiable")
+    );
 }
 
 #[test]

@@ -125,47 +125,100 @@ impl StaticApiContext<'_> {
                     crate::call_option_literal(file, call, options_index, "sync"),
                 )
             });
-            let async_compute = || {
-                call.arguments
-                    .first()
-                    .is_some_and(|argument| computation_is_async(self.lookup, file, argument.span))
+            // ADR 0655: what the computation does on a pass. A return typed
+            // `any`, a type that may be sync and a value no fact describes are
+            // open; only an async function or a Promise on every path proves
+            // that a pass returns one.
+            let compute = || {
+                let argument = call.arguments.first()?;
+                let lookup = self.lookup;
+                // A spread of an exact one-element tuple has no options slot, so
+                // nothing there can say `sync`.
+                let spread_tuple = file
+                    .ast
+                    .spreads
+                    .iter()
+                    .find(|spread| argument.spread && spread.span == argument.span)
+                    .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
+                    .and_then(|entity| entity.tuple_shape)
+                    .and_then(typefacts::TupleShape::exact_length);
+                if spread_tuple == Some(1) && call.arguments.len() == 1 {
+                    return None;
+                }
+                // `createSignal(0, options)` has no computation: only a value
+                // that may be a function can return anything.
+                let entity = lookup.entity_at(file.path.as_str(), argument.span);
+                if !argument.spread
+                    && (matches!(
+                        argument.runtime_value_kind,
+                        solid_facts::ast::RuntimeValueKind::Primitive
+                            | solid_facts::ast::RuntimeValueKind::Nullish
+                    ) || entity.and_then(|entity| entity.callability)
+                        == Some(typefacts::Callability::NonCallable))
+                {
+                    return None;
+                }
+                if computation_is_async(lookup, file, argument.span) {
+                    let open =
+                        crate::owners::computation_may_answer_sync(lookup, file, argument.span);
+                    return Some(if open {
+                        StaticSource::Open
+                    } else {
+                        StaticSource::Promise("")
+                    });
+                }
+                Some(static_source_state(file, argument, self))
             };
             // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
-            // a non-literal `sync:` value) may assert `sync: true`: with an
-            // async computation that is an obligation, not a silent clean.
+            // a non-literal `sync:` value) may assert `sync: true`: with a
+            // computation not proven synchronous that is an obligation, not a
+            // silent clean.
             if let Some((false, solid_dialect::OptionLiteral::Unknown)) = sync_literal
-                && async_compute()
+                && matches!(
+                    compute(),
+                    Some(StaticSource::Promise(_) | StaticSource::Open)
+                )
             {
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
                     rule: "sync-computation-received-async".into(),
                     message: format!(
-                        "{primitive}'s computation can return a Promise or AsyncIterable, and its options cannot be read statically; if they set sync: true, dev throws SYNC_NODE_RECEIVED_ASYNC and production stores the unawaited value, and whether they do cannot be proven either way"
+                        "{primitive}'s computation is not proven synchronous, and its options cannot be read statically; if they set sync: true and it returns a Promise or AsyncIterable, dev throws SYNC_NODE_RECEIVED_ASYNC and production stores the unawaited value, and whether it does cannot be proven either way"
                     ),
                     hint: "Pass the options as an object literal with a literal sync value, so solid-checker can read it; drop sync: true for an async computation.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: crate::blockers::COMPUTE_RETURN_UNPROVEN.to_owned(),
                     fixes: vec![],
                     uncertain: true,
                 });
             }
             if let Some((true, _)) = sync_literal
-                && async_compute()
+                && let Some(state @ (StaticSource::Promise(_) | StaticSource::Open)) = compute()
             {
+                let uncertain = matches!(state, StaticSource::Open);
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
                     rule: "sync-computation-received-async".into(),
                     message: format!(
-                        "{primitive} is marked sync: true but its computation can return a Promise or AsyncIterable; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is"
+                        "{primitive} is marked sync: true but its computation {}; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is",
+                        if uncertain {
+                            "may return a Promise or AsyncIterable, and nothing proves it does not"
+                        } else {
+                            "returns a Promise or AsyncIterable"
+                        }
                     ),
                     hint: format!(
                         "Drop sync: true and let the read suspend to a <{}> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here.",
                         dialect.boundary_name(solid_dialect::Boundary::Async)
                     ),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: if uncertain {
+                        crate::blockers::COMPUTE_RETURN_UNPROVEN.to_owned()
+                    } else {
+                        String::new()
+                    },
                     fixes: vec![],
-                    uncertain: false,
+                    uncertain,
                 });
             }
             // SC2004: resolve() in a tracked scope. Probed on

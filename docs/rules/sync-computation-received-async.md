@@ -58,3 +58,11 @@ reading the settled accessor here.
 ## Related
 
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — consuming async computations
+
+## Uncertifiable
+
+A violation needs an async function, or a return type that is a Promise on every path.
+"Can return" is not "returns": a return that may be sync, or typed `any`, `unknown` or a
+type parameter (Type Facts `returnOpen`), and a value no fact describes are uncertifiable,
+blocker `compute-return-unproven` (ADR 0655). Options the syntax cannot read are
+uncertifiable beside any computation not proven synchronous.

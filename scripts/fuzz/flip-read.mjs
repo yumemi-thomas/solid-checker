@@ -13,6 +13,14 @@ export const STATIC_SOURCES = {
   "src-options": '() => Promise.resolve("p" as const), ({ static: true }) as { static: boolean }',
 };
 
+// ADR 0655: a `sync: true` computation whose return no type settles. Each returns a Promise when it runs.
+export const SYNC_COMPUTES = {
+  "cmp-any": '((() => Promise.resolve(1)) as () => any), { sync: true }',
+  "cmp-unknown": '((() => Promise.resolve(1)) as () => unknown), { sync: true }',
+  "cmp-cond": '() => (Math.random() >= 0 ? Promise.resolve(1) : 1), { sync: true }',
+  "cmp-options": 'async () => 1, ({ sync: true }) as { sync: boolean }',
+};
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
 };

@@ -3590,5 +3590,17 @@
    "mx-dynamic-static-promise-body-src-options-direct-none"
   ],
   "rediscovered": "ec76609d7: 1,500 false cleans of the five src-* variants; ADR 0654: 0"
+ },
+ {
+  "finding": "SC7002 read `can_return_async` alone: a compute returning `any` or `unknown` threw in dev, certified; a branch not taken was a violation Chrome did not report (ADR 0655)",
+  "found": "the flip audit",
+  "fixed": "ADR 0655",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-body-cmp-any-direct-none",
+   "mx-sync-node-received-async-body-cmp-unknown-direct-none"
+  ],
+  "rediscovered": "076ad9a8b: 1,140 false cleans of cmp-any and cmp-unknown; ADR 0655: 0"
  }
 ]

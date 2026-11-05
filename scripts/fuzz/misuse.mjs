@@ -19,7 +19,7 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, STATIC_SOURCES, flipReadContext } from "./flip-read.mjs";
+import { FLIP_READ_CONTEXTS, STATIC_SOURCES, SYNC_COMPUTES, flipReadContext } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
@@ -568,8 +568,8 @@ export const SPEC = {
     call: (node, sigs) => (node.variant === "store-keys" ? member(sigs[0].name, (o) => `Object.keys(${o})`) : node.variant === "store-in" ? member(sigs[0].name, (o) => `"v" in ${o}`) : node.variant === "store-has-own" ? member(sigs[0].name, (o) => `Object.hasOwn(${o}, "v")`) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : pendingRead(node, sigs)),
   },
   SYNC_NODE_RECEIVED_ASYNC: {
-    variants: ["memo", "effect"], contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
-    call: (node) => (node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
+    variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
+    call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant]) : node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
