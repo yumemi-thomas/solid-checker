@@ -3952,5 +3952,17 @@
    "lg-strict-read-untracked-arm-tag-signal-direct-none"
   ],
   "rediscovered": "the checker at b3130c6af on legal.mjs --recall (codes STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE, STORE_WRITE_OUTSIDE_SETTER; flip-read.mjs contexts mount-named, arm-helper, arm-helper-chain, arm-tag): 212 false positive, 4,652 unexecuted; the fix 13,854 programs, 0 of either. D3 has no generator host: HOST h10 h11 h12 hold it, 25 of 25"
+ },
+ {
+  "finding": "a window-inheriting call in a named function not proven to run where it is written: V from the lexical component role, Chrome quiet (a function only handed to a timer or `.then`, or only called from handlers), or unplaced (an object host, a returned closure, a helper's argument)",
+  "found": "sc1001.md step 4, its named forms; the two-handler shape by a probe",
+  "fixed": "ADR 0679",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-root-named-timer-signal-direct-none",
+   "lg-strict-read-untracked-root-named-then-signal-direct-none"
+  ],
+  "rediscovered": "the checker at 32fb19025 on legal.mjs --recall (flip-read.mjs contexts root-named-timer, root-named-then): 1,720 false positive, 224 unexecuted; the fix 3,720 programs, 0 of either, root-two-handlers 1,860 clean or open on both builds. A helper called only from two handlers fails only as pattern api/root-two-handlers, NEW false-positive on the build before"
  }
 ]

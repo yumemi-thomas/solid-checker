@@ -2159,7 +2159,7 @@ pub(super) fn inheriting_call_role(
             )
         }
         other if other.reports_untracked_read() => {
-            reporting_role_where_the_call_runs(file, call, other, lookup)
+            reporting_role_where_the_call_runs(file, call, other, allowed, lookup, classifying)
         }
         other => other,
     }
@@ -2173,7 +2173,9 @@ fn reporting_role_where_the_call_runs(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     at_call: ExecutionRole,
+    allowed: &[Span],
     lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
     let at = super::write_roles::climb_in_place_layers(file, call.callee, lookup)
         .map_or(call.callee, |climb| climb.at);
@@ -2192,7 +2194,140 @@ fn reporting_role_where_the_call_runs(
     if crate::local_access::function_escapes_unfollowed(file, at, lookup) {
         return role_arm!("callee_roles.inheriting-unplaced", ExecutionRole::Unknown);
     }
+    // `UntrackedRendering` here is lexical: the function holding the call is
+    // written in a component, which does not put it on the body's stack.
+    if at_call == ExecutionRole::UntrackedRendering
+        && let Some(holder) = crate::owners::containing_ast_function(&file.ast, at)
+    {
+        return holder_call_role(file, holder, at, at_call, allowed, lookup, classifying);
+    }
     at_call
+}
+
+/// The role a window-inheriting call keeps in `holder`, a function not proven to
+/// run in place: a compiler or primitive callback has its own role. A binding
+/// answers from where it runs: one reporting position proves the claim, and
+/// positions none of which reports prove it silent. A binding only handed to
+/// schedulers has no window, and anything else is placed nowhere (ADR 0679).
+fn holder_call_role(
+    file: &solid_facts::FileFacts,
+    holder: &solid_facts::ast::FunctionFact,
+    at: Span,
+    at_call: ExecutionRole,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    use crate::local_access::HandOff;
+    let compiler_callback = file
+        .compiler
+        .callback_roles
+        .iter()
+        .any(|callback| callback.span.contains(holder.span));
+    let primitive_callback = file.ast.arguments_containing(at).any(|(call, index)| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .callback_semantics_at(primitive, index, call.arguments.len())
+                    .execution
+                    .is_some()
+            })
+    });
+    if compiler_callback || primitive_callback {
+        return at_call;
+    }
+    let Some(name) = crate::owners::function_binding_name(file, holder) else {
+        return role_arm!(
+            "callee_roles.inheriting-holder-unnamed",
+            ExecutionRole::Unknown
+        );
+    };
+    let mut hand_offs = Vec::new();
+    crate::local_access::binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+    if hand_offs.is_empty() {
+        return role_arm!(
+            "callee_roles.inheriting-holder-no-hand-off",
+            ExecutionRole::Unknown
+        );
+    }
+    let mut positions = Vec::new();
+    for hand_off in &hand_offs {
+        match hand_off {
+            HandOff::Call => positions.extend(direct_call_positions(file, name.span, lookup)),
+            HandOff::Inline(carrier) => positions.push(*carrier),
+            HandOff::FreshStack | HandOff::Value => {}
+            _ => {
+                return role_arm!(
+                    "callee_roles.inheriting-holder-handed",
+                    ExecutionRole::Unknown
+                );
+            }
+        }
+    }
+    let mut roles = Vec::new();
+    for position in positions {
+        let key = (file.path.to_string(), position);
+        if !classifying.insert(key.clone()) {
+            return role_arm!(
+                "callee_roles.inheriting-holder-recursive",
+                ExecutionRole::Unknown
+            );
+        }
+        roles.push(semantic_execution_role_within(
+            file,
+            position,
+            allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        ));
+        classifying.remove(&key);
+    }
+    if roles.iter().any(|role| role.reports_untracked_read()) {
+        return at_call;
+    }
+    if roles.contains(&ExecutionRole::Unknown) {
+        return role_arm!(
+            "callee_roles.inheriting-holder-unplaced",
+            ExecutionRole::Unknown
+        );
+    }
+    role_arm!(
+        "callee_roles.inheriting-holder-silent",
+        ExecutionRole::DeferredCallback
+    )
+}
+
+/// The calls whose callee is exactly the binding at `name`, in its own file.
+fn direct_call_positions(
+    file: &solid_facts::FileFacts,
+    name: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let Some(symbol) = lookup
+        .entities()
+        .exact(&crate::execution_role::location(file.path.shared(), name))
+    else {
+        return Vec::new();
+    };
+    lookup
+        .symbol_references(symbol.as_str())
+        .iter()
+        .filter(|reference| reference.path.as_ref() == file.path.as_str())
+        .filter_map(|reference| {
+            let at = Span::new(
+                u32::try_from(reference.start_byte).ok()?,
+                u32::try_from(reference.end_byte).ok()?,
+            );
+            file.ast
+                .calls_with_peeled_callee(at)
+                .next()
+                .map(|call| call.span)
+        })
+        .collect()
 }
 
 /// ADR 0547: the read role of `span`, written in the body of `function`, an

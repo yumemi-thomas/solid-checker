@@ -1240,7 +1240,8 @@ function fireParts(fire, handler, kit) {
     case "reset": return { setup: [...made("form"), on("reset")], fire: expr(domExpr(`${el}.reset()`)) };
     case "submit": return { setup: [...made("form"), on("submit"), expr(domExpr(`${el}.addEventListener("submit", (event) => event.preventDefault())`))], fire: expr(domExpr(`${el}.requestSubmit()`)) };
     case "validity": return { setup: [...made("input"), expr(domExpr(`${el}.required = true`)), on("invalid")], fire: expr(domExpr(`${el}.checkValidity()`)) };
-    case "modal": return { setup: [...made("dialog"), on("beforetoggle")], fire: expr(domExpr(`${el}.showModal()`)) };
+    // Closed on the spot: an open modal makes the document inert, and the driver's next click then waits out its timeout (ADR 0679's run).
+    case "modal": return { setup: [...made("dialog"), on("beforetoggle")], fire: expr(domExpr(`(${el}.showModal(), ${el}.close())`)) };
     case "popover": return { setup: [...made("div"), expr(domExpr(`${el}.popover = "auto"`)), on("beforetoggle")], fire: expr(domExpr(`${el}.showPopover()`)) };
     default: throw new Error(`no fire ${fire}`);
   }

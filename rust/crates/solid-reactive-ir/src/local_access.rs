@@ -7994,7 +7994,7 @@ pub(crate) enum HandOff {
 
 /// The hand-offs of every same-file reference of the binding named at `name`
 /// ([`HandOff`]); copies remain obligations.
-fn binding_hand_offs(
+pub(crate) fn binding_hand_offs(
     file: &solid_facts::FileFacts,
     name: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,

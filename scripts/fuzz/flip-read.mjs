@@ -38,6 +38,8 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named"],
+  // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach"],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
@@ -46,7 +48,7 @@ export const FLIP_READ_LEGAL = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag"],
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag"],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
@@ -91,6 +93,17 @@ export function flipReadContext(context, stmts, kit) {
     const [h, g] = [kit.name("f"), kit.name("g")];
     const held = context === "arm-helper" ? [decl(h, fn(stmts))] : [decl(g, fn(stmts)), decl(h, fn([expr(call(ref(g)))]))];
     return { body: [...held, expr(domExpr(`if (isServer) ${h}();`, ["isServer"]))], view: [] };
+  }
+  if (context.startsWith("root-named-") || context === "root-two-handlers") {
+    const h = kit.name("f");
+    const held = decl(h, fn([expr(prim("root", fn(stmts)))]));
+    switch (context) {
+      case "root-named-timer": return { body: [held, expr(domExpr(`setTimeout(${h}, 0)`))], view: [] };
+      case "root-named-then": return { body: [held, expr(domExpr(`Promise.resolve().then(${h})`))], view: [] };
+      case "root-named-twice": return { body: [held, expr(call(ref(h))), expr(call(ref(h)))], view: [] };
+      case "root-named-foreach": return { body: [held, expr(domExpr(`[1].forEach(${h})`))], view: [] };
+      default: return { body: [held], view: [button(kit.name("b"), [expr(call(ref(h)))]), button(kit.name("b"), [expr(call(ref(h)))])] };
+    }
   }
   if (context === "arm-tag") {
     const k = kit.name("K");
