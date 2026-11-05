@@ -367,7 +367,8 @@ impl StaticApiContext<'_> {
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
-                && self.lookup.synchronous_event_flush_dispatch_present()
+                && (self.lookup.synchronous_event_flush_dispatch_present()
+                    || crate::execution_role::in_denied_handler(file, call.span))
                 && !result.violations.iter().any(|violation| {
                     violation.id == "SC2008"
                         && violation.location == location(file.path.shared(), call.callee)
@@ -388,9 +389,9 @@ impl StaticApiContext<'_> {
                         id: "SC2008".into(),
                         rule: "flush-in-effect-callback".into(),
                         message: format!(
-                            "{primitive}() runs in a handler, and something here dispatches an \
-                             event synchronously: from an effect's apply it would run inside the \
-                             flush draining effects"
+                            "{primitive}() runs in a handler that may be delivered synchronously \
+                             (a dispatch here, or a state change for an event no call names): \
+                             from an effect's apply it would run inside the flush draining effects"
                         ),
                         hint: "Remove the flush(), or the synchronous dispatch from the apply."
                             .into(),

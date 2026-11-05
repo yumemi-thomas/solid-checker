@@ -1318,6 +1318,11 @@ pub(super) fn callee_parameter_use_role(
             lookup,
             classifying,
         );
+        // A call in a denied handler: a known delivery, with no proof of its
+        // stack, so the callee is unplaced, never the component's rendering.
+        if here == ExecutionRole::Unknown && super::in_denied_handler(file, call.span) {
+            return Some(ExecutionRole::Unknown);
+        }
         if !matches!(
             here,
             ExecutionRole::EventCallback
@@ -2293,6 +2298,7 @@ pub(crate) fn action_step_call_sites<'a>(
             if file.compiler.callback_roles.iter().any(|callback| {
                 callback.span == reference
                     && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && !super::handler_event_denied(file, callback.span)
             }) {
                 continue;
             }

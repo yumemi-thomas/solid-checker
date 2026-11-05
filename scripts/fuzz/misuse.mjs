@@ -14,7 +14,7 @@
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
   walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
-  HANDOFF_FORMS, DEPTH_FORMS, propEl, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  HANDOFF_FORMS, DEPTH_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
   CBP_CALLS, CBP_FORMS, cbProp, namedButton,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
@@ -134,7 +134,7 @@ export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
  * a helper and a member. A project method or a local function called `focus` delivers nothing (`project`, `shadow`).
  */
 /** A fire cell is about the call that delivers: one shape of the read or write inside it, not the whole cross of what the grids vary. */
-export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && !shape.source && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
+export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread|dny)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && (!shape.source || (context === "dny-renamed-prop" && shape.source === "prop")) && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
 const FIRES = ["focus", "select", "blur", "remove", "steal", "reset", "submit", "validity", "modal", "popover", "focus-wrapper", "focus-member"];
 /**
  * ADR 0645: what a listener reaches, on the stack of what delivers it. A window listener that calls a member (`method`), a bound member, an
@@ -148,10 +148,38 @@ const RENDER_DRAINS = ["rnd-body", "rnd-wrapper", "rnd-root", "rnd-memo", "rnd-f
 const RENDER_LEGAL = ["rnd-handler", "rnd-timer", "rnd-await", "rnd-shadow"];
 /** ADR 0645: what `program_listens_for_click` missed, and the elements ADR 0640's exclusion took: each `flush()`es on the apply's stack. */
 const ANCHOR_MISSES = ["evt-anchor-apply-bare", "evt-anchor-apply-alias", "evt-anchor-apply-computed", "evt-created-label", "evt-created-checkbox"];
+/**
+ * The denied events (ADR 0642, the ruling's section 3): delivered by a state change, on the stack of whatever made it, with no dedicated
+ * method. Each `dny-*` runs a user's step on an empty stack (`prep`: a real focus, text typed with `execCommand`, a click that opens a
+ * popover), then mounts a later root whose body makes the change (`trigger`). An IME composition needs CDP input, which the page cannot
+ * make: `compositionend` stays in fixtures.
+ */
+const DENIED = {
+  "dny-blur-disabled": { tag: "button", on: "onBlur", prep: ["EL.focus()"], trigger: "EL.disabled = true" },
+  "dny-blur-replace": { tag: "input", on: "onBlur", prep: ["EL.focus()"], trigger: 'EL.replaceWith(document.createElement("span"))' },
+  "dny-blur-move": { tag: "input", on: "onBlur", prep: ["EL.focus()"], trigger: "document.body.append(EL)" },
+  "dny-focusout-replace": { tag: "input", on: "onFocusOut", prep: ["EL.focus()"], trigger: 'EL.replaceWith(document.createElement("span"))' },
+  "dny-change-typed": { tag: "input", on: "onChange", prep: ["EL.focus()", 'document.execCommand("insertText", false, "x")'], trigger: "EL.disabled = true" },
+  "dny-change-typed-move": { tag: "input", on: "onChange", prep: ["EL.focus()", 'document.execCommand("insertText", false, "x")'], trigger: "document.body.append(EL)" },
+  "dny-beforetoggle-click": { tag: "div", on: "onBeforeToggle", attrs: 'popover="auto"', prep: ["EL.showPopover()"], trigger: 'EL.removeAttribute("popover")' },
+  "dny-beforetoggle-write": { tag: "div", on: "onBeforeToggle", attrs: 'popover="auto"', prep: ["EL.showPopover()"], trigger: "EL.popover = null" },
+  "dny-formdata": { tag: "form", on: "onFormData", prep: [], trigger: "new FormData(EL)" },
+  "dny-formdata-submit": { tag: "form", on: "onFormData", attrs: 'action="javascript:void 0"', prep: [], trigger: "EL.submit()" },
+  "dny-focus-selection": { tag: "div", on: "onFocus", attrs: "contenteditable", prep: [], trigger: "getSelection()!.collapse(EL, 0)" },
+};
+/** Solid's own DOM work: the focused element leaves on the stack of a `flush()`, a disposer or `insert`, with no call of the program's naming it. */
+const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
+/** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer"];
+const DENIED_OTHER = ["dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
+/** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
+const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load"];
+
 const ZERO_READS = ["zero-body-empty", "zero-body-var", "zero-await-empty", "zero-await-var"];
 const firesAt = (...positions) => positions.flatMap((position) => FIRES.map((fire) => `evt-${position}-fire-${fire}`));
 const FIRE_LEGAL = [...firesAt("apply", "handler"), "evt-body-fire-project", "evt-body-fire-shadow"];
-const EVENT_LEGAL = ["evt-apply-dispatch", "evt-handler-dispatch", "evt-created-anchor", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply", ...FIRE_LEGAL, ...listenersAt("none", "handler")];
+const EVENT_LEGAL = [...DENIED_LEGAL, "evt-apply-dispatch", "evt-handler-dispatch", "evt-created-anchor", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply", ...FIRE_LEGAL, ...listenersAt("none", "handler")];
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -347,7 +375,7 @@ const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", "evt-apply-owned-flush", ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", "evt-apply-owned-flush", ...DENIED_CONTEXTS, ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
     recallLegal: [...EVENT_LEGAL, ...RENDER_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
@@ -411,7 +439,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body")], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -586,7 +614,7 @@ export const SPEC = {
   RESOLVE_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("resolve", "() => 1") },
   UNTIL_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
   FLUSH_IN_ACTION: { legal: ["handler", "timer"], recallContexts: ["action-after-yield", "action-shared"], contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener", ...ANCHOR_MISSES], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener", ...ANCHOR_MISSES, ...DENIED_FLUSH], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
@@ -1228,6 +1256,57 @@ function ownedFlushContext(stmts, kit) {
   };
 }
 
+const anyEl = (id) => `(document.querySelector('[data-act="${id}"]') as any)`;
+function laterRoot(kit, prep, trigger, solid, web) {
+  const host = kit.name("el");
+  return [
+    decl(host, domExpr('document.createElement("div")')),
+    decl("Later", domExpr(`() => { ${trigger}; return <i />; }`, web, solid)),
+    expr(prim("timer", fn([...prep.map((text) => expr(domExpr(text))), expr(domExpr(`render(() => <Later />, ${host})`, ["render"]))]))),
+  ];
+}
+function deniedContext(context, stmts, kit) {
+  const b = kit.name("b"), el = anyEl(b);
+  const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
+  if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
+  const spec = DENIED[context];
+  if (spec) {
+    const fill = (text) => text.replaceAll("EL", el);
+    return { body: laterRoot(kit, spec.prep.map(fill), fill(spec.trigger)), view: [button(b, stmts, { tag: spec.tag, on: spec.on, attrs: spec.attrs })] };
+  }
+  if (DISPOSALS[context]) {
+    const host = kit.name("el"), d = kit.name("f");
+    const dispose = { body: `${d}()`, memo: `createMemo(() => { ${d}(); return 1; })()`, compute: `createEffect(() => { ${d}(); return 1; }, () => {})`, untrack: `createMemo(() => untrack(() => { ${d}(); return 1; }))()` }[DISPOSALS[context]];
+    const inner = decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "input", on: "onBlur" })))]));
+    return { body: [decl(host, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${host})`)), inner,
+      decl(d, domExpr(`render(() => <Inner />, ${host})`, ["render"])),
+      ...laterRoot(kit, [`${el}.focus()`], dispose, ["createEffect", "createMemo", "untrack"])], view: [] };
+  }
+  const gone = apiSignal(kit.name("t"), context === "dny-flush-load" ? 0 : 1, "owned", "src");
+  switch (context) {
+    case "dny-unmount-flush-body": case "dny-unmount-flush-root": {
+      const change = context.endsWith("root") ? `createRoot(() => { ${gone.setter}(0); flush(); })` : `${gone.setter}(0); flush()`;
+      return { sigs: [gone], body: laterRoot(kit, [`${el}.focus()`], change, ["createRoot", "flush"]), view: [show(read(gone.name), [button(b, stmts, { tag: "input", on: "onBlur" })])] };
+    }
+    case "dny-insert-body": {
+      const host = kit.name("el");
+      return { body: [decl(host, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${host})`)), decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "input", on: "onBlur" })))])), expr(domExpr(`render(() => <Inner />, ${host})`, ["render"])), ...laterRoot(kit, [`${el}.focus()`], `insert(${host}, "x")`, undefined, ["insert"])], view: [] };
+    }
+    case "dny-renamed-prop": {
+      const field = decl("Field", domExpr(`(props: { save: () => void }) => <button data-act="${b}" onBlur={props.save}>go</button>`));
+      return { body: [field, ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [propEl("Field", fn(stmts), "save")] };
+    }
+    case "dny-shared-fn": { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [namedButton(b, ref(h), { attrs: `onBlur={${h}}` })] }; }
+    case "dny-chain-click": {
+      const u = kit.name("b");
+      return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(u, stmts), button(b, [expr(domExpr(`document.querySelector<HTMLElement>('[data-act="${u}"]')!.click()`))], { on: "onBlur" })] };
+    }
+    case "dny-flush-unmount": return { sigs: [gone], body: laterRoot(kit, [`${el}.focus()`, `${gone.setter}(0)`], "1"), view: [show(read(gone.name), [button(b, stmts, { tag: "input", on: "onBlur" })])] };
+    case "dny-flush-load": return { sigs: [gone], body: [expr(prim("timer", fn([expr(domExpr(`${gone.setter}(1)`))])))], view: [show(read(gone.name), [button(b, stmts, { tag: "iframe", on: "onLoad" })])] };
+    default: throw new Error(`no denied context ${context}`);
+  }
+}
+
 /** An apply a nested `render` drains (`rnd-*`, ADR 0644): the site is in the apply, queued before the mount runs. */
 function renderContext(where, stmts, kit) {
   const mount = domExpr('render(() => null, document.createElement("div"))', ["render"]);
@@ -1277,6 +1356,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
+  if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
   if (zero) return zeroRunContext(zero[1], zero[2], stmts, kit);
   // ADR 0641: a component's prop is a getter nothing reads, whatever spells the tag: a capital, a member, a lowercase member.

@@ -502,8 +502,22 @@ pub(crate) fn named_callback_roles(
     // Identity-exact, like the tracked/deferred arms above -- the attribute
     // value must *be* the function, so `onClick={() => handler()}` keeps
     // classifying the arrow rather than `handler`.
+    // One denied delivery denies the function, whatever else it is bound to.
+    let denied = file
+        .compiler
+        .callback_roles
+        .iter()
+        .filter(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && super::handler_event_denied(file, callback.span)
+        })
+        .flat_map(|callback| index.identity_at(file, entities, callback.span))
+        .map(|candidate| index.functions[*candidate])
+        .collect::<HashSet<_>>();
     for callback in &file.compiler.callback_roles {
-        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler {
+        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler
+            || super::handler_event_denied(file, callback.span)
+        {
             continue;
         }
         // The attribute value must be a bare identifier reference.
@@ -519,6 +533,9 @@ pub(crate) fn named_callback_roles(
         }
         for candidate in index.identity_at(file, entities, callback.span) {
             let function = index.functions[*candidate];
+            if denied.contains(&function) {
+                continue;
+            }
             let entry = roles.entry(function);
             entry.admitted = true;
             entry.deferred = true;

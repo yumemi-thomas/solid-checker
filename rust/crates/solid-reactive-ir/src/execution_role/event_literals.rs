@@ -537,10 +537,13 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
             if registered {
                 return Some(Some(ExecutionRole::DeferredCallback));
             }
-        } else if file.compiler.callback_roles.iter().any(|callback| {
+        } else if let Some(callback) = file.compiler.callback_roles.iter().find(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == owner.span
         }) {
+            if crate::execution_role::handler_event_denied(file, callback.span) {
+                return None;
+            }
             return Some(Some(ExecutionRole::EventCallback));
         }
         let key = (format!("\0owner-flow:{}", file.path.as_str()), owner.span);
@@ -829,7 +832,8 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
                 let name = file.source_text(attribute.name)?;
                 if intrinsic_element(file, element) {
                     return (path.is_empty()
-                        && self.world.dialect().compiler_lowers_event_attribute(name))
+                        && self.world.dialect().compiler_lowers_event_attribute(name)
+                        && crate::runtime_semantics::event_keeps_delivery_proof(name))
                     .then(|| {
                         out.push(Invocation::Role(ExecutionRole::EventCallback));
                     });
@@ -852,7 +856,10 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
                 if intrinsic_element(file, element) {
                     return match path.as_slice() {
                         [] => Some(()),
-                        [key] if self.world.dialect().spread_key_is_event(key) == Some(true) => {
+                        [key]
+                            if self.world.dialect().spread_key_is_event(key) == Some(true)
+                                && crate::runtime_semantics::event_keeps_delivery_proof(key) =>
+                        {
                             out.push(Invocation::Role(ExecutionRole::EventCallback));
                             Some(())
                         }

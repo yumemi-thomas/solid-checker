@@ -2,6 +2,36 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1072,
+      "end": 1079,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1342,
+      "end": 1349,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1618,
+      "end": 1625,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

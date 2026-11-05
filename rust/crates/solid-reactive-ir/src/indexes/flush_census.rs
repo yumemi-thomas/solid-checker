@@ -293,5 +293,6 @@ fn inline_event_handler_call(file: &solid_facts::FileFacts, span: Span) -> bool 
         && file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == function.span
+                && !crate::execution_role::handler_event_denied(file, callback.span)
         })
 }

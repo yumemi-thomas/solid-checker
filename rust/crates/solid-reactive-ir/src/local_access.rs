@@ -1372,6 +1372,7 @@ impl LocalAccessContext<'_, '_> {
         if file.compiler.callback_roles.iter().any(|callback| {
             callback.span == reference
                 && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && !crate::execution_role::handler_event_denied(file, callback.span)
         }) {
             return Some(ExecutionRole::EventCallback);
         }
@@ -1472,6 +1473,7 @@ impl LocalAccessContext<'_, '_> {
     ) -> bool {
         if file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && !crate::execution_role::handler_event_denied(file, callback.span)
                 && crate::owners::yielded_value_contains(file, callback.span, caller.span)
                 && file
                     .ast

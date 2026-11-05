@@ -3281,5 +3281,140 @@
    "mx-reactive-write-in-owned-scope-evt-apply-owned-flush-refresh-direct-none"
   ],
   "rediscovered": "b05b96574: 3 false-clean; the fix: 3 recall-gap"
+ },
+ {
+  "finding": "a state change delivers focus events with no call to name (`disabled`, `replaceWith`, an append that moves, Selection): the handler certified (STRICT_READ_UNTRACKED)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-blur-disabled-memo-direct-none",
+   "mx-strict-read-untracked-dny-blur-move-memo-direct-none",
+   "mx-strict-read-untracked-dny-blur-replace-memo-direct-none",
+   "mx-strict-read-untracked-dny-focus-selection-memo-direct-none",
+   "mx-strict-read-untracked-dny-focusout-replace-memo-direct-none"
+  ],
+  "rediscovered": "207b13142: 70 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "typed text then focus loss delivers `change`, an open popover `beforetoggle` on an attribute write, a constructor or `submit` `formdata`: the handler certified (STRICT_READ_UNTRACKED)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-beforetoggle-click-memo-direct-none",
+   "mx-strict-read-untracked-dny-beforetoggle-write-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-typed-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-typed-move-memo-direct-none",
+   "mx-strict-read-untracked-dny-formdata-memo-direct-none",
+   "mx-strict-read-untracked-dny-formdata-submit-memo-direct-none"
+  ],
+  "rediscovered": "207b13142: 84 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a prop renamed on the way down, a function on two events, and a click in `onBlur`: the event is the delivering element's, one denied delivery denies the function, a hazard in one has no handler's stack (STRICT_READ_UNTRACKED)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-chain-click-memo-direct-none",
+   "mx-strict-read-untracked-dny-renamed-prop-memo-direct-none",
+   "mx-strict-read-untracked-dny-shared-fn-memo-direct-none"
+  ],
+  "rediscovered": "207b13142: 42 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a state change delivers focus events with no call to name (`disabled`, `replaceWith`, an append that moves, Selection): the handler certified (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-blur-disabled-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-blur-move-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-blur-replace-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-focus-selection-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-focusout-replace-refresh-direct-none"
+  ],
+  "rediscovered": "207b13142: 15 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "typed text then focus loss delivers `change`, an open popover `beforetoggle` on an attribute write, a constructor or `submit` `formdata`: the handler certified (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-beforetoggle-click-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-beforetoggle-write-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-typed-move-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-typed-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-formdata-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-formdata-submit-refresh-direct-none"
+  ],
+  "rediscovered": "207b13142: 18 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "a prop renamed on the way down, a function on two events, and a click in `onBlur`: the event is the delivering element's, one denied delivery denies the function, a hazard in one has no handler's stack (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-chain-click-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-renamed-prop-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-shared-fn-refresh-direct-none"
+  ],
+  "rediscovered": "207b13142: 9 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "Solid's own unmount has the owner of the `flush()`, disposer or `insert()` that ran it, in a body, a root, a memo, a compute and `untrack`: the handler's write threw and certified",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-dispose-body-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-dispose-compute-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-dispose-memo-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-dispose-untrack-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-insert-body-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-unmount-flush-body-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-unmount-flush-root-refresh-direct-none"
+  ],
+  "rediscovered": "207b13142: 21 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "Solid's own unmount from a body has the body's window: the handler's read warned and certified",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-dispose-body-memo-direct-none",
+   "mx-strict-read-untracked-dny-insert-body-memo-direct-none"
+  ],
+  "rediscovered": "207b13142: 28 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "`flush()` in a handler Solid delivers from its own unmount or mount warned, with no dispatch in the program: certified",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-dny-flush-load-x-direct-none",
+   "mx-flush-in-effect-callback-dny-flush-unmount-x-direct-none"
+  ],
+  "rediscovered": "207b13142: 2 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "`compositionend` is delivered by a focus move with an IME open: the handler certified (`a06`)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "outside": "an IME composition needs CDP input (`Input.imeSetComposition`), which the fuzzer's in-page runner cannot make; fixture rc21-denied-events holds the handler"
  }
 ]

@@ -14,7 +14,7 @@ export function Page() {
   }
   return (
     <div>
-      <input ref={input} onFocus={() => setCount(count() + 1)} />
+      <input ref={input} onKeyDown={() => setCount(count() + 1)} />
       <button onClick={() => setOn(true)}>go</button>
       <Show when={on()}>
         <Later />

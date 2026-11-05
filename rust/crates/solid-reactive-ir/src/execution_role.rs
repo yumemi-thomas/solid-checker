@@ -290,6 +290,33 @@ fn execution_role_where(
     )
 }
 
+/// Whether the event of the handler the compiler wires at `callback` keeps the
+/// host-delivery proof ([`crate::runtime_semantics::event_keeps_delivery_proof`]),
+/// read at the delivering element. A handler no attribute names (a spread) has
+/// no measured event: denied.
+pub(crate) fn handler_event_denied(file: &solid_facts::FileFacts, callback: Span) -> bool {
+    !file.ast.jsx_containing(callback).any(|element| {
+        element.attributes.iter().any(|attribute| {
+            attribute
+                .expression
+                .or(attribute.value)
+                .is_some_and(|value| value.contains(callback))
+                && file
+                    .source_text(attribute.name)
+                    .is_some_and(crate::runtime_semantics::event_keeps_delivery_proof)
+        })
+    })
+}
+
+/// Whether `span` is inside a handler of a denied event.
+pub(crate) fn in_denied_handler(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.compiler.callback_roles.iter().any(|callback| {
+        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            && callback.span.contains(span)
+            && handler_event_denied(file, callback.span)
+    })
+}
+
 /// Compiler execution role for code that actually runs at `span`.
 ///
 /// A callback-role span covers the complete JSX value expression handed to
@@ -313,7 +340,7 @@ fn source_execution_role(
         .filter(|function| component_child_function(file, function.span))
         .min_by_key(|function| function.span.end - function.span.start)
         .map(|function| function.span);
-    execution_role_where(&file.compiler, span, allowed, within, |callback| {
+    let role = execution_role_where(&file.compiler, span, allowed, within, |callback| {
         // A component's `ref` is a prop, not an ownerless ref application.
         (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
             || crate::owners::ref_application_on_intrinsic(file, callback.span))
@@ -330,7 +357,11 @@ fn source_execution_role(
                 function.body.contains(span)
                     && crate::owners::yielded_value_contains(file, callback.span, function.span)
             }))
-    })
+    });
+    if role == ExecutionRole::EventCallback && in_denied_handler(file, span) {
+        return role_arm!("execution_role.denied-event", ExecutionRole::Unknown);
+    }
+    role
 }
 
 pub(super) fn semantic_execution_role(

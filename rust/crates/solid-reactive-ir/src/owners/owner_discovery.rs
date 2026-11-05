@@ -104,7 +104,11 @@ pub(crate) fn discover_owner_file(
             edges.push(SymbolicOwnerEdge {
                 source: None,
                 target: OwnerTarget::Function(target.path.to_string(), function.span),
-                kind: event_owner_edge(lookup, function.generator),
+                kind: if crate::execution_role::handler_event_denied(file, callback.span) {
+                    OwnerEdgeKind::Conditional
+                } else {
+                    event_owner_edge(lookup, function.generator)
+                },
             });
         }
     }
@@ -121,13 +125,26 @@ pub(crate) fn discover_owner_file(
                 edges.push(SymbolicOwnerEdge {
                     source: None,
                     target: OwnerTarget::Function(path.clone(), *span),
-                    kind: event_owner_edge(
-                        lookup,
-                        lookup
-                            .file_by_path(path)
-                            .and_then(|file| file.ast.function_at(*span))
-                            .is_some_and(|function| function.generator),
-                    ),
+                    // The key the literal holds it under names the event; a
+                    // value no literal key names has no measured event.
+                    kind: match lookup.file_by_path(path).filter(|file| {
+                        file.ast.object_properties.iter().any(|property| {
+                            file.ast.peel_ts_sugar_span(property.value) == *span
+                                && file.source_text(property.key).is_some_and(|key| {
+                                    crate::runtime_semantics::event_keeps_delivery_proof(
+                                        key.trim_matches(['\'', '"']),
+                                    )
+                                })
+                        })
+                    }) {
+                        Some(file) => event_owner_edge(
+                            lookup,
+                            file.ast
+                                .function_at(*span)
+                                .is_some_and(|function| function.generator),
+                        ),
+                        None => OwnerEdgeKind::Conditional,
+                    },
                 });
             }
         }
@@ -725,7 +742,11 @@ pub(crate) fn discover_owner_file(
                 solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                     OwnerEdgeKind::RefApplied
                 }
-                _ if lookup.synchronous_event_dispatch_present() => OwnerEdgeKind::Conditional,
+                _ if lookup.synchronous_event_dispatch_present()
+                    || crate::execution_role::handler_event_denied(file, callback.span) =>
+                {
+                    OwnerEdgeKind::Conditional
+                }
                 _ => OwnerEdgeKind::Unowned,
             };
             edges.push(SymbolicOwnerEdge {

@@ -775,6 +775,88 @@ pub(super) fn is_timer_call(call: &ResolvedCall) -> bool {
 /// focus moves, whatever loses focus, `invalid`, a form's `reset` and `submit`,
 /// and `beforetoggle`. Whether focus moves is a runtime fact, so each is taken
 /// to deliver. Named by declaration: a project method called `focus` is none.
+/// The ruling on ADR 0642, measured in Chrome: an event whose every synchronous
+/// deliverer is a call the hazard census lists. Anything else may be delivered
+/// by a state change with no call to name: a focus event, and `change` and
+/// `compositionend` with it, by any way the focused element leaves, Solid's own
+/// unmount included; `beforetoggle` by an attribute write, `load` by an
+/// insertion, `formdata` by a constructor. So they never take the proof that
+/// only the host delivers a handler, and neither does a name nobody measured.
+pub(crate) fn event_keeps_delivery_proof(attribute: &str) -> bool {
+    let name = attribute.to_ascii_lowercase();
+    let name = name.strip_prefix("on").unwrap_or(&name);
+    let name = name.strip_prefix(':').unwrap_or(name);
+    matches!(
+        name,
+        "pointerdown"
+            | "pointerup"
+            | "pointermove"
+            | "pointerover"
+            | "pointerout"
+            | "pointerenter"
+            | "pointerleave"
+            | "pointercancel"
+            | "pointerrawupdate"
+            | "gotpointercapture"
+            | "lostpointercapture"
+            | "mousedown"
+            | "mouseup"
+            | "mousemove"
+            | "mouseover"
+            | "mouseout"
+            | "mouseenter"
+            | "mouseleave"
+            | "keydown"
+            | "keyup"
+            | "keypress"
+            | "wheel"
+            | "touchstart"
+            | "touchend"
+            | "touchmove"
+            | "touchcancel"
+            | "drag"
+            | "dragstart"
+            | "dragend"
+            | "dragover"
+            | "dragenter"
+            | "dragleave"
+            | "drop"
+            | "click"
+            | "dblclick"
+            | "auxclick"
+            | "contextmenu"
+            | "input"
+            | "beforeinput"
+            | "submit"
+            | "reset"
+            | "invalid"
+            | "cancel"
+            | "command"
+            | "select"
+            | "selectstart"
+            | "copy"
+            | "cut"
+            | "paste"
+            | "beforecopy"
+            | "beforecut"
+            | "scroll"
+            | "scrollend"
+            | "toggle"
+            | "close"
+            | "error"
+            | "animationstart"
+            | "animationend"
+            | "animationiteration"
+            | "animationcancel"
+            | "transitionstart"
+            | "transitionend"
+            | "transitionrun"
+            | "transitioncancel"
+            | "compositionstart"
+            | "compositionupdate"
+    )
+}
+
 pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
     let Some((owner, member)) = qualified_name.rsplit_once('.') else {
         return false;

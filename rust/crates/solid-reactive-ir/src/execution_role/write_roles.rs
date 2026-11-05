@@ -860,6 +860,7 @@ fn is_event_handler_literal(
         && file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && callback.span == function.span
+                && !super::handler_event_denied(file, callback.span)
         })
 }
 
@@ -926,6 +927,7 @@ fn stored_function_called_only_by_events(
                 file.compiler.callback_roles.iter().any(|callback| {
                     callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                         && callback.span == caller.span
+                        && !super::handler_event_denied(file, callback.span)
                 })
             })
         })

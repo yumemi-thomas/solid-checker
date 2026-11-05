@@ -281,6 +281,7 @@ function render(program, instrument) {
   function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
+      case "jsxExpr": return view(e.item, depth).join("\n").trim();
       case "dom": for (const name of e.webNames ?? []) parentWeb.add(name); for (const name of e.solidNames ?? []) used.add(name); return e.text;
       case "listen": return `${e.target}.addEventListener(${JSON.stringify(e.type)}, ${expr(e.fn, depth)})`;
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
@@ -503,12 +504,13 @@ function render(program, instrument) {
     switch (item.k) {
       case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-array", "store-empty", "store-shallow", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
-        const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
-        return lines;
+        const tag = item.tag ?? "button";
+        const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.on ?? "onClick"}={() => ${block(item.handler, depth, entryFor(item, "handler"))}}`;
+        return [tag === "input" || tag === "iframe" ? `${open} />` : `${open}>go</${tag}>`];
       }
-      case "hbutton": return [`${ind(depth)}<button data-act="${item.id}" onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
+      case "hbutton": return [`${ind(depth)}<button data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
-      case "propEl": return [`${ind(depth)}<${item.tag} a={${expr(item.e, depth)}} />`];
+      case "propEl": return [`${ind(depth)}<${item.tag} ${item.prop ?? "a"}={${expr(item.e, depth)}} />`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
       case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
       case "flow": {

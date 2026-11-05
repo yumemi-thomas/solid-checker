@@ -80,7 +80,9 @@ export const jsx = () => ({ k: "jsx" });
 export const createOwnerExpr = () => ({ k: "createOwner" });
 /** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
 /** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641). */
-export const propEl = (tag, e) => ({ k: "propEl", tag, e });
+export const propEl = (tag, e, prop = "a") => ({ k: "propEl", tag, e, prop });
+/** A JSX view item as an expression (`const Inner = () => <input … />`): a site in a tree a program mounts and disposes itself. */
+export const jsxExpr = (item) => ({ k: "jsxExpr", item });
 export const domExpr = (text, web, solid) => ({ k: "dom", text, ...(web ? { webNames: web } : {}), ...(solid ? { solidNames: solid } : {}) });
 /** `el.addEventListener(type, fn)`: a listener the program dispatches to itself. */
 export const listenExpr = (target, type, fn) => ({ k: "listen", target, type, fn });
@@ -135,7 +137,8 @@ export const USES = {
 export const contain = (kind, id, body, extra = {}) => ({ k: "contain", kind, id, async: false, use: null, body, ...extra });
 
 export const probe = (sig) => ({ k: "probe", sig });
-export const button = (id, handler) => ({ k: "button", id, handler });
+/** `<button data-act onClick>`, or another element and event (`tag`, `on`, `attrs`: the denied events, ADR 0642). */
+export const button = (id, handler, extra = {}) => ({ k: "button", id, handler, ...extra });
 export const child = (id, e) => ({ k: "child", id, e });
 export const attr = (id, e) => ({ k: "attr", id, e });
 export const show = (when, children, fallback = []) => ({ k: "show", when, children, fallback });
@@ -149,7 +152,7 @@ export const refEl = (id, e, form = "inline") => ({ k: "ref", id, e, form });
 /** `<p onClick={(e, () => {})}>`: the handler expression, which the element's setup evaluates (`e` runs once there, in the body). */
 export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
 /** `<button data-act={id} onClick={e}>`: a handler passed by name (`e` a reference); `tuple` writes Solid's `[e, 1]` bound form. */
-export const namedButton = (id, e, { tuple = false } = {}) => ({ k: "hbutton", id, e, tuple });
+export const namedButton = (id, e, { tuple = false, attrs } = {}) => ({ k: "hbutton", id, e, tuple, ...(attrs ? { attrs } : {}) });
 /** The flow components whose function child the `flow` item writes a body for (`FLOW_FORMS`, misuse.mjs `FLOW_CONTEXTS`). */
 export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
 /** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
@@ -502,6 +505,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
       switch (e.k) {
         case "num": return T.num;
         case "dom": return T.unknown;
+        case "jsxExpr": checkBlock(e.item.handler, scope, "free"); return T.unknown;
         case "listen": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
