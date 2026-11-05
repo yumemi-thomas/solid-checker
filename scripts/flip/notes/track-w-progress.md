@@ -23,9 +23,27 @@ SC2001.
 
 - **SC2004/5, SC3002, SC6001**: no flip needed (plan). check.mjs on the SC7001 build: 6 of 6, 9 of 9, 8 of 8. No commit.
 
+- **SC7006** (ADR 0702): **no code change.** The plan's edit was wrong: rc.21's `transformDirectives` (server mode) registers each
+  export's initializer at its declaration (`registerServerReference(id, <initializer>)`, specifier form too), so a reassignment
+  never reaches registration; today's `export_shape` answers are right (rebound function clean, rebound literal a violation). I
+  built the plan's edit first, then measured the compiler (research agent's finding, confirmed) and reverted it. Fixture
+  `valid-use-server-rebound` pins both. Witnesses 8 of 8 keep.
+- Picked from claude/flip-reads: `ce6a831b2`, `ae2327986` (stale tests; R's progress-file hunk dropped), `ef46d0ac6`
+  (verify-delta maps rule pages and `.gitignore`).
+
+## Owner notes (2026-11-05)
+
+- From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
+  W false clean (probe u11). Handle it before SC2001 (it is SC2001's `unreached_write` territory; may land with SC2001's
+  prerequisites). Full notes arrive in `scripts/flip/notes/` on claude/flip-reads.
+- `reactive_analysis.rs`, `result_reads.rs`, `props_reactivity.rs` are not in the plan's file table; both tracks edit
+  `reactive_analysis.rs`, so keep W's edits there small.
+- j08 (SC2003) goes to Track R.
+- Use `make verify-delta` per rule; full `make verify` only at merges.
+
 ## Next
 
-SC7006, SC7005, SC7007, DOM dispatch list. A research agent prepared these:
+SC7005, SC7007, DOM dispatch list, then SC2006. A research agent prepared these:
 `~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)
