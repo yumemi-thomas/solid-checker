@@ -177,10 +177,19 @@ SC2001.
   (+ `positive/001` now expects U on `props.n`). fuzz-patterns 773/364 (8 FIXED). **Corpus +1,441 U** (`sweep-w2003d.json`,
   binaries `bins/w2003d`; same under `--program-boundary closed`, `sweep-w2003*-closed.json`), 0 V moved; app-game math helpers,
   methods, escaping namespaces, value uses. Reported to the owner as the open-function arm's cost.
-  **SC2003 next:** step 5 element flows (research section 2 last paragraph, section 3 row 5: `d2-identity-return`, `d2n-find*`,
-  `d2n-for-jsx-row-write`, `d2n-forof-write`, `d2n-memo-*`, `d2n-object-values-write`, `d2n-root-array-forof`, `t2-for-row-*`,
-  `t6-for-row-helper`). Step 4 already makes forEach/map callbacks over a store U (`d2n-foreach-write`, `d2n-map-write`,
-  `d2n-root-array-foreach` left open-defects): step 5 proves them V. c15 c16 j07 j08 stay failing (R's census).
+- **SC2003 step 5 of 5** (ADR 0720, 66b7f19f3): element flows. `ParameterFlow::value` takes `at: Span` (where the store is
+  judged: the handing call or the sink); `push_parameter_store_flow` runs `value` at the sink for a non-parameter root, and
+  `push_unproven_container_write`, `no_direct_mutation`, the mutator and std-lib sinks hand a call-rooted chain to it (a call
+  span resolves to its leading symbol through `source_reference_index`, so the old "rooted at a call" `continue` swallowed
+  `find(…)!.v` and `m().n`). Rows: `call_value` (std-lib by declaration: find/findLast/at element; filter/slice/toSorted/
+  toReversed/concat/Object.values/Array.from copies when linked; map/flatMap open unless fresh literal; identity function
+  `returned_parameter`; `memo_compute_return`; `For` accessor call under `keyed={false}`), `for_of_operand`, `for_row`. Element =
+  link = U `unproven-container-root`; V only for identity/memo of the root. Witnesses unchanged (SC2003 9/13, all 208).
+  fuzz-patterns 785/352 (12 FIXED, `outside`). Corpus +108 U (`sweep-w2003e2.json`, binaries `bins/w2003e`), 0 removed, 0 V
+  moved; step 4's 1,441 unchanged. Fixture `store-element-flow`; ownership case `element-flow/001`. Probes
+  `~/EDF/tmp/flipw/p2003e/{cases,mine}` (+ `mine-chrome.json`).
+  **SC2003 is complete on W**; c15 c16 j07 j08 wait for R's census.
+
 
 ## Owner notes (2026-11-05)
 
@@ -219,8 +228,8 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: steps 1-4 done (ADRs 0716-0719), next step 5** (see the SC2003 entry above),
-   then SC2001 last. Old SC4001 notes kept for reference:
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). SC2003 done (ADRs 0716-0720).
+   **Next: SC2001, the last rule** (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`; R's u11 note above). Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
    quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
@@ -242,7 +251,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w2003d.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2003e2.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
@@ -286,3 +295,9 @@ Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writ
   temporary debug build (append a tag per open arm to `$SC2003_FLOW_DEBUG`; write each line with one `write_all`, or lines interleave).
 - `function_call_site_references` gives a namespace member call at the whole member (`m4.scaling`), while the compiler's reference is
   the property: a closedness test must accept the property too.
+- A dead-branch write is V for the direct spelling (`if (Math.random() > 2) st.n = 5;`, base and every W build) though Chrome
+  is quiet; ADR 0720's identity form inherits it (`id(st).n`). Reported to the owner, not changed.
+- `make ir-read-lint`'s hashmap-iteration count is textual by name: `function.parameters.iter()` on one line matched a `HashMap`
+  named `parameters` elsewhere in the file; reuse a helper (`plain_parameter_at`) rather than add the scan.
+- A function declaration callee is never `exact` in `project_callee_at_parameter` when the sink is `id(st).n = 5`: the member
+  write rooted at the call counts as a write of the `id` binding (`binding_written`).
