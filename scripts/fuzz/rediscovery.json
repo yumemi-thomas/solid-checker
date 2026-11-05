@@ -3792,6 +3792,19 @@
   ],
   "rediscovered": "the checker at dbc66107a on `focus.mjs --grids mx-recall` (flip-write.mjs context flw-getter-helper): 78 false-clean of the 78 that type-check (552 typed-away: binding variants the component declares, out of reach of the hoisted helper); the fix: 0 false-clean, 78 recall-gap. The full grid for the code (28,098 programs) needs no look"
  },
+  {
+  "finding": "SC2001: a setter or refresh call in a module-scope helper only an object getter calls, the getter read in a component body, had no row and certified; Chrome (rc.21) throws REACTIVE_WRITE_IN_OWNED_SCOPE (flip witnesses SC2001 d02-d04, e01-e03, e07-e11, e13, research probes u11-*; ADR 0721)",
+  "found": "flip plan SC2001 row, Track R's u11 probe, research probes",
+  "fixed": "ADR 0721",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-flw-getter-helper-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-flw-getter-helper-store-direct-none",
+   "mx-reactive-write-in-owned-scope-flw-getter-helper-refresh-direct-none"
+  ],
+  "rediscovered": "the checker at f14f1fbff on `focus.mjs --grids mx-recall` (flip-write.mjs contexts flw-getter-helper, flw-module-method): 468 false-clean (signal, store, refresh variants; 1,272 typed-away per context: binding variants the component declares); flw-module-method was withheld there by a remote reactive-dispatch-unresolved. The fix: 0 false-clean, 0 false-positive, 1,044 recall-gap; the sampled whole grid for the code (11,250 of 80,694, every stratum) is valid and needs no look. fuzz-patterns: types/h02-tagged-write (a write directly in a module tag: a printer form the generator lacks), types/e905-custom-connected, types/e907-custom-attr (custom element lifecycle methods, the flw-module-method arm) left open-defects.json at ADR 0721"
+ },
  {
   "finding": "SC2003: a store member as a `for … of`/`for … in` head target (`for (s.a of [2])`) was never asked (no_direct_mutation walked assignments only) and certified; Chrome (rc.21) warns STORE_WRITE_OUTSIDE_SETTER when the loop iterates (flip witnesses SC2003 c02, c03, j01, j02; ADR 0716)",
   "found": "flip plan SC2003 row; values/d6-for-of-target",

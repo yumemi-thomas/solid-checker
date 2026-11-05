@@ -1009,6 +1009,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-create-in-effect-unplaced/node_modules/**
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/**
+!fixtures/reactive-ir/rc21-setter-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-setter-unplaced/node_modules/**
 !fixtures/reactive-ir/store-for-head-write/node_modules/
 !fixtures/reactive-ir/store-for-head-write/node_modules/**
 !fixtures/reactive-ir/store-standard-library-alias/node_modules/

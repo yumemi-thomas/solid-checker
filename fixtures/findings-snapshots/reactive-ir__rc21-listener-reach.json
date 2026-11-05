@@ -2,6 +2,16 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-listener-reach/App.tsx",
+      "start": 110,
+      "end": 131,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

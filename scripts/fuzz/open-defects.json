@@ -2367,24 +2367,6 @@
    ]
   },
   {
-   "id": "types/e905-custom-connected",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/e907-custom-attr",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
    "id": "types/e911-on-colon",
    "item": "T-other",
    "outcome": "no-run",
@@ -2489,15 +2471,6 @@
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/h02-tagged-write",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
   },
