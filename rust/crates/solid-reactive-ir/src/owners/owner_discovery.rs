@@ -36,6 +36,27 @@ pub(crate) fn discover_owner_file(
     // ([`OwnerEdgeKind::MayBeUnowned`]), and a requirement it holds is
     // uncertifiable, never a violation and never silent.
     let list_site = |span| crate::owners::in_parameter_list(&file.ast, span);
+    // ADR 0714: whether the call runs on every run of the function around it,
+    // or on every evaluation of the module (one parse per file). An edge from
+    // a call that may not run proves no run of its target: it keeps its
+    // source's owner without the proof (`MayRun`), or for a primitive's
+    // unowned callback the possible bit alone. In a package analyzed as
+    // source the project call's attribution asks each hop instead, with the
+    // call's arguments (ADR 0290, `attribute_dependency_requirements`).
+    let every_run = std::cell::OnceCell::new();
+    let in_dependency = lookup.in_dependency_source(file.path.as_str());
+    let runs_every_time = |span: Span| {
+        in_dependency
+            || every_run
+                .get_or_init(|| {
+                    solid_facts::ast::every_unconditional_call(
+                        std::path::Path::new(file.path.as_str()),
+                        &file.source,
+                    )
+                })
+                .as_ref()
+                .is_some_and(|calls| calls.contains(&span))
+    };
     // Keyed by function span: the emission pass resolves it to the node whose
     // propagated context it reads, as it does `owner`.
     // A region never answers for the stepped generator of an action: its
@@ -223,7 +244,9 @@ pub(crate) fn discover_owner_file(
                     .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
                     .is_some_and(|declaration| crate::indexes::binding_written(file, declaration)));
         if let Some(target) = target {
-            let (source, kind) = if unproven_callee {
+            let (source, kind) = if unproven_callee
+                || (kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span))
+            {
                 may_run()
             } else {
                 (source.clone(), kind)
@@ -250,7 +273,12 @@ pub(crate) fn discover_owner_file(
                     kind: if in_list {
                         OwnerEdgeKind::MayBeUnowned
                     } else {
-                        call_owner_edge(file, call.callee, lookup)
+                        match call_owner_edge(file, call.callee, lookup) {
+                            OwnerEdgeKind::Preserve if !runs_every_time(call.span) => {
+                                OwnerEdgeKind::MayRun
+                            }
+                            kind => kind,
+                        }
                     },
                 });
             }
@@ -279,7 +307,9 @@ pub(crate) fn discover_owner_file(
                 };
                 let (source, kind) = if !runs {
                     (None, OwnerEdgeKind::MayBeUnowned)
-                } else if unproven_handed_function(file, &target, argument, lookup) {
+                } else if unproven_handed_function(file, &target, argument, lookup)
+                    || !runs_every_time(call.span)
+                {
                     may_run()
                 } else {
                     (source.clone(), kind)
@@ -398,6 +428,14 @@ pub(crate) fn discover_owner_file(
                             OwnerEdgeKind::MayBeUnowned
                         },
                     )
+                } else if !runs_every_time(call.span) {
+                    // ADR 0714: a callback whose call may not run is not
+                    // proven to run.
+                    match kind {
+                        OwnerEdgeKind::Preserve => (source, OwnerEdgeKind::MayRun),
+                        OwnerEdgeKind::Unowned => (None, OwnerEdgeKind::MayBeUnowned),
+                        kind => (source, kind),
+                    }
                 } else {
                     (source, kind)
                 };

@@ -4,6 +4,6 @@
 
 Silent: `guardedIife`, `guardedAnd`, `guardedTernary`, `guardedNested` (module scope, where the guard is false); `Comp` (a component body).
 
-Reported: `unguardedIife`; `elseBranch`; `shadowedGuard` (a same-named local); `Host` → `awaitedGuard`; `Host` → `guardedAsyncIife` (code after an async literal's first `await`).
+Reported: `unguardedIife`; `elseBranch`, `shadowedGuard` (a same-named local), both obligations (ADR 0714); `Host` → `awaitedGuard`; `Host` → `guardedAsyncIife` (code after an async literal's first `await`).
 
 Stubs: published rc.13 `solid-js.d.ts`, as in `component-owner-binding`.

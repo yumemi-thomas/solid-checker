@@ -3929,5 +3929,16 @@
   "found": "sc1001.md steps 6 and 7",
   "fixed": "ADR 0676",
   "outside": "the setter must be a destructured tuple slot, which a context cannot write: patterns values/setter-fn-apply, setter-signal-apply, setter-signal-own, setter-key-apply, setter-key-draft-apply, setter-other-store fail as NEW false-clean on the build before, setter-key-timer-q, setter-key-held-q as NEW false-positive; setter-own-store-q, setter-own-alias-q, setter-draft-q, setter-fn-timer-q, setter-tracked-store-q, setter-tracked-signal-q pin the quiet twins"
+ },
+ {
+  "finding": "SC4001: a hook called under the component owner and in a module-scope branch nothing takes was a proven violation: the module edge carried the unowned proof whether or not its call runs; Chrome (rc.21) is quiet, the only run is owned (flip research probe k-module-dead-branch; ADR 0714)",
+  "found": "flip plan SC4001 row, research probe",
+  "fixed": "ADR 0714",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-mixed-dead-x-direct-none"
+  ],
+  "rediscovered": "the checker at 9de5c2bd3 on `focus.mjs --grids mx-recall` (codes NO_OWNER_CLEANUP, NO_OWNER_EFFECT; flip-write.mjs context flw-mixed-dead): 384 false-positive of 1152; the fix: 0 false-positive, 756 not-fired, 396 typed-away"
  }
 ]

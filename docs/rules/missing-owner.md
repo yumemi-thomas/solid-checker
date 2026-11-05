@@ -50,6 +50,12 @@ scope, and detached callbacks. Exported functions with unseen callers, nullable
 `runWithOwner` values, unresolved component identity, and unresolved runtime
 allocation paths are uncertifiable rather than proven violations.
 
+An unowned run is proven only along calls that run on every run of the code
+around them, or of the module (ADR 0714). A helper called under an owner and
+also from a module-scope `if`, a `&&` operand, an optional call, or a timer set
+in a branch is uncertifiable: every run may be the owned one. An unconditional
+module-scope statement or timer stays a violation.
+
 The apply callback of `createEffect(compute, apply)` is always a detached
 callback: the runtime queues it, and it runs from the flush with no owner, unless a
 `flush()` of the program may drain the queue under an owner: then the apply's

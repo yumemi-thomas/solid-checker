@@ -14,8 +14,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
       "start": 1254,
       "end": 1266,
@@ -24,8 +24,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
       "start": 1494,
       "end": 1506,

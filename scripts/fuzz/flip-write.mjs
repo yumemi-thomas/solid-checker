@@ -81,7 +81,26 @@ const OPEN_CONTEXTS = {
   },
 };
 
+/**
+ * ADR 0714, SC4001: the site's function called once in the component (owned) and once in a module-scope branch nothing takes. Chrome
+ * (rc.21): quiet, the only run is owned. The build before reported it proven unowned (the module's edge carried the proof whether or
+ * not its call runs).
+ */
+const MIXED_OWNERS = {
+  "flw-mixed-dead": (stmts, kit) => {
+    const h = kit.name("h");
+    return {
+      // Raw text: the validator reads names declared in the component, and `h` is not one.
+      hoisted: [decl(h, fn(stmts)), expr(domExpr(`if (Math.random() > 2) ${h}();`))],
+      body: [expr(domExpr(`${h}()`))],
+      view: [],
+    };
+  },
+};
+
 export const FLIP_WRITE_CONTEXTS = {
+  NO_OWNER_CLEANUP: Object.keys(MIXED_OWNERS),
+  NO_OWNER_EFFECT: Object.keys(MIXED_OWNERS),
   CONTEXT_NOT_FOUND: Object.keys(OPEN_CONTEXTS),
   PRIMITIVE_IN_FORBIDDEN_SCOPE: Object.keys(DISPATCH_FIRES),
   FLUSH_IN_ACTION: Object.keys(UNPLACED_STEPS),
@@ -93,5 +112,5 @@ export const FLIP_WRITE_CONTEXTS = {
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context])?.(stmts, kit);
+  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context])?.(stmts, kit);
 }
