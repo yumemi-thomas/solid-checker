@@ -62,7 +62,14 @@ pub(crate) fn loading_on_outside_hold_obligations(
                     ),
                     hint: "Move the outside read under the boundary so one hold owns the data, or read `latest()` in `on` to show the fallback beside the held frame.".into(),
                     location: location(file.path.shared(), at),
-                    analysis_context: String::new(),
+                    analysis_context: if reason.contains("not resolved")
+                        || reason.contains("accessor")
+                        || reason.contains("handed")
+                    {
+                        crate::blockers::FUNCTION_RUN_UNPLACED.to_owned()
+                    } else {
+                        String::new()
+                    },
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -303,23 +310,64 @@ fn unproven_hold(
             || program.async_reads.iter().any(|read| at(&read.location))
     };
     if file.ast.calls.iter().any(|call| {
-        call.arguments.is_empty()
-            && element
-                .children
-                .iter()
-                .any(|child| child.contains(call.span))
+        element
+            .children
+            .iter()
+            .any(|child| child.contains(call.span))
             && file
                 .ast
                 .call_at(file.ast.peel_ts_sugar_span(call.callee))
                 .is_none()
             && !read_at(call.span)
             && !read_at(call.callee)
-            && lookup.function_called_at(path, call.callee).is_none()
+            // ADR 0660: a resolved target proves nothing where no edge follows
+            // its body: a method, a slot, a class member.
+            && lookup.function_called_at(path, call.callee).is_none_or(
+                |(target_file, target)| {
+                    crate::execution_role::unplaced_run(target_file, target.body, lookup)
+                },
+            )
             && lookup
                 .standard_library_declaration(file, call, typefacts::CallKind::Call)
                 .is_none()
     }) {
         return Some("a value it reads is not resolved");
+    }
+    // ADR 0660: a Get may run an accessor, and a source handed to a call under
+    // the boundary has no read row at it.
+    if file.ast.members.iter().any(|member| {
+        under(member.span) && crate::local_access::literal_member_has_getter(file, member)
+    }) {
+        return Some("a Get under it may run an accessor");
+    }
+    let callees = file
+        .ast
+        .calls
+        .iter()
+        .map(|call| file.ast.peel_ts_sugar_span(call.callee))
+        .collect::<crate::HashSet<_>>();
+    let is_async_source = |declaration: Span| {
+        file.ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+            .and_then(|binding| binding.call_initializer)
+            .and_then(|initializer| file.ast.call_at(initializer))
+            .and_then(|call| call.arguments.first())
+            .is_some_and(|argument| {
+                crate::owners::computation_is_async(lookup, file, argument.span)
+            })
+    };
+    if file.ast.identifiers.iter().any(|identifier| {
+        under(identifier.span)
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && !callees.contains(&identifier.span)
+            && file
+                .ast
+                .reference_declaration(identifier.span)
+                .is_some_and(is_async_source)
+    }) {
+        return Some("an async source is handed to code under it");
     }
     let mut sources = program
         .async_reads

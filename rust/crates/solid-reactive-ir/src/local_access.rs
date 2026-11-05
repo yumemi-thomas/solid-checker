@@ -195,6 +195,32 @@ pub(crate) struct HandedTables<'a, 'l> {
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
 }
 
+/// Whether `member`'s object is a local literal that declares an accessor.
+pub(crate) fn literal_member_has_getter(
+    file: &solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> bool {
+    file.ast
+        .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+        .and_then(|declaration| {
+            file.ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| {
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            file.ast.object_get_shapes.iter().any(|shape| {
+                shape.span == initializer
+                    && shape
+                        .properties
+                        .iter()
+                        .any(|property| property.getter.is_some())
+            })
+        })
+}
+
 /// ADR 0509: whether the value at `span` is one a caller supplied
 /// ([`UNRESOLVED_HANDED_MEMBER`]), through at most `depth` steps.
 pub(crate) fn handed_value(
@@ -3679,29 +3705,7 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         member: &solid_facts::ast::MemberFact,
     ) -> bool {
-        let object = file.ast.peel_ts_sugar_span(member.object);
-        if self.handed_member_callee(file, member.span) {
-            return true;
-        }
-        file.ast
-            .reference_declaration(object)
-            .and_then(|declaration| {
-                file.ast
-                    .bindings
-                    .iter()
-                    .find(|binding| binding.names.iter().any(|name| name.span == declaration))
-            })
-            .and_then(|binding| binding.initializer)
-            .is_some_and(|initializer| {
-                let initializer = file.ast.peel_ts_sugar_span(initializer);
-                file.ast.object_get_shapes.iter().any(|shape| {
-                    shape.span == initializer
-                        && shape
-                            .properties
-                            .iter()
-                            .any(|property| property.getter.is_some())
-                })
-            })
+        self.handed_member_callee(file, member.span) || literal_member_has_getter(file, member)
     }
 
     /// A read that cannot throw into a pass: a plain signal, a source served

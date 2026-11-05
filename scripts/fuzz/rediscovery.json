@@ -3658,5 +3658,11 @@
   "found": "the SSR and hydration audit",
   "fixed": "ADR 0659",
   "outside": "the grids run one client host and need a two-host judge: scripts/flip/host-witnesses.json holds them on the measured hosts, `check.mjs HOST` 1 of 24 before, 20 after, the rest marked `open` for their rule; fixture rc21-server-arms each branch"
+ },
+ {
+  "finding": "SC5006 asked only no-argument calls and trusted a resolved function: `o.r(2)` under `<Loading on>` warned LOADING_ON_OUTSIDE_HOLD with no SC5006 (ADR 0660)",
+  "found": "the flip audit",
+  "fixed": "ADR 0660",
+  "outside": "the recall context generates the boundary's own held child and places only the outside read, so a variant cannot change what the child calls. scripts/flip/witnesses.json holds b03, fixture rc21-hold-open each branch"
  }
 ]

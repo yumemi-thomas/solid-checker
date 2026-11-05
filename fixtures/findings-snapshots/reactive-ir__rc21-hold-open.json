@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 385,
+      "end": 397,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 494,
+      "end": 506,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 609,
+      "end": 621,
+      "fixes": 0
+    }
+  ]
+}

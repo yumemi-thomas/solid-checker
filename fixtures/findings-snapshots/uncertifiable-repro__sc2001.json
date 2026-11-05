@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
+      "start": 1106,
+      "end": 1121,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",

@@ -40,3 +40,8 @@ Move the outside read under the boundary so one hold owns the data, or read
 
 Recall-only. A proven violation needs the boundary-instance, same-flight and
 visibility proofs listed above (`docs/open-work.md`).
+
+A call with arguments counts as a no-argument one does. A resolved target proves nothing
+where no edge follows its body (a method, a slot), and a Get of a literal's accessor or a
+source handed to a call under the boundary keeps the obligation, blocker
+`function-run-unplaced` (ADR 0660).
