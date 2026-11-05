@@ -155,7 +155,10 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
   const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
-  const wrong = violations.filter((finding) => !corroborated(finding) && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
+  // A violation whose silence the control run measured on its own lines (`runtimeSilent`, pipeline.mjs) has no code that could have fired
+  // there: `offSiteVerdicts` reads it as no-counterpart, and it names no rule wrongly here. It excuses nothing else: with no claiming rule the
+  // row falls through to a recall gap or a false clean.
+  const wrong = violations.filter((finding) => !corroborated(finding) && !finding.runtimeSilent && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
   // A claiming violation does not excuse another rule's on these lines: on the `agree` path the second finding is judged the same way
   // (`leaf-owner-forbidden-call` beside `no-await-primitive-in-tracked-scope`, ADR 0641).

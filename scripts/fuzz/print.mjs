@@ -159,7 +159,13 @@ function render(program, instrument) {
     const seen = sourcedSignals(component, signals);
     for (const { node } of walk(component)) if (node.k === "use") uses.set(node, describeUse(node, seen));
   }
-  const auxLine = (node, line) => line.replace(AUX, siteIndex.has(node) ? `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}` : "");
+  // A line the site runs from (`const wrapUse = () => { … };`) has a counter of its own in the twin, so a finding there is measured there.
+  const auxLine = (node, line) => {
+    if (!line.includes(AUX)) return line;
+    if (!siteIndex.has(node)) return line.replace(AUX, "");
+    const counter = instrument ? `__h(${allocate("auto", "aux", pathOf.get(node))}); ` : "";
+    return line.replace(AUX, () => `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}${counter}`);
+  };
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
   const ledger = [];

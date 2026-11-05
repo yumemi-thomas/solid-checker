@@ -4054,5 +4054,18 @@
   "found": "Track W's SC2003 step 2, open defect values/d1n-array-proto-call",
   "fixed": "ADR 0688",
   "outside": "not tried in a generator: W's write shapes are in flip-write.mjs, outside this track's file. Pattern values/d1n-array-proto-call was a listed false clean until this commit"
+ },
+ {
+  "finding": "the 72 of pos-flush-fn under a dynamic-only body: SC1001 with the no-window hint is a claim of silence Chrome bears out, yet 60 read as wrong-rule and 12 as false positives. Same checker under older judges: none before 7e9b9d5ee (ADR 0641, beside), 72 wrong-rule from it, 60 + 12 from 5b8a1d7b5",
+  "found": "whole mx-recall on rm5 (66684ac14 tree), 2026-11-06",
+  "fixed": "the generator's wrapper line has a counter; matrix.mjs reads runtimeSilent",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-pos-flush-fn-nested-assign-wrapper-none-m-dynamic",
+   "mx-store-write-outside-setter-pos-flush-fn-nested-assign-direct-none-m-dynamic",
+   "mx-store-write-outside-setter-pos-flush-fn-nested-push-wrapper-none-m-dynamic"
+  ],
+  "rediscovered": "same 607,719 ids before and after, on rm5: exactly these 72 moved, to agree, nothing else; the 12 went false-positive to wrong-rule on the counter alone, then all 72 to agree on the matrix line, and base gives the same rows. A judge artifact, so no old checker build fails: the old judge does, on any build"
  }
 ]
