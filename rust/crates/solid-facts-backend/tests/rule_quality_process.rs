@@ -27,7 +27,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // pinned below.
         ("reactive-read-after-await", 20),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
-        ("reactive-dispatch-unresolved", 3),
+        // ADR 0646: two more, `owned-scope-valid.tsx:28`, a tuple's function
+        // slots from a local hook: its transport does not resolve.
+        ("reactive-dispatch-unresolved", 5),
         ("no-destructure", 1),
         ("components-return-once", 3),
         ("leaf-owner-forbidden-call", 7),

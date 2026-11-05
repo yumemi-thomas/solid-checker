@@ -321,10 +321,20 @@ fn eager_read_summaries_require_exact_fresh_stack_global_bindings() {
                         .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
             })
             .collect::<Vec<_>>();
-        assert_eq!(rows.len(), usize::from(uncertain), "{name}: {rows:#?}");
+        // ADR 0646: a returned function's call beside the read is SC9012's too:
+        // the transport of `const task = scheduledAndReturned()` does not resolve.
+        let handed = usize::from(name == "ScheduledAndReturned");
+        assert_eq!(
+            rows.len(),
+            usize::from(uncertain) + handed,
+            "{name}: {rows:#?}"
+        );
         if uncertain {
             assert_eq!(rows[0]["id"], "SC1001", "{name}");
-            assert_eq!(rows[0]["kind"], "uncertifiable", "{name}");
+            assert!(
+                rows.iter().all(|row| row["kind"] == "uncertifiable"),
+                "{name}: {rows:#?}"
+            );
         }
     }
 }
