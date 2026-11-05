@@ -3940,5 +3940,17 @@
    "mx-no-owner-cleanup-flw-mixed-dead-x-direct-none"
   ],
   "rediscovered": "the checker at 9de5c2bd3 on `focus.mjs --grids mx-recall` (codes NO_OWNER_CLEANUP, NO_OWNER_EFFECT; flip-write.mjs context flw-mixed-dead): 384 false-positive of 1152; the fix: 0 false-positive, 756 not-fired, 396 typed-away"
+ },
+ {
+  "finding": "a client claim on code a client build never runs, or that no window covers: a helper only isServer calls (V SC2003, SC2001, SC1001), a tag only isServer renders, and a read in a function render names (V SC1001, Chrome quiet), and a function a clientOnly body calls",
+  "found": "ssr/report.md D1, D6, ADR 0659 and 0664 limits",
+  "fixed": "ADRs 0677, 0678",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-mount-named-signal-direct-none",
+   "lg-strict-read-untracked-arm-tag-signal-direct-none"
+  ],
+  "rediscovered": "the checker at b3130c6af on legal.mjs --recall (codes STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE, STORE_WRITE_OUTSIDE_SETTER; flip-read.mjs contexts mount-named, arm-helper, arm-helper-chain, arm-tag): 212 false positive, 4,652 unexecuted; the fix 13,854 programs, 0 of either. D3 has no generator host: HOST h10 h11 h12 hold it, 25 of 25"
  }
 ]

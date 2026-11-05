@@ -36,6 +36,10 @@ pub enum ArmSide {
     /// content, a later one calls it in a window, so no read claim holds here
     /// (ADR 0664). A child's own body has its window back.
     DeferredMount,
+    /// `<NoHydration>`'s children where a hydrating pass runs: `NoHydration`
+    /// returns `undefined` while hydrating, and a non-hydrating mount renders
+    /// them, so no client claim holds here either way (ADR 0677).
+    NoHydration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -110,6 +114,8 @@ impl ExecutionPaths {
             crate::blockers::CLIENT_ROOT_UNPROVEN
         } else if arm == Some(ArmSide::BuildConstant) {
             crate::blockers::BUILD_CONSTANT_ARM
+        } else if arm == Some(ArmSide::NoHydration) {
+            crate::blockers::NO_HYDRATION_SUBTREE
         } else {
             return true;
         };
@@ -163,14 +169,239 @@ pub(crate) fn execution_paths(
     facts: &solid_facts::ProjectFacts,
     runtime: &RuntimeEnvironment,
     dialect: &dyn solid_dialect::Dialect,
+    lookup: &crate::indexes::SemanticLookup<'_>,
 ) -> ExecutionPaths {
     let client = client_path(facts, runtime, dialect);
+    let files = &facts.files;
+    let hydrates = hydrating_pass_present(files, runtime, dialect);
     let mut arms = Vec::new();
-    for file in &facts.files {
+    for file in files {
         file_arms(file, dialect, &mut arms);
         deferred_mount_arms(facts, file, runtime, dialect, &mut arms);
+        if hydrates {
+            no_hydration_arms(file, lookup, &mut arms);
+        }
     }
+    arm_only_functions(files, runtime, lookup, &mut arms);
     ExecutionPaths { client, arms }
+}
+
+/// Whether a hydrating pass may run: the selection says so, or a file calls
+/// `hydrate`. Without one, `NoHydration` renders its children and every claim
+/// in them stands.
+fn hydrating_pass_present(
+    files: &[solid_facts::FileFacts],
+    runtime: &RuntimeEnvironment,
+    dialect: &dyn solid_dialect::Dialect,
+) -> bool {
+    matches!(runtime.rendering, Some(RuntimeRendering::Hydrated))
+        || files.iter().any(|file| {
+            file.ast
+                .calls
+                .iter()
+                .any(|call| named_import(file, dialect, call.callee, "hydrate"))
+        })
+}
+
+/// ADR 0677: the elements `NoHydration` wraps, `Hydration` inside them included:
+/// the outer one returned nothing, so the inner one never ran on the client.
+fn no_hydration_arms(
+    file: &solid_facts::FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    arms: &mut Vec<BuildArm>,
+) {
+    for element in &file.ast.jsx_elements {
+        if crate::jsx_tag_is(lookup, file, element, "NoHydration") {
+            arms.push(BuildArm {
+                path: file.path.as_str().to_owned(),
+                start_byte: u64::from(element.span.start),
+                end_byte: u64::from(element.span.end),
+                side: ArmSide::NoHydration,
+            });
+        }
+    }
+}
+
+/// How a reference reaches a function: called, or as a JSX tag or a value.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Reach {
+    Call,
+    Other,
+}
+
+/// ADR 0677: a function every reference of which lies in an arm runs only there,
+/// so a site in it is in the arm. A helper an arm calls is the case arms alone
+/// missed (ADR 0659's limit), and a helper a deferred body calls is the same one
+/// (ADR 0664's). Runs to a fixpoint: arms only grow, so it ends. A function with
+/// no symbol, or no reference, stays out, which leaves its finding where it was.
+fn arm_only_functions(
+    files: &[solid_facts::FileFacts],
+    runtime: &RuntimeEnvironment,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    arms: &mut Vec<BuildArm>,
+) {
+    if arms.is_empty() {
+        return;
+    }
+    let by_path = |path: &str| files.iter().find(|file| file.path.as_str() == path);
+    let mut done: std::collections::HashSet<(String, Span)> = std::collections::HashSet::new();
+    loop {
+        let mut grown = Vec::new();
+        for arm in arms.iter() {
+            let Some(file) = by_path(&arm.path) else {
+                continue;
+            };
+            for (target, function) in functions_named_in(file, arm, lookup) {
+                let key = (target.path.as_str().to_owned(), function.span);
+                if done.contains(&key) {
+                    continue;
+                }
+                if let Some(side) =
+                    arm_of_every_reference(target, function, runtime, lookup, files, arms)
+                {
+                    done.insert(key);
+                    grown.push(BuildArm {
+                        path: target.path.as_str().to_owned(),
+                        start_byte: u64::from(function.span.start),
+                        end_byte: u64::from(function.span.end),
+                        side,
+                    });
+                }
+            }
+        }
+        if grown.is_empty() {
+            return;
+        }
+        arms.extend(grown);
+    }
+}
+
+/// The functions an arm names by a call, a JSX tag or an attribute or argument.
+fn functions_named_in<'l>(
+    file: &solid_facts::FileFacts,
+    arm: &BuildArm,
+    lookup: &crate::indexes::SemanticLookup<'l>,
+) -> Vec<(
+    &'l solid_facts::FileFacts,
+    &'l solid_facts::ast::FunctionFact,
+)> {
+    let inside =
+        |span: Span| arm.start_byte <= u64::from(span.start) && u64::from(span.end) <= arm.end_byte;
+    let path = file.path.as_str();
+    let mut spans = Vec::new();
+    for call in file.ast.calls.iter().filter(|call| inside(call.span)) {
+        spans.push(call.callee);
+        spans.extend(call.arguments.iter().map(|argument| argument.span));
+    }
+    for element in file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| inside(element.span))
+    {
+        spans.push(element.name.span);
+        spans.extend(
+            element
+                .attributes
+                .iter()
+                .filter_map(|attribute| attribute.expression),
+        );
+    }
+    spans
+        .into_iter()
+        .filter_map(|span| lookup.function_called_at(path, file.ast.peel_ts_sugar_span(span)))
+        .collect()
+}
+
+/// The arm every reference of `function` lies in, or `None` when one lies
+/// elsewhere. `DeferredMount` passes only a call: a tag's body has its window
+/// back. A server-only arm reached by a function other files may import proves
+/// nothing about those callers, so that answer is open, not silent.
+fn arm_of_every_reference(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    runtime: &RuntimeEnvironment,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    files: &[solid_facts::FileFacts],
+    arms: &[BuildArm],
+) -> Option<ArmSide> {
+    let symbol = lookup.symbol_of_function(file, function)?;
+    let references = lookup.symbol_references(symbol.as_str());
+    let name = function
+        .name
+        .as_ref()
+        .or_else(|| crate::owners::function_binding_name(file, function))?;
+    let mut sides = Vec::new();
+    for reference in &references {
+        let start = u32::try_from(reference.start_byte).ok()?;
+        let end = u32::try_from(reference.end_byte).ok()?;
+        let span = Span::new(start, end);
+        if *reference.path == *file.path.as_str()
+            && (function.span.contains(span) || name.span == span)
+        {
+            continue;
+        }
+        let target = files
+            .iter()
+            .find(|target| target.path.as_str() == &*reference.path)?;
+        if module_specifier_reference(target, span) {
+            continue;
+        }
+        let reach = if target
+            .ast
+            .calls
+            .iter()
+            .any(|call| target.ast.peel_ts_sugar_span(call.callee) == span)
+        {
+            Reach::Call
+        } else {
+            Reach::Other
+        };
+        let side = arms
+            .iter()
+            .filter(|arm| {
+                arm.path == *reference.path
+                    && arm.start_byte <= reference.start_byte
+                    && reference.end_byte <= arm.end_byte
+                    && (arm.side != ArmSide::DeferredMount || reach == Reach::Call)
+            })
+            .map(|arm| arm.side)
+            .min_by_key(|side| side_rank(*side))?;
+        sides.push(side);
+    }
+    let side = sides.into_iter().max_by_key(|side| side_rank(*side))?;
+    let open_to_importers =
+        !runtime.program_is_closed() && crate::indexes::binding_exported(file, name.span);
+    Some(if side == ArmSide::ServerOnly && open_to_importers {
+        ArmSide::BuildConstant
+    } else {
+        side
+    })
+}
+
+/// Whether `span` is an import or export specifier, which names a binding and
+/// runs nothing. Not `export.span`: `export function f` holds all of `f`.
+pub(crate) fn module_specifier_reference(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast
+        .imports
+        .iter()
+        .any(|import| import.span.contains(span))
+        || file
+            .ast
+            .exports
+            .iter()
+            .flat_map(|export| export.specifiers.iter())
+            .any(|specifier| specifier.local.span == span)
+}
+
+/// Which arm answers when a function sits in several: the most decided first.
+const fn side_rank(side: ArmSide) -> u8 {
+    match side {
+        ArmSide::ServerOnly => 0,
+        ArmSide::NoHydration => 1,
+        ArmSide::DeferredMount => 2,
+        ArmSide::BuildConstant => 3,
+    }
 }
 
 /// ADR 0664: the bodies a client-only or resumed loader mounts. A module named

@@ -238,8 +238,7 @@
   "runtime": {
    "client": [],
    "server": []
-  },
-  "open": "SC1001: the NoHydration blocker"
+  }
  },
  "HOST/h11-nohydr-write": {
   "rule": "HOST",
@@ -254,8 +253,7 @@
    "server": [
     "SERVER_WRITE"
    ]
-  },
-  "open": "SC1001: the NoHydration blocker"
+  }
  },
  "HOST/h12-nohydr-then-hydration": {
   "rule": "HOST",
@@ -268,8 +266,7 @@
   "runtime": {
    "client": [],
    "server": []
-  },
-  "open": "SC1001: the NoHydration blocker"
+  }
  },
  "HOST/s02-body-read": {
   "rule": "HOST",

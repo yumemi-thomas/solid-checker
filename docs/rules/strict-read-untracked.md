@@ -365,3 +365,5 @@ helpers, has no call node to place it: uncertifiable (ADR 0673). So is one in a 
 (`h.call(null)`, `[1].map(h)`, a copy, a tag), and a generator's body, a parameter default and a read past an await on some paths below one (ADR 0674). A
 named function handed to a carrier that provably runs in a body takes the carrier's role: proved. A setter runs its callback on its stack: a read there, or in a `reconcile` key that is argument 0, takes the setter call's role, except a store's own Gets, which never warn
 (ADR 0676). A key on a `reconcile` held elsewhere is uncertifiable. Under a scheduler a window-inheriting call reports nothing (ADR 0675).
+
+A function every reference of which lies in an `isServer` arm never runs on a client: silent. One only a build constant, a `clientOnly` or resumed `lazy` body by call, or a `<NoHydration>` subtree in a hydrating project reaches is uncertifiable (ADR 0677). `render(Local, el)` calls `Local` with no strict window, so a read there is silent where `<Local />` warns (ADR 0678).

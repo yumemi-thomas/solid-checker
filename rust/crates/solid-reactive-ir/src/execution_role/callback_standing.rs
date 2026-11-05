@@ -1084,6 +1084,76 @@ pub(super) fn result_access_callback_contains(
 /// caller's execution role. This covers wrappers such as `batch`,
 /// `catchError`'s protected body, and `modifyMutable`; `untrack` and other
 /// explicit untracked callbacks are classified by the later dialect branch.
+/// ADR 0678: `render(Local, el)` calls `Local` as `code()` under `createRoot`,
+/// where `render(() => <Local />, el)` goes through `createComponent`: no strict
+/// window, so `Local`'s body runs like `render`'s inline callback, at the role of
+/// the call. Only when every reference of `Local` is such a call in its own
+/// file: a `<Local />` elsewhere has the window, and an export may have one.
+pub(super) fn named_mount_root_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let function = crate::owners::containing_ast_function(&file.ast, span)?;
+    if !function.body.contains(span) {
+        return None;
+    }
+    let symbol = lookup.symbol_of_function(file, function)?;
+    let name = function
+        .name
+        .as_ref()
+        .or_else(|| crate::owners::function_binding_name(file, function))?;
+    if crate::indexes::binding_exported(file, name.span) {
+        return None;
+    }
+    let mut mounts = Vec::new();
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return None;
+        }
+        let at = Span::new(
+            u32::try_from(reference.start_byte).ok()?,
+            u32::try_from(reference.end_byte).ok()?,
+        );
+        if function.span.contains(at) || name.span == at {
+            continue;
+        }
+        let (call, index) = file.ast.arguments_containing(at).next()?;
+        let mounts_here = index == 0
+            && file.ast.peel_ts_sugar_span(call.arguments[0].span) == at
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup.dialect.mount_runs_component_synchronously(primitive)
+                });
+        if !mounts_here {
+            return None;
+        }
+        mounts.push(call.span);
+    }
+    let mut roles = Vec::new();
+    for call in mounts {
+        let key = (file.path.to_string(), call);
+        if !classifying.insert(key.clone()) {
+            return None;
+        }
+        roles.push(semantic_execution_role_within(
+            file,
+            call,
+            allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        ));
+        classifying.remove(&key);
+    }
+    let first = *roles.first()?;
+    (roles.iter().all(|role| *role == first) && first != ExecutionRole::Unknown).then_some(first)
+}
+
 pub(super) fn inline_callback_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,

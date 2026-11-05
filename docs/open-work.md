@@ -290,4 +290,4 @@ Measured on rc.21; the input to `claims_client_runtime` and `ExecutionPaths`.
 | strict window, write guard | absent |
 | a pending read in a body | retried by the boundary; the body runs twice |
 
-ADR 0659 limits: `--rendering hydrated` resolves packages as the client, so dependency source is the client graph on both paths. A site in a helper only an arm calls keeps its finding. `typeof window` is uncertifiable even under a browser selection that could decide it. `claims_client_runtime` lists the rules the audit measured: SC1001, SC2001, SC2002, SC2003, SC2008, SC5001, SC6002. The corpus sweep still runs every project as `csr`.
+ADR 0659 limits: `--rendering hydrated` resolves packages as the client, so dependency source is the client graph on both paths. A site in a function with no symbol that only an arm reaches keeps its finding (ADR 0677). `typeof window` is uncertifiable even under a browser selection that could decide it. `claims_client_runtime` lists the rules the audit measured: SC1001, SC2001, SC2002, SC2003, SC2008, SC5001, SC6002. The corpus sweep still runs every project as `csr`.

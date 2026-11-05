@@ -2600,6 +2600,28 @@ fn namespace_member_primitive(
 /// `dynamic(source, { static: true })`) is the same form in every pass. The
 /// spelling stays the callee's: a form is a call of the export, not another
 /// name.
+/// Whether `element`'s tag is the dialect export spelled `name`, the same answer
+/// a primitive's tag gets, for an export with no [`Primitive`].
+pub(crate) fn jsx_tag_is(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    name: &str,
+) -> bool {
+    jsx_primitive_name_cached(
+        lookup,
+        file,
+        element,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup.dialect,
+    )
+    .is_some_and(|primitive| match primitive {
+        PrimitiveName::Known(_, spelled) => spelled == name,
+        PrimitiveName::Other(spelled) => &*spelled == name,
+    })
+}
+
 /// [`jsx_primitive_name`], answered from `lookup`'s per-file memo under the
 /// same exact-identity conditions as [`call_primitive_name_cached`]: the
 /// element is the file's own fact, found by its place in that slice.

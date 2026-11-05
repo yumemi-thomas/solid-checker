@@ -45,6 +45,10 @@ export const FLIP_READ_CONTEXTS = {
 export const FLIP_READ_LEGAL = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
+  // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag"],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag"],
+  STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
 // ADR 0665: a source no type proves sync or async. Each is pending at the read; the build before took it for a settled signal.
@@ -79,6 +83,19 @@ const holderForms = (k) => ({
 });
 
 export function flipReadContext(context, stmts, kit) {
+  if (context === "mount-named") {
+    const h = kit.name("f");
+    return { hoisted: [decl(h, fn([...stmts, ret(domExpr("<i />"))])), expr(domExpr(`render(${h}, document.createElement("div"));`, ["render"]))], body: [], view: [] };
+  }
+  if (context === "arm-helper" || context === "arm-helper-chain") {
+    const [h, g] = [kit.name("f"), kit.name("g")];
+    const held = context === "arm-helper" ? [decl(h, fn(stmts))] : [decl(g, fn(stmts)), decl(h, fn([expr(call(ref(g)))]))];
+    return { body: [...held, expr(domExpr(`if (isServer) ${h}();`, ["isServer"]))], view: [] };
+  }
+  if (context === "arm-tag") {
+    const k = kit.name("K");
+    return { body: [decl(k, fn([...stmts, ret(domExpr("<i />"))]))], view: [mounted(kit.name("v"), domExpr(`{isServer ? <${k} /> : null}`, ["isServer"]))] };
+  }
   if (context === "then-named") {
     const [f, m] = [kit.name("f"), kit.name("m")];
     const flight = domExpr(`new Promise<number>((done) => setTimeout(() => done(1), 1)).then(${f})`);

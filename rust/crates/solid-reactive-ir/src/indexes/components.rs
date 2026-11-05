@@ -875,7 +875,7 @@ pub(super) fn reference_in_type_query(file: &FileFacts, span: Span) -> bool {
 /// Whether the module exports the binding declared at `name` itself: an
 /// exported declaration, `export { name }` or `export default name`.
 /// Re-exports elsewhere need this export first.
-pub(super) fn binding_exported(file: &FileFacts, name: Span) -> bool {
+pub(crate) fn binding_exported(file: &FileFacts, name: Span) -> bool {
     file.ast
         .exports
         .iter()

@@ -33,7 +33,7 @@ mod class_prototype;
 mod closed_members;
 mod completion;
 mod components;
-pub(crate) use components::unproven_component_status;
+pub(crate) use components::{binding_exported, unproven_component_status};
 mod compound;
 mod event_delivery;
 pub(crate) use event_delivery::spelled_dispatch;
@@ -2193,6 +2193,15 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn entities(&self) -> &'a EntitySymbols {
         self.entities
+    }
+
+    /// The symbol that names `function`: its own name or its binding's.
+    pub(crate) fn symbol_of_function(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> Option<&'a SymbolId> {
+        crate::execution_role::function_symbol(file, function, self.entities)
     }
 
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {

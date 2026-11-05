@@ -37,5 +37,6 @@ pub(crate) const CAUGHT_READ_UNPROVEN: &str = "caught-read-unproven";
 pub(crate) const ASYNC_PROVENANCE_UNPROVEN: &str = "async-provenance-unproven";
 pub(crate) const ROOT_MOUNT_PASS_UNPROVEN: &str = "root-mount-pass-unproven";
 pub(crate) const MOUNT_FORM_WINDOW: &str = "mount-form-window";
+pub(crate) const NO_HYDRATION_SUBTREE: &str = "no-hydration-subtree";
 pub(crate) const HANDED_READ_AFTER_AWAIT: &str = "handed-read-after-await";
 pub(crate) const PREFERENCE_READ_UNPROVEN: &str = "preference-read-unproven";

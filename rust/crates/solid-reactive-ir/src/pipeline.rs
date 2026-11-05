@@ -671,8 +671,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.static_defects,
     );
     let mut program = draft.into_program(factory_instances);
-    program.execution_paths =
-        crate::execution_paths::execution_paths(facts, &rule_options.runtime, dialect);
+    program.execution_paths = crate::execution_paths::execution_paths(
+        facts,
+        &rule_options.runtime,
+        dialect,
+        semantic_lookup,
+    );
     // ADR 0517: a `<Loading on>` whose hold is not proven its own; ADR 0624: one
     // handed a function.
     let holds =

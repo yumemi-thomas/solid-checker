@@ -297,6 +297,12 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.named-climb-unplaced", ExecutionRole::Unknown);
         }
     }
+    // ADR 0678: reads only, a write under the root keeps its role.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(role) = named_mount_root_role(file, span, allowed, lookup, classifying)
+    {
+        return role_arm!("callee_roles.named-mount-root", role);
+    }
     if classifying.contains(&write_classification_marker()) {
         if let Some(role) =
             super::named_callbacks::named_callback_write_execution_role(file, span, lookup)
