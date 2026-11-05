@@ -1728,6 +1728,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             } else {
                 Vec::new()
             },
+            logical: match expression.operator {
+                AssignmentOperator::LogicalNullish => Some(LogicalAssignmentOperator::Nullish),
+                AssignmentOperator::LogicalOr => Some(LogicalAssignmentOperator::Or),
+                AssignmentOperator::LogicalAnd => Some(LogicalAssignmentOperator::And),
+                _ => None,
+            },
         });
         let logical = matches!(
             expression.operator,
@@ -1799,6 +1805,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             reads_target: true,
             call_initializer: None,
             array_slots: Vec::new(),
+            logical: None,
         });
         // Prefix and postfix `++`/`--` apply ToNumeric to the old value.
         self.coercing_operands

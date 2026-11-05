@@ -25,7 +25,8 @@ working (ADR 0425). The shapes, each proven at the exact store or projection
 symbol:
 
 - an assignment, compound assignment or update (`store.a.b = x`,
-  `store.n++`);
+  `store.n++`); a logical one (`??=`, `||=`, `&&=`) only where the store's own
+  literal passes its test, clean where it fails, else uncertifiable (ADR 0718);
 - a `for (… of …)` or `for (… in …)` head (`for (store.a of [2])`), which
   writes on each iteration: a violation over an array literal with an element,
   uncertifiable (`store-operation-may-not-write`) over anything else (ADR 0716);
@@ -38,7 +39,8 @@ symbol:
   path of the store. The callee must resolve through Type Facts to the
   standard library's `Array` method, so a project method of the same name, a
   typed array's `fill` and an unresolved receiver are silent (upstream's
-  `no-store-mutation-outside-setter` matches the method name);
+  `no-store-mutation-outside-setter` matches the method name); `sort`,
+  `reverse`, `fill` and `copyWithin` may write nothing: uncertifiable (ADR 0718);
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
@@ -194,7 +196,7 @@ which is a plain call there (ADR 0571).
 
 `Object.assign`, `Reflect.set`, `Object.defineProperty` and `Reflect.deleteProperty` on a
 store are writes (ADRs 0526, 0638), also through a `const` alias (`const set = Reflect.set`,
-ADR 0717), judged by the declaration. `Array.prototype.sort.call(store)` is not followed. A class method a store path holds runs with the proxy as
+ADR 0717), judged by the declaration; `Object.assign` only when its first source is a closed literal with a data key (ADR 0718). `Array.prototype.sort.call(store)` is not followed. A class method a store path holds runs with the proxy as
 `this`, so a write of `this.x` in it is uncertifiable (ADR 0638). A write through a `merge` of
 several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0630, 0634).
 

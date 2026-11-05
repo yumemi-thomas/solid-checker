@@ -408,6 +408,41 @@
    }
   },
   {
+   "id": "no-store-mutation-outside-setter/logical-assignment/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ name: null as string | null, count: 1 });\n// A logical assignment writes only when its test passes (ADR 0718).\nexport function Named() {\n  profile.name ??= \"a\";\n}\n// The literal the store still holds fails the test: nothing is written.\nexport function Counted() {\n  profile.count ??= 2;\n}\n// Nothing proves the value.\nexport function Seeded(seed: number) {\n  const [seeded] = createStore({ n: seed });\n  seeded.n ||= 2;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": { "marker": "profile.name" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "seeded.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
    "id": "no-store-mutation-outside-setter/nested-props-value/001",
    "dialect": "solid-v2",
    "source": {

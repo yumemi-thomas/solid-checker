@@ -3803,5 +3803,18 @@
   "found": "flip plan SC2003 row",
   "fixed": "ADR 0717",
   "outside": "a recall context places the site and cannot respell the write as an aliased call: the spelling is a SPEC variant in misuse.mjs, outside this track's file; the witness and fixture store-standard-library-alias pin it"
+ },
+ {
+  "finding": "SC2003: a store operation that writes nothing on its run (`??=`/`&&=` the store's literal fails, `Object.assign` of null, an empty or inherited source, `sort`/`reverse`/`fill`/`copyWithin` on a short array or empty range) was a violation; Chrome (rc.21) is silent with no [[Set]] (V-D1; ADR 0718)",
+  "found": "V-D1 (scripts/flip/notes/v-d1-checker.patch), fuzz-patterns values/d1-*, t1-assign-nonenum, t1-reverse-holes",
+  "fixed": "ADR 0718",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-noop-nullish-direct-none",
+   "lg-store-write-outside-setter-handler-noop-sort-one-direct-none",
+   "lg-store-write-outside-setter-handler-noop-assign-null-direct-none"
+  ],
+  "rediscovered": "the checker at fbecfa142 on `focus.mjs --grids lg-recall` (misuse.mjs STORE_NO_OPS variants): 540 false-positive of 540; the fix: 108 clean (noop-nullish, noop-and proven), 432 uncertifiable. fuzz-patterns: 16 values/d1-*/t1-* entries left open-defects.json"
  }
 ]
