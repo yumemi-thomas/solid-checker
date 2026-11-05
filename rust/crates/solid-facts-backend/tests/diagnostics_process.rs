@@ -2014,9 +2014,19 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     if let Some(findings) = diagnostic_fixture("http-response-flush") {
         let drops = findings_for_rule(&findings, "http-response-after-flush");
         // The two component-body calls below the Loading boundary plus the
-        // lexical call in its children; the shell, fallback, and
-        // event-handler calls stay silent.
-        assert_eq!(drops.len(), 3, "{findings:#?}");
+        // lexical call in its children; since ADR 0703 the shell and
+        // fallback calls are obligations too (no shell-content proof yet),
+        // blocker response-head-position-unproven; the event-handler call
+        // stays silent.
+        assert_eq!(drops.len(), 6, "{findings:#?}");
+        assert_eq!(
+            drops
+                .iter()
+                .filter(|finding| finding["analysisContext"] == "response-head-position-unproven")
+                .count(),
+            3,
+            "{drops:#?}"
+        );
         assert!(
             drops.iter().all(|finding| {
                 finding["severity"] == "warning" && finding["kind"] == "uncertifiable"
