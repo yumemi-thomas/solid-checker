@@ -1,17 +1,10 @@
 # Review: does the rc.3-audited Solid 2 vocabulary hold for `solid-js@2.0.0-rc.9`?
 
-Date: 2026-09-26. Status: **for the repository owner's review**. This is a
-review, not a dialect change: no row, no `AUDITED_SOLID_2` entry, and no
-dialect answer was changed.
-
-**Why it exists.** Dialect selection goes by major version only
-(`rust/crates/solid-facts-backend/src/dialect.rs:497-515`). The 2026-09-26
-sweep therefore analysed `solid-js@2.0.0-rc.9` (solid-primitives `next`) and
-`solid-js@2.0.0-experimental.1` (corvu) with the vocabulary that was read on
-rc.0/rc.3 bytes. AGENTS.md says "a newer prerelease must be reviewed rather
-than silently substituted", and the backlog entry "Newer Solid 2 prereleases
-are analysed with rc.3 vocabulary (2026-09-26)" deferred that review. This
-document is that review.
+Date: 2026-09-26. A record of what rc.9's bytes changed against rc.3. Its items
+are now implemented: `rust/crates/solid-dialect/src/solid_2/releases.rs` holds
+the per-release answers and cites this review by section; ADR 0194 and
+docs/rules/unaudited-solid-release.md state what each release gets. Paths and
+line numbers name the tree of that date.
 
 Every claim is tagged **[M]** (measured: cited to a file and line, a digest,
 or a command run on the named bytes) or **[E]** (estimated: inferred from
@@ -42,19 +35,6 @@ first *prerelease-sensitive* dialect answer. The installed version is already
 in `Detection::Installed { version, manifest }`, so the seam can carry it.
 Answering `false` for both versions would duplicate TS2540 on rc.3, which the
 absolute rule forbids.
-
-Until B1-B4 land, the owner has to choose what rc.9 projects get. The review
-does not refuse them. My advice is a visible, non-refusing notice at selection
-time. The reason is B1: today `--certify` reports `certified` for an rc.9
-project that writes a store's root property outside a setter, and rc.9 drops
-that write (§ 4.1). Refusal, option (c), would refuse most current Solid 2
-projects for four items, three of them additive. The backlog already
-records that trade-off.
-
-**Negative rows stay archive-scoped.** No rc.9 archive is listed in
-`AUDITED_ARCHIVES`, so no row answers for rc.9 today. § 7 names five
-`@solidjs/signals@2.0.0-rc.9` `creates` rows that could be granted cheaply,
-and says what they would still need.
 
 **`2.0.0-experimental.1` (corvu) should be refused, not treated as pre-rc.**
 See § 8.
@@ -467,13 +447,6 @@ uncertifiable. The second fix also covers the next prerelease.
 
 ## 6. Compiler
 
-- **What the checker compiles with [M].** `solidjs-compiler` from
-  `yumemi-thomas/solid` at distribution `9f9a84b2`, implementation
-  `7f4e1135` and upstream `a10cf1a1` (`rust/Cargo.toml:37`,
-  `rust/dialects/solid-v2/compiler/src/lib.rs:29-31`,
-  `docs/package-contract-v2/phase4/compiler-identity.json`). Semantic trace
-  version is 3. The monorepo at `9f9a84b` is version `2.0.0-rc.3`: its
-  `packages/compiler/package.json` is `@solidjs/compiler@2.0.0-rc.3`.
 - **What rc.9 "expects" [M].** `solid-js@2.0.0-rc.9` declares no compiler
   dependency. The rc.9 consumer compiles with
   `@dom-expressions/babel-plugin-jsx@0.50.0-next.44`, through
@@ -494,48 +467,10 @@ uncertifiable. The second fix also covers the next prerelease.
   facts model (`insert`, `memo`, `template`, `ref`/`applyRef`,
   `delegateEvents`) are byte-identical, and `effect` keeps its
   `createRenderEffect` shape (§ 3.5).
-- **Upstream drift [E].** The unpinned rc.7-era fork checkouts `16f0988` and
-  `9d2ccb9` differ from `9f9a84b` in 26 files under `packages/compiler/src`
-  (≈2,100 changed lines, a new `tsrx/` module, `shared/patch.rs` removed). Of
-  the helpers they import, only `rowProof` is gone [M for the counts]. A
-  compiler rebase is a separate review. rc.9 compatibility does not depend on
-  it, given the helper interface above.
 
-## 7. Negative rows: what rc.9 could get cheaply
+## 7. Negative rows
 
-Rows stay archive-scoped. No rc.9 archive is in `AUDITED_ARCHIVES`
-(`solid_2.rs:131-156`), so no row answers for rc.9 and certification of an
-rc.9 tree loses closures rather than gaining wrong ones [M].
-
-Cheap candidates are the rc.6 `@solidjs/signals` rows
-(`2026-09-25-solid-2-rc6-signals-negative-rows.md`) whose top-level dev slice
-is byte-identical from rc.6 to rc.9, or differs only in dev console
-reporting [M, slice comparison of `signals-rc6/dist/dev.js` against
-`<r9sig>/dist/dev{,-shared}.js`]:
-
-| rc.6 row | rc.9 dev slice vs rc.6 |
-| --- | --- |
-| `getOwner` `creates` | `getOwner` byte-identical (`return context`) |
-| `onCleanup` `creates` | `cleanup` byte-identical. `onCleanup` swaps `console.warn` for `reportDiagnostic`, which is console output plus the caller-installed footer hook (`dev-shared.js:600-609`) |
-| `untrack` `creates` | byte-identical |
-| `runWithOwner` `creates` | differs only in the disposed-owner `reportDiagnostic` |
-| `createRoot` `creates` | byte-identical. Its `createOwner` adds a `_name: undefined` literal slot and a `DEV` rename |
-
-Each still needs a reading of rc.9's `dist/prod/**` split files and of the
-new `dist/observe/**` tier, which the rc.6 audit never had to cover. That
-cost is estimated as small because the slices are tiny [E].
-
-Not cheap: `createSignal`, `createMemo`, `createTrackedEffect`, `onSettled`,
-`flush`, `createStore`, `createProjection`, `createOptimistic*`,
-`reconcile`, `snapshot` and `action`. Their top slices are sometimes
-identical, but their closures changed: `computed`, `recompute` (4188-4775,
-rewritten), `trackedEffect`, `flush`, and the store rewrite [M].
-
-The `solid-js@2.0.0-rc.9` rows are not cheap either. `solid-js`'s
-`createRoot` is its own export in rc.9 (§ 3.3). The rc.3 rows that paired
-signals bodies with `solid-js@rc.3` server bodies need `solid-js@rc.9`'s:
-`runWithOwner` changed there (§ 3.6), and `getOwner` and `untrack` were not
-re-read in this review.
+Retired with the package-contract tier (ADR 0312).
 
 ## 8. `2.0.0-experimental.1` (corvu)
 
@@ -573,11 +508,6 @@ the vocabulary cites. It is the same seam extension B1 needs.
 
 ## 9. Not done, and incidental observations
 
-- **Not done.** No rc.9 RFC text was read (§ 1). `@solidjs/web` server
-  functions beyond the rich-argument throw were not compared. The `observe`
-  bundles were not read, only enumerated. The `omit` proxy traps were not
-  read in full (B3). No tarball integrity was re-derived. No contract or
-  census was run on rc.9.
 - **Incidental, version-independent [M].** Probe L shows `createRenderEffect`
   runs its apply function *during* the creating call on both rc.3 and rc.9,
   dev and prod (`compute,apply,returned`). `effect()` calls
