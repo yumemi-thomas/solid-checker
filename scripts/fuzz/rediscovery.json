@@ -3541,5 +3541,11 @@
    "mx-reactive-write-in-owned-scope-dny-typo-event-refresh-direct-none"
   ],
   "rediscovered": "207b13142: 3 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "a resolved solid-js manifest whose version names no release (\"nightly\") was read as an absence: analyzed under the default dialect and certified (flip SC9013, ADR 0700)",
+  "found": "the flip plan's SC9013 row (scripts/flip/PLAN.md), measured with \"version\":\"nightly\"",
+  "fixed": "ADR 0700",
+  "outside": "the generator writes programs against one oracle install; it never writes a project's own node_modules/solid-js manifest. The process test an_unclassified_release_is_analyzed_with_a_named_blocker (fixture unclassified-release-nightly) holds it"
  }
 ]

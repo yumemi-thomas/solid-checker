@@ -883,7 +883,7 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
     };
     let mut finding = Finding::new(metadata, message, location);
     finding.hint = hint;
-    finding.analysis_context = "dialect-detection".into();
+    finding.analysis_context = notice.blocker.unwrap_or("dialect-detection").into();
     finding.subject_kind = "project".into();
     finding.evidence = evidence;
     finding
