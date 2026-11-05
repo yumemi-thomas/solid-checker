@@ -1,4 +1,25 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args-enabled/App.tsx",
+      "start": 547,
+      "end": 551,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args-enabled/App.tsx",
+      "start": 553,
+      "end": 557,
+      "fixes": 0
+    }
+  ]
 }

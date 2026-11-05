@@ -62,6 +62,15 @@ SC2001.
 - **SC7006 D12** (ADR 0706): `valid_use_server.rs` `captured_bindings`: a value reference in an extracted, nested server
   function whose declaration is in an enclosing function (or is its own name) is a violation, proven from the binder; rc.21
   `transformDirectives` measured on 12 shapes. Fixture `valid-use-server-capture`. Corpus 0 moved.
+- **SC7007 SSR follow-up** (ADR 0707): D9 namespace member calls (`namespace_member_function` fallback), D10 the opt-in is the
+  `enableRichArguments()` call (proven only unconditional at module scope in the client entry before its render, matched by
+  import binding: a zero-arg call has no resolved-call fact; an import otherwise Unresolved, never Disabled), D11 `-0` (a zero
+  constant or numeric literal domain proves nothing; an unsigned decimal literal as argument or graph leaf does), D4 a leading
+  `undefined` before another argument is uncertain. Not built: D5, dynamic `import()`, a client-reached non-entry file
+  (open-work). Fixtures `server-function-transport-audit`, `server-function-rich-args-entry`. Corpus 0 moved.
+  **Trap:** `verify-delta` does not select `diagnostics_process` for `server_rules.rs`; run
+  `cargo test -p solid-facts-backend --test diagnostics_process` by hand after any server rule change (it caught 3 stale
+  tests here, 2 at the merge).
 - **Post-merge baseline sweep**: `~/EDF/tmp/flipw/sweep-merge.json` (059beb67a, binaries `bins/wmerge`): 16,835 (16,452 U,
   383 V). Diff later rules against it.
 
@@ -90,7 +99,7 @@ SC2001.
 
 ## Next
 
-SC7007 SSR follow-up (D9 namespace calls and dynamic import, D10 call-not-import opt-in, D11 -0, D4 leading undefined, D5 first run under SSR; `h/sf.mjs` is not on this machine), then SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
+SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
 `~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)

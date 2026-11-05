@@ -3711,5 +3711,11 @@
   "found": "the SSR premise audit (d01, d02, d24, d25), rerun here with @solidjs/compiler@2.0.0-rc.21 transformDirectives on twelve shapes",
   "fixed": "ADR 0706",
   "outside": "SC7006's oracle is the compiler's directive pass, not a runtime: no grid compiles \"use server\" (scripts/fuzz/README.md, the SSR host section, already says so). Fixture valid-use-server-capture holds the seven errors and four compiling shapes"
+ },
+ {
+  "finding": "server-function-rich-argument (SC7007) at rc.21's transport: a namespace member call api.save(new Date()) and zero(-0) certified, an enableRichArguments import counted as the opt-in, and f(undefined, new Uint8Array(2)) was a violation though rc.21 sends it (SSR audit D9, D10, D11, D4; ADR 0707)",
+  "found": "the SSR premise audit (scripts/flip/notes/ssr/report.md, h/sf.mjs at the real /_server boundary on the other machine)",
+  "fixed": "ADR 0707",
+  "outside": "no grid compiles \"use server\"; the audit's h/sf.mjs host is not in this repository. Fixtures server-function-transport-audit and server-function-rich-args-entry hold the shapes, and the report's witnesses r01-r08, r17, f16 are the runtime record"
  }
 ]

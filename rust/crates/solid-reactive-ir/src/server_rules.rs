@@ -431,9 +431,15 @@ fn rich_arguments_in_file(
         if call.arguments.is_empty() {
             continue;
         }
+        // ADR 0707 (SSR audit D9): a static member of a namespace import
+        // (`api.save(new Date())`) is the exported function itself.
         let Some((declaration_file, function)) = ctx
             .semantic_lookup
             .function_called_at(file.path.as_str(), call.callee)
+            .or_else(|| {
+                ctx.semantic_lookup
+                    .namespace_member_function(file, call.callee)
+            })
         else {
             // A member read off a server function (`query.keyFor(x)`) is
             // not that function, and nothing names it by its leading token.
@@ -534,7 +540,9 @@ fn rich_arguments_in_file(
                 .as_deref()
                 .and_then(|types| rich_transport_member(types));
             let Some(matched) = matched else {
-                if argument_is_proven_json_safe(argument, entity) {
+                if argument_is_proven_json_safe(argument, entity)
+                    || argument_is_unsigned_number_literal(file, argument)
+                {
                     continue;
                 }
                 let serializer =
@@ -564,7 +572,22 @@ fn rich_arguments_in_file(
                         ObjectGraphProof::Open => {}
                     }
                 }
-                if argument_is_proven_json_unsafe_primitive(entity) {
+                // ADR 0707 (SSR audit D4): rc.21 sends a leading `undefined`
+                // as `null` when a later argument goes as the request body, so
+                // an `undefined` before another argument is not a proven throw.
+                let leading_undefined = index + 1 < call.arguments.len()
+                    && entity
+                        .primitive_value_domain
+                        .present()
+                        .is_some_and(|domain| domain.may_be_undefined());
+                if argument_is_proven_json_unsafe_primitive(entity) && leading_undefined {
+                    push_rich_argument_uncertainty(
+                        &mut defects,
+                        file,
+                        argument.span,
+                        "a leading undefined is sent as null when a later argument goes as the request body, so whether this call throws is not proven",
+                    );
+                } else if argument_is_proven_json_unsafe_primitive(entity) {
                     if serializer == SerializerProof::Unresolved {
                         push_rich_argument_uncertainty(
                             &mut defects,
@@ -672,6 +695,29 @@ fn argument_is_proven_json_safe(
     value_is_proven_json_safe(entity)
 }
 
+/// ADR 0707 (SSR audit D11): an unsigned decimal literal written as the
+/// argument itself (`0`, `42`, `1.5`; no sign, exponent or radix prefix, at
+/// most 15 digits) is finite and is not negative zero, which rc.21's
+/// `isJSONSafe` rejects (`Object.is(v, -0)`) and whose literal type is `0`.
+fn argument_is_unsigned_number_literal(
+    file: &FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> bool {
+    unsigned_number_literal(file.source_text(file.ast.peel_ts_sugar_span(argument.span)))
+}
+
+fn unsigned_number_literal(text: Option<&str>) -> bool {
+    text.is_some_and(|text| {
+        !text.is_empty()
+            && text.len() <= 15
+            && text.starts_with(|first: char| first.is_ascii_digit())
+            && text
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '.' || c == '_')
+            && text.matches('.').count() <= 1
+    })
+}
+
 /// Whether one runtime value is proven to be inside JSON's domain, from the
 /// compiler's constant value or its primitive domain. Shared by the argument
 /// check and the object-graph walk so the two cannot drift.
@@ -679,7 +725,10 @@ fn value_is_proven_json_safe(entity: &EntityFact) -> bool {
     if let Some(value) = entity.constant_value.as_ref() {
         return match value.kind {
             ConstantValueKind::String => true,
-            ConstantValueKind::Number => value.number.is_finite(),
+            // ADR 0707: TypeScript types `-0` as `0`, and rc.21's
+            // `isJSONSafe` rejects negative zero: a zero constant is not
+            // proven safe.
+            ConstantValueKind::Number => value.number.is_finite() && value.number != 0.0,
         };
     }
     let Some(domain) = entity.primitive_value_domain.present() else {
@@ -690,7 +739,8 @@ fn value_is_proven_json_safe(entity: &EntityFact) -> bool {
         && !domain.may_be_symbol()
         && !domain.may_be_undefined()
         && !domain.may_be_object()
-        && (!domain.may_be_number() || domain.numbers_are_finite())
+        // ADR 0707: a finite literal domain may hold `0`, which may be `-0`.
+        && !domain.may_be_number()
 }
 
 fn argument_is_proven_json_unsafe_primitive(entity: &EntityFact) -> bool {
@@ -1008,6 +1058,8 @@ fn object_graph_proof(
             }
             leaf_safe |= value_is_proven_json_safe(entity);
         }
+        // ADR 0707: an unsigned decimal literal written as the value.
+        leaf_safe |= unsigned_number_literal(file.source_text(file.ast.peel_ts_sugar_span(value)));
         // An accessor's written value is a function whose body runs on access,
         // so it proves nothing about what the property yields.
         all_safe &= leaf_safe && property.data;
@@ -1053,13 +1105,16 @@ fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMe
 fn project_rich_argument_serializer(ctx: &AnalysisContext<'_>) -> SerializerProof {
     let mut unresolved = false;
     for file in &ctx.facts.files {
-        let rich_args_import = file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && import.module.as_str() == "@solidjs/web/server-functions/rich-args"
-                && import.bindings.iter().any(|binding| !binding.type_only)
-        });
-        if rich_args_import {
-            return SerializerProof::Enabled;
+        // ADR 0707 (SSR audit D10): the opt-in is the call, not the import:
+        // rc.21's rich-args installs the codec inside
+        // `enableRichArguments()`. Proven only for an unconditional
+        // module-scope call in the client entry, before its `render` or
+        // `hydrate`; any other call (in a function, under a condition, after
+        // the render, in another file) is unresolved.
+        match rich_arguments_enabled_in(ctx, file) {
+            Some(true) => return SerializerProof::Enabled,
+            Some(false) => unresolved = true,
+            None => {}
         }
         for call in &file.ast.calls {
             let exact_configure = ctx
@@ -1098,6 +1153,76 @@ fn project_rich_argument_serializer(ctx: &AnalysisContext<'_>) -> SerializerProo
     } else {
         SerializerProof::Disabled
     }
+}
+
+/// `Some(true)`: `file` calls `enableRichArguments()` unconditionally at module
+/// scope before a module-scope `render`/`hydrate` call; `Some(false)`: it
+/// imports the rich-args entry and the call is not proven so; `None`: it does
+/// not import it. Callees are matched through the binder to their import
+/// binding (a zero-argument call has no resolved-call fact to ask).
+fn rich_arguments_enabled_in(ctx: &AnalysisContext<'_>, file: &FileFacts) -> Option<bool> {
+    const RICH_ARGS: &str = "@solidjs/web/server-functions/rich-args";
+    let ast = &file.ast;
+    if !ast
+        .imports
+        .iter()
+        .any(|import| !import.type_only && import.module.as_str() == RICH_ARGS)
+    {
+        return None;
+    }
+    let imported_as =
+        |call: &solid_facts::ast::CallFact, names: &[&str], module: &dyn Fn(&str) -> bool| {
+            ast.reference_declaration(ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|declaration| {
+                    ast.imports.iter().any(|import| {
+                        !import.type_only
+                            && module(import.module.as_str())
+                            && import.bindings.iter().any(|binding| {
+                                !binding.type_only
+                                    && binding.local.span == declaration
+                                    && binding
+                                        .imported
+                                        .as_deref()
+                                        .is_some_and(|imported| names.contains(&imported))
+                            })
+                    })
+                })
+        };
+    let unconditional_module_scope = |span: Span| {
+        ast.innermost_function_containing(span).is_none()
+            && !ast.if_regions.iter().any(|region| {
+                region.consequent.contains(span)
+                    || region
+                        .alternate
+                        .is_some_and(|alternate| alternate.contains(span))
+            })
+            && !ast
+                .logical_expressions
+                .iter()
+                .any(|logical| logical.right.contains(span))
+            && !ast.conditional_expressions.iter().any(|conditional| {
+                conditional.consequent.contains(span) || conditional.alternate.contains(span)
+            })
+    };
+    let first_root = ast
+        .calls
+        .iter()
+        .filter(|call| {
+            unconditional_module_scope(call.span)
+                && imported_as(call, &["render", "hydrate"], &|module| {
+                    ctx.dialect.owns_module(module)
+                })
+        })
+        .map(|call| call.span.start)
+        .min();
+    Some(first_root.is_some_and(|root| {
+        ast.calls.iter().any(|call| {
+            imported_as(call, &["enableRichArguments"], &|module| {
+                module == RICH_ARGS
+            }) && unconditional_module_scope(call.span)
+                && call.span.end <= root
+        })
+    }))
 }
 
 #[cfg(test)]
