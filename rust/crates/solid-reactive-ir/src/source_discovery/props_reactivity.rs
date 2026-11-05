@@ -707,9 +707,6 @@ pub(super) fn classify_one_component(
     if references.is_empty() {
         escapes = true;
     }
-    let name_text = name
-        .and_then(|name| file.source_text(name.span))
-        .unwrap_or_default();
     for reference in &references {
         let (Ok(start), Ok(end)) = (
             u32::try_from(reference.start_byte),
@@ -719,16 +716,17 @@ pub(super) fn classify_one_component(
             continue;
         };
         let span = Span::new(start, end);
-        let own_declaration = *reference.path == *file.path.as_str()
-            && (function.span.contains(span) || name.is_some_and(|name| name.span == span));
+        // Exact (ADR 0684): a reference written in the component's own body, or
+        // in its element's children, is a use like any other: `saved = C`,
+        // `<C>{C({ run: setN })}</C>` and `me={C}` hand the component on.
+        let own_declaration =
+            *reference.path == *file.path.as_str() && name.is_some_and(|name| name.span == span);
         if own_declaration {
             continue;
         }
         let jsx_use = component_uses.iter().any(|(use_file, element)| {
             *reference.path == *use_file.path.as_str()
-                && (element.name.span == span
-                    || (element.span.contains(span)
-                        && use_file.source_text(span) == Some(name_text)))
+                && (element.name.span == span || element.closing_name == Some(span))
         });
         if !jsx_use {
             // Passed as a value, aliased, or re-exported: this hands the

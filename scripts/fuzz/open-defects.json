@@ -1273,51 +1273,6 @@
    "certified": true
   },
   {
-   "id": "returns/w6-direct-call-in-own-element",
-   "item": "H-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/x1-dynamic-in-own-element-setter",
-   "item": "H-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/x2-saved-in-own-body-setter",
-   "item": "H-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/x3-self-as-attr-setter",
-   "item": "H-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/x5-direct-call-setter",
-   "item": "H-D5",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/a01-body",
    "item": "T-other",
    "outcome": "false-clean",

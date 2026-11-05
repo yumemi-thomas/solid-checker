@@ -3993,5 +3993,11 @@
    "lg-strict-read-untracked-subclass-late-foreach-signal-direct-handoff-function"
   ],
   "rediscovered": "the checker at 8a2de6a8e on legal.mjs --recall (flip-read.mjs context subclass-late-foreach): 14 false positive, 73 unexecuted; the fix 1,860 programs, 0 of either"
+ },
+ {
+  "finding": "a component handed on by a reference inside its own body or element: certified, Chrome throws (x1 x2 x3 x5 w6)",
+  "found": "H-D5, sc9012-census.md",
+  "fixed": "ADR 0684",
+  "outside": "the site is a prop called in the component, and the value reaches it through the component's own reference: a generator context writes one site inside one holder. Patterns returns/x1, x2, x3, x5, w6 were listed false cleans until this commit"
  }
 ]
