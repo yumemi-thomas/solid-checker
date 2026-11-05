@@ -142,7 +142,15 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
 `static_api.rs` is the helper-aware form of `unplaced_run`, reuse it for SC2008/SC6002):
 2. SC2006, SC2008, SC6002 done (ADRs 0708-0710). SC6001 needs no flip (plan).
 3. SC3001 done (ADR 0711).
-4. **SC2009**, then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
+4. **SC2009** (started, nothing committed). Found: `transported_writes` (local_access.rs, W's `:4050` area) does not carry a
+   setter through a JSX prop: `<K s={setO} />` then `props.s(2)` in K is certified with and without the `as` cast, so the plan's
+   edit there cannot close a04. Patch for the hook/context transport half (an SC2009 obligation, blocker
+   `optimistic-reach-unresolved`, when `optimistic_async_setter(symbol)` in the transported loop, plus
+   `draft.static_violations.extend(transported.static_violations)` in reactive_analysis.rs, which drops them today) saved at
+   `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
+   component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
+   `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
+   Then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
    patterns.mjs import-before-subscribe artifact first; the edit is the measured dead-branch false positive at
    `owner_context.rs:242`), **SC2002** then **SC2003** (`.../sc2003.md`, 5 commits) then **SC2001** last
    (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`: gate `unreached_write` on "site may run", exclude module initialization;
