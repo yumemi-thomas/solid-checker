@@ -117,15 +117,31 @@ pub(super) fn native_promise_claim(
     span: Span,
     depth: usize,
 ) -> bool {
+    claim(ctx, file, span, depth) == Some(true)
+}
+
+/// ADR 0750: the claim stopped at [`MAX_DEPTH`] before it was decided: the
+/// receiver may be native, so its handlers are obligations, not a thenable's.
+pub(super) fn native_promise_undecided(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    span: Span,
+    depth: usize,
+) -> bool {
+    claim(ctx, file, span, depth).is_none()
+}
+
+/// [`native_promise_claim`], `None` where the nesting limit cut it.
+fn claim(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span, depth: usize) -> Option<bool> {
     if depth > MAX_DEPTH {
-        return false;
+        return None;
     }
     let span = file.ast.peel_ts_sugar_span(span);
     let Some(call) = file.ast.call_at(span) else {
-        return false;
+        return Some(false);
     };
     if async_helper(ctx, file, call).is_some() {
-        return true;
+        return Some(true);
     }
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     // An `async` function literal called in place returns the intrinsic promise.
@@ -135,14 +151,14 @@ pub(super) fn native_promise_claim(
             .function_at(callee)
             .is_some_and(|function| function.r#async && !function.generator)
     {
-        return true;
+        return Some(true);
     }
     let standard = ctx
         .semantic_lookup
         .resolved_callee_call(file, call.callee)
         .and_then(standard_call_name);
     match (call.construct, standard) {
-        (true, Some("PromiseConstructor.construct")) => is_global_promise(file, call.callee),
+        (true, Some("PromiseConstructor.construct")) => Some(is_global_promise(file, call.callee)),
         (
             false,
             Some(
@@ -153,17 +169,19 @@ pub(super) fn native_promise_claim(
                 | "PromiseConstructor.race"
                 | "PromiseConstructor.any",
             ),
-        ) => is_global_promise_static(file, callee),
+        ) => Some(is_global_promise_static(file, callee)),
         (false, Some("Promise.then" | "Promise.catch" | "Promise.finally")) => file
             .ast
             .member_at(callee)
             .filter(|_| !file.ast.computed_members.contains(&callee))
-            .is_some_and(|member| native_promise_claim(ctx, file, member.object, depth + 1)),
+            .map_or(Some(false), |member| {
+                claim(ctx, file, member.object, depth + 1)
+            }),
         (false, Some(name @ ("fetch" | "WindowOrWorkerGlobalScope.fetch"))) => {
-            direct_builtin(file, call, name)
+            Some(direct_builtin(file, call, name))
         }
         (false, None) => returns_native_promise_claim(ctx, file, call, depth),
-        _ => false,
+        _ => Some(false),
     }
 }
 
@@ -174,19 +192,19 @@ fn returns_native_promise_claim(
     file: &FileFacts,
     call: &CallFact,
     depth: usize,
-) -> bool {
+) -> Option<bool> {
     if call.construct {
-        return false;
+        return Some(false);
     }
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     if file.ast.member_at(callee).is_some() {
-        return false;
+        return Some(false);
     }
     let Some((helper_file, helper)) = ctx
         .semantic_lookup
         .function_called_at(file.path.as_str(), callee)
     else {
-        return false;
+        return Some(false);
     };
     if helper.generator
         || helper.method_name.is_some()
@@ -194,7 +212,7 @@ fn returns_native_promise_claim(
             .semantic_lookup
             .function_value_is_current(helper_file, helper)
     {
-        return false;
+        return Some(false);
     }
     let mut returned = helper_file
         .ast
@@ -202,11 +220,19 @@ fn returns_native_promise_claim(
         .chain(helper.expression_return.iter())
         .peekable();
     if returned.peek().is_none() {
-        return false;
+        return Some(false);
     }
-    returned.all(|returned| {
-        returned
-            .argument
-            .is_some_and(|argument| native_promise_claim(ctx, helper_file, argument, depth + 1))
-    })
+    // Every return must be native; one proven not is no, one undecided is
+    // undecided.
+    let mut answer = Some(true);
+    for returned in returned {
+        match returned.argument.map_or(Some(false), |argument| {
+            claim(ctx, helper_file, argument, depth + 1)
+        }) {
+            Some(true) => {}
+            Some(false) => return Some(false),
+            None => answer = None,
+        }
+    }
+    answer
 }

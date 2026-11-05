@@ -43,6 +43,8 @@ dependency code is outside the facts (premise, docs/open-work.md).
 
 ## When it is uncertifiable
 
+A walk past its bound (13 helpers, ADR 0750) is uncertifiable, `search-depth-limit`.
+
 The marker is one global: an effect run synchronously inside the callback
 (a render effect created under `runWithOwner`) lowers it when it returns. So the
 claim is a violation only when no call runs in the apply before the creating

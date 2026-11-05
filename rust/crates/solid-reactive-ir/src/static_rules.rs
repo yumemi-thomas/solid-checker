@@ -891,7 +891,7 @@ fn handed_reads_after_await_through_calls<'a>(
                     else {
                         continue;
                     };
-                    let Some((read_file, read)) =
+                    let Some((read_file, read, blocker)) =
                         region_calls_handed(ctx, &tables, file, literal.body, literal.span, 3)
                     else {
                         continue;
@@ -907,7 +907,7 @@ fn handed_reads_after_await_through_calls<'a>(
                             member: None,
                         },
                         location: location(read_file.path.shared(), read),
-                        analysis_context: format!("handed-read-after-await {analysis_context}"),
+                        analysis_context: format!("{blocker} {analysis_context}"),
                         fixes: vec![],
                         uncertain: true,
                     });
@@ -957,7 +957,7 @@ fn handed_reads_after_await_through_calls<'a>(
                             region_calls_handed(ctx, &tables, file, literal.body, literal.span, 3)
                         })
                 };
-                let Some((read_file, read)) = through_helper
+                let Some((read_file, read, blocker)) = through_helper
                     .or_else(through_argument)
                     .or_else(through_literal)
                 else {
@@ -983,7 +983,7 @@ fn handed_reads_after_await_through_calls<'a>(
                         member: None,
                     },
                     location: location(read_file.path.shared(), read),
-                    analysis_context: format!("handed-read-after-await {analysis_context}"),
+                    analysis_context: format!("{blocker} {analysis_context}"),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -994,7 +994,8 @@ fn handed_reads_after_await_through_calls<'a>(
 
 /// The first read in `region` (or a helper it calls, `depth` deep) of a
 /// value a caller supplied: a call of one, or a prop read the callers do not
-/// prove static. Its file and span.
+/// prove static. Its file and span, and the blocker it is reported under:
+/// ADR 0750, a helper past `depth` is unread, so its call stands for it.
 fn region_calls_handed<'f>(
     ctx: &AnalysisContext<'f>,
     tables: &crate::local_access::HandedTables<'_, '_>,
@@ -1002,10 +1003,11 @@ fn region_calls_handed<'f>(
     region: solid_facts::core::Span,
     owner: solid_facts::core::Span,
     depth: usize,
-) -> Option<(&'f solid_facts::FileFacts, solid_facts::core::Span)> {
-    if depth == 0 {
-        return None;
-    }
+) -> Option<(
+    &'f solid_facts::FileFacts,
+    solid_facts::core::Span,
+    &'static str,
+)> {
     // A prop read the callers do not prove static (a getter-backed prop).
     let prop_read = file.ast.members.iter().find(|member| {
         if !region.contains(member.span) || file.ast.computed_members.contains(&member.span) {
@@ -1024,7 +1026,7 @@ fn region_calls_handed<'f>(
         })
     });
     if let Some(member) = prop_read {
-        return Some((file, member.span));
+        return Some((file, member.span, HANDED_READ_AFTER_AWAIT));
     }
     file.ast
         .calls
@@ -1048,7 +1050,7 @@ fn region_calls_handed<'f>(
                 call.callee,
                 crate::local_access::HANDED_DEPTH,
             ) {
-                return Some((file, call.callee));
+                return Some((file, call.callee, HANDED_READ_AFTER_AWAIT));
             }
             let (inner_file, inner) = ctx
                 .semantic_lookup
@@ -1056,9 +1058,16 @@ fn region_calls_handed<'f>(
             if inner.span == owner {
                 return None;
             }
+            // `depth` regions are read, this one included.
+            if depth <= 1 {
+                return Some((file, call.callee, crate::blockers::SEARCH_DEPTH_LIMIT));
+            }
             region_calls_handed(ctx, tables, inner_file, inner.body, inner.span, depth - 1)
         })
 }
+
+/// The obligation context of a handed read after an await (ADR 0509).
+const HANDED_READ_AFTER_AWAIT: &str = "handed-read-after-await";
 
 /// ADR 0294: a typed candidate whose implementation is not visible.
 fn typed_unknown(ctx: &AnalysisContext<'_>, symbol: &SymbolId) -> bool {

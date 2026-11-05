@@ -88,6 +88,11 @@ pub(crate) struct EffectPhaseOrigin {
     /// ADR 0541: the primitive whose callback the walk ended at, for the
     /// wording (`createEffect`, `createRenderEffect`, `createReaction`).
     pub(crate) primitive: solid_dialect::Primitive,
+    /// ADR 0750: no origin was found, but the walk stopped at a bound
+    /// ([`MAX_LAYERS`], [`BUDGET`], the re-export depth) before it decided:
+    /// an apply may run the code. `mixed` is set, `apply` is the span itself;
+    /// the value is the blocker naming the bound.
+    pub(crate) undecided: Option<&'static str>,
 }
 
 impl EffectPhaseOrigin {
@@ -147,6 +152,7 @@ fn walk_to_effect_phase(
         files: std::cell::OnceCell::new(),
         visiting: HashSet::default(),
         budget: BUDGET,
+        limited: std::cell::Cell::new(None),
         earlier: false,
         from: None,
         stepped: false,
@@ -154,9 +160,22 @@ fn walk_to_effect_phase(
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
     let flush_call = file.ast.calls.iter().find(|call| call.span == span)?;
-    let flush_instance = walk.instance_of(file, flush_call.callee)?;
+    let undecided = |walk: &Walk<'_, '_>| {
+        walk.limited.get().map(|blocker| EffectPhaseOrigin {
+            path: file.path.to_string(),
+            helper_calls: 0,
+            apply: span,
+            earlier_call: true,
+            mixed: true,
+            primitive: solid_dialect::Primitive::CreateEffect,
+            undecided: Some(blocker),
+        })
+    };
+    let Some(flush_instance) = walk.instance_of(file, flush_call.callee) else {
+        return undecided(&walk);
+    };
     walk.flush_instance = flush_instance;
-    walk.layer(file, span, 0)
+    walk.layer(file, span, 0).or_else(|| undecided(&walk))
 }
 
 struct Walk<'l, 'a> {
@@ -175,6 +194,8 @@ struct Walk<'l, 'a> {
     /// Functions the walk is inside through a call, so a call cycle ends.
     visiting: HashSet<(String, Span)>,
     budget: usize,
+    /// ADR 0750: a bound stopped some branch of the walk.
+    limited: std::cell::Cell<Option<&'static str>>,
     /// A call that may run before the path ([`EffectPhaseOrigin::earlier_call`]).
     earlier: bool,
     /// The layer the walk just left, whose own calls are the path's.
@@ -191,7 +212,11 @@ impl<'l, 'a> Walk<'l, 'a> {
         span: Span,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        if helper_calls > MAX_LAYERS || inside_instance_field(file, span) {
+        if helper_calls > MAX_LAYERS {
+            self.limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+            return None;
+        }
+        if inside_instance_field(file, span) {
             return None;
         }
         // Module scope: nothing around the span runs it.
@@ -332,6 +357,8 @@ impl<'l, 'a> Walk<'l, 'a> {
         let mut every = true;
         for call in calls {
             if self.budget == 0 {
+                self.limited
+                    .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));
                 every = false;
                 break;
             }
@@ -386,6 +413,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         earlier_call: self.earlier,
                         mixed: self.stepped,
                         primitive,
+                        undecided: None,
                     });
             }
             // ADR 0541: a callback only whose later runs are in the phase
@@ -401,6 +429,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         earlier_call: self.earlier,
                         mixed: true,
                         primitive,
+                        undecided: None,
                     });
             }
             if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
@@ -575,6 +604,7 @@ impl<'l, 'a> Walk<'l, 'a> {
         depth: usize,
     ) -> Chain {
         if depth > 8 {
+            self.limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
             return Chain::Unknown;
         }
         let Some(landing) = self.landing(file, span, module) else {
@@ -743,6 +773,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                 earlier_call: walk.earlier,
                 mixed: reruns,
                 primitive,
+                undecided: None,
             })
         };
         let references_of = |symbol: &str| -> Vec<(String, Span)> {
@@ -943,6 +974,8 @@ impl<'l, 'a> Walk<'l, 'a> {
         let mut every = !escapes;
         for (caller, callee) in sites {
             if self.budget == 0 {
+                self.limited
+                    .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));
                 every = false;
                 break;
             }

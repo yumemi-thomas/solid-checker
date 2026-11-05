@@ -1021,3 +1021,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-parameter-flow/node_modules/**
 !fixtures/reactive-ir/store-element-flow/node_modules/
 !fixtures/reactive-ir/store-element-flow/node_modules/**
+!fixtures/reactive-ir/bounds-search-depth-limit/node_modules/
+!fixtures/reactive-ir/bounds-search-depth-limit/node_modules/**

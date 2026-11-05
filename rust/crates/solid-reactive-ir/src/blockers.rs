@@ -14,6 +14,13 @@ pub(crate) const CLIENT_ROOT_UNPROVEN: &str = "client-root-unproven";
 /// ADR 0659: a site under a build constant no selection decides here.
 pub(crate) const BUILD_CONSTANT_ARM: &str = "build-constant-arm";
 
+/// ADR 0750: a search stopped at its depth limit (a chain of calls, promises,
+/// layers or values longer than it follows) before it decided.
+pub(crate) const SEARCH_DEPTH_LIMIT: &str = "search-depth-limit";
+/// ADR 0750: a search's work budget, site cap or round cap ran out before it
+/// decided.
+pub(crate) const SEARCH_BUDGET_EXHAUSTED: &str = "search-budget-exhausted";
+
 // Track W.
 pub(crate) const SOLID_VERSION_UNCLASSIFIED: &str = "solid-version-unclassified";
 pub(crate) const RESPONSE_HEAD_POSITION_UNPROVEN: &str = "response-head-position-unproven";

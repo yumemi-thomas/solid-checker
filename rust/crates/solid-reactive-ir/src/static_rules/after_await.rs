@@ -36,7 +36,8 @@
 //! (ADR 0195).
 
 use super::native_promise::{
-    async_helper, is_global_promise, is_global_promise_static, native_promise, native_promise_claim,
+    async_helper, is_global_promise, is_global_promise_static, native_promise,
+    native_promise_claim, native_promise_undecided,
 };
 use super::pre_await::{PreAwait, Tracking};
 use super::{
@@ -1749,6 +1750,22 @@ impl<'f, 'a> Reach<'f, 'a> {
 
     /// ADR 0537: a call past the region bound: what it runs is not followed,
     /// so it is an obligation.
+    /// ADR 0750: `call` continues a chain past [`MAX_DEPTH`]: an obligation
+    /// at its callee, named by the bound.
+    fn push_search_limit(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &Walk<'_>,
+        file: &FileFacts,
+        call: &CallFact,
+    ) {
+        let mark = draft.static_defects.len();
+        self.push_unfollowed(draft, walk, file, call, call.callee);
+        for defect in &mut draft.static_defects[mark..] {
+            defect.analysis_context = crate::blockers::SEARCH_DEPTH_LIMIT.into();
+        }
+    }
+
     fn push_unfollowed(
         &self,
         draft: &mut ProgramDraft,
@@ -1873,7 +1890,13 @@ impl<'f, 'a> Reach<'f, 'a> {
         call: &'f CallFact,
         depth: usize,
     ) {
-        if depth > MAX_DEPTH || call.construct {
+        if call.construct {
+            return;
+        }
+        if depth > MAX_DEPTH {
+            // ADR 0750: the chain goes on past the nesting limit; what its
+            // handlers read after the await is unknown, never clean.
+            self.push_search_limit(draft, walk, file, call);
             return;
         }
         let ctx = self.ctx;
@@ -1981,7 +2004,12 @@ impl<'f, 'a> Reach<'f, 'a> {
                     // ADR 0349: a receiver the premise would prove native, which
                     // a visible write withdraws, is unproven, not clean: its
                     // handlers are proof obligations.
-                    if native_promise_claim(self.ctx, file, receiver, 0) {
+                    // ADR 0750: a receiver whose claim the nesting limit cut
+                    // may be native too: its handlers are obligations.
+                    let undecided = !native_promise_claim(self.ctx, file, receiver, 0)
+                        && native_promise_undecided(self.ctx, file, receiver, 0);
+                    let mark = draft.static_defects.len();
+                    if undecided || native_promise_claim(self.ctx, file, receiver, 0) {
                         for argument in call
                             .arguments
                             .iter()
@@ -1997,9 +2025,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                                     file,
                                     callback,
                                     depth,
-                                    &AfterAwaitObligation::IntrinsicMayBeReplaced,
+                                    &if undecided {
+                                        AfterAwaitObligation::HandlerMayNotRun
+                                    } else {
+                                        AfterAwaitObligation::IntrinsicMayBeReplaced
+                                    },
                                 );
                             }
+                        }
+                    }
+                    if undecided {
+                        for defect in &mut draft.static_defects[mark..] {
+                            defect.analysis_context = crate::blockers::SEARCH_DEPTH_LIMIT.into();
+                        }
+                        let receiver = file.ast.peel_ts_sugar_span(receiver);
+                        if let Some(inner) = file.ast.call_at(receiver) {
+                            self.expand(draft, walk, queue, file, inner, depth + 1);
                         }
                     }
                     return;

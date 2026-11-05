@@ -50,6 +50,7 @@ there, and the reads in it are then reported with the same two proofs:
   called under two elements) and a `replace`/`replaceAll` replacer are the
   exception: whether they run depends on the contents or on a match, so a read
   in one is **uncertifiable**.
+- A promise chain past six links (ADR 0750) is **uncertifiable**, `search-depth-limit`.
 - **A promise handler.** The callback of `.then`/`.catch`/`.finally` on a
   proven native `Promise` runs from a microtask with no owner. It is in the
   continuation when the call's result is the promise the computation returns
