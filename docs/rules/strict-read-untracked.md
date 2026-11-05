@@ -359,3 +359,6 @@ ADRs 0528–0530: eager IIFEs in handler expressions do not inherit the yielded 
 Placement climbs that exhaust their budget retain an uncertifiable read (ADR 0532): 16 in-place layers, eight generator steps, or eight layers inspected for a pre-suspension window. Outer unread layers cannot supply a deferred or unwindowed role.
 
 A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.
+
+A read in a function only a hidden call runs (a getter, `toString`, an iterator, a tag, a class field, a `Map` slot), directly or through named
+helpers, has no call node to place it: uncertifiable (ADR 0673).

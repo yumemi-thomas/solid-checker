@@ -46,6 +46,16 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 506,
+      "end": 513,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-assigned.ts",
       "start": 391,
       "end": 397,
@@ -139,6 +149,26 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/local-object-this-text.tsx",
       "start": 659,
       "end": 680,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 689,
+      "end": 704,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 709,
+      "end": 721,
       "fixes": 0
     },
     {
@@ -819,6 +849,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
       "start": 678,
       "end": 696,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
+      "start": 452,
+      "end": 459,
       "fixes": 0
     },
     {

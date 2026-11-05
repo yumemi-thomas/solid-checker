@@ -50,6 +50,16 @@
       "start": 899,
       "end": 917,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 2274,
+      "end": 2280,
+      "fixes": 0
     }
   ]
 }

@@ -2,6 +2,26 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 769,
+      "end": 776,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1141,
+      "end": 1148,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
@@ -39,6 +59,16 @@
       "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
       "start": 1623,
       "end": 1626,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1877,
+      "end": 1884,
       "fixes": 0
     },
     {

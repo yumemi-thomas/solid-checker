@@ -170,6 +170,16 @@
       "start": 7139,
       "end": 7177,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/hook.ts",
+      "start": 2373,
+      "end": 2384,
+      "fixes": 0
     }
   ]
 }

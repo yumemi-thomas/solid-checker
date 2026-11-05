@@ -57,6 +57,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
+      "start": 1927,
+      "end": 1931,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
+      "start": 3138,
+      "end": 3142,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
       "start": 3220,
       "end": 3229,
       "fixes": 0
@@ -69,6 +89,16 @@
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
       "start": 3580,
       "end": 3589,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
+      "start": 3811,
+      "end": 3815,
       "fixes": 0
     },
     {

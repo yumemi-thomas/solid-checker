@@ -337,6 +337,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 4526,
+      "end": 4539,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 4598,
       "end": 4607,
       "fixes": 0
@@ -402,6 +412,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 6881,
+      "end": 6887,
+      "fixes": 0
+    },
+    {
       "rule": "prefer-show",
       "code": "SC8015",
       "kind": "uncertifiable",
@@ -419,6 +439,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 6989,
       "end": 7000,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 7205,
+      "end": 7211,
       "fixes": 0
     },
     {
@@ -549,6 +579,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 9600,
       "end": 9632,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/cache-helper.ts",
+      "start": 126,
+      "end": 133,
       "fixes": 0
     },
     {
@@ -746,6 +786,16 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/factory.ts",
+      "start": 257,
+      "end": 263,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
       "start": 1158,
       "end": 1172,
@@ -854,6 +904,26 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
+      "start": 1607,
+      "end": 1613,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
+      "start": 1631,
+      "end": 1637,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
@@ -879,6 +949,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
       "start": 2698,
       "end": 2711,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/warm-factory.ts",
+      "start": 136,
+      "end": 142,
       "fixes": 0
     }
   ]

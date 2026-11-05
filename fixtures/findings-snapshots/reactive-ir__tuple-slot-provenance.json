@@ -287,6 +287,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 742,
+      "end": 749,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
       "start": 873,
       "end": 880,
       "fixes": 0

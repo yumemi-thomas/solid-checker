@@ -147,6 +147,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components-escapes/HelperCalled.tsx",
+      "start": 189,
+      "end": 196,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/HelperCalled.tsx",
       "start": 253,
       "end": 263,
       "fixes": 0

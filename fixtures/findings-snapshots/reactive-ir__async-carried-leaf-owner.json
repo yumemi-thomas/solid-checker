@@ -42,6 +42,26 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
+      "start": 1648,
+      "end": 1652,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
+      "start": 1648,
+      "end": 1652,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -49,6 +69,26 @@
       "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
       "start": 1709,
       "end": 1718,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
+      "start": 2003,
+      "end": 2008,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
+      "start": 2003,
+      "end": 2008,
       "fixes": 0
     },
     {

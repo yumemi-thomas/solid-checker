@@ -47,6 +47,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
+      "start": 512,
+      "end": 519,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
       "start": 669,
       "end": 677,
       "fixes": 0

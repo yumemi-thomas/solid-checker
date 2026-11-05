@@ -1508,12 +1508,27 @@ fn action_step_body_through(
 /// exact call of the named function around it, through `depth` helpers: a
 /// helper whose callers include an object method or slot runs wherever that
 /// member does, which no call edge places either.
-fn runs_unplaced_through_callers(
+pub(crate) fn runs_unplaced_through_callers(
     file: &FileFacts,
     site: Span,
     lookup: &SemanticLookup<'_>,
     depth: usize,
     ownerless: bool,
+) -> bool {
+    let mut visited = HashSet::default();
+    unplaced_through(file, site, lookup, depth, ownerless, &mut visited)
+}
+
+/// ADR 0673: `visited` holds each helper once: the walk fans out over every
+/// caller, so without it a helper with many callers is exponential in `depth`.
+/// A helper already asked answered false, or the walk has ended.
+fn unplaced_through(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    ownerless: bool,
+    visited: &mut HashSet<(String, Span)>,
 ) -> bool {
     // ADR 0710: with `ownerless`, a site a primitive's synchronous callback
     // runs (other than `untrack`'s) has the owner that primitive sets, and a
@@ -1526,7 +1541,12 @@ fn runs_unplaced_through_callers(
     {
         return false;
     }
-    if crate::execution_role::unplaced_run(file, site, lookup) {
+    // ADR 0673: `unplaced_run` refuses a site `SiteReach` calls never entered,
+    // and a method only a coercion runs (`${o}`) is one: no call edge reaches
+    // `toString`. The hand-off census asks nothing of reach.
+    if crate::execution_role::unplaced_run(file, site, lookup)
+        || crate::local_access::function_escapes_unfollowed(file, site, lookup)
+    {
         return true;
     }
     if depth == 0 {
@@ -1537,7 +1557,7 @@ fn runs_unplaced_through_callers(
         // The layers that run in place end at a call in other code: ask
         // there.
         Some(climb) if climb.at != site => {
-            return runs_unplaced_through_callers(file, climb.at, lookup, depth - 1, ownerless);
+            return unplaced_through(file, climb.at, lookup, depth - 1, ownerless, visited);
         }
         Some(_) | None => site,
     };
@@ -1546,23 +1566,50 @@ fn runs_unplaced_through_callers(
     else {
         return false;
     };
-    if crate::owners::function_binding_name(file, function).is_none() {
+    let Some(name) = crate::owners::function_binding_name(file, function) else {
         return false;
+    };
+    if !visited.insert((file.path.to_string(), function.span)) {
+        return false;
+    }
+    // ADR 0673: a call in a function no edge enters (`toString`, which only a
+    // coercion runs) has no call site here, so the binder names this file's.
+    let name = name.span;
+    let own: Vec<Span> = file
+        .ast
+        .calls
+        .iter()
+        .filter(|call| {
+            !call.construct
+                && file
+                    .ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
+                    == Some(name)
+        })
+        .map(|call| call.span)
+        .collect();
+    if own
+        .into_iter()
+        .any(|call| unplaced_through(file, call, lookup, depth - 1, ownerless, visited))
+    {
+        return true;
     }
     lookup
         .function_call_sites(file.path.as_str(), function.span)
         .into_iter()
         .any(|(caller, callee)| {
-            caller
+            let calls: Vec<Span> = caller
                 .ast
                 .calls
                 .iter()
                 .filter(|call| {
                     !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
                 })
-                .any(|call| {
-                    runs_unplaced_through_callers(caller, call.span, lookup, depth - 1, ownerless)
-                })
+                .map(|call| call.span)
+                .collect();
+            calls
+                .into_iter()
+                .any(|call| unplaced_through(caller, call, lookup, depth - 1, ownerless, visited))
         })
 }
 

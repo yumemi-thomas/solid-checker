@@ -12,6 +12,26 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 416,
+      "end": 423,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 913,
+      "end": 916,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -22,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 1167,
+      "end": 1170,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -29,6 +59,46 @@
       "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
       "start": 1271,
       "end": 1279,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 1429,
+      "end": 1432,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 1729,
+      "end": 1732,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 1950,
+      "end": 1953,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 2306,
+      "end": 2309,
       "fixes": 0
     },
     {
@@ -79,6 +149,36 @@
       "path": "fixtures/reactive-ir/fp-summary-returned-closure/hooks.ts",
       "start": 419,
       "end": 448,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/hooks.ts",
+      "start": 466,
+      "end": 473,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/hooks.ts",
+      "start": 589,
+      "end": 592,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/hooks.ts",
+      "start": 780,
+      "end": 783,
       "fixes": 0
     },
     {

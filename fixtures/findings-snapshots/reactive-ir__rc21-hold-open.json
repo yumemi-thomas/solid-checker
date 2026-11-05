@@ -2,6 +2,16 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 180,
+      "end": 186,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
@@ -19,6 +29,16 @@
       "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
       "start": 180,
       "end": 186,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 237,
+      "end": 243,
       "fixes": 0
     },
     {

@@ -627,6 +627,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
+      "start": 433,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
+      "start": 433,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
       "start": 892,
       "end": 1058,
       "fixes": 0
@@ -912,6 +932,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-call.tsx",
+      "start": 460,
+      "end": 466,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -919,6 +949,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-call.tsx",
       "start": 589,
       "end": 599,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx",
+      "start": 463,
+      "end": 469,
       "fixes": 0
     },
     {

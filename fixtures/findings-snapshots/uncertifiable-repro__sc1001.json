@@ -677,6 +677,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/r-array-actions.tsx",
+      "start": 571,
+      "end": 579,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/r-array-actions.tsx",
       "start": 630,
       "end": 644,
       "fixes": 0

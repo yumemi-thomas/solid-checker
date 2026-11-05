@@ -187,8 +187,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/provider-array-provenance/factory.ts",
+      "start": 1144,
+      "end": 1151,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/provider-array-provenance/factory.ts",
       "start": 1255,
       "end": 1262,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/provider-array-provenance/factory.ts",
+      "start": 1385,
+      "end": 1392,
       "fixes": 0
     },
     {

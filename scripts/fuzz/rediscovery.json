@@ -3863,5 +3863,17 @@
   "found": "flip plan's SC3001 row (corpus, rc.21, --runtime-target browser)",
   "fixed": "ADR 0711",
   "outside": "the generator imports every primitive by its own name from solid-js and never writes a missing export or module, and the producer misattribution was not reproduced outside those two projects; the corpus sweep shows both sites uncertifiable"
+ },
+ {
+  "finding": "a plain helper only a getter, toString, iterator, tag, field or Map slot runs certified a read Chrome warns on (ADR 0673)",
+  "found": "scripts/flip/notes/sc1001.md, programs u01 u03-u07 u14 u15",
+  "fixed": "ADR 0673",
+  "outside": "a context can only wrap statements in the component, where a helper already has a row: the old build passes those. The module-level programs are scripts/fuzz/patterns/values/hidden-helper-*, and the old build fails all 6 as NEW false-clean"
+ },
+ {
+  "finding": "a read in a tag function certified; f05-tagged, open since the census (ADR 0673)",
+  "found": "scripts/fuzz/patterns/types/f05-tagged",
+  "fixed": "ADR 0673",
+  "outside": "a tag at module level, which a context cannot write; the program stays in the pattern lane, which fails on it if it regresses"
  }
 ]

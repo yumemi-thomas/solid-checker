@@ -1758,3 +1758,13 @@ owner-context wording and no blocker, and the helper's text said the operation r
 `LeafOwnerOperation::identity_unproven` carries it through the walk (`Reached` has a third field), projects blocker
 `leaf-operation-identity-unproven`, clears any fix, and gets its own wording. No kind moved. The renamed barrel in the fixture could be proved
 by following the re-export; it stays open, since the callee's symbol is not what the rule's binder test reads.
+
+<a id="adr-0673"></a>
+## ADR 0673 — A read only a hidden call runs is placed nowhere
+
+A hidden call (getter, `toString`, iterator, tag, field, `Map` slot) has no call node, so a plain helper it runs had no row and no obligation:
+certified, Chrome warns. `placed_nowhere` joins the old pair with ADR 0708's `runs_unplaced_through_callers` at the two read arms and in
+`discover_member`, role `Unknown`, blocker by the existing read wording. The helper changes for all its readers: it also asks the hand-off census, since
+`SiteReach` calls a method only a coercion runs never entered, and it reads this file's calls of the binding, since no edge leaves such a method.
+Each helper is visited once: the walk fans out over every caller, and without the set `solid-groove` went from 5 s to the 900 s kill. So a
+diamond past the depth bound may answer from its first path. This is `sc1001.md` steps 2 and 3, at the site rather than at the call.

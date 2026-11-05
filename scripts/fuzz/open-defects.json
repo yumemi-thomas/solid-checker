@@ -13,16 +13,33 @@
    "idPrefix": "mx-strict-read-untracked-",
    "code": "STRICT_READ_UNTRACKED",
    "variantPrefix": "store-dstr-",
-   "contexts": ["ref-row", "ref-named", "ref-factory"],
+   "contexts": [
+    "ref-row"
+   ],
    "outcome": "false-clean",
-   "item": "ref role",
+   "item": "ref in a control-flow callback",
    "partial": true,
-   "note": "ADR 0670 keeps a store destructure in an apply or a plain `ref` as a site; a `ref` in a row, by name or from a factory has a role that still reads as a fresh callback, so 152 certify, on the build before ADR 0665 too"
+   "note": "72 of the 152, every layer. Role log: the site answers DeferredCallback from `callee_roles.control-flow`, so For's child callback wins before any `ref` arm. Not a fresh-callback role, as this entry said until measured"
+  },
+  {
+   "idPrefix": "mx-strict-read-untracked-",
+   "code": "STRICT_READ_UNTRACKED",
+   "variantPrefix": "store-dstr-",
+   "contexts": [
+    "ref-named",
+    "ref-factory"
+   ],
+   "outcome": "false-clean",
+   "item": "layer inside a named ref",
+   "partial": true,
+   "note": "80 of the 152: 4 variants, `direct` and `alias` bindings, 5 layers, 2 contexts. Layer `none` and `wrapper` bindings are open, so the ref's role is right; a site in a function nested in the ref answers DeferredCallback from `callee_roles.named-callback-untracked` (logged on ref-named; ref-factory by count only)"
   },
   {
    "idPrefix": "mx-untracked-read-after-await-then-named-",
    "code": "UNTRACKED_READ_AFTER_AWAIT",
-   "contexts": ["then-named"],
+   "contexts": [
+    "then-named"
+   ],
    "outcome": "false-clean",
    "item": "census",
    "partial": true,
@@ -2243,15 +2260,6 @@
    "outcome": "no-run",
    "codes": [],
    "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e911-on-colon/entry.tsx"
-  },
-  {
-   "id": "types/f05-tagged",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
   },
   {
    "id": "types/f14-children-helper-read-in-body",

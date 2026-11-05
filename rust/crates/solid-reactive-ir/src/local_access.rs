@@ -2119,8 +2119,7 @@ impl LocalAccessContext<'_, '_> {
     ) {
         if let Some(accessor) = self.accessors.get(symbol)
             && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
-            && (function_escapes_unfollowed(file, call.callee, self.lookup)
-                || crate::execution_role::inside_class_member(file, call.callee, self.lookup))
+            && placed_nowhere(file, call.callee, self.lookup)
             && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
         {
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
@@ -2370,8 +2369,7 @@ impl LocalAccessContext<'_, '_> {
             self.push_accessor_read(file, call, symbol, accessor, execution, result);
         } else if let Some(accessor) = self.accessors.get(symbol)
             && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
-            && (function_escapes_unfollowed(file, call.callee, self.lookup)
-                || crate::execution_role::inside_class_member(file, call.callee, self.lookup)
+            && (placed_nowhere(file, call.callee, self.lookup)
                 || handed.is_some_and(|(role, _)| role == ExecutionRole::Unknown))
             && seen.insert(key.clone())
         {
@@ -5596,13 +5594,7 @@ impl LocalAccessContext<'_, '_> {
                 || escapes
             {
                 if crate::execution_role::named_at_tracked_position(file, member.span, self.lookup)
-                    || !(unplaced
-                        || function_escapes_unfollowed(file, member.span, self.lookup)
-                        || crate::execution_role::inside_class_member(
-                            file,
-                            member.span,
-                            self.lookup,
-                        ))
+                    || !(unplaced || placed_nowhere(file, member.span, self.lookup))
                 {
                     return;
                 }
@@ -7479,6 +7471,31 @@ pub(crate) fn run_unplaced(
 ) -> bool {
     object_slot_value(file, function) || handed_to_unknown_code(file, function.body, lookup)
 }
+
+/// ADR 0673: a read no role and no call edge places. A hidden call site (a
+/// getter, `toString`, an iterator, a tag, a field) has no call node, so this
+/// is decided from the function, and from the functions an exact call of the
+/// named helper around `span` sits in. `inside_class_member` stays beside
+/// [`crate::static_api::runs_unplaced_through_callers`]: it has a climb that
+/// reports exhaustion.
+fn placed_nowhere(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    function_escapes_unfollowed(file, span, lookup)
+        || crate::execution_role::inside_class_member(file, span, lookup)
+        || crate::static_api::runs_unplaced_through_callers(
+            file,
+            span,
+            lookup,
+            UNPLACED_CALLER_DEPTH,
+            false,
+        )
+}
+
+/// Helpers followed out from a read, as W's nets do.
+const UNPLACED_CALLER_DEPTH: usize = 6;
 
 pub(crate) fn function_escapes_unfollowed(
     file: &solid_facts::FileFacts,

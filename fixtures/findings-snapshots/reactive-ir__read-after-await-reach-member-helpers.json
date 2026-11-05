@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 456,
+      "end": 463,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -22,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 804,
+      "end": 811,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -39,6 +59,16 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
       "start": 934,
       "end": 940,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 1175,
+      "end": 1182,
       "fixes": 0
     },
     {
@@ -92,6 +122,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 2399,
+      "end": 2406,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -119,6 +159,16 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
       "start": 2906,
       "end": 2912,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 3162,
+      "end": 3169,
       "fixes": 0
     },
     {
@@ -159,6 +209,16 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
       "start": 4525,
       "end": 4531,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 4797,
+      "end": 4804,
       "fixes": 0
     },
     {
