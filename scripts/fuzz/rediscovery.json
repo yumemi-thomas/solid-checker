@@ -3557,5 +3557,11 @@
    "mx-loading-on-accessor-on-call-accessor-direct-none"
   ],
   "rediscovered": "895fbf806: 9,540 false cleans; ADR 0650: 0"
+ },
+ {
+  "finding": "SC8003 read only literal spreads and assumed an attribute has a value: `{...p}` holding `innerHTML` certified, `textContent={undefined}` beside a child warned (ADR 0651)",
+  "found": "the flip audit",
+  "fixed": "ADR 0651",
+  "outside": "SC8003 has no runtime diagnostic: its claim is the DOM a program ends with, and the grids judge diagnostics. scripts/flip/witnesses.json holds the programs with the DOM measured, and fixture rc21-content-competition each branch"
  }
 ]

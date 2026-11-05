@@ -232,6 +232,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-any-call-result.tsx",
+      "start": 581,
+      "end": 606,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -252,6 +262,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
+      "start": 205,
+      "end": 240,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -259,6 +279,16 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
       "start": 231,
       "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-rest.tsx",
+      "start": 413,
+      "end": 524,
       "fixes": 0
     },
     {

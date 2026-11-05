@@ -699,7 +699,17 @@ pub(super) struct UpstreamCompatContext<'a> {
 fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiagnostics {
     let mut violations = Vec::new();
     let mut defects = Vec::new();
-    syntax::check_file(file, &mut violations);
+    syntax::check_file(
+        file,
+        |span| {
+            context
+                .lookup
+                .entity_at(file.path.as_str(), span)
+                .and_then(|entity| entity.declared_keys.as_deref())
+                .map(Vec::as_slice)
+        },
+        &mut violations,
+    );
     if context.prefer_for_enabled || context.prefer_show_enabled {
         structure::check_file(file, context, &mut violations);
     }

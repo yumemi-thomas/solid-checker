@@ -322,6 +322,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 754,
+      "end": 778,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -389,6 +399,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-conditional-spread.tsx",
       "start": 876,
       "end": 906,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 751,
+      "end": 790,
       "fixes": 0
     },
     {
@@ -542,6 +562,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-spread-onto-intrinsic.tsx",
+      "start": 515,
+      "end": 531,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -579,6 +609,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-to-factory-component.tsx",
       "start": 784,
       "end": 799,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-typeof-guard-spread.tsx",
+      "start": 480,
+      "end": 640,
       "fixes": 0
     },
     {

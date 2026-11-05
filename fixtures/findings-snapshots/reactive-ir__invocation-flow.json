@@ -522,6 +522,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1206,
+      "end": 1268,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -539,6 +549,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
       "start": 1727,
       "end": 2217,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1889,
+      "end": 1926,
       "fixes": 0
     },
     {

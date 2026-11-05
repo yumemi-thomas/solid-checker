@@ -2937,6 +2937,74 @@
     ]
    },
    "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut."
+  },
+  {
+   "id": "jsx-no-duplicate-props/solid-v2/open-spread/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "const o: Record<string, string> = { title: \"t\" };\nexport const App = () => <div {...o}>child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "<div {...o}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0651): eslint-plugin-solid 0.14.5 reads a spread only when its argument is an object expression (`jsxGetAllProps`), so an open spread is silent there. In rc.21 a spread beside children can carry innerHTML and wipe them (flip witnesses SC8003 h02-h08). Unproven, so uncertifiable, blocker spread-content-unproven."
+  },
+  {
+   "id": "jsx-no-duplicate-props/solid-v2/nullish-text/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const App = (props: { text?: string }) => <div textContent={props.text}>child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "<div textContent={props.text}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0651): upstream reports any textContent beside children. In rc.21 Chrome, a nullish or empty textContent drops nothing and the children render, so a value not proven filled is uncertifiable, blocker content-source-value-unproven."
   }
  ]
 }
