@@ -1570,42 +1570,6 @@
    "certified": false
   },
   {
-   "id": "types/d02-subclass-upcast",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/d04-subclass-read",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/d05-array-late-fp",
-   "item": "T-other",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
-  },
-  {
-   "id": "types/d06-array-late-read-fp",
-   "item": "T-other",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "types/d07-lying-thenable-cast",
    "item": "T-D4",
    "outcome": "false-clean",
@@ -1739,15 +1703,6 @@
   {
    "id": "types/g12-cleanup-comp-store-write",
    "item": "T-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
-  },
-  {
-   "id": "types/g24-map-late-subclass",
-   "item": "T-other",
    "outcome": "false-positive",
    "codes": [],
    "rules": [

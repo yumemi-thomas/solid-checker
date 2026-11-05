@@ -1017,6 +1017,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-no-hydration/node_modules/**
 !fixtures/reactive-ir/rc21-no-hydration-render/node_modules/
 !fixtures/reactive-ir/rc21-no-hydration-render/node_modules/**
+!fixtures/reactive-ir/rc21-standard-subclass/node_modules/
+!fixtures/reactive-ir/rc21-standard-subclass/node_modules/**
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/**
 !fixtures/reactive-ir/rc21-after-await-handed/node_modules/

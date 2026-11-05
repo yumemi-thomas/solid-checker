@@ -290,4 +290,6 @@ Measured on rc.21; the input to `claims_client_runtime` and `ExecutionPaths`.
 | strict window, write guard | absent |
 | a pending read in a body | retried by the boundary; the body runs twice |
 
+ADR 0683 limit: a class extending a standard container vetoes that member project-wide; only an array-literal receiver is exempt, so a `new Map()` receiver is not yet proved plain (+68 uncertifiable in `app-game`). A mixin or a patched prototype raises nothing.
+
 ADR 0659 limits: `--rendering hydrated` resolves packages as the client, so dependency source is the client graph on both paths. A site in a function with no symbol that only an arm reaches keeps its finding (ADR 0677). `typeof window` is uncertifiable even under a browser selection that could decide it. `claims_client_runtime` lists the rules the audit measured: SC1001, SC2001, SC2002, SC2003, SC2008, SC5001, SC6002. The corpus sweep still runs every project as `csr`.

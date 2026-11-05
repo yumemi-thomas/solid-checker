@@ -3981,6 +3981,17 @@
   "finding": "a helper's pending read in a body `<Dynamic>` mounts under `<Loading>`: V SC5001, Chrome retries and renders, because a row attributed at a call kept the lexical role",
   "found": "open-defects T-D3, types/g04-sc5001-dynamic-helper",
   "fixed": "ADR 0682",
-  "outside": "the row needs source and helper at module scope: an in-body helper does not fail on the build before (630 programs, 0 false positive), and a `hoisted` helper naming the site's source fails the generator's validator. Pattern types/g04-sc5001-dynamic-helper is NEW false-positive on the build before"
+  "outside": "the row needs source and helper at module scope: an in-body helper does not fail on the build before (630 programs, 0 false positive), and with a `hoisted` helper naming the site's source 552 of 630 programs fail to type-check, an invalid run. Pattern types/g04-sc5001-dynamic-helper is NEW false-positive on the build before"
+ },
+ {
+  "finding": "a standard method a project subclass replaces, on a value typed as the container: V, Chrome quiet, the override runs the callback on a microtask (d05, d06, g24)",
+  "found": "queue Q5, item 14's tripwire",
+  "fixed": "ADR 0683",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-subclass-late-foreach-signal-direct-handoff-function"
+  ],
+  "rediscovered": "the checker at 8a2de6a8e on legal.mjs --recall (flip-read.mjs context subclass-late-foreach): 14 false positive, 73 unexecuted; the fix 1,860 programs, 0 of either"
  }
 ]

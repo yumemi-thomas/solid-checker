@@ -1724,7 +1724,14 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx.record_input(Input::File(self.id, Section::Source));
         self.ctx
             .record_input(Input::File(self.id, Section::Signatures));
-        self.view.resolved_callee_call(callee)
+        // ADR 0683: as `SemanticLookup::resolved_callee_call`.
+        let resolved = self.view.resolved_callee_call(callee)?;
+        let vetoed = crate::runtime_semantics::standard_call_name(resolved)
+            .and_then(|name| {
+                crate::base::contributions::subclass_veto(self.view.file, callee, name)
+            })
+            .is_some_and(|hazards| hazards.into_iter().any(|hazard| self.ctx.hazard(hazard)));
+        (!vetoed).then_some(resolved)
     }
 
     /// The symbol whose name covers exactly `span` in this file.

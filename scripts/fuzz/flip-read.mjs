@@ -48,7 +48,7 @@ export const FLIP_READ_LEGAL = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount"],
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag"],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
@@ -110,6 +110,12 @@ export function flipReadContext(context, stmts, kit) {
     const k = kit.name("K");
     const hold = `onCleanup(() => { render(() => <${k} />, document.createElement("div")); })`;
     return { body: [decl(k, fn([...stmts, ret(domExpr("<i />"))])), expr(domExpr(`createEffect(() => 1, () => { ${hold}; })`, ["render"], ["createEffect", "onCleanup"]))], view: [] };
+  }
+  // ADR 0683: the override runs the callback on a microtask, so the read has no window. The type says `number[]`.
+  if (context === "subclass-late-foreach") {
+    const [late, h, held] = [kit.name("L"), kit.name("f"), kit.name("a")];
+    const fresh = `class ${late} extends Array<number> { override forEach(cb: (v: number, i: number, a: number[]) => void) { queueMicrotask(() => { super.forEach(cb); }); } }`;
+    return { hoisted: [expr(domExpr(fresh))], body: [decl(h, fn(stmts)), decl(held, domExpr(`new ${late}(1) as number[]`)), expr(domExpr(`${held}.forEach(${h})`))], view: [] };
   }
   if (context === "arm-tag") {
     const k = kit.name("K");

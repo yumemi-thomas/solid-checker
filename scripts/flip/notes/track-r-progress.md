@@ -43,9 +43,11 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 | C-D2 | `c84106c8b`, ADR 0679 | 0 moved, `sweep-cd2.json` | proved silent: a function only handed to a scheduler, or only called from handlers; now uncertifiable: object host, returned closure, helper argument. 13 false positives left, 306 open |
 | Blockers | ADR 0680, `scripts/flip/blockers.mjs` | 0 moved, `sweep-bl.json`, 18,502 U, 376 V | 9,216 rows had no blocker. Rows are `blocker:<old context>`; `contextKind` reads a row-derived head as it read a function name. `check.mjs` fails an unnamed row. A new escalation needs a blocker, and a row-derived one goes in `ROW_BLOCKERS` |
 
+| Step 9 | `8a2de6a8e`, ADRs 0681, 0682; subclass ADR 0683 | ADR 0683: +68 U `app-game` (67 SC9012, 1 SC2003), 0 V, `sweep-sub.json`, 18,570 U, 376 V | `T-mount-from-cleanup` now uncertifiable `refused-creation-unrun`; `e511` uncertifiable `callee-callback-timing`; `g04` uncertifiable `function-run-unplaced` + `invocation-context-unproven`; `d05 d06 g24` uncertifiable, `d02 d04` close too. Patterns 298 open (25 FP, 270 FC, 3 no run) |
+
 Grid at `a92553232`, `mx-recall` whole set, STRICT_READ_UNTRACKED: 62,480 programs, 0 false positive, 152 false cleans, the two known `ref-*` groups; 12 oracle runs inconclusive, not read.
 
-Next agent: step 9 (`T-mount-from-cleanup`, T-D3, H-D4 with F0, subclass: no track, tell the owner), then H-D5, F0, F-C, F-D, the census, the bounds audit. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
+Next agent: H-D5, F0 (H-D4 with it), F-C, F-D, the census, the bounds audit. Baseline sweep `sweep-sub.json`, build `rsub/`. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
 
 Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open. `a92553232`'s says 24 false positives left the list; it was 23 (67 to 44, 342 to 319 open).
 

@@ -669,12 +669,119 @@ pub(crate) enum Hazard {
     /// A `require` the facts do not model as a load: a bare call they did
     /// not record, or any other mention (value 0).
     UnmodeledRequire,
+    /// A class extending a standard container declares this member (ADR 0683;
+    /// the key is a hash of `Container.member`, value the class's ordinal): the
+    /// container's own method may be the class's override. A collision only
+    /// withholds another proof.
+    StandardOverride(u32),
     /// A top-level `await` or `for await` (value 0).
     TopLevelAwait,
     /// Some export outside every `namespace` block (value 0).
     ModuleLevelExport,
     /// Some export at all (value 0).
     Export,
+}
+
+const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
+/// The member a class declares under a key no fact reads: any of the container's.
+const ANY_MEMBER: &str = "*";
+
+/// FNV-1a over `Container.member`: stable across builds, as a key must be.
+fn standard_override(container: &str, member: &str) -> Hazard {
+    let mut hash = 0x811c_9dc5_u32;
+    for byte in [container, ".", member]
+        .iter()
+        .flat_map(|part| part.bytes())
+    {
+        hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
+    }
+    Hazard::StandardOverride(hash)
+}
+
+/// The container an `extends` names: the global, a `globalThis.` member of it,
+/// or a `const` alias of one. An import or any other binding names no container.
+fn subclassed_container(file: &solid_facts::FileFacts, heritage: Span) -> Option<&'static str> {
+    let peeled = file.ast.peel_ts_sugar_span(heritage);
+    let text = file.source_text(peeled)?.trim();
+    let root = text.split('<').next()?.trim();
+    let root = ["globalThis.", "window.", "self."]
+        .iter()
+        .find_map(|prefix| root.strip_prefix(prefix))
+        .unwrap_or(root);
+    let named = |name: &str| STANDARD_CONTAINERS.into_iter().find(|known| *known == name);
+    let Some(declaration) = file.ast.reference_declaration(peeled) else {
+        return named(root);
+    };
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    named(file.source_text(binding.initializer?)?.trim())
+}
+
+/// The hazards a member of a class extending a standard container raises: its
+/// own name, or any name where its key is computed.
+fn class_overrides(
+    file: &solid_facts::FileFacts,
+    class: &solid_facts::ast::ClassFact,
+) -> Vec<Hazard> {
+    let Some(container) = class
+        .heritage
+        .and_then(|heritage| subclassed_container(file, heritage))
+    else {
+        return Vec::new();
+    };
+    use solid_facts::ast::ClassElementKind;
+    class
+        .elements
+        .iter()
+        .filter(|element| {
+            !element.r#static
+                && matches!(
+                    element.kind,
+                    ClassElementKind::Method
+                        | ClassElementKind::Getter
+                        | ClassElementKind::Setter
+                        | ClassElementKind::Field
+                )
+        })
+        .filter_map(|element| {
+            if element.computed {
+                return Some(standard_override(container, ANY_MEMBER));
+            }
+            let key = file.source_text(element.key?)?;
+            Some(standard_override(container, key))
+        })
+        .collect()
+}
+
+/// The hazards that withhold `qualified_name` at `callee`. None where the
+/// receiver is an array literal, which is no instance of a subclass.
+pub(crate) fn subclass_veto(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    qualified_name: &str,
+) -> Option<[Hazard; 2]> {
+    let (owner, member) = qualified_name.split_once('.')?;
+    let container = owner.strip_prefix("Readonly").unwrap_or(owner);
+    let container = if container == "PromiseLike" {
+        "Promise"
+    } else {
+        container
+    };
+    if !STANDARD_CONTAINERS.contains(&container) {
+        return None;
+    }
+    let literal = file
+        .ast
+        .member_at(file.ast.peel_ts_sugar_span(callee))
+        .and_then(|member| file.source_text(file.ast.peel_ts_sugar_span(member.object)))
+        .is_some_and(|receiver| receiver.starts_with('['));
+    (!literal).then(|| {
+        [
+            standard_override(container, member),
+            standard_override(container, ANY_MEMBER),
+        ]
+    })
 }
 
 pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
@@ -687,6 +794,11 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
                 entries.push((Hazard::NonliteralDynamicLoad, ordinal(index)));
             }
             _ => {}
+        }
+    }
+    for (index, class) in file.ast.classes.iter().enumerate() {
+        for hazard in class_overrides(file, class) {
+            entries.push((hazard, ordinal(index)));
         }
     }
     for (index, call) in file.ast.calls.iter().enumerate() {

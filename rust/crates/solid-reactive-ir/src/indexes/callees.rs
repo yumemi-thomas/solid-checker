@@ -391,12 +391,22 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
-        resolved_callee_call_in(
+        let resolved = resolved_callee_call_in(
             file,
             self.ast_indexes.get(file.path.as_str()),
             callee,
             |span| self.entity_at(file.path.as_str(), span),
-        )
+        )?;
+        // ADR 0683: a method a project subclass may have replaced is not the
+        // standard one: no proof reads it.
+        let vetoed = crate::runtime_semantics::standard_call_name(resolved)
+            .and_then(|name| crate::base::contributions::subclass_veto(file, callee, name))
+            .is_some_and(|hazards| {
+                hazards
+                    .into_iter()
+                    .any(|hazard| self.hazard_present(hazard))
+            });
+        (!vetoed).then_some(resolved)
     }
 
     pub(crate) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {

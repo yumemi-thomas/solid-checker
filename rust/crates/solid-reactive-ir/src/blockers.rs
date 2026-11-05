@@ -73,6 +73,7 @@ pub(crate) const HANDLER_DISPATCH_UNPROVEN: &str = "handler-dispatch-unproven";
 pub(crate) const LEAF_CALLBACK_OPAQUE: &str = "leaf-callback-opaque";
 pub(crate) const CONDITIONAL_RETURN_UNPROVEN: &str = "conditional-return-unproven";
 pub(crate) const PROPS_CALLERS_UNENUMERATED: &str = "props-callers-unenumerated";
+pub(crate) const STORE_WRITE_UNPROVEN: &str = "store-write-unproven";
 pub(crate) const LOADING_HOLD_UNPROVEN: &str = "loading-hold-unproven";
 pub(crate) const EFFECT_OWNER_UNPROVEN: &str = "effect-owner-unproven";
 pub(crate) const PACKAGE_SOURCE_UNAVAILABLE: &str = "package-source-unavailable";
@@ -186,7 +187,8 @@ pub(crate) const fn for_async_read(read: &crate::AsyncRead) -> &'static str {
 /// A rule whose rows have no hole of their own: what its one proof step lacks.
 pub(crate) fn for_rule(code: &str) -> &'static str {
     match code {
-        "SC1003" | "SC1007" | "SC2003" => PROPS_CALLERS_UNENUMERATED,
+        "SC1003" | "SC1007" => PROPS_CALLERS_UNENUMERATED,
+        "SC2003" => STORE_WRITE_UNPROVEN,
         "SC1001" => READ_BACKING_UNPROVEN,
         "SC1002" => HANDED_READ_AFTER_AWAIT,
         "SC1004" => CONDITIONAL_RETURN_UNPROVEN,
