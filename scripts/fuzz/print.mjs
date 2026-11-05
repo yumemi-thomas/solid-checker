@@ -506,7 +506,7 @@ function render(program, instrument) {
       case "button": {
         const tag = item.tag ?? "button";
         const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.on ?? "onClick"}={() => ${block(item.handler, depth, entryFor(item, "handler"))}}`;
-        return [tag === "input" || tag === "iframe" ? `${open} />` : `${open}>go</${tag}>`];
+        return [tag === "input" || tag === "iframe" || tag === "Dynamic" ? `${open} />` : `${open}>go</${tag}>`];
       }
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];

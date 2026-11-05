@@ -3505,5 +3505,41 @@
    "mx-flush-in-effect-callback-dny-flush-popover-x-direct-none"
   ],
   "rediscovered": "207b13142: 1 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "a spread object, `Dynamic` and a Portal in a root disposed in a body deliver a denied event: certified (`e03`, `e04`, `c20`) (STRICT_READ_UNTRACKED)",
+  "found": "the owner's check of the forms the report said were not tested",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-blur-dynamic-memo-direct-none",
+   "mx-strict-read-untracked-dny-blur-spread-memo-direct-none",
+   "mx-strict-read-untracked-dny-portal-dispose-memo-direct-none"
+  ],
+  "rediscovered": "207b13142: 42 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "a spread object, `Dynamic` and a Portal in a root disposed in a body deliver a denied event: certified (`e03`, `e04`, `c20`) (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the owner's check of the forms the report said were not tested",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-blur-dynamic-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-blur-spread-refresh-direct-none"
+  ],
+  "rediscovered": "207b13142: 6 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "a handler bound under a name nobody measured (`{...{ onBlurr: h }}`) and delivered by a dispatch: certified; the allow-list's closed default (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the owner's check of the forms the report said were not tested",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-typo-event-refresh-direct-none"
+  ],
+  "rediscovered": "207b13142: 3 false-clean; 6730781e7: recall-gap"
  }
 ]

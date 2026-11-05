@@ -180,8 +180,8 @@ const DENIED = {
 /** Solid's own DOM work: the focused element leaves on the stack of a `flush()`, a disposer or `insert`, with no call of the program's naming it. */
 const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click"];
-const DENIED_OTHER = ["dny-load-append", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase"];
+const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -1277,6 +1277,7 @@ function laterRoot(kit, prep, trigger, solid, web) {
 }
 function deniedContext(context, stmts, kit) {
   const b = kit.name("b"), el = anyEl(b);
+  if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
   if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
   if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
@@ -1315,6 +1316,19 @@ function deniedContext(context, stmts, kit) {
       return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(u, stmts), button(b, [expr(domExpr(`document.querySelector<HTMLElement>('[data-act="${u}"]')!.click()`))], { on: "onBlur" })] };
     }
     case "dny-flush-unmount": return { sigs: [gone], body: laterRoot(kit, [`${el}.focus()`, `${gone.setter}(0)`], "1"), view: [show(read(gone.name), [button(b, stmts, { tag: "input", on: "onBlur" })])] };
+    case "dny-blur-spread": { const hs = kit.name("box"); return { body: [decl(hs, obj([["onBlur", fn(stmts)]])), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...${hs}}` })] }; }
+    // An attribute `onblur` and a typo fail tsc (invariant 1), and rc.21 has no `on:` (the types reject it, the compiler refuses the source).
+    // A spread takes either name. rc.21 binds `onBlurr` and a dispatch delivers it, so it falls to the closed default; it does not bind
+    // `onblur` (LOWERCASE_EVENT_ATTRIBUTE), so that site never runs.
+    case "dny-typo-event": { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [], `${el}.dispatchEvent(new Event("blurr"))`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onBlurr: ${h} }}` })] }; }
+    case "dny-blur-dynamic": return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`, undefined, ["Dynamic"]), view: [button(b, stmts, { tag: "Dynamic", on: "onBlur", attrs: 'component="button"' })] };
+    case "dny-portal-dispose": {
+      const d = kit.name("f"), out = kit.name("el");
+      return { body: [decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "input", on: "onBlur" })))])), decl(d, domExpr("(() => {}) as () => void"), { kw: "let" }),
+        decl(out, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${out})`)),
+        expr(domExpr(`queueMicrotask(() => { createRoot((dd) => { ${d} = dd; insert(${out}, () => <Portal><Inner /></Portal>); }); })`, ["insert", "Portal"], ["createRoot"])),
+        ...laterRoot(kit, [`${el}.focus()`], `${d}()`)], view: [] };
+    }
     case "dny-load-append": return { body: [decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "iframe", on: "onLoad" })))])), ...laterRoot(kit, [], "document.body.appendChild(Inner() as any)")], view: [] };
     case "dny-flush-popover": return { sigs: [gone], body: laterRoot(kit, [`${el}.showPopover()`, `${gone.setter}(0)`], "1"), view: [button(b, stmts, { tag: "div", on: "onBeforeToggle", attrs: `popover={${gone.name}() ? "auto" : undefined}` })] };
     case "dny-flush-load": return { sigs: [gone], body: [expr(prim("timer", fn([expr(domExpr(`${gone.setter}(1)`))])))], view: [show(read(gone.name), [button(b, stmts, { tag: "iframe", on: "onLoad" })])] };
