@@ -406,7 +406,9 @@ fn one_answer_of_the_veto_moving_reruns_the_readers() {
 /// (ADR 0356). The edit is in the file that declares the receiver's type; the
 /// file that dispatches on it is not touched.
 const TARGET_ELEMENT: &str = "export type Target = HTMLElement;\n";
-const TARGET_PLAIN: &str = "export type Target = { click(): void };\n";
+/// A method with a body is no hazard. A type literal's signature would be an
+/// `Unknown` site since ADR 0642: it says nothing of the runtime receiver.
+const TARGET_PLAIN: &str = "export class Target {\n  click(): void {}\n}\n";
 const TARGET_USE: &str = "import type { Target } from \"./target\";\nexport function press(target: Target) {\n  target.click();\n}\n";
 
 #[test]

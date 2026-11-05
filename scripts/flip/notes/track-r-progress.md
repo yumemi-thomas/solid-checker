@@ -11,6 +11,6 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 Next: SC8003, then the plan's order.
 
 Surprises:
-- **The branch cut's Rust tests are red, 3 of 1,252, independent of this track**: `changing_a_receivers_type_in_another_file_moves_the_veto`, `eslint_plugin_solid_two_corpus_matches_native_rule_semantics`, `eager_read_summaries_require_exact_fresh_stack_global_bindings`. Confirmed on a clean worktree at `895fbf806`. So `make verify-delta` fails its rust lane on every commit. Gate used: `nt.sh` (nextest, no fail-fast) must show no failure beyond these 3, and verify-delta's other lanes pass. Pass `BASE=895fbf806`, or it maps thousands of paths against `origin/main`.
+- The branch cut had 3 red Rust tests (none ran `make verify` there); fixed in the commit `test(flip-base): ...`, for Track W to pick up. Rust tests are 1,252 of 1,252 from then on; `nt.sh` prints anything new. Pass `BASE=<last rule commit>` to verify-delta, or it maps thousands of paths against `origin/main`.
 - `scripts/fuzz/install` needs `npm ci` too (Chrome host); the plan names only the oracle install.
 - `view` children in a generator context must be numbers: build a boundary in `body` with `domExpr`.
