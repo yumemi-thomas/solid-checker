@@ -133,6 +133,15 @@ SC2001.
 - **SC4001 step 1** (0beedb8a7, no ADR): `run.mjs` and `patterns.mjs` import App dynamically after the diagnostics
   subscription (module-scope diagnostics were lost). patterns.mjs lets a load failure fail the entry (catching it turned two
   no-run patterns "fine"). fuzz-patterns unchanged; SC4001/SC6001 `--chrome` 8 of 8.
+- **SC4001 step 2** (ADR 0714, cbe24d60a): `solid_facts::ast::every_unconditional_call` (one parse per file, function and module
+  scope; `await` ordinary, generator to first `yield`, module-scope class static fields). `owner_discovery.rs`: a `Preserve`
+  call / IIFE / carrier edge off that set -> `MayRun`, a callback's `Unowned` -> `MayBeUnowned`; dependency-source files keep their
+  edges (`SemanticLookup::in_dependency_source`; ADR 0290's walk asks per hop with arguments). `missing_owners.rs`: that walk
+  carries a `MayRun` edge as an obligation (it silently dropped context-read-package `ConditionalHook` first). Dead-branch mixed
+  hook V -> U. First cut also stopped at `await`: +6 corpus U (app-game) and dead-code-sites Live:53 V -> U; reverted to
+  `await`-ordinary. Costs: `f?.()`, guard/local-function branches, module `try` are U (Chrome warns). Witnesses 195 (same).
+  Fuzzer `flw-mixed-dead`: old 384 FP of 1152, new 0. Corpus 0 moved (`sweep-w4001.json`). Fixture `owner-unowned-run-unproven`.
+  **Merge note:** blocker `owner-varies-by-caller` + wording need an `OwnerRequirement` field (lib.rs, R's).
 
 ## Owner notes (2026-11-05)
 
@@ -171,7 +180,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). **SC4001 in progress (step 1 committed; step 2 is the next agent's start):**
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). **Next: SC2002.** Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
    quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
@@ -193,7 +202,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w4002.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w4001.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
