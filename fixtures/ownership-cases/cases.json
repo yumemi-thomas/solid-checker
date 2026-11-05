@@ -353,6 +353,96 @@
    "note": "ADR 0476: a write past the root is uncertifiable. The proxy serves a child only through `isWrappable` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2272-2283`, `:5569`, `:5605`), which refuses a frozen object, a non-plain prototype and a DOM node and serves it raw, so a write below such a link lands (Chrome, witnessed with `Object.freeze`). Whether a link's value is plain is a property of the value, not its type."
   },
   {
+   "id": "no-store-mutation-outside-setter/loop-head/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0 });\n// A loop head writes on each iteration (ADR 0716).\nexport function Once() {\n  for (profile.count of [1]) {}\n}\n// Nothing proves this loop iterates.\nexport function Maybe(xs: number[]) {\n  for (profile.count of xs) {}\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        169,
+        182
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        279,
+        292
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "no-store-mutation-outside-setter/logical-assignment/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ name: null as string | null, count: 1 });\n// A logical assignment writes only when its test passes (ADR 0718).\nexport function Named() {\n  profile.name ??= \"a\";\n}\n// The literal the store still holds fails the test: nothing is written.\nexport function Counted() {\n  profile.count ??= 2;\n}\n// Nothing proves the value.\nexport function Seeded(seed: number) {\n  const [seeded] = createStore({ n: seed });\n  seeded.n ||= 2;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": { "marker": "profile.name" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "seeded.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
    "id": "no-store-mutation-outside-setter/nested-props-value/001",
    "dialect": "solid-v2",
    "source": {

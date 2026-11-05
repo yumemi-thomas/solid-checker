@@ -1310,6 +1310,11 @@ pub struct OwnerRequirement {
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// `conditional_owner` with no nullable owner to name: the function runs
+    /// under an owner on some paths and with none on others, and no fact
+    /// proves an unowned one runs (ADR 0687).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub owner_varies_by_caller: bool,
     /// The uncertainty comes from a callback that runs under its caller's
     /// owner only on its first run, and with no owner on every later run --
     /// 2.0 `createRenderEffect`'s apply. The first run is owned exactly as the

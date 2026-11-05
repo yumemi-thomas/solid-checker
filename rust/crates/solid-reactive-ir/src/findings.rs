@@ -267,6 +267,9 @@ impl Finding {
                 // runWithOwner wording would name a cause that is not there.
                 "this function is exported, and a caller solid-checker cannot see may supply no owner, so this operation may execute with or without a reactive owner"
                     .into()
+            } else if requirement.owner_varies_by_caller {
+                "this function runs under a reactive owner on some paths and with none on others, and no fact proves an unowned path runs, so this operation may execute detached"
+                    .into()
             } else if conditional_owner {
                 "runWithOwner receives a nullable owner, so this operation may execute detached"
                     .into()
@@ -354,7 +357,11 @@ impl Finding {
         }
         // The exported-caller clause below carries the open-world cause; the
         // runWithOwner clause is for a nullable owner only (ADR 0349).
-        if conditional_owner && !requirement.caller_uncertain {
+        if requirement.owner_varies_by_caller && !requirement.caller_uncertain {
+            message.push_str(
+                "; its callers differ, so solid-checker cannot prove every execution has an owner",
+            );
+        } else if conditional_owner && !requirement.caller_uncertain {
             message.push_str(
                 "; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner",
             );

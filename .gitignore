@@ -1019,6 +1019,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-no-hydration-render/node_modules/**
 !fixtures/reactive-ir/rc21-standard-subclass/node_modules/
 !fixtures/reactive-ir/rc21-standard-subclass/node_modules/**
+!fixtures/reactive-ir/rc21-function-call-target/node_modules/
+!fixtures/reactive-ir/rc21-function-call-target/node_modules/**
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/**
 !fixtures/reactive-ir/rc21-after-await-handed/node_modules/
@@ -1033,3 +1035,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-create-in-effect-unplaced/node_modules/**
 !fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/
 !fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/**
+!fixtures/reactive-ir/rc21-action-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-action-unplaced/node_modules/**
+!fixtures/reactive-ir/store-for-head-write/node_modules/
+!fixtures/reactive-ir/store-for-head-write/node_modules/**
+!fixtures/reactive-ir/store-standard-library-alias/node_modules/
+!fixtures/reactive-ir/store-standard-library-alias/node_modules/**
+!fixtures/reactive-ir/store-operation-may-not-write/node_modules/
+!fixtures/reactive-ir/store-operation-may-not-write/node_modules/**

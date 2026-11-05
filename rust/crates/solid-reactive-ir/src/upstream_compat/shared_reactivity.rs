@@ -1389,13 +1389,28 @@ fn no_direct_mutation(
     defects: &mut Vec<StaticDefect>,
 ) {
     // Every leaf of a destructuring pattern is a written member of its own
-    // (ADR 0526).
+    // (ADR 0526). ADR 0716: so is every leaf of a `for (… of …)` or
+    // `for (… in …)` head, which writes only if the loop iterates: `Some`
+    // with whether a non-empty iterable is proven.
     let written_members = file
         .ast
         .assignments
         .iter()
-        .flat_map(|assignment| assignment_write_targets(file, assignment));
-    for written in written_members {
+        .flat_map(|assignment| {
+            assignment_write_targets(file, assignment)
+                .into_iter()
+                .map(|written| (written, None, assignment.logical))
+        })
+        .chain(file.ast.iteration_targets.iter().flat_map(|head| {
+            let iterates = iteration_head_proven_nonempty(file, *head);
+            file.ast
+                .write_targets
+                .iter()
+                .filter(move |target| head.contains(**target))
+                .map(move |target| (*target, Some(iterates), None))
+        }))
+        .collect::<Vec<_>>();
+    for (written, head, logical) in written_members {
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
         // the same reference-index fallback `uncalled-accessor` uses: an
@@ -1565,13 +1580,29 @@ fn no_direct_mutation(
         } else {
             false
         };
+        // ADR 0718: a logical assignment `Set`s only when its test passes.
+        // Proven not to write, it is clean; not proven to write, open.
+        let writes = match logical {
+            Some(operator) if store => {
+                logical_assignment_writes(file, context, operator, written, root)
+            }
+            _ => Some(true),
+        };
+        if writes == Some(false) {
+            continue;
+        }
+        let may_not_write = head == Some(false) || writes.is_none();
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.to_owned(),
                 target,
             },
             location: location(file.path.shared(), written),
-            analysis_context: String::new(),
+            analysis_context: if may_not_write {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            } else {
+                String::new()
+            },
             fixes: vec![],
             // A write through a 2.0 props object, or a `merge`/`omit` view of
             // it, is not dropped: on rc.13 the assigned value reads back
@@ -1582,9 +1613,30 @@ fn no_direct_mutation(
             uncertain: props
                 || typed_store.is_some()
                 || past_root
-                || standing == WriteStanding::Unproven,
+                || standing == WriteStanding::Unproven
+                || may_not_write,
         });
     }
+}
+
+/// ADR 0716: whether the loop whose head is `head` is proven to iterate at
+/// least once: its iterable, separated from the head by exactly `of` or `in`,
+/// is an array literal with an element that is a value (an index for
+/// `for … in`, an element for `for … of`, whatever spreads beside it hold).
+/// Anything else (an empty literal, a binding, a call, an object, a comment
+/// between) proves nothing: rc.21 writes only when the loop iterates.
+fn iteration_head_proven_nonempty(file: &FileFacts, head: Span) -> bool {
+    file.ast.array_literal_elements.iter().any(|array| {
+        array.span.start >= head.end
+            && file
+                .source
+                .get(head.end as usize..array.span.start as usize)
+                .is_some_and(|between| matches!(between.trim(), "of" | "in"))
+            && array
+                .elements
+                .iter()
+                .any(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)
+    })
 }
 
 /// The members a plain assignment writes: its target, or, for a destructuring
@@ -2667,20 +2719,53 @@ fn links_proven_wrappable(
     root: Span,
 ) -> bool {
     let ast = &file.ast;
+    let Some(initial) = store_literal_untouched(file, context, root, false) else {
+        return false;
+    };
+    // The written path's links resolve to literals (the use check already
+    // walked it; this pins the links themselves).
+    let member = ast.peel_ts_sugar_span(member);
+    let Some(path) = static_path(file, member, ast.peel_ts_sugar_span(root)) else {
+        return false;
+    };
+    let (last, prefix) = match path.split_last() {
+        Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
+        _ => return false,
+    };
+    let called = ast.calls_with_peeled_callee(member).next().is_some();
+    if called
+        && !file
+            .source_text(*last)
+            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
+    {
+        return false;
+    }
+    holds_object(resolve_literal_path(file, initial, prefix))
+}
+
+/// The first half of [`links_proven_wrappable`]'s proof: the store `root`
+/// names still holds its initializer's closed object literal, returned, since
+/// no setter call, alias or escaping proxy can replace or reach it. With
+/// `module_scope` (ADR 0718) the store may also be a module's `const` that no
+/// export names: every reference is then in this file, checked below.
+fn store_literal_untouched(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    root: Span,
+    module_scope: bool,
+) -> Option<Span> {
+    let ast = &file.ast;
     // A direct `eval` can reach the setter or the store with no reference
     // the binder sees.
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
-        return false;
+        return None;
     }
     // ADR 0500: a member root that is exactly a `const` (ADR 0481,
     // `thing.useIt`) starts the walk at that `const`.
     let root_declaration = ast
         .local_alias_member(ast.peel_ts_sugar_span(root))
         .map(|alias| alias.source)
-        .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)));
-    let Some(root_declaration) = root_declaration else {
-        return false;
-    };
+        .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)))?;
     // The store pattern and its exact `const` aliases, by declared name span.
     let mut names = vec![root_declaration];
     let mut store = None;
@@ -2693,63 +2778,53 @@ fn links_proven_wrappable(
             names.push(alias.source);
             continue;
         }
-        let Some(binding) = ast
+        let binding = ast
             .bindings
             .iter()
-            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
-        else {
-            return false;
-        };
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
         if !binding.immutable {
-            return false;
+            return None;
         }
         match binding.shape {
             solid_facts::ast::BindingShape::Identifier => {
-                let Some(source) = binding
+                let source = binding
                     .initializer_identifier
                     .as_ref()
-                    .and_then(|source| ast.reference_declaration(source.span))
-                else {
-                    return false;
-                };
+                    .and_then(|source| ast.reference_declaration(source.span))?;
                 names.push(source);
             }
             solid_facts::ast::BindingShape::Array => {
                 store = Some(binding);
                 break;
             }
-            _ => return false,
+            _ => return None,
         }
     }
-    let Some(store) = store else {
-        return false;
-    };
+    let store = store?;
     let slot = |index: usize| store.array_slots.get(index).and_then(Option::as_ref);
     if slot(0).map(|name| name.span) != names.last().copied()
         || store.array_slots.len() > 2
         || file
             .source_text(store.pattern)
             .is_none_or(|pattern| pattern.contains("..."))
-        || !ast.any_function_body_containing(store.declaration)
+        || !(module_scope || ast.any_function_body_containing(store.declaration))
     {
-        return false;
+        return None;
     }
     let primitive = context
         .entities
         .at(file.path.as_str(), slot(0).expect("slot 0").span)
         .and_then(|symbol| context.source_primitives.get(symbol));
-    let Some(call) = store.call_initializer.and_then(|call| ast.call_at(call)) else {
-        return false;
-    };
+    let call = store.call_initializer.and_then(|call| ast.call_at(call))?;
     let [argument] = call.arguments.as_slice() else {
-        return false;
+        return None;
     };
     let initial = ast.peel_ts_sugar_span(argument.span);
     if primitive.is_none_or(|primitive| primitive.as_str() != "createStore")
         || ast.peel_ts_sugar_span(store.initializer.unwrap_or(call.span)) != call.span
         || closed_literal(ast, initial).is_none()
     {
-        return false;
+        return None;
     }
     let referenced = |declaration: Span| {
         ast.identifiers.iter().any(|identifier| {
@@ -2758,7 +2833,7 @@ fn links_proven_wrappable(
         })
     };
     if slot(1).is_some_and(|setter| referenced(setter.span)) {
-        return false;
+        return None;
     }
     // ADR 0497: every exact alias of the store, not only those on the root's
     // chain, is the store; its references are checked like the store's own.
@@ -2773,6 +2848,26 @@ fn links_proven_wrappable(
             break;
         }
         names.extend(more);
+    }
+    // A module's store reaches other files only through an export.
+    if !ast.any_function_body_containing(store.declaration) {
+        let named = names
+            .iter()
+            .filter_map(|name| file.source_text(*name))
+            .collect::<Vec<_>>();
+        if ast.exports.iter().any(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(&export.declarations)
+                .chain(&export.declaration_surface_only)
+                .any(|specifier| {
+                    file.source_text(specifier.local.span)
+                        .is_none_or(|local| named.contains(&local))
+                })
+        }) {
+            return None;
+        }
     }
     // Alias initializers are the references the alias walk already took.
     let alias_sources: Vec<Span> = ast
@@ -2801,28 +2896,10 @@ fn links_proven_wrappable(
         if !contained_store_use(file, identifier.span, initial)
             && !consumed_by_alias_slots(file, identifier.span, &names, initial)
         {
-            return false;
+            return None;
         }
     }
-    // The written path's links resolve to literals (the use check above
-    // already walked it; this pins the links themselves).
-    let member = ast.peel_ts_sugar_span(member);
-    let Some(path) = static_path(file, member, ast.peel_ts_sugar_span(root)) else {
-        return false;
-    };
-    let (last, prefix) = match path.split_last() {
-        Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
-        _ => return false,
-    };
-    let called = ast.calls_with_peeled_callee(member).next().is_some();
-    if called
-        && !file
-            .source_text(*last)
-            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
-    {
-        return false;
-    }
-    holds_object(resolve_literal_path(file, initial, prefix))
+    Some(initial)
 }
 
 /// The value is an object or array literal: a primitive (or a regular
@@ -3239,6 +3316,106 @@ fn tsc_reports_in(file: &FileFacts) -> bool {
     !javascript && !file.ast.typescript_directive_comment
 }
 
+/// ADR 0718: whether the logical assignment `operator` to the store member
+/// `written` writes: `Some` only where the value there is the literal the
+/// store's initializer holds ([`store_literal_untouched`]: nothing else can
+/// write the store) and that literal's truthiness is known. `None` where the
+/// value is not proven, so the write may be skipped, and Chrome is silent.
+fn logical_assignment_writes(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    operator: solid_facts::ast::LogicalAssignmentOperator,
+    written: Span,
+    root: Span,
+) -> Option<bool> {
+    use solid_facts::ast::LogicalAssignmentOperator;
+    let mut value = store_literal_untouched(file, context, root, true)?;
+    let path = static_path(
+        file,
+        file.ast.peel_ts_sugar_span(written),
+        file.ast.peel_ts_sugar_span(root),
+    )?;
+    for key in &path {
+        let key = file.source_text(*key)?;
+        value = file
+            .ast
+            .peel_ts_sugar_span(crate::execution_role::closed_literal_slot_value(
+                file, value, key,
+            )?);
+    }
+    let truth = literal_truthiness(file, value)?;
+    Some(match operator {
+        LogicalAssignmentOperator::Nullish => truth == Truthiness::Nullish,
+        LogicalAssignmentOperator::Or => truth != Truthiness::Truthy,
+        LogicalAssignmentOperator::And => truth == Truthiness::Truthy,
+    })
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Truthiness {
+    Nullish,
+    Falsy,
+    Truthy,
+}
+
+/// The truthiness of the literal at `value`, read only where its spelling
+/// fixes it: `null`, an `undefined` no declaration shadows, `true`, `false`,
+/// an unsigned decimal number (falsy only at zero: `0.0` too), a quoted
+/// string with no escape (falsy only when empty). Anything else is `None`.
+fn literal_truthiness(file: &FileFacts, value: Span) -> Option<Truthiness> {
+    let text = file.source_text(value)?;
+    let quoted = text.len() >= 2
+        && matches!(text.as_bytes()[0], b'"' | b'\'')
+        && text.as_bytes()[text.len() - 1] == text.as_bytes()[0]
+        && !text.contains('\\');
+    match text {
+        "null" => Some(Truthiness::Nullish),
+        "undefined"
+            if file.ast.reference_declaration(value).is_none()
+                && file
+                    .ast
+                    .identifiers
+                    .binary_search_by_key(&value, |identifier| identifier.span)
+                    .is_ok() =>
+        {
+            Some(Truthiness::Nullish)
+        }
+        "true" => Some(Truthiness::Truthy),
+        "false" => Some(Truthiness::Falsy),
+        _ if quoted => Some(if text.len() == 2 {
+            Truthiness::Falsy
+        } else {
+            Truthiness::Truthy
+        }),
+        _ if !text.is_empty()
+            && text
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || byte == b'.')
+            && text
+                .bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_digit()) =>
+        {
+            let number = text.parse::<f64>().ok()?;
+            Some(if number == 0.0 {
+                Truthiness::Falsy
+            } else {
+                Truthiness::Truthy
+            })
+        }
+        _ => None,
+    }
+}
+
+/// ADR 0718: `sort`, `reverse`, `fill` and `copyWithin` read the length
+/// first and write nothing on a short array or an empty range (Chrome is
+/// silent). The length is proven by no fact here: ADR 0491's literal proof
+/// covers neither a root array nor a call of these methods, so they may not
+/// write. The other mutators always write `length`.
+fn mutator_always_writes(method: &str) -> bool {
+    !matches!(method, "sort" | "reverse" | "fill" | "copyWithin")
+}
+
 /// The nine in-place `Array.prototype` methods upstream names
 /// (`MUTATING_METHODS`).
 const ARRAY_MUTATORS: [&str; 9] = [
@@ -3336,15 +3513,23 @@ fn no_store_mutator_call(
         let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
             continue;
         };
+        let writes = mutator_always_writes(text(file, member.property));
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), call.span),
-            analysis_context: String::new(),
+            analysis_context: if writes {
+                String::new()
+            } else {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            },
             fixes: vec![],
-            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some()
+                || past_root
+                || !writes
+                || standing == WriteStanding::Unproven,
         });
     }
 }
@@ -3575,15 +3760,16 @@ fn no_store_standard_library_write(
 ) {
     for call in &file.ast.calls {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let Some(member) = file.ast.member_at(callee) else {
-            continue;
-        };
-        if call.construct
-            || file.ast.computed_members.binary_search(&callee).is_ok()
-            || !STANDARD_LIBRARY_WRITES
+        // A member callee is prefiltered by its name; an identifier one
+        // (`const as = Object.assign; as(store, …)`, ADR 0717) is judged by
+        // the declaration alone, as every callee is below.
+        let named = match file.ast.member_at(callee) {
+            Some(member) => STANDARD_LIBRARY_WRITES
                 .iter()
-                .any(|(name, _)| *name == text(file, member.property))
-        {
+                .any(|(name, _)| *name == text(file, member.property)),
+            None => crate::owners::is_identifier_span(file, callee),
+        };
+        if call.construct || file.ast.computed_members.binary_search(&callee).is_ok() || !named {
             continue;
         }
         let Some(declaration) =
@@ -3666,15 +3852,45 @@ fn no_store_standard_library_write(
             }
             true
         };
+        // ADR 0718: `Object.assign` writes only an own enumerable key of a
+        // source. Proven only when its first source is a closed literal of
+        // data properties with one: no code runs before that first `Set`.
+        let writes = declaration.qualified_name.as_ref() != "ObjectConstructor.assign"
+            || call
+                .arguments
+                .get(1)
+                .filter(|source| !source.spread)
+                .and_then(|source| {
+                    let source = file.ast.peel_ts_sugar_span(source.span);
+                    file.ast
+                        .object_get_shapes
+                        .iter()
+                        .find(|shape| shape.span == source)
+                })
+                .is_some_and(|shape| {
+                    shape.closed
+                        && !shape.properties.is_empty()
+                        && shape
+                            .properties
+                            .iter()
+                            .all(|property| property.getter.is_none())
+                });
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), call.span),
-            analysis_context: String::new(),
+            analysis_context: if writes {
+                String::new()
+            } else {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            },
             fixes: vec![],
-            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some()
+                || past_root
+                || !writes
+                || standing == WriteStanding::Unproven,
         });
     }
 }

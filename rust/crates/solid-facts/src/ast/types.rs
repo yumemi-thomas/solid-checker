@@ -1765,6 +1765,21 @@ pub struct AssignmentFact {
     pub call_initializer: Option<Span>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub array_slots: Vec<Option<Span>>,
+    /// The operator of a logical assignment (`??=`, `||=`, `&&=`), which
+    /// writes only when its test passes (facts schema 89, ADR 0718).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logical: Option<LogicalAssignmentOperator>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogicalAssignmentOperator {
+    /// `??=`: writes when the target is `null` or `undefined`.
+    Nullish,
+    /// `||=`: writes when the target is falsy.
+    Or,
+    /// `&&=`: writes when the target is truthy.
+    And,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

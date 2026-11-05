@@ -49,9 +49,11 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 | H-D4 | `0a2df93f6`, ADR 0685 | 0 moved | now uncertifiable: `valueOf`, `__defineGetter__`, `__defineSetter__` on a closed object. 3 FP, 2 FC left |
 | F0 steps 1-3 | ADR 0686, `interproc/completeness.rs` | +125 SC9012 U, 0 V moved, 0 removed, `sweep-f0.json`, 18,695 U, 376 V | 22 false cleans left, 266 open (22 FP, 241 FC, 3 no run). `v42` passes, 222 of 336. Left of F0: `handed_value`'s call arms (`v08 f01 f12`), `ArrayMembers` (`f02`), ADR 0509's text |
 
+| Merge 5 | W to `dfaf076df`, ADRs 0687, 0688 | 0 moved, `sweep-m5.json`, 18,695 U, 376 V, 0 unnamed | SC4001 `owner-varies-by-caller` by field and wording; SC2002 and SC3001 already named (ADRs 0680, 0672): W's note is stale; `sort.call(store)` is `function-call-target-unresolved`. 248 open (6 FP, 239 FC, 3 no run) |
+
 Grid at `a92553232`, `mx-recall` whole set, STRICT_READ_UNTRACKED: 62,480 programs, 0 false positive, 152 false cleans, the two known `ref-*` groups; 12 oracle runs inconclusive, not read.
 
-Next agent: F0 steps 4-6, F-C, F-D, the census, the bounds audit. Baseline sweep `sweep-f0.json`, build `rf0/`. `make coverage` prints only the first moved row of a fixture: compare snapshots row by row before an update. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
+Next agent: F0 steps 4-6, F-C, F-D, the census, the bounds audit. Baseline sweep `sweep-m5.json`, build `rm5/`. `make coverage` prints only the first moved row of a fixture: compare snapshots row by row before an update. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
 
 Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open. `a92553232`'s says 24 false positives left the list; it was 23 (67 to 44, 342 to 319 open).
 
@@ -72,6 +74,7 @@ Next: SC8014, SC8015, then SC1001, H-D5, F0, SC9012. Latest sweep `sweep-7.json`
 Handoff at ADR 0664: helpers `chk.sh` (scratch, oracle path fixed), `rd.py <cmp> <sweep> x` (each added site with its source line), `rm/` (merge build), `r9012/`, `rco/`. Do first: step 6 (`computation_provenance`, four discovery sites, wording flag, C-D4), then 7 (`lazy` tag row), 8 (`j06`), the fuzz contexts. Step 6 reaches W: an `any`-computed `createOptimistic` starts to hold, tell W in the commit.
 
 Surprises:
+- Gate and commit with `&&` or `if`: `;` committed a red verify-delta once (clippy), amended before pushing. An item after a `#[cfg(test)] mod` fails clippy.
 - `rm -rf *` after a `cd` is refused by the harness: use a fresh probe directory. zsh does not word-split `$ids`: `redisc.py` then gets one id. `patterns.mjs` takes `--checker`, not `--checker-bin`, and silently uses the default build with the wrong flag.
 - Read a grid's whole outcome line, and diff by id against the previous build, before committing: 596 false cleans sat unlisted past ADR 0668 because the run printed them under "more". A background `timeout` is the background limit: pass a long one.
 - A recall-only code's own cells go in `recallContexts`, with `contexts: []`, or `recall.test.mjs` counts them as base cells.

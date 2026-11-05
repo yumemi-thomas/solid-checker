@@ -77,6 +77,7 @@ pub(crate) const STORE_WRITE_UNPROVEN: &str = "store-write-unproven";
 pub(crate) const LOADING_HOLD_UNPROVEN: &str = "loading-hold-unproven";
 pub(crate) const EFFECT_OWNER_UNPROVEN: &str = "effect-owner-unproven";
 pub(crate) const PACKAGE_SOURCE_UNAVAILABLE: &str = "package-source-unavailable";
+pub(crate) const FUNCTION_CALL_TARGET_UNRESOLVED: &str = "function-call-target-unresolved";
 pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-premise";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
@@ -137,6 +138,8 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
     if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
+    } else if requirement.owner_varies_by_caller {
+        OWNER_VARIES_BY_CALLER
     } else if requirement.conditional_owner {
         OWNER_NULLABLE
     } else if requirement.caller_uncertain {

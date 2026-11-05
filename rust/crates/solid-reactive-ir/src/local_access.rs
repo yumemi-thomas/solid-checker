@@ -1809,6 +1809,7 @@ impl LocalAccessContext<'_, '_> {
         let mut seen = HashSet::default();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {
+            self.push_function_call_target_obligation(file, call, &mut result);
             self.discover_call(file, call, &allowed, &mut result, &mut seen);
             if self.lookup.primitive_at_call(file, call.span)
                 == Some(solid_dialect::Primitive::Untrack)
@@ -1953,6 +1954,77 @@ impl LocalAccessContext<'_, '_> {
         call: &solid_facts::ast::CallFact,
     ) -> bool {
         dispatch_invokes(file, call)
+    }
+
+    /// ADR 0688: `Array.prototype.sort.call(store)`. The callee resolves to
+    /// `Function.call`, whose target no fact gives, so a reactive value handed
+    /// to it reaches code nothing here reads: an obligation, never silence.
+    fn push_function_call_target_obligation(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        result: &mut LocalAccessResult,
+    ) {
+        let ast = &file.ast;
+        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+            return;
+        };
+        if !matches!(file.source_text(member.property), Some("call" | "apply"))
+            || !dispatch_invokes(file, call)
+            || self
+                .lookup
+                .function_called_at(file.path.as_str(), member.object)
+                .is_some()
+            || self
+                .lookup
+                .callee_symbol(file, member.object)
+                .is_some_and(|symbol| {
+                    self.setters.contains_key(symbol)
+                        || self.actions.contains_key(symbol)
+                        || self.accessors.contains_key(symbol)
+                })
+        {
+            return;
+        }
+        let standard = self
+            .lookup
+            .standard_library_declaration(file, call, typefacts::CallKind::Call)
+            .is_some_and(|declaration| {
+                matches!(
+                    declaration.qualified_name.as_ref(),
+                    "Function.call"
+                        | "Function.apply"
+                        | "CallableFunction.call"
+                        | "CallableFunction.apply"
+                )
+            });
+        let reactive = call.arguments.iter().any(|argument| {
+            let value = ast.peel_ts_sugar_span(argument.span);
+            let root = ast
+                .member_at(value)
+                .map_or(value, |member| ast.peel_ts_sugar_span(member.object));
+            self.lookup.callee_symbol(file, root).is_some_and(|symbol| {
+                self.setters.contains_key(symbol)
+                    || self.actions.contains_key(symbol)
+                    || self.accessors.contains_key(symbol)
+            })
+        });
+        if !standard || !reactive {
+            return;
+        }
+        result.dispatch_obligations.push(crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: file
+                    .source_text(call.callee)
+                    .unwrap_or("this callee")
+                    .to_owned(),
+                member: None,
+            },
+            location: location(file.path.shared(), call.callee),
+            analysis_context: crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        });
     }
 
     /// ADR 0468: a comma, conditional or logical callee (`(c && setX)(1)`)
@@ -2345,17 +2417,26 @@ impl LocalAccessContext<'_, '_> {
             .get(self.lookup.callee_symbol(file, call.callee)?)
     }
 
-    /// The write half of "no row is not never runs". Empty until the flip's
-    /// SC2001 commit (`scripts/flip/PLAN.md`), so the read and write tracks
-    /// edit different functions.
-    #[allow(clippy::unused_self)]
+    /// The write half of "no row is not never runs" (ADR 0715): no call edge
+    /// reaches the function holding the call, yet it may run (a getter,
+    /// `toString`, an iterator, a tag, a slot, a method, a constructor), so an
+    /// action call there is uncertain, never certified. Module initialization
+    /// (outside every function, a static field or block) has no owner and is
+    /// silent; a non-static field initializer runs at `new` and asks.
     fn unreached_write(
         &self,
-        _file: &solid_facts::FileFacts,
-        _call: &solid_facts::ast::CallFact,
-        _symbol: &str,
-        _result: &mut LocalAccessResult,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        result: &mut LocalAccessResult,
     ) {
+        if !self.actions.contains_key(symbol)
+            || !unreached_write_may_run(file, call.span, self.lookup)
+        {
+            return;
+        }
+        let allowed = allowed_callback_spans(file, self.lookup);
+        self.push_action_invocation(file, call, symbol, &allowed, true, 1, result);
     }
 
     /// [`Self::discover_call`] for the call `call` invoking the function the
@@ -4396,6 +4477,20 @@ impl LocalAccessContext<'_, '_> {
                 ));
             }
             let Some(multiplicity) = self.reachable_calls.get(callee).copied() else {
+                // ADR 0715: an action a hook or context carries, called where
+                // no edge reaches, as [`Self::unreached_write`].
+                if unreached_write_may_run(file, call.span, self.lookup) {
+                    let allowed = allowed_callback_spans(file, self.lookup);
+                    self.push_action_invocation(
+                        file,
+                        call,
+                        symbol.as_str(),
+                        &allowed,
+                        true,
+                        1,
+                        &mut result,
+                    );
+                }
                 continue;
             };
             let allowed = allowed_callback_spans(file, self.lookup);
@@ -9087,4 +9182,30 @@ pub(crate) fn read_as_part_of_longer_path(
             && !(file.ast.is_no_get_target(candidate.span)
                 || target(&file.ast.iteration_targets, candidate.span))
     })
+}
+
+/// ADR 0715: whether a setter or action call no reachable row places may run:
+/// written in a function, or in a non-static field initializer (it runs at
+/// `new`), and not proven unreached (ADR 0458). Outside both it is module
+/// initialization: no owner, proven silent.
+fn unreached_write_may_run(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let in_instance_field = file
+        .ast
+        .classes
+        .iter()
+        .flat_map(|class| &class.elements)
+        .any(|element| {
+            element.kind == solid_facts::ast::ClassElementKind::Field
+                && !element.r#static
+                && element.value.is_some_and(|value| value.contains(span))
+        });
+    (crate::owners::owning_function(&file.ast, span).is_some() || in_instance_field)
+        && !matches!(
+            crate::execution_role::SiteReach::new(lookup).site(file, span),
+            crate::execution_role::Reach::Unreached(_)
+        )
 }

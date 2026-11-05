@@ -102,6 +102,7 @@ fn catalog_prose_program() -> Program {
             runtime_uncertain: false,
             caller_uncertain: false,
             conditional_owner: false,
+            owner_varies_by_caller: false,
             later_run_unowned: false,
             component_uncertain: false,
             unplaced_callback: false,

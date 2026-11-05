@@ -1656,141 +1656,6 @@
    "certified": true
   },
   {
-   "id": "values/d1-and-handler",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-assign-empty",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-assign-empty-var",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-assign-null",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-copywithin-past",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-fill-past",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-fill-zero-range",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-nullish-filled-by-setter",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-nullish-handler",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-or-handler",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-reverse-empty-handler",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-reverse-one-handler",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-sort-one-handler",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1-sort-setter-emptied",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/d1n-array-proto-call",
-   "item": "V-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d2-body-read-root",
    "item": "V-D2",
    "outcome": "false-clean",
@@ -2088,15 +1953,6 @@
    "certified": true
   },
   {
-   "id": "values/d6-for-of-target",
-   "item": "V-D6",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d6-proxy-wrap",
    "item": "V-D6",
    "outcome": "false-clean",
@@ -2212,24 +2068,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "values/t1-assign-nonenum",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
-  },
-  {
-   "id": "values/t1-reverse-holes",
-   "item": "V-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-store-mutation-outside-setter"
-   ]
   },
   {
    "id": "values/t2-for-row-root-array",

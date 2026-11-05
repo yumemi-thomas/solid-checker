@@ -1125,9 +1125,20 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "reports",
-      "checkerCount": 9,
+      "checkerCount": 5,
       "why": "SC2003's in-place array arm (ADR 0425). All nine `Array.prototype` mutators on a store that is itself the array type-check on the audited rc.17 (`Store<T> = T`), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings. The receiver reads no link past the root, so the finding is a violation in both passes; a mutator through a link (`store.items.push(1)`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass and it is pinned by the fixtures `store-mutators`, `store-write-chain-links` and `store-write-chain-links-loose`.",
-      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.push(1);\n  list.pop();\n  list.shift();\n  list.unshift(0);\n  list.splice(0, 1);\n  list.sort();\n  list.reverse();\n  list.fill(7);\n  list.copyWithin(0, 1);\n}\n"
+      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.push(1);\n  list.pop();\n  list.shift();\n  list.unshift(0);\n  list.splice(0, 1);\n}\n"
+    },
+        {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 4,
+    "checkerKind": "uncertifiable",
+      "why": "SC2003's in-place array arm, the four mutators with no length fact (ADR 0718): `sort`, `reverse`, `fill` and `copyWithin` write nothing on an empty or short array, so with no fact for the array's length the finding is uncertifiable, `store-operation-may-not-write`, in both passes. The five that always write are the case before this one.",
+      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.sort();\n  list.reverse();\n  list.fill(7);\n  list.copyWithin(0, 1);\n}\n"
     },
     {
       "rule": "no-store-mutation-outside-setter",

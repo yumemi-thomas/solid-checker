@@ -411,6 +411,7 @@ pub(crate) fn attribute_dependency_requirements(
                 runtime_uncertain: requirement.runtime_uncertain,
                 caller_uncertain: requirement.caller_uncertain,
                 conditional_owner: requirement.conditional_owner,
+                owner_varies_by_caller: requirement.owner_varies_by_caller,
                 later_run_unowned: requirement.later_run_unowned,
                 component_uncertain: requirement.component_uncertain,
                 unplaced_callback: requirement.unplaced_callback,

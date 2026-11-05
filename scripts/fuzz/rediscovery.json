@@ -4011,5 +4011,48 @@
   "found": "H-D1, f0.md",
   "fixed": "ADR 0686",
   "outside": "the accessor itself must be the hook's parameter, and a context's `stmts` is one site: contexts f0-hook-param and f0-hook-captured-alias answered the same on the build before and this one (3,384 programs, 0 false clean), so they were dropped. Patterns returns/q3, r20, t1, t2, t4, t5, t6, t8, t10, t11, t13, v01, v03, v06, v07, v16, v18, v20, values/d3-curried-var, t3-helper-module-curried, t5-helper-wrapper-call and api/v42 were listed false cleans until this commit"
+ },
+ {
+  "finding": "SC2002: an action call in a module-scope helper only an object getter calls, the getter read in a component body, had no row and certified; Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE (flip witnesses SC2002 d05, d06, e03, e06, research probe a-u11-getter; ADR 0715)",
+  "found": "flip plan SC2002 row, research probes",
+  "fixed": "ADR 0715",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-flw-getter-helper-x-direct-none",
+   "mx-action-called-in-owned-scope-flw-getter-helper-x-direct-closure"
+  ],
+  "rediscovered": "the checker at dbc66107a on `focus.mjs --grids mx-recall` (flip-write.mjs context flw-getter-helper): 78 false-clean of the 78 that type-check (552 typed-away: binding variants the component declares, out of reach of the hoisted helper); the fix: 0 false-clean, 78 recall-gap. The full grid for the code (28,098 programs) needs no look"
+ },
+ {
+  "finding": "SC2003: a store member as a `for … of`/`for … in` head target (`for (s.a of [2])`) was never asked (no_direct_mutation walked assignments only) and certified; Chrome (rc.21) warns STORE_WRITE_OUTSIDE_SETTER when the loop iterates (flip witnesses SC2003 c02, c03, j01, j02; ADR 0716)",
+  "found": "flip plan SC2003 row; values/d6-for-of-target",
+  "fixed": "ADR 0716",
+  "outside": "a recall context places the site and cannot respell it as a loop head: the spelling of the write is a SPEC variant in misuse.mjs, outside this track's file. fuzz-patterns: values/d6-for-of-target left open-defects.json at ADR 0716; the witnesses and fixture store-for-head-write pin the rest"
+ },
+ {
+  "finding": "SC2003: Object.assign called through a const alias on a store (`const as = Object.assign; as(s, { a: 2 })`) certified: the standard-library write needed a member callee before asking the declaration (flip witness SC2003 j04; ADR 0717)",
+  "found": "flip plan SC2003 row",
+  "fixed": "ADR 0717",
+  "outside": "a recall context places the site and cannot respell the write as an aliased call: the spelling is a SPEC variant in misuse.mjs, outside this track's file; the witness and fixture store-standard-library-alias pin it"
+ },
+ {
+  "finding": "SC2003: a store operation that writes nothing on its run (`??=`/`&&=` the store's literal fails, `Object.assign` of null, an empty or inherited source, `sort`/`reverse`/`fill`/`copyWithin` on a short array or empty range) was a violation; Chrome (rc.21) is silent with no [[Set]] (V-D1; ADR 0718)",
+  "found": "V-D1 (scripts/flip/notes/v-d1-checker.patch), fuzz-patterns values/d1-*, t1-assign-nonenum, t1-reverse-holes",
+  "fixed": "ADR 0718",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-noop-nullish-direct-none",
+   "lg-store-write-outside-setter-handler-noop-sort-one-direct-none",
+   "lg-store-write-outside-setter-handler-noop-assign-null-direct-none"
+  ],
+  "rediscovered": "the checker at fbecfa142 on `focus.mjs --grids lg-recall` (misuse.mjs STORE_NO_OPS variants): 540 false-positive of 540; the fix: 108 clean (noop-nullish, noop-and proven), 432 uncertifiable. fuzz-patterns: 16 values/d1-*/t1-* entries left open-defects.json"
+ },
+ {
+  "finding": "a store handed to `Array.prototype.sort.call`, which resolves to `Function.call`: certified, Chrome warns (d1n)",
+  "found": "Track W's SC2003 step 2, open defect values/d1n-array-proto-call",
+  "fixed": "ADR 0688",
+  "outside": "not tried in a generator: W's write shapes are in flip-write.mjs, outside this track's file. Pattern values/d1n-array-proto-call was a listed false clean until this commit"
  }
 ]

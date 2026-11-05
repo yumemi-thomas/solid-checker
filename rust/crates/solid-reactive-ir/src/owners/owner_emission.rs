@@ -534,6 +534,25 @@ pub(super) fn emit_file(
             && !later_run_unowned
             && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
             && context & OWNER_CONTEXT_UNOWNED != 0;
+        // ADR 0687: a `runWithOwner` callback has a nullable owner to name;
+        // anywhere else the callers differ.
+        let owner_varies_by_caller = conditional_owner
+            && !file
+                .ast
+                .arguments_containing(candidate.operation_span)
+                .any(|(call, index)| {
+                    inputs
+                        .lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            inputs
+                                .lookup
+                                .dialect
+                                .callback_semantics_at(primitive, index, call.arguments.len())
+                                .owner
+                                == Some(solid_dialect::CallbackOwner::Conditional)
+                        })
+                });
         let caller_uncertain = candidate.allow_uncertain
             && !proven_unowned
             && !unplaced_callback
@@ -592,6 +611,7 @@ pub(super) fn emit_file(
                     caller_uncertain: false,
                     unplaced_callback: false,
                     conditional_owner: false,
+                    owner_varies_by_caller: false,
                     later_run_unowned: false,
                     component_uncertain,
                     provider_open,
@@ -630,6 +650,7 @@ pub(super) fn emit_file(
                 caller_uncertain,
                 unplaced_callback,
                 conditional_owner,
+                owner_varies_by_caller,
                 later_run_unowned,
                 component_uncertain,
                 provider_open,

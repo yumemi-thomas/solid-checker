@@ -502,6 +502,7 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,
+    pub(crate) owner_varies_by_caller: bool,
     pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
     /// ADR 0534: the operation's callback is written in an owner-providing

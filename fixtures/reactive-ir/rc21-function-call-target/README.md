@@ -1,0 +1,1 @@
+`Array.prototype.sort.call(store)` resolves to `Function.call`, whose target no fact gives (ADR 0688): the reactive value reaches unread code, so it is uncertifiable, `function-call-target-unresolved`. A plain value, and a resolved project function, stay as they were.

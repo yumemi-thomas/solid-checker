@@ -142,6 +142,34 @@ SC2001.
   `await`-ordinary. Costs: `f?.()`, guard/local-function branches, module `try` are U (Chrome warns). Witnesses 195 (same).
   Fuzzer `flw-mixed-dead`: old 384 FP of 1152, new 0. Corpus 0 moved (`sweep-w4001.json`). Fixture `owner-unowned-run-unproven`.
   **Merge note:** blocker `owner-varies-by-caller` + wording need an `OwnerRequirement` field (lib.rs, R's).
+- **SC2002** (ADR 0715, 797d0d630): `local_access.rs` `unreached_write` (no-row arm) and `transported_writes`' no-row branch push
+  the action row with `alias_withheld` (Unknown -> U) when `unreached_write_may_run` (free fn at the file's end: in a function or
+  non-static field initializer, and `SiteReach` not Unreached). SC2001's commit adds `push_setter_write` to both (plus
+  `static_api.rs` refresh arms, per research). Witnesses SC2002 7/7, all 200 of 335. Fixture `rc21-action-unplaced` (stubs in
+  node_modules + .gitignore lines). arrow-bound-helper-reachability: 4 new U (a reassigned `let`, plus 3 never-called helpers
+  the multi-file reach query does not prove unreached). Fuzzer `flw-getter-helper` (hoisted): old 78 false-clean, new 0; 552
+  typed-away (binding variants declared in the component); full grid 28,098 programs, nothing needs a look. Corpus 0 moved
+  (`sweep-w2002.json`). **Merge note:** named blocker `function-run-unplaced` needs a row field or wording branch in lib.rs (R's).
+  Runner for research probes: `node ~/EDF/tmp/flipw/research-sc2001/runp.mjs <dir> <absolute bindir>` (bindir holds the checker
+  and `solid-typefacts`).
+- **SC2003 step 1 of 5** (ADR 0716, 1232c2f2c): for-heads. `shared_reactivity.rs` `no_direct_mutation` chains each
+  `write_targets` leaf inside an `iteration_targets` head; `iteration_head_proven_nonempty` (array literal with a value element,
+  separated by exactly `of`/`in`) decides V, else U `store-operation-may-not-write`. Ownership case
+  `no-store-mutation-outside-setter/loop-head/001` (upstream has no such rule; insert cases.json entries as text: re-serializing
+  rewrites `\u00ef` escapes; a case needs `expect.absent`). fuzz-patterns `values/d6-for-of-target` FIXED (moved to rediscovery).
+  Witnesses SC2003 5/13, all 204. Corpus 0 moved (`sweep-w2003a.json`). Fixture `store-for-head-write`.
+- **SC2003 step 2 of 5** (ADR 0717, 523597ec8): `no_store_standard_library_write` lets an identifier callee through (judged by
+  declaration). `.call` on a prototype method NOT built (resolves to `Function.call`; the member's declaration is no recorded
+  query): stays open defect `values/d1n-array-proto-call`. j04 holds (SC2003 6/13, all 205). Corpus 0 moved (`sweep-w2003b.json`).
+  Fixture `store-standard-library-alias`.
+- **SC2003 step 3 of 5** (ADR 0718, 061f71bd2): V-D1 fold. `AssignmentFact.logical` (schema 89; R's unbumped facts change: the
+  merge takes one bump). `store_literal_untouched` = ADR 0491's proof minus links (module `const` unexported allowed for V-D1 only);
+  logical assignment V where the literal passes, clean where it fails, else U `store-operation-may-not-write`; `Object.assign` V only
+  with a closed data-literal first source; sort/reverse/fill/copyWithin always U (no length fact). Witnesses SC2003 6/13, all 205.
+  fuzz-patterns 765/372 (16 FIXED); lg-recall noop-*: old 540 FP, new 0; grids list now empty. Corpus 0 moved (`sweep-w2003c.json`).
+  Fixture `store-operation-may-not-write`; ownership case `.../logical-assignment/001`. Probes `~/EDF/tmp/flipw/v-d1/cases`.
+  **SC2003 next:** step 4 sink-driven parameter/callback flow (c04 j05 j06, research section 2); step 5 element flows. c15 c16 j07
+  j08 stay failing (R's census).
 
 ## Owner notes (2026-11-05)
 
@@ -180,7 +208,8 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). **Next: SC2002.** Old SC4001 notes kept for reference:
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: steps 1-3 done (ADRs 0716-0718), next step 4** (see the SC2003 entry above),
+   then SC2001 last. Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
    quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
@@ -202,7 +231,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w4001.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2003c.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
@@ -226,6 +255,15 @@ Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writ
 
 - Load-timing tests fail under a full verify and pass alone: `scripts/fuzz/exec.test.mjs` (deadlines), packages/cli
   `development-feedback.test.mjs` (1 s timeout), `invocation_flow_process` file-stamp tests. Rerun alone, never change limits.
+- Doc budget is at its limit (docs/ 1,140,000; fixture READMEs 484,000; open-work 82,000): every rule so far trimmed W's own
+  ADRs/READMEs to fit. Keep new text short; compress older W text (ADRs 0700-0717) rather than raise a budget.
+- `exec.test.mjs` deadlines fail under verify-delta's load about half the time; rerun alone, then rerun verify-delta.
 - `verify-delta` stops at the first failing check: run the ones after it by hand (usually only `wasm-compile`).
 - rustfmt reflows edited code: a later scripted edit that matches the old text silently fails; match by function name.
 - `scripts/flip/tsc.mjs` needs an `App` export; to type-check a fixture, copy its source to a temp dir and append one.
+- `v-d1-checker.patch` no longer applies (steps 1-2 moved `no_direct_mutation`); and as written its literal arm was dead
+  (`links_proven_wrappable` refuses a one-link path) and its `parse::<f64>` called `0.0`/`NaN` truthy. Folded by hand.
+- Full `make fuzz-focus CODES=STORE_WRITE_OUTSIDE_SETTER` exceeds 30 min (mx-src 24k programs); the noop variants are
+  `recallLegalVariants`: run `node scripts/fuzz/focus.mjs --codes … --grids lg-recall --checker-bin <bin> --typefacts <bin>` (~11 min).
+- `node scripts/verify-delta.mjs --help` is not a help flag: it starts a full run against the last green commit.
+- `make coverage`'s stub check needs a new fixture staged (`git add`) first, or it reports the stub untracked.

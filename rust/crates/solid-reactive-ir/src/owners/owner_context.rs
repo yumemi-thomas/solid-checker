@@ -670,6 +670,7 @@ pub(crate) fn push_owner_requirement(
             runtime_uncertain: status.runtime_uncertain,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
+            owner_varies_by_caller: status.owner_varies_by_caller,
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
             unplaced_callback: status.unplaced_callback,
