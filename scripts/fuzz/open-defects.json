@@ -65,42 +65,6 @@
  ],
  "patterns": [
   {
-   "id": "api/c01-timer-key",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c02-host-key",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c02-host-root",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c02-host-rwo",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/c03-named-timer-root",
    "item": "C-D2",
    "outcome": "false-positive",
@@ -137,33 +101,6 @@
    ]
   },
   {
-   "id": "api/c05-named-listener-root",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c05-named-listener-rwo",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c06-object-host-key",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/c06-object-host-root",
    "item": "C-D2",
    "outcome": "false-positive",
@@ -174,15 +111,6 @@
   },
   {
    "id": "api/c06-object-host-rwo",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c08-after-await-key",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -209,15 +137,6 @@
    ]
   },
   {
-   "id": "api/c11-passed-to-helper-key",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/c11-passed-to-helper-root",
    "item": "C-D2",
    "outcome": "false-positive",
@@ -228,73 +147,6 @@
   },
   {
    "id": "api/c11-passed-to-helper-rwo",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/c13-body-iife-control-key",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-bodyDirect-reconcileKey",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-host-createRoot",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-host-createRootDispose",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-host-reconcileKey",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-host-runWithOwner",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-micro-reconcileKey",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -322,24 +174,6 @@
   },
   {
    "id": "api/k-namedTimer-runWithOwner",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-then-reconcileKey",
-   "item": "C-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/k-timer-reconcileKey",
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
@@ -843,26 +677,6 @@
    "certified": true
   },
   {
-   "id": "census/c03-window-arrow-nested-reconcile",
-   "item": "section-4 census:c",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "census/c06-body-reconcile-key",
-   "item": "section-4 census:c",
-   "outcome": "false-positive",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "census/cases3b-f06-children-helper-read",
    "item": "section-4 census:f",
    "outcome": "false-clean",
@@ -1104,24 +918,6 @@
    "certified": true
   },
   {
-   "id": "census/k03-window-createRoot",
-   "item": "section-4 census:k",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "census/k09-timer-reconcile-key",
-   "item": "section-4 census:k",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "census/k10-mapArray-result",
    "item": "section-4 census:k",
    "outcome": "false-clean",
@@ -1165,15 +961,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "census/s06-reconcile-key-fn",
-   "item": "section-4 census:s",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "census/w01-private-field-setter",

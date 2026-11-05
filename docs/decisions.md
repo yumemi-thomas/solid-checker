@@ -1789,6 +1789,28 @@ A named function no edge enters, handed to a carrier in a body, had no read row:
 runs it now proves SC1001 (`handed_async_read_role`), and one that may not leaves it uncertifiable: the zero-run trade of ADR 0531
 does not extend to this arm. W's nets take the same walk.
 
+<a id="adr-0675"></a>
+## ADR 0675 — A window-inheriting call reports only where its code runs
+
+`inheriting_call_role`'s reporting tail trusted the role at the call. Up the in-place layers from it: a scheduler's callback has
+no window, proved silent (`n06`, and the 21 rows `sc1001.md` counts); a function nothing places proves no role; a component's body
+keeps it. `reporting_role_where_the_call_runs`, reads only. `:817` is untouched: direct reads rely on it.
+A read in a window-inheriting callback in a named handler also called in place (`h(); <button onClick={h} />`) certified, because
+the handler role answered first: a reporting in-place call now wins. `n13 n22 n23` hold, so `sc1001.md`'s step 5 is not needed.
+
+<a id="adr-0676"></a>
+## ADR 0676 — A setter runs its callback on its stack
+
+`setSt((d) => …)`, `setN((p) => …)` and a `reconcile` key that is argument 0 run on the setter's stack, so the setter's call places a
+read there, in discovery rather than `layer_run`, which W's write walk reads. In an apply: proved V, where it certified (`r11 r18
+r19 z01`). A key applied to the draft (`reconcile(v, key)(d)`) counts too. Where the write guard throws first the callback never runs:
+no read claim, SC2001 stands (`z04 r16 r17`). A setter callback in a tracked effect runs, quietly (`t1 t2`). A key on a `reconcile` held
+anywhere else, and anything else built for the setter (`storePath`), is unplaced: `r13`, `r14` lose a false V.
+A store's own Gets in its setter's callback are silent in any window: `dev.js` checks `!inDraft`, measured (`z05`, `z08` through a
+`const`). The test is identity of the tuple binding, so another store warns (`z09`), and so does a signal's own read (`z10`).
+`CloudStorageContext:238` moves V to U: read in `setState(storePath(…))`. rc.21 exports no `storePath`, so the file does not load and
+no Chrome truth exists; `sc1001.md` predicted this move. Tell the owner.
+
 <a id="adr-0712"></a>
 ## ADR 0712 — SC2009 does not certify a setter handed as a prop
 `<K s={setO} />` with `props.s(2)` in K's handler threw `OPTIMISTIC_WRITE_BEFORE_LOAD` in Chrome and certified (flip witness SC2009 a04): `transported_writes` carries hook and context values, not props, and `discover_optimistic_reach` walks callees only. Now each non-intrinsic JSX element's prop and spread values, through `?:`, `&&`, `||` and `??` branches to a name, member or call, are asked `callee_reaches` of an async optimistic setter; a hit is uncertain at the value, blocker `optimistic-reach-unresolved`. A function written in the prop is skipped (its call is placed where it runs), and so is any other form, which holds no function. A provider's `value` is a prop, so a context hand-off asks there too. As the plan asked, a transported call of such a setter is also uncertain when the file's own pass said nothing at it, and the transported pass's SC2009 results now reach the report (they were dropped): no fixture or probe reached it beyond the local pass, so it is a backstop. Not built: prop value flow, which would place `props.s(…)` and could prove it. Corpus: +22 uncertifiable, all hand-offs in inferay (one of two projects using `createOptimistic`), 0 removed. Owners: `local_access.rs`, `reactive_analysis.rs`.

@@ -3917,5 +3917,17 @@
   "found": "sc1001.md section 2, step 0",
   "fixed": "patterns.mjs reads the hint where the lane holds the Chrome record: a measurement, no behaviour change",
   "outside": "not a defect of the checker: nothing to generate. A finding with the hint where Chrome warned is still judged by its code, so the lane cannot hide a true contradiction"
+ },
+ {
+  "finding": "a read in a window-inheriting callback certified or warned by the wrong role: certified when its function is also a named handler and called in place (`h(); <button onClick={h} />`, Chrome warns), and V under a timer (`setTimeout(() => { (() => createRoot(() => c()))(); })`, quiet) (ADR 0675)",
+  "found": "sc1001.md step 4, n14 and n06",
+  "fixed": "ADR 0675",
+  "outside": "`h` must be handed by name beside its call, and a context receives the site's statements: patterns values/root-handler-and-body, root-timer-iife-q; the build before fails both, the fix passes"
+ },
+ {
+  "finding": "a read in a setter's callback or a `reconcile` key: certified in an apply though Chrome warns (r11, r18, r19, z01, z09, z10), a V for a key that never ran (r13) or ran on a timer (r15), and a store's own Gets read as reads (ADR 0676)",
+  "found": "sc1001.md steps 6 and 7",
+  "fixed": "ADR 0676",
+  "outside": "the setter must be a destructured tuple slot, which a context cannot write: patterns values/setter-fn-apply, setter-signal-apply, setter-signal-own, setter-key-apply, setter-key-draft-apply, setter-other-store fail as NEW false-clean on the build before, setter-key-timer-q, setter-key-held-q as NEW false-positive; setter-own-store-q, setter-own-alias-q, setter-draft-q, setter-fn-timer-q, setter-tracked-store-q, setter-tracked-signal-q pin the quiet twins"
  }
 ]

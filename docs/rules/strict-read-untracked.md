@@ -363,4 +363,5 @@ A handler's read is proven to run in no window only while no call can deliver it
 A read in a function only a hidden call runs (a getter, `toString`, an iterator, a tag, a class field, a `Map` slot), directly or through named
 helpers, has no call node to place it: uncertifiable (ADR 0673). So is one in a helper handed on from such a member, or from another file
 (`h.call(null)`, `[1].map(h)`, a copy, a tag), and a generator's body, a parameter default and a read past an await on some paths below one (ADR 0674). A
-named function handed to a carrier that provably runs in a body takes the carrier's role: proved.
+named function handed to a carrier that provably runs in a body takes the carrier's role: proved. A setter runs its callback on its stack: a read there, or in a `reconcile` key that is argument 0, takes the setter call's role, except a store's own Gets, which never warn
+(ADR 0676). A key on a `reconcile` held elsewhere is uncertifiable. Under a scheduler a window-inheriting call reports nothing (ADR 0675).

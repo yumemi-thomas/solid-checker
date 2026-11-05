@@ -320,6 +320,39 @@ pub(super) fn semantic_role_before_awaits(
         {
             let entry = lookup.named_callback_roles(file).get(callback.span);
             if !(entry.tracked || entry.effect_compute) {
+                // ADR 0675: the handler is one entry of a function also called
+                // in place (`h(); <button onClick={h} />`): where such a call
+                // reports, a read in a window-inheriting callback runs there
+                // too. A summary claims every other read at the call.
+                if !classifying.contains(&write_classification_marker())
+                    && file.ast.arguments_containing(span).any(|(call, index)| {
+                        lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some_and(|primitive| {
+                                lookup
+                                    .dialect
+                                    .callback_inherits_calling_window(primitive, index)
+                            })
+                    })
+                    && let Some(called) = lookup
+                        .function_call_sites(file.path.as_str(), callback.span)
+                        .into_iter()
+                        .filter(|(caller, _)| caller.path == file.path)
+                        .map(|(_, callee)| {
+                            semantic_execution_role_within(
+                                file,
+                                callee,
+                                allowed,
+                                entities,
+                                symbol_names,
+                                lookup,
+                                classifying,
+                            )
+                        })
+                        .find(|role| role.reports_untracked_read())
+                {
+                    return role_arm!("callee_roles.named-callback-called-in-place", called);
+                }
                 return role_arm!("callee_roles.named-callback-untracked", role);
             }
             // A closure whose binding only inline carriers in the callback's
@@ -2119,8 +2152,41 @@ pub(super) fn inheriting_call_role(
                 ExecutionRole::Unreported
             )
         }
+        other if other.reports_untracked_read() => {
+            reporting_role_where_the_call_runs(file, call, other, lookup)
+        }
         other => other,
     }
+}
+
+/// ADR 0675: a reporting role at a window-inheriting call (`createRoot`,
+/// `runWithOwner`) holds only where the code around the call runs on that
+/// position's stack. Up the layers that run in place: a scheduler's callback
+/// has no window, proved silent, and a function nothing places proves no role.
+fn reporting_role_where_the_call_runs(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    at_call: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    let at = super::write_roles::climb_in_place_layers(file, call.callee, lookup)
+        .map_or(call.callee, |climb| climb.at);
+    if fresh_stack_callback_call(file, at, lookup).is_some() {
+        return role_arm!(
+            "callee_roles.inheriting-fresh-stack",
+            ExecutionRole::DeferredCallback
+        );
+    }
+    // A component's render enters its body, whatever else names it.
+    if crate::owners::containing_ast_function(&file.ast, at)
+        .is_some_and(|function| lookup.function_may_be_component(file, function))
+    {
+        return at_call;
+    }
+    if crate::local_access::function_escapes_unfollowed(file, at, lookup) {
+        return role_arm!("callee_roles.inheriting-unplaced", ExecutionRole::Unknown);
+    }
+    at_call
 }
 
 /// ADR 0547: the read role of `span`, written in the body of `function`, an

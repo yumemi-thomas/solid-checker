@@ -2159,6 +2159,192 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// ADR 0676: the role of a read in a callback an exact setter runs on its
+    /// stack: argument 0 (`setA((p) => …)`, `setSt((d) => …)`) or the key of a
+    /// `reconcile` that is itself that argument. The setter's call places it:
+    /// a window at the call is open in the callback. Where the write guard
+    /// throws first the callback never runs. A key on a `reconcile` held
+    /// anywhere else runs where nothing places it. A setter's own store is
+    /// its draft in the callback, whose Gets never warn (`own`, the read's
+    /// root). `None`: no setter holds the site.
+    fn setter_callback_role(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        allowed: &[solid_facts::core::Span],
+        own: Option<&SymbolId>,
+    ) -> Option<ExecutionRole> {
+        let ast = &file.ast;
+        let function = crate::owners::owning_function(ast, span)?;
+        let (holder, index) = ast
+            .arguments_containing(function.span)
+            .find(|(call, index)| {
+                ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })?;
+        let setter_call = if index == 1
+            && self.lookup.primitive_at_call(file, holder.span)
+                == Some(solid_dialect::Primitive::Reconcile)
+        {
+            let around = ast
+                .arguments_containing(holder.span)
+                .find(|(call, index)| {
+                    *index == 0 && ast.peel_ts_sugar_span(call.arguments[0].span) == holder.span
+                })
+                .map(|(call, _)| call);
+            match around {
+                Some(call) if self.exact_setter_row(file, call).is_some() => call,
+                // `setSt((d) => { reconcile(v, key)(d); })`: applied to the
+                // draft, on the setter's stack.
+                _ if self.applied_to_setters_draft(file, holder) => {
+                    return self.setter_callback_role(file, holder.span, allowed, None);
+                }
+                _ => return Some(ExecutionRole::Unknown),
+            }
+        } else if index == 0 && self.exact_setter_row(file, holder).is_some() {
+            holder
+        } else if self.lookup.primitive_at_call(file, holder.span).is_none()
+            && self
+                .lookup
+                .standard_library_declaration(file, holder, typefacts::CallKind::Call)
+                .is_none()
+            && ast.arguments_containing(holder.span).any(|(call, index)| {
+                index == 0
+                    && ast.peel_ts_sugar_span(call.arguments[0].span) == holder.span
+                    && self.exact_setter_row(file, call).is_some()
+            })
+        {
+            // Anything else built for the setter (`setSt(storePath("a", (p) =>
+            // …))`): when it runs the callback is not this code's to prove.
+            // `setA(untrack(() => …))` and `setA(xs.map((x) => …))` run while
+            // the argument is built.
+            return Some(ExecutionRole::Unknown);
+        } else {
+            return None;
+        };
+        if let Some(root) = own {
+            match self.is_setters_store(root, self.exact_setter_row(file, setter_call)?) {
+                Some(true) => return Some(ExecutionRole::DeferredCallback),
+                Some(false) => {}
+                None => return Some(ExecutionRole::Unknown),
+            }
+        }
+        let role = read_execution_role(
+            file,
+            setter_call.callee,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        Some(if role.reports_disallowed_write() {
+            ExecutionRole::Unreported
+        } else {
+            role
+        })
+    }
+
+    /// Whether `reconcile` is called on the spot with the first parameter of
+    /// a setter's callback around it.
+    fn applied_to_setters_draft(
+        &self,
+        file: &solid_facts::FileFacts,
+        reconcile: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let ast = &file.ast;
+        let Some(function) = crate::owners::owning_function(ast, reconcile.span) else {
+            return false;
+        };
+        let setters_callback = ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                index == 0
+                    && ast.peel_ts_sugar_span(call.arguments[0].span) == function.span
+                    && self.exact_setter_row(file, call).is_some()
+            });
+        setters_callback
+            && ast.calls_with_peeled_callee(reconcile.span).any(|applied| {
+                applied.arguments.first().is_some_and(|argument| {
+                    !argument.spread
+                        && ast
+                            .reference_declaration(ast.peel_ts_sugar_span(argument.span))
+                            .is_some_and(|declared| {
+                                function.span.contains(declared)
+                                    && !function.body.contains(declared)
+                            })
+                })
+            })
+    }
+
+    /// The setter call [`Self::setter_callback_role`] placed `span` at: the
+    /// read's timing is that call's.
+    fn running_setter_call(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+    ) -> Option<solid_facts::core::Span> {
+        let ast = &file.ast;
+        let function = crate::owners::owning_function(ast, span)?;
+        ast.arguments_containing(function.span)
+            .flat_map(|(call, _)| {
+                std::iter::once(call).chain(
+                    ast.arguments_containing(call.span)
+                        .map(|(around, _)| around),
+                )
+            })
+            .find(|call| self.exact_setter_row(file, call).is_some())
+            .map(|call| call.span)
+    }
+
+    /// Whether the store at `root` is the one the setter's tuple destructures.
+    /// `None` when `root` has no source row here.
+    fn is_setters_store(
+        &self,
+        root: &SymbolId,
+        setter: &(
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    ) -> Option<bool> {
+        let (_, store) = self
+            .prop_sources
+            .get(root)
+            .or_else(|| self.accessors.get(root))?;
+        let declared = &setter.1;
+        if store.path != declared.path {
+            return Some(false);
+        }
+        let file = self.lookup.file_by_path(store.path.as_ref())?;
+        let holds = |binding: &solid_facts::ast::BindingFact, at: &Location| {
+            binding.names.iter().any(|name| {
+                u64::from(name.span.start) == at.start_byte
+                    && u64::from(name.span.end) == at.end_byte
+            })
+        };
+        Some(
+            file.ast
+                .bindings
+                .iter()
+                .any(|binding| holds(binding, store) && holds(binding, declared)),
+        )
+    }
+
+    /// The row of the setter `call` calls, by the callee's exact symbol.
+    fn exact_setter_row(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<&(
+        SymbolId,
+        Location,
+        crate::OwnedWriteOption,
+        ReactiveSourceKind,
+    )> {
+        self.setters
+            .get(self.lookup.callee_symbol(file, call.callee)?)
+    }
+
     /// The write half of "no row is not never runs". Empty until the flip's
     /// SC2001 commit (`scripts/flip/PLAN.md`), so the read and write tracks
     /// edit different functions.
@@ -2328,6 +2514,26 @@ impl LocalAccessContext<'_, '_> {
             && call.arguments.is_empty()
             && !crate::callback_return::binding_is_callback_result(self.lookup, file, call.callee)
             && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee).is_some();
+        // ADR 0676: a setter runs this callback on its own stack.
+        if self.accessors.contains_key(symbol)
+            && let Some(role) = self.setter_callback_role(file, call.callee, allowed, None)
+        {
+            if (role.reports_untracked_read() || role.reports_unplaced())
+                && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
+                && let Some(accessor) = self.accessors.get(symbol)
+            {
+                self.push_accessor_read_placed(
+                    file,
+                    call,
+                    symbol,
+                    accessor,
+                    role,
+                    self.running_setter_call(file, call.callee),
+                    result,
+                );
+            }
+            return;
+        }
         let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
             (typed_effect_accessor
                 || ((self.accessors.contains_key(symbol) || typed_unknown)
@@ -5662,6 +5868,11 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
             )
         };
+        // ADR 0676: as for a call.
+        let in_setter = self.setter_callback_role(file, member.span, allowed, Some(symbol));
+        if let Some(role) = in_setter {
+            execution = role;
+        }
         let helper = self
             .prop_sources
             .get(symbol)
@@ -5946,7 +6157,10 @@ impl LocalAccessContext<'_, '_> {
         placed_at: Option<solid_facts::core::Span>,
     ) -> ReactiveRead {
         // ADR 0531: the timing of a read a carrier places is the carrier's.
-        let timing_at = placed_at.unwrap_or(member.span);
+        // ADR 0676: a read in a setter's callback runs when the setter does.
+        let timing_at = placed_at
+            .or_else(|| self.running_setter_call(file, member.span))
+            .unwrap_or(member.span);
         let accessor = if prop_head {
             // Name the Get we proved, including brackets/optional syntax,
             // rather than a suffix's property or an invented dotted key.
