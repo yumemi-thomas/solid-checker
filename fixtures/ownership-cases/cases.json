@@ -487,6 +487,55 @@
    }
   },
   {
+   "id": "no-store-mutation-outside-setter/element-flow/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// A function returning its own parameter returns the store (ADR 0720).\nconst id = <T,>(v: T): T => v;\nconst [st] = createStore({ n: 1, items: [{ n: 1 }] });\nexport function Flow() {\n  id(st).n = 5;\n  // An element past the root is not proven wrapped.\n  for (const row of st.items) row.n = 2;\n  // A copy written itself is a plain array.\n  st.items.slice(0).push({ n: 3 });\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "id(st).n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "row.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
    "id": "no-store-mutation-outside-setter/nested-props-value/001",
    "dialect": "solid-v2",
    "source": {

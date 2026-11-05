@@ -2718,87 +2718,6 @@
    "certified": true
   },
   {
-   "id": "values/d2-identity-return",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-find-var-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-find-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-for-jsx-row-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-forof-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-memo-filter-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-memo-of-store-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-object-values-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-root-array-forof",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d3-curried-var",
    "item": "V-D3",
    "outcome": "false-clean",
@@ -3087,24 +3006,6 @@
    "certified": true
   },
   {
-   "id": "values/t2-for-row-root-array",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t2-for-row-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/t3-bind-cast-arg",
    "item": "V-D3",
    "outcome": "false-clean",
@@ -3245,15 +3146,6 @@
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t6-for-row-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
    ],
    "certified": true
   },

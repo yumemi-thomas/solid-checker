@@ -1492,6 +1492,16 @@ fn no_direct_mutation(
                 .call_at(file.ast.peel_ts_sugar_span(root))
                 .is_some()
         {
+            // ADR 0720: unless a row proves the call returns a store value
+            // (an identity function, a `createMemo` compute, a store
+            // array's `find`).
+            let sink = SinkWrite {
+                member: written,
+                may_not_write: head == Some(false) || logical.is_some(),
+                delete: false,
+                linked: false,
+            };
+            push_unproven_container_write(file, context, written, root, sink, defects);
             continue;
         }
         // `createMutable` is the one Solid 1.x source whose proxy is designed
@@ -1687,6 +1697,10 @@ fn push_unproven_container_write(
         member_root(file, peeled).map_or(peeled, |inner| file.ast.peel_ts_sugar_span(inner))
     };
     if !bare_root(file, root) {
+        // ADR 0720: a call's result may be a store value.
+        if file.ast.call_at(root).is_some() {
+            push_parameter_store_flow(file, context, site, root, sink, defects);
+        }
         return;
     }
     if !handed_container(file, context, root, 6) {
@@ -1765,9 +1779,6 @@ fn push_parameter_store_flow(
     sink: SinkWrite,
     defects: &mut Vec<StaticDefect>,
 ) {
-    let Some((function, index)) = plain_parameter_at(file, root) else {
-        return;
-    };
     // TypeScript's (a nullish link), or the sink's own links unproven.
     let mut sink_open = sink.may_not_write;
     if sink.delete {
@@ -1780,7 +1791,6 @@ fn push_parameter_store_flow(
     let Some(past_root) = chain_links_verdict(file, context, sink.member, root) else {
         return;
     };
-    let in_place = function_runs_in_place(file, function, site);
     let mut flow = ParameterFlow {
         context,
         calls: 0,
@@ -1788,8 +1798,23 @@ fn push_parameter_store_flow(
         store: None,
         open: false,
     };
-    let linked = sink.linked || past_root || parameter_reassigned(file, function, index);
-    flow.parameter(file, function, index, in_place, linked, FLOW_DEPTH);
+    if let Some((function, index)) = plain_parameter_at(file, root) {
+        let in_place = function_runs_in_place(file, function, site);
+        let linked = sink.linked || past_root || parameter_reassigned(file, function, index);
+        flow.parameter(file, function, index, in_place, linked, FLOW_DEPTH);
+    } else {
+        // ADR 0720: a local root, a call's result or a loop's element, is
+        // judged at the sink itself.
+        flow.value(
+            file,
+            site,
+            root,
+            None,
+            true,
+            sink.linked || past_root,
+            FLOW_DEPTH,
+        );
+    }
     let (name, proven) = match (flow.store, flow.open) {
         (Some(store), _) => (store.name, store.proven && !sink_open),
         (None, true) => (text(file, root).to_owned(), false),
@@ -1925,6 +1950,21 @@ impl<'c> ParameterFlow<'_, 'c> {
             self.callback(file, call, position, index, in_place, linked, depth);
             return;
         }
+        // ADR 0720: a `For` row's element is an element of its `each`.
+        match for_row(file, self.context, function, index) {
+            ForRow::NotRow => {}
+            // The accessor itself is a function: only its call's value is
+            // the element ([`Self::call_value`]).
+            ForRow::Silent | ForRow::Accessor(_) => return,
+            ForRow::Open => {
+                self.open = true;
+                return;
+            }
+            ForRow::Each(each) => {
+                self.value(file, each, each, None, false, true, depth - 1);
+                return;
+            }
+        }
         let Some(name) = crate::owners::function_binding_name(file, function) else {
             // A literal written in JSX, an object slot or a return: what
             // enters it is not a call this walk sees (ADR 0719's limit).
@@ -1982,7 +2022,7 @@ impl<'c> ParameterFlow<'_, 'c> {
             if let Some(argument) = call.arguments.get(index) {
                 self.value(
                     caller,
-                    call,
+                    call.span,
                     argument.span,
                     None,
                     in_place,
@@ -2031,7 +2071,7 @@ impl<'c> ParameterFlow<'_, 'c> {
                 .filter(|argument| file.ast.functions_within(*argument).next().is_none())
                 .chain(receiver)
             {
-                self.value(file, call, value, None, false, true, depth - 1);
+                self.value(file, call.span, value, None, false, true, depth - 1);
             }
             return;
         };
@@ -2081,7 +2121,7 @@ impl<'c> ParameterFlow<'_, 'c> {
                 && reached(callee_file, inner.span, lookup);
             self.value(
                 callee_file,
-                inner,
+                inner.span,
                 argument.span,
                 Some(frame),
                 in_place,
@@ -2091,13 +2131,15 @@ impl<'c> ParameterFlow<'_, 'c> {
         }
     }
 
-    /// The value `expression`, argument of `call` (in `file`), reaching the
-    /// sink.
+    /// The value `expression`, in `file`, reaching the sink: `at` is where
+    /// the store would be handed on (the call, or the sink itself), whose
+    /// window and reach decide a proven flow. `linked`: the sink reads past
+    /// this value (a member, an element).
     #[allow(clippy::too_many_arguments)]
     fn value<'f>(
         &mut self,
         file: &'f FileFacts,
-        call: &'f solid_facts::ast::CallFact,
+        at: Span,
         expression: Span,
         frame: Option<FlowFrame<'f>>,
         in_place: bool,
@@ -2115,6 +2157,12 @@ impl<'c> ParameterFlow<'_, 'c> {
         let root = member_root(file, expression)
             .map_or(expression, |inner| file.ast.peel_ts_sugar_span(inner));
         let linked = linked || root != expression;
+        // ADR 0720: a call whose result is a store value, or an element of one.
+        if let Some(call) = file.ast.call_at(root)
+            && self.call_value(file, at, call, frame, in_place, linked, depth)
+        {
+            return;
+        }
         if file.ast.call_at(root).is_none() && bare_root(file, root) {
             if let Some(symbol) = source_symbol_at(context, file, root) {
                 if context.prop_sources.contains_key(symbol) {
@@ -2124,7 +2172,7 @@ impl<'c> ParameterFlow<'_, 'c> {
                 if context.accessors.contains_key(symbol)
                     || typed_store_name(context, symbol).is_some()
                 {
-                    self.store(file, call, expression, root, symbol, in_place, linked);
+                    self.store(file, at, expression, root, symbol, in_place, linked);
                     return;
                 }
             }
@@ -2132,8 +2180,8 @@ impl<'c> ParameterFlow<'_, 'c> {
             // argument; any other function's, its callers'.
             if let Some((function, index)) = plain_parameter_at(file, root) {
                 let in_place = in_place
-                    && function_runs_in_place(file, function, call.span)
-                    && reached(file, call.span, context.lookup);
+                    && function_runs_in_place(file, function, at)
+                    && reached(file, at, context.lookup);
                 let linked = linked || parameter_reassigned(file, function, index);
                 match frame {
                     Some(frame)
@@ -2153,7 +2201,7 @@ impl<'c> ParameterFlow<'_, 'c> {
                                 in_place && reached(frame.file, frame.call.span, context.lookup);
                             self.value(
                                 frame.file,
-                                frame.call,
+                                frame.call.span,
                                 argument.span,
                                 None,
                                 in_place,
@@ -2166,9 +2214,15 @@ impl<'c> ParameterFlow<'_, 'c> {
                 }
                 return;
             }
-            // An exact `const` alias: its initializer. A call's result (a
-            // hook, `useContext`) is [`handed_container`]'s, below.
             let declaration = file.ast.reference_declaration(root).unwrap_or(root);
+            // ADR 0720: a `for (const x of e)` binding holds an element of `e`.
+            if let Some(operand) = for_of_operand(file, declaration) {
+                self.value(file, at, operand, frame, in_place, true, depth - 1);
+                return;
+            }
+            // An exact `const` alias: its initializer. A call's result is a
+            // row of [`Self::call_value`]'s, or [`handed_container`]'s (a hook,
+            // `useContext`), below.
             if let Some(initializer) = file
                 .ast
                 .bindings
@@ -2178,14 +2232,18 @@ impl<'c> ParameterFlow<'_, 'c> {
                     binding.shape == solid_facts::ast::BindingShape::Identifier && binding.immutable
                 })
                 .and_then(|binding| binding.initializer)
-                .filter(|initializer| {
-                    file.ast
-                        .call_at(file.ast.peel_ts_sugar_span(*initializer))
-                        .is_none()
-                })
             {
-                self.value(file, call, initializer, frame, in_place, linked, depth - 1);
-                return;
+                match file.ast.call_at(file.ast.peel_ts_sugar_span(initializer)) {
+                    None => {
+                        self.value(file, at, initializer, frame, in_place, linked, depth - 1);
+                        return;
+                    }
+                    Some(call) => {
+                        if self.call_value(file, at, call, frame, in_place, linked, depth) {
+                            return;
+                        }
+                    }
+                }
             }
         }
         if handed_container(file, context, expression, 6) {
@@ -2193,12 +2251,156 @@ impl<'c> ParameterFlow<'_, 'c> {
         }
     }
 
+    /// ADR 0720: the result of `call` as a value reaching the sink, when a row
+    /// describes it (`false` otherwise): a standard-library method returning
+    /// an element of its receiver (`find`, `findLast`, `at`), or, read past
+    /// (`linked`), a copy whose elements are its source's (`filter`, `slice`,
+    /// `toSorted`, `toReversed`, `concat`, `Object.values`, a one-argument
+    /// `Array.from`), each by its exact declaration; a `map` or `flatMap` of
+    /// a store value whose callback is not proven to return a fresh literal
+    /// (open); a project function that returns its own parameter; a `For`
+    /// row's accessor called under `keyed={false}`; a `createMemo` accessor
+    /// whose compute is an expression. A copy written itself is a plain
+    /// array: no row.
+    #[allow(clippy::too_many_arguments)]
+    fn call_value<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        call: &'f solid_facts::ast::CallFact,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) -> bool
+    where
+        'c: 'f,
+    {
+        if call.construct || depth == 0 {
+            return false;
+        }
+        let context = self.context;
+        let lookup = context.lookup;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let receiver = file
+            .ast
+            .member_at(callee)
+            .filter(|member| {
+                file.ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+            })
+            .map(|member| member.object);
+        let argument = |index: usize| {
+            call.arguments
+                .get(index)
+                .filter(|_| {
+                    !call
+                        .arguments
+                        .iter()
+                        .take(index + 1)
+                        .any(|argument| argument.spread)
+                })
+                .map(|argument| argument.span)
+        };
+        if let Some(declaration) =
+            lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)
+        {
+            let qualified = declaration.qualified_name.as_ref();
+            let method = qualified
+                .strip_prefix("Array.")
+                .or_else(|| qualified.strip_prefix("ReadonlyArray."));
+            let sources: Vec<Span> = match (method, qualified) {
+                (Some("find" | "findLast" | "at"), _) => receiver.into_iter().collect(),
+                (Some("filter" | "slice" | "toSorted" | "toReversed"), _) if linked => {
+                    receiver.into_iter().collect()
+                }
+                (Some("concat"), _) if linked => {
+                    if call.arguments.iter().any(|argument| argument.spread) {
+                        self.open = true;
+                    }
+                    receiver
+                        .into_iter()
+                        .chain(call.arguments.iter().map(|argument| argument.span))
+                        .collect()
+                }
+                (_, "ObjectConstructor.values") if linked => argument(0).into_iter().collect(),
+                (_, "ArrayConstructor.from") if linked && call.arguments.len() == 1 => {
+                    argument(0).into_iter().collect()
+                }
+                (Some("map" | "flatMap"), _) if linked => {
+                    if !map_returns_fresh(file, argument(0))
+                        && let Some(receiver) = receiver
+                    {
+                        // What the callback returns for a store element is
+                        // not followed: a store there is open.
+                        let mut probe = ParameterFlow {
+                            context,
+                            calls: self.calls,
+                            seen: self.seen.clone(),
+                            store: None,
+                            open: false,
+                        };
+                        probe.value(file, at, receiver, frame, false, true, depth - 1);
+                        self.calls = probe.calls;
+                        self.open |= probe.store.is_some() || probe.open;
+                    }
+                    return true;
+                }
+                _ => return false,
+            };
+            if sources.is_empty() {
+                return false;
+            }
+            for source in sources {
+                self.value(file, at, source, frame, in_place, true, depth - 1);
+            }
+            return true;
+        }
+        // A project function that returns its own parameter: the argument.
+        if let Some((callee_file, function)) = lookup.function_called_at(file.path.as_str(), callee)
+            && let Some(index) = returned_parameter(callee_file, function)
+        {
+            let exact = matches!(
+                crate::execution_role::project_callee_at_parameter(file, call, index, lookup),
+                Some((exact_file, exact, true))
+                    if exact_file.path == callee_file.path && exact.span == function.span
+            );
+            match argument(index) {
+                Some(argument) if exact => {
+                    self.value(file, at, argument, frame, in_place, linked, depth - 1);
+                }
+                Some(_) => self.open = true,
+                None => self.open |= call.arguments.iter().any(|argument| argument.spread),
+            }
+            return true;
+        }
+        // A `For` row's accessor under `keyed={false}`: an element of `each`.
+        if call.arguments.is_empty()
+            && crate::owners::is_identifier_span(file, callee)
+            && let Some((function, index)) = plain_parameter_at(file, callee)
+            && let ForRow::Accessor(each) = for_row(file, context, function, index)
+        {
+            self.value(file, each, each, None, false, true, depth - 1);
+            return true;
+        }
+        // A `createMemo` accessor read: the value its compute returned.
+        if call.arguments.is_empty()
+            && let Some(compute) = memo_compute_return(file, context, callee)
+        {
+            self.value(file, at, compute, frame, in_place, linked, depth - 1);
+            return true;
+        }
+        false
+    }
+
     /// A proven store (`symbol`, at `root` of `expression`) handed by `call`.
     #[allow(clippy::too_many_arguments)]
     fn store(
         &mut self,
         file: &FileFacts,
-        call: &solid_facts::ast::CallFact,
+        at: Span,
         expression: Span,
         root: Span,
         symbol: &crate::SymbolId,
@@ -2236,8 +2438,8 @@ impl<'c> ParameterFlow<'_, 'c> {
             file,
             context,
             StoreWriteSite {
-                span: call.span,
-                member: call.span,
+                span: at,
+                member: at,
                 root,
             },
             symbol,
@@ -2250,7 +2452,7 @@ impl<'c> ParameterFlow<'_, 'c> {
             && !linked
             && typed_store.is_none()
             && !context.dialect.store_root_properties_are_readonly()
-            && reached(file, call.span, context.lookup);
+            && reached(file, at, context.lookup);
         if self
             .store
             .as_ref()
@@ -2261,6 +2463,205 @@ impl<'c> ParameterFlow<'_, 'c> {
                 proven,
             });
         }
+    }
+}
+
+/// ADR 0720: the iterated operand of the `for (const x of operand)` whose
+/// single identifier binding `declaration` declares (no initializer, `of`
+/// exactly between the binding and the operand).
+fn for_of_operand(file: &FileFacts, declaration: Span) -> Option<Span> {
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.initializer.is_none()
+            && binding.names.len() == 1
+            && binding.names[0].span == declaration
+    })?;
+    file.ast.iterated_operands.iter().copied().find(|operand| {
+        operand.start >= binding.pattern.end
+            && file
+                .source
+                .get(binding.pattern.end as usize..operand.start as usize)
+                .is_some_and(|between| between.trim() == "of")
+            && file.ast.loop_statements.iter().any(|statement| {
+                statement.contains(binding.pattern) && statement.contains(*operand)
+            })
+    })
+}
+
+/// ADR 0720: the index of the plain parameter `function` returns on every
+/// normal completion: its expression body, or its one `return`, in its
+/// straight-line flow, is exactly that parameter, never reassigned.
+fn returned_parameter(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<usize> {
+    if function.r#async || function.generator {
+        return None;
+    }
+    let returned = match &function.expression_return {
+        Some(returned) => returned.argument?,
+        None => {
+            let mut own = file.ast.returns.iter().filter(|returned| {
+                function.body.contains(returned.span)
+                    && crate::owners::owning_function(&file.ast, returned.span)
+                        .is_some_and(|owner| owner.span == function.span)
+            });
+            let only = own.next()?;
+            if own.next().is_some() || !only.straight_line {
+                return None;
+            }
+            only.argument?
+        }
+    };
+    let returned = file.ast.peel_ts_sugar_span(returned);
+    file.ast.reference_declaration(returned)?;
+    let (owner, index) = plain_parameter_at(file, returned)?;
+    (owner.span == function.span && !parameter_reassigned(file, function, index)).then_some(index)
+}
+
+/// ADR 0720: the expression a `createMemo` accessor `callee` (a `const`
+/// binding in this file, by primitive identity) computes, when its compute
+/// is a function literal with an expression body.
+fn memo_compute_return(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    callee: Span,
+) -> Option<Span> {
+    if !crate::owners::is_identifier_span(file, callee) {
+        return None;
+    }
+    let declaration = file.ast.reference_declaration(callee)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    let call = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))?;
+    if context.lookup.primitive_at_call(file, call.span)
+        != Some(solid_dialect::Primitive::CreateMemo)
+    {
+        return None;
+    }
+    let compute = file.ast.peel_ts_sugar_span(call.arguments.first()?.span);
+    let function = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == compute)?;
+    if function.r#async || function.generator {
+        return None;
+    }
+    function.expression_return.as_ref()?.argument
+}
+
+/// Whether the `map` callback `callback` returns a fresh object or array
+/// literal (its expression body), so no element of the result is the
+/// receiver's.
+fn map_returns_fresh(file: &FileFacts, callback: Option<Span>) -> bool {
+    callback
+        .and_then(|callback| {
+            let callback = file.ast.peel_ts_sugar_span(callback);
+            file.ast
+                .functions
+                .iter()
+                .find(|function| function.span == callback)
+        })
+        .and_then(|function| function.expression_return.as_ref())
+        .and_then(|returned| returned.argument)
+        .is_some_and(|returned| {
+            let returned = file.ast.peel_ts_sugar_span(returned);
+            file.ast.array_literal_at(returned).is_some()
+                || file
+                    .ast
+                    .object_get_shapes
+                    .iter()
+                    .any(|shape| shape.span == returned)
+        })
+}
+
+/// What a `For` row parameter holds ([`ParameterFlow::parameter`]).
+enum ForRow {
+    /// The function is no `For` children callback.
+    NotRow,
+    /// Not an element: the index accessor.
+    Silent,
+    /// An accessor of an element of the `each` value (`keyed={false}`).
+    Accessor(Span),
+    /// The element's shape is not proven (a dynamic `keyed`, a spread, no `each`).
+    Open,
+    /// An element of the `each` value.
+    Each(Span),
+}
+
+/// ADR 0720: whether `function` is the children callback of an exact `For`
+/// element, and what its parameter `index` holds: rc.21 hands the raw element
+/// as parameter 0 unless `keyed` is `false` or a function (accessors), and the
+/// index accessor as parameter 1.
+fn for_row(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+) -> ForRow {
+    let wraps = |child: &Span| {
+        child.start < function.span.start
+            && function.span.end < child.end
+            && file
+                .source
+                .get(child.start as usize..function.span.start as usize)
+                .is_some_and(|before| before.trim() == "{")
+            && file
+                .source
+                .get(function.span.end as usize..child.end as usize)
+                .is_some_and(|after| after.trim() == "}")
+    };
+    let primitives = context.lookup.primitives(file);
+    let Some((element_index, element)) = file
+        .ast
+        .jsx_elements
+        .iter()
+        .enumerate()
+        .find(|(_, element)| element.children.iter().any(wraps))
+    else {
+        return ForRow::NotRow;
+    };
+    if primitives.jsx.get(element_index).and_then(known_primitive)
+        != Some(solid_dialect::Primitive::For)
+    {
+        return ForRow::NotRow;
+    }
+    if index != 0 {
+        return ForRow::Silent;
+    }
+    let keyed = element
+        .boolean_properties
+        .iter()
+        .find(|property| file.source_text(property.name) == Some("keyed"));
+    if keyed.is_none()
+        && element
+            .properties
+            .iter()
+            .any(|property| file.source_text(*property) == Some("keyed"))
+    {
+        return ForRow::Open;
+    }
+    if !element.spreads.is_empty() {
+        return ForRow::Open;
+    }
+    let Some(each) = element
+        .attributes
+        .iter()
+        .find(|attribute| file.source_text(attribute.name) == Some("each"))
+        .and_then(|attribute| attribute.expression)
+    else {
+        return ForRow::Open;
+    };
+    if keyed.is_some_and(|property| !property.value) {
+        ForRow::Accessor(each)
+    } else {
+        ForRow::Each(each)
     }
 }
 
@@ -4104,8 +4505,14 @@ fn no_store_mutator_call(
                 .or(typed_store)
                 .map(|name| (symbol, name))
         });
-        let Some((symbol, name)) = proven else {
-            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+        // ADR 0720: a chain rooted at a call writes what the call returned,
+        // which a row of the flow may prove a store value.
+        let call_root = file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(root))
+            .is_some();
+        let Some((symbol, name)) = proven.filter(|_| !call_root) else {
+            if call_root || source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
                 let sink = SinkWrite {
                     member: callee,
                     may_not_write: !mutator_always_writes(text(file, member.property)),
@@ -4116,15 +4523,8 @@ fn no_store_mutator_call(
             }
             continue;
         };
-        // A member chain rooted at a call writes to what the call returned
-        // (`store.items.slice().push(1)` is a plain copy), and a root that is
-        // not a bare identifier is not the proxy.
-        if file
-            .ast
-            .call_at(file.ast.peel_ts_sugar_span(root))
-            .is_some()
-            || !bare_root(file, root)
-        {
+        // A root that is not a bare identifier is not the proxy.
+        if !bare_root(file, root) {
             continue;
         }
         let standing = store_write_standing(
@@ -4433,9 +4833,15 @@ fn no_store_standard_library_write(
                 .or(typed_store)
                 .map(|name| (symbol, name))
         });
-        let Some((symbol, name)) = proven else {
+        // ADR 0720: a target rooted at a call is what the call returned,
+        // which a row of the flow may prove a store value.
+        let call_root = file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(root))
+            .is_some();
+        let Some((symbol, name)) = proven.filter(|_| !call_root) else {
             // ADR 0509: a container a caller handed in may hold a store.
-            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+            if call_root || source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
                 let sink = SinkWrite {
                     member: target,
                     may_not_write: !assign_writes(file, declaration, call),
@@ -4446,15 +4852,9 @@ fn no_store_standard_library_write(
             }
             continue;
         };
-        // A target rooted at a call is what the call returned, and a root that
-        // is not a bare identifier is not the proxy (`store.items.slice()`,
-        // `(store as T)`).
-        if file
-            .ast
-            .call_at(file.ast.peel_ts_sugar_span(root))
-            .is_some()
-            || !bare_root(file, root)
-        {
+        // A root that is not a bare identifier is not the proxy
+        // (`(store as T)`).
+        if !bare_root(file, root) {
             continue;
         }
         // Where the dialect's store type is `Readonly` at the root (rc.0-rc.6,

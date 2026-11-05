@@ -3822,5 +3822,11 @@
   "found": "flip plan SC2003 row; fuzz-patterns values/d2-handler-link, d2-handler-root, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper",
   "fixed": "ADR 0719",
   "outside": "model.mjs names a function's parameters positionally (`p0`) and STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name, so no flip-write.mjs context can hand the store to a parameter the site writes through (a parameter named like the store needs model.mjs, outside this track's file). fuzz-patterns: values/d2-handler-link, d2-handler-root, d2n-foreach-write, d2n-map-write, d2n-root-array-foreach, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper left open-defects.json at ADR 0719; the witnesses and fixture store-parameter-flow pin the rest"
+ },
+ {
+  "finding": "SC2003: a store value reached the write through a call's result or a loop's element and certified: an identity function (`id(st).n = 5`), a `createMemo` compute, `find`, `for…of`, `filter`/`Object.values` copies, `For` rows (ADR 0720)",
+  "found": "fuzz-patterns values/d2-identity-return, d2n-find-var-write, d2n-find-write, d2n-for-jsx-row-write, d2n-forof-write, d2n-memo-filter-write, d2n-memo-of-store-write, d2n-object-values-write, d2n-root-array-forof, t2-for-row-root-array, t2-for-row-write, t6-for-row-helper",
+  "fixed": "ADR 0720",
+  "outside": "STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name (`st.x = …`), and a flip-write.mjs context places the site without respelling it, so no context can root the write at a call's result or a loop element. The 12 fuzz-patterns entries left open-defects.json at ADR 0720; fixture store-element-flow pins the rest"
  }
 ]
