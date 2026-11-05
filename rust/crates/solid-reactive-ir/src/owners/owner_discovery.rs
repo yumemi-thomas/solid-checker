@@ -866,6 +866,7 @@ pub(crate) fn find_missing_owners_incremental(
     Vec<OwnerRequirement>,
     SettledGateDecisions,
     OwnerIncrementalTimings,
+    Vec<crate::StaticViolation>,
 ) {
     let entities = lookup.entities();
     let mut timings = OwnerIncrementalTimings::default();
@@ -954,6 +955,7 @@ pub(crate) fn find_missing_owners_incremental(
     let mut dirty = moved.files.clone();
     dirty.extend(moved.contexts.iter().map(|node| node.path));
     let mut requirements = Vec::new();
+    let mut static_violations = Vec::new();
     let mut settled_gates = SettledGateDecisions::default();
     for (file, pid) in files.iter().zip(&order) {
         let reusable = !dirty.contains(pid)
@@ -973,6 +975,7 @@ pub(crate) fn find_missing_owners_incremental(
         }
         if let Some(emission) = emissions.get(pid) {
             requirements.extend(emission.requirements.iter().cloned());
+            static_violations.extend(emission.static_violations.iter().cloned());
             settled_gates.extend(emission.gates.iter().cloned());
         }
     }
@@ -999,6 +1002,7 @@ pub(crate) fn find_missing_owners_incremental(
             context_census,
             ..timings
         },
+        static_violations,
     )
 }
 

@@ -697,6 +697,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
         }
+        // ADR 0713: an open context's read (always uncertain on this channel).
+        Rule::MissingContextProvider => {
+            "the read runs under an owner, and its context has no default; whether a provider is above every render of its function is not proven"
+        }
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
         Rule::StrictReadUntracked
@@ -711,7 +715,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
-        | Rule::MissingContextProvider
         | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication

@@ -65,7 +65,24 @@ const UNPLACED_APPLIES = {
   },
 };
 
+/**
+ * ADR 0713, SC4002: a read of a context that is provided somewhere, but not above this read: a provider in a sibling subtree, and a
+ * component rendered once under the provider and once outside. Chrome (rc.21): "Context has no provider above this read". The build
+ * before certified both (its census asked only whether a provider exists).
+ */
+const OPEN_CONTEXTS = {
+  "flw-ctx-sibling": (stmts, kit) => ({ body: [decl(kit.name("p"), domExpr("<Ctx value={1}><i /></Ctx>")), ...stmts], view: [] }),
+  "flw-ctx-two-renders": (stmts, kit) => {
+    const K = kit.name("K");
+    return {
+      body: [decl(K, fn([...stmts, ret(domExpr("<i />"))])), decl(kit.name("p"), domExpr(`<><Ctx value={1}><${K} /></Ctx><${K} /></>`))],
+      view: [],
+    };
+  },
+};
+
 export const FLIP_WRITE_CONTEXTS = {
+  CONTEXT_NOT_FOUND: Object.keys(OPEN_CONTEXTS),
   PRIMITIVE_IN_FORBIDDEN_SCOPE: Object.keys(DISPATCH_FIRES),
   FLUSH_IN_ACTION: Object.keys(UNPLACED_STEPS),
   FLUSH_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
@@ -76,5 +93,5 @@ export const FLIP_WRITE_CONTEXTS = {
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context])?.(stmts, kit);
+  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context])?.(stmts, kit);
 }

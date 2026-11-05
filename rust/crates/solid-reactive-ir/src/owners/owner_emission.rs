@@ -29,9 +29,11 @@ use typefacts::Location;
 pub(crate) struct Emission {
     pub(super) requirements: Vec<OwnerRequirement>,
     pub(super) gates: Vec<((String, u64, u64), LeafGateDecision)>,
-    /// The provider-free verdict of each context a `useContext` read named
-    /// (`Some(proven)`: provider-free, its lack of a default proven or not).
-    pub(super) provider: Vec<(Location, Option<bool>)>,
+    /// The census's verdict for each context a `useContext` read named
+    /// (`None`: no project context with no default).
+    pub(super) provider: Vec<(Location, Option<ContextVerdict>)>,
+    /// ADR 0713: reads of an open context no provider is proven above.
+    pub(super) static_violations: Vec<crate::StaticViolation>,
     /// Each `onSettled` cleanup's resolved callback node and its file's hash.
     pub(super) callbacks: Vec<(OwnerTarget, Option<NodeId>, Option<SourceHash>)>,
 }
@@ -40,7 +42,7 @@ pub(super) struct EmissionInputs<'a, 'f, 'i> {
     pub(super) facts: &'a ProjectFacts,
     pub(super) lookup: &'a SemanticLookup<'f>,
     pub(super) indexes: &'a ProjectIndexes<'i>,
-    pub(super) provider_free: &'a HashMap<Location, bool>,
+    pub(super) provider_free: &'a HashMap<Location, ContextVerdict>,
 }
 
 impl EmissionInputs<'_, '_, '_> {
@@ -49,7 +51,7 @@ impl EmissionInputs<'_, '_, '_> {
         emission
             .provider
             .iter()
-            .all(|(key, free)| self.provider_free.get(key).copied() == *free)
+            .all(|(key, verdict)| self.provider_free.get(key).copied() == *verdict)
             && emission.callbacks.iter().all(|(target, node, hash)| {
                 graph.resolve_target(pid, target) == *node
                     && self.callback_hash(graph, *node) == *hash
@@ -331,16 +333,79 @@ pub(super) fn emit_file(
         }
         // A read of a provider-free context under an owner throws
         // `ContextNotFoundError` (ADR 0352).
-        let provider_verdict = (candidate.operation == "context-read")
+        // `Some(None)`: the argument names no binding exactly (ADR 0713).
+        let context_key = (candidate.operation == "context-read")
             .then_some(candidate.context_argument)
             .flatten()
-            .and_then(|argument| context_key_at(lookup, file, argument))
-            .and_then(|key| {
-                let free = inputs.provider_free.get(&key).copied();
-                emission.provider.push((key, free));
-                free
-            });
+            .map(|argument| context_key_at(lookup, file, argument));
+        let verdict = context_key.as_ref().and_then(|key| {
+            let key = key.as_ref()?;
+            let verdict = inputs.provider_free.get(key).copied();
+            emission.provider.push((key.clone(), verdict));
+            verdict
+        });
+        let provider_verdict = match verdict {
+            Some(ContextVerdict::Free(proven)) => Some(proven),
+            _ => None,
+        };
         let provider_free_read = provider_verdict.is_some();
+        // ADR 0713: a read of a context a provider may supply somewhere, run
+        // under an owner, throws `ContextNotFoundError` unless a provider is
+        // above it: proven only by every render of its function sitting
+        // under one (`provided_above`), else an obligation.
+        // A key the census does not know (an alias, a parameter, an
+        // unresolved import) is open too: nothing proves a default.
+        let open_key = match &context_key {
+            Some(None) => Some(None),
+            Some(Some(key)) if matches!(verdict, None | Some(ContextVerdict::Open)) => {
+                Some(Some(key))
+            }
+            _ => None,
+        };
+        if let Some(key) = open_key
+            && !after_await
+            && possible_continuation.is_none()
+            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+            && !key.is_some_and(|key| {
+                // A `let` may hold another context at the provider than at
+                // the read: the binding's identity proves nothing then.
+                let constant = candidate.context_argument.is_some_and(|argument| {
+                    lookup
+                        .binding_at_reference(
+                            file.path.as_str(),
+                            file.ast.peel_ts_sugar_span(argument),
+                        )
+                        .is_some_and(|(_, binding, _)| binding.immutable)
+                });
+                constant
+                    && containing_ast_function(&file.ast, candidate.operation_span)
+                        .is_some_and(|reading| provided_above(lookup, file, reading, key))
+            })
+        {
+            let here = location(file.path.shared(), candidate.operation_span);
+            if !emission
+                .static_violations
+                .iter()
+                .any(|known| known.location == here)
+            {
+                emission.static_violations.push(crate::StaticViolation {
+                    id: "SC4002".into(),
+                    rule: "missing-context-provider".into(),
+                    message: "this read runs under an owner, and its context has no default; a \
+                              provider exists in the program, but none is proven above every \
+                              render of the function reading it, and Solid throws \
+                              `ContextNotFoundError` where none is"
+                        .into(),
+                    hint: "Render a provider above every use of this component, or give the \
+                           context a default."
+                        .into(),
+                    location: here,
+                    analysis_context: crate::blockers::PROVIDER_NOT_PROVEN_ABOVE.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
         // ADR 0575: a default the syntax does not prove is not `undefined`.
         let default_unproven = provider_verdict == Some(false);
         // A JSX boundary keeps the answer by detaching bits alone (ADR 0534

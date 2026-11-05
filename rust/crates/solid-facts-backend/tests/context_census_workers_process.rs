@@ -125,20 +125,29 @@ fn the_context_census_answers_alike_on_every_worker_count() {
 
     let serial = check(&project, &producer, Some("1"));
     let parallel = check(&project, &producer, None);
-    let census = |report: &serde_json::Value| {
+    let census = |report: &serde_json::Value, kind: &str| {
         let mut found = report["findings"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|finding| finding["rule"] == "missing-context-provider")
+            .filter(|finding| {
+                finding["rule"] == "missing-context-provider" && finding["kind"] == kind
+            })
             .map(|finding| finding["primaryLocation"].to_string())
             .collect::<Vec<_>>();
         found.sort();
         found
     };
     let expected = 2 + modules.div_ceil(4);
-    assert_eq!(census(&serial).len(), expected, "{:#?}", census(&serial));
-    assert_eq!(census(&parallel), census(&serial));
+    let violations = census(&serial, "violation");
+    assert_eq!(violations.len(), expected, "{violations:#?}");
+    // ADR 0713: an escaped context (`held`, an aliased export, the
+    // fixture's `Escaped`, and `remote.ts`'s context `renamed.ts` holds) is open, and its
+    // exported reader an obligation; `Provided{index}`'s reader is proven.
+    let open = census(&serial, "uncertifiable");
+    assert_eq!(open.len(), 2 * (modules / 4) + 2, "{open:#?}");
+    assert_eq!(census(&parallel, "violation"), violations);
+    assert_eq!(census(&parallel, "uncertifiable"), open);
     assert_eq!(parallel, serial, "the whole report, not only the census");
     fs::remove_dir_all(project).unwrap();
 }

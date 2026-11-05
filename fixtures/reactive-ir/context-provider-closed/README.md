@@ -6,6 +6,6 @@ Violations (`missing-context-provider`): `Panel` (a component body), `Memo` (a c
 
 Not this rule: `HandlerRead` reads with no owner, which is `missing-owner` (SC4001).
 
-Silent: `Provided` and `Reader` (a provider above the reader), `Defaulted` (a default makes the read a value), and `Escaped` (stored in `holders`, so a holder may provide it).
+Silent: `Provided` and `Reader` (a provider above the reader), `Defaulted` (a default). `Escaped` (a holder may provide it) is an SC4002 obligation (ADR 0713).
 
 Premises: the closed program is the `private` manifest. Runtime: `fixtures/runtime-oracle/ctx-provider-missing`.

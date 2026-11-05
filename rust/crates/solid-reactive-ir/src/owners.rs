@@ -60,15 +60,18 @@ pub(crate) fn collect_project(
     timings: &mut BuildTimings,
 ) {
     if let Some(cache) = cache {
-        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
-            ctx.facts,
-            ctx.semantic_lookup,
-            project_indexes,
-            ctx.symbol_names,
-            unchanged_paths,
-            &mut cache.owners,
-        );
+        let (requirements, gates, owner_timings, static_violations) =
+            find_missing_owners_incremental(
+                ctx.facts,
+                ctx.semantic_lookup,
+                project_indexes,
+                ctx.symbol_names,
+                unchanged_paths,
+                &mut cache.owners,
+            );
         draft.missing_owners.extend(requirements);
+        // ADR 0713: open context reads.
+        draft.static_violations.extend(static_violations);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
@@ -77,15 +80,18 @@ pub(crate) fn collect_project(
         // A build with no retained cache runs the same pass over a scratch
         // state: one owner analysis, so a fresh and a retained build cannot
         // disagree (the duplicate batch pass drifted, S7f-0).
-        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
-            ctx.facts,
-            ctx.semantic_lookup,
-            project_indexes,
-            ctx.symbol_names,
-            unchanged_paths,
-            &mut OwnerState::default(),
-        );
+        let (requirements, gates, owner_timings, static_violations) =
+            find_missing_owners_incremental(
+                ctx.facts,
+                ctx.semantic_lookup,
+                project_indexes,
+                ctx.symbol_names,
+                unchanged_paths,
+                &mut OwnerState::default(),
+            );
         draft.missing_owners.extend(requirements);
+        // ADR 0713: open context reads.
+        draft.static_violations.extend(static_violations);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);

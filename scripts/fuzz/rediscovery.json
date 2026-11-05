@@ -3756,5 +3756,17 @@
   "found": "flip plan's SC2009 row",
   "fixed": "ADR 0712",
   "outside": "a recall context receives the site's statements, not the setter's name, so it cannot write a JSX element handing the setter itself to a component; the witness and fixture rc21-optimistic-handed-prop pin it"
+ },
+ {
+  "finding": "SC4002: a read of a default-less context provided somewhere but not above it (a sibling subtree, a second render outside the provider) threw ContextNotFoundError in Chrome and certified: the census asked only whether a provider exists (flip witnesses SC4002 g02, g03, g04, g06, a07; ADR 0713)",
+  "found": "flip plan's SC4002 row",
+  "fixed": "ADR 0713",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-flw-ctx-sibling-x-direct-none",
+   "mx-context-not-found-flw-ctx-two-renders-x-direct-none"
+  ],
+  "rediscovered": "the checker at 727507bda on `focus.mjs --grids mx-recall` (flip-write.mjs contexts flw-ctx-sibling, flw-ctx-two-renders): 626 false-clean of 758; the fix: 0 false-clean, 758 recall-gap"
  }
 ]

@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
+      "start": 859,
+      "end": 869,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -29,6 +39,16 @@
       "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
       "start": 887,
       "end": 891,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
+      "start": 1040,
+      "end": 1050,
       "fixes": 0
     },
     {
