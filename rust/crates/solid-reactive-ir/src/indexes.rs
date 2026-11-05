@@ -1425,6 +1425,22 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// ADR 0709: whether a primitive the project names defers one of its
+    /// callbacks to a later flush (an effect's apply among them).
+    pub(crate) fn project_defers_callbacks(&self) -> bool {
+        let primitives = self.project_primitives();
+        primitives.iter().any(|primitive| {
+            (1..=PROBED_ARGUMENTS).any(|count| {
+                (0..count).any(|argument| {
+                    self.dialect
+                        .callback_semantics_at(*primitive, argument, count)
+                        .execution
+                        == Some(solid_dialect::Execution::Deferred)
+                })
+            })
+        })
+    }
+
     pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
         crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         *self.callback_capabilities.get_or_init(|| {

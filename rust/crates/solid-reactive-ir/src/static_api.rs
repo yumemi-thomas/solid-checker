@@ -459,12 +459,23 @@ impl StaticApiContext<'_> {
             // ADR 0639: `flush()`'s guard takes no event, so a handler dispatched
             // synchronously from an effect's apply warns there. A dispatch whose
             // caller is not placed outside every apply makes a flush in a handler
-            // an obligation.
+            // an obligation. ADR 0709: so is a flush in a function no call
+            // edge places (an object or class member, a slot, a bundle's
+            // `effect`, a function handed where nothing follows it): an apply
+            // may be what runs it.
+            let dispatched = || {
+                self.lookup.synchronous_event_flush_dispatch_present()
+                    || crate::execution_role::in_denied_handler(file, call.span)
+            };
+            let mut unplaced = false;
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
-                && (self.lookup.synchronous_event_flush_dispatch_present()
-                    || crate::execution_role::in_denied_handler(file, call.span))
+                && (dispatched() || {
+                    unplaced = self.lookup.project_defers_callbacks()
+                        && runs_unplaced_through_callers(file, call.span, self.lookup, 4);
+                    unplaced
+                })
                 && !result.violations.iter().any(|violation| {
                     violation.id == "SC2008"
                         && violation.location == location(file.path.shared(), call.callee)
@@ -481,18 +492,34 @@ impl StaticApiContext<'_> {
                         |function| !self.lookup.function_may_be_component(file, function),
                     )
                 {
+                    let (message, hint, blocker) = if unplaced {
+                        (
+                            format!(
+                                "{primitive}() runs in a function no call edge places (a member, a slot, \
+                                 a function handed on): if an effect's apply runs it, it runs inside the \
+                                 flush draining effects and drains nothing"
+                            ),
+                            "Remove the flush(), or call it only from code proven outside every effect's apply (an event handler, a timer).",
+                            crate::blockers::FUNCTION_RUN_UNPLACED,
+                        )
+                    } else {
+                        (
+                            format!(
+                                "{primitive}() runs in a handler that may be delivered synchronously \
+                                 (a dispatch here, or a state change for an event no call names): \
+                                 from an effect's apply it would run inside the flush draining effects"
+                            ),
+                            "Remove the flush(), or the synchronous dispatch from the apply.",
+                            "",
+                        )
+                    };
                     result.violations.push(StaticViolation {
                         id: "SC2008".into(),
                         rule: "flush-in-effect-callback".into(),
-                        message: format!(
-                            "{primitive}() runs in a handler that may be delivered synchronously \
-                             (a dispatch here, or a state change for an event no call names): \
-                             from an effect's apply it would run inside the flush draining effects"
-                        ),
-                        hint: "Remove the flush(), or the synchronous dispatch from the apply."
-                            .into(),
+                        message,
+                        hint: hint.into(),
                         location: location(file.path.shared(), call.callee),
-                        analysis_context: String::new(),
+                        analysis_context: blocker.into(),
                         fixes: vec![],
                         uncertain: true,
                     });

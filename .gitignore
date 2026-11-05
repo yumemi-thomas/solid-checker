@@ -1001,3 +1001,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-flush-in-action-unplaced/node_modules/**
 !fixtures/reactive-ir/rc21-flush-unplaced-no-action/node_modules/
 !fixtures/reactive-ir/rc21-flush-unplaced-no-action/node_modules/**
+!fixtures/reactive-ir/rc21-flush-in-effect-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-flush-in-effect-unplaced/node_modules/**

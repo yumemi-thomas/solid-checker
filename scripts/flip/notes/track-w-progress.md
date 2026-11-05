@@ -84,6 +84,16 @@ SC2001.
   `rc21-flush-in-action-unplaced`, `rc21-flush-unplaced-no-action`; 4 snapshots gained obligations (SC2008 fixtures whose
   handlers and members now ask). Corpus +21 U SC2006 (`sweep-w2006.json`), 0 removed. fuzz-patterns 747 fine (was 744).
 
+- **SC2008** (ADR 0709): ADR 0639's net in `static_api.rs` also asks when `runs_unplaced_through_callers` holds and the project
+  names a primitive that defers a callback (`indexes.rs` `project_defers_callbacks`; `action` counts, so SC2006's fixture gets
+  SC2008 obligations too); blocker `function-run-unplaced`, the net's filters kept. Covers the bundle `effect` and named apply
+  the plan listed. Witness b05 holds (186 of 335). Fuzzer `flw-apply-slot-module` (holder hoisted, apply calls it through raw
+  text: the validator refuses a component reference to a hoisted name): the old build is withheld in the grid by a remote
+  `reactive-dispatch-unresolved`, so rediscovery says `outside`. Fixture `rc21-flush-in-effect-unplaced` (stubs in
+  `node_modules`: an ambient `declare module` gives no `callee_package_root`, so the proven SC2008 violation vanished).
+  rc13-flush-in-effect-callback negatives never placed (`void onClick`, a `let` helper, a factory member) are obligations now.
+  Corpus 0 moved (`sweep-w2008b.json`). Doc budget: trimmed READMEs rather than raise it.
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -111,7 +121,7 @@ SC2001.
 
 Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs_unplaced_through_callers` in
 `static_api.rs` is the helper-aware form of `unplaced_run`, reuse it for SC2008/SC6002):
-2. **SC2008**, **SC6002** (PLAN rows; `unplaced_run` in `execution_role/site_reach.rs` has no caller yet).
+2. **SC6002** (PLAN row; SC2006 and SC2008 done, ADRs 0708, 0709).
 3. **SC3001** (trace `Primitive::CreateOwner` at solid-three `core/index.tsx:118`, inferay `PerformanceRecorder:199`).
 4. **SC2009**, then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
    patterns.mjs import-before-subscribe artifact first; the edit is the measured dead-branch false positive at
@@ -120,7 +130,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w2006.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2008b.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 

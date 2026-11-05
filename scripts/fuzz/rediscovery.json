@@ -3732,5 +3732,11 @@
    "mx-flush-in-action-flw-action-slot-x-wrapper-none"
   ],
   "rediscovered": "70bc53c26: 209 false-clean of 379 on flw-action-slot; fix: 0 false-clean (each an SC2006 obligation)"
+ },
+ {
+  "finding": "SC2008: a flush() in a module-level object method an effect's apply calls warned FLUSH_IN_EFFECT_CALLBACK in Chrome and certified (flip witness SC2008 b05; ADR 0709)",
+  "found": "flip plan's SC2008 row, witness SC2008 b05",
+  "fixed": "ADR 0709",
+  "outside": "the mx-recall harness program is withheld on the old build by a remote reactive-dispatch-unresolved obligation, so the flw-apply-slot-module context (module-level slot, apply calls it) cannot fail that build; the fix claims the site on all 252 judged programs (flush-in-effect-callback uncertifiable at the site). Witness b05 and fixture rc21-flush-in-effect-unplaced hold the certified shape"
  }
 ]

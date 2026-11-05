@@ -2,7 +2,7 @@
 // commit adds its shapes here, so neither track edits misuse.mjs or the other's file.
 //   FLIP_WRITE_CONTEXTS  { [code]: [context, ...] }, appended to that code's recallContexts
 //   flipWriteContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
-import { button, call, decl, domExpr, expr, fn, listenExpr, member, obj, prim, ref } from "./model.mjs";
+import { button, call, decl, domExpr, expr, fn, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
 
 /**
  * ADR 0705, the DOM dispatch list: a member that dispatches on its caller's stack, fired from `onSettled` (a leaf owner), with a
@@ -48,13 +48,31 @@ const UNPLACED_STEPS = {
   },
 };
 
+/**
+ * ADR 0709, SC2008: the site in an object slot an effect's apply calls, so it runs inside the flush draining effects (Chrome,
+ * rc.21: FLUSH_IN_EFFECT_CALLBACK). The build before certified it.
+ */
+const UNPLACED_APPLIES = {
+  // The holder at module scope: a slot written in the component was already an obligation (ADR 0516).
+  "flw-apply-slot-module": (stmts, kit) => {
+    const holder = kit.name("h");
+    return {
+      hoisted: [decl(holder, obj([["go", fn(stmts)]]))],
+      // Raw text: the validator reads names declared in the component, and the holder is not one.
+      body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(domExpr(`${holder}.go()`))]) }))],
+      view: [],
+    };
+  },
+};
+
 export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_FORBIDDEN_SCOPE: Object.keys(DISPATCH_FIRES),
   FLUSH_IN_ACTION: Object.keys(UNPLACED_STEPS),
+  FLUSH_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
 };
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return UNPLACED_STEPS[context]?.(stmts, kit);
+  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context])?.(stmts, kit);
 }
