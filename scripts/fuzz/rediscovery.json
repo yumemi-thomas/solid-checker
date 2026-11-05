@@ -3999,5 +3999,11 @@
   "found": "H-D5, sc9012-census.md",
   "fixed": "ADR 0684",
   "outside": "the site is a prop called in the component, and the value reaches it through the component's own reference: a generator context writes one site inside one holder. Patterns returns/x1, x2, x3, x5, w6 were listed false cleans until this commit"
+ },
+ {
+  "finding": "a closed object handed out by `valueOf` or written by `__defineGetter__`: a replaced slot left V where Chrome is quiet (b07 r21 r14b) and certified where it warns (r14 fc-14)",
+  "found": "H-D4, f0.md D4",
+  "fixed": "ADR 0685",
+  "outside": "the site is a member call on a hook's result and the hand-out is a second statement on that result, which one generator context does not write. Patterns returns/b07, r21, r14b, r14, fc-14 were listed open until this commit"
  }
 ]

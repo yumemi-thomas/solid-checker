@@ -900,15 +900,6 @@
    "certified": true
   },
   {
-   "id": "returns/b07-valueof-fp",
-   "item": "H-D4",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "returns/c16-spread-unread-key",
    "item": "H-other",
    "outcome": "false-positive",
@@ -942,15 +933,6 @@
   {
    "id": "returns/fc-08-capture",
    "item": "H-capture",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/fc-14-define-getter",
-   "item": "H-D4",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
@@ -1057,24 +1039,6 @@
    "certified": true
   },
   {
-   "id": "returns/r14-define-getter-no-param",
-   "item": "H-D4",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/r14b-define-getter-fp",
-   "item": "H-D4",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "returns/r20-param-control",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
@@ -1082,15 +1046,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "returns/r21-valueof-fp-module-sig",
-   "item": "H-D4",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "returns/t1-typed-slot-param",
