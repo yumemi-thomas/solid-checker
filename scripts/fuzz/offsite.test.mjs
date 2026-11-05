@@ -72,6 +72,10 @@ describe("the judge, past the row's own code (ADR 0614)", () => {
     const verdict = judgeOf("FLUSH_IN_EFFECT_CALLBACK", [finding("flush-in-effect-callback", 10), finding("strict-read-untracked", 10)], [event("FLUSH_IN_EFFECT_CALLBACK", 10)]);
     expect(verdict).toMatchObject({ outcome: "false-positive", detail: { primary: "agree", rules: ["strict-read-untracked"], at: [10] } });
   });
+  it("a wrong rule the runtime contradicts is a false positive: the row's code fired, and the rule's never did", () => {
+    const verdict = judgeOf("FLUSH_IN_EFFECT_CALLBACK", [finding("strict-read-untracked", 10)], [event("FLUSH_IN_EFFECT_CALLBACK", 10)]);
+    expect(verdict).toMatchObject({ outcome: "false-positive", detail: { primary: "wrong-rule", rules: ["strict-read-untracked"], at: [10] } });
+  });
   it("a claiming violation on a site that ran and reported nothing is a false positive, not a generator problem", () => {
     const verdict = judgeOf("STRICT_READ_UNTRACKED", [finding("strict-read-untracked", 10)], []);
     expect(verdict).toMatchObject({ outcome: "false-positive", detail: { primary: "not-fired", rules: ["strict-read-untracked"] } });
@@ -154,10 +158,19 @@ describe("rowProblem, the one test of focus, the audit and smoke", () => {
 describe("the gate, certified second-code misses", () => {
   const row = (seed, secondary) => ({ code: "A", context: "body", seed, outcome: "agree", binding: "direct", layer: "none", detail: secondary ? { secondary } : {} });
   const matrixOf = (rows) => buildMatrix(rows, { options: { seed: 1, perCell: 4 }, header: { label: "x" }, typedAway: {} });
-  it("fails a cell that gains one, and passes one that keeps or loses it", () => {
-    const missed = { X: "false-clean-certified" };
-    expect(gate(matrixOf([row(1)]), matrixOf([row(1, missed)])).ok).toBe(false);
-    expect(gate(matrixOf([row(1, missed)]), matrixOf([row(1, missed)])).ok).toBe(true);
+  const missed = { X: "false-clean-certified" };
+  it("fails a cell that gains one", () => {
+    const result = gate(matrixOf([row(1)]), matrixOf([row(1, missed)]));
+    expect(result.ok).toBe(false);
+    expect(result.regressions.map((regression) => regression.why)).toEqual(["certified second-code misses 0 -> 1"]);
+  });
+  it("fails one that keeps it: no baseline excuses a certified false clean", () => {
+    const result = gate(matrixOf([row(1, missed)]), matrixOf([row(1, missed)]));
+    expect(result.ok).toBe(false);
+    expect(result.regressions).toEqual([]);
+    expect(result.certifiedSecondary.map((miss) => miss.code)).toEqual(["X"]);
+  });
+  it("passes one that loses it", () => {
     expect(gate(matrixOf([row(1, missed)]), matrixOf([row(1)])).ok).toBe(true);
   });
 });

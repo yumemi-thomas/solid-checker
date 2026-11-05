@@ -88,9 +88,10 @@ export function judge(input) {
   if (!judged.length) return verdict;
   const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.why ? `(${row.why})` : ""}`) };
   const wrong = judged.filter((row) => row.verdict === "false-positive");
-  // A false clean or a wrong rule at the site is already a problem: the off-site false positive is listed beside it.
-  if (!wrong.length || !["agree", "recall-gap", "not-fired"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
-  return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
+  // A false clean at the site is already a problem: the off-site false positive is listed beside it. A wrong rule is not above a false
+  // positive: a violation the runtime contradicts is one whatever else the row found, and `beside` is an `agree` with that violation in it.
+  if (!wrong.length || !["agree", "recall-gap", "not-fired", "wrong-rule"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
+  return { outcome: "false-positive", detail: { ...detail, primary: verdict.detail?.beside ? "agree" : verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
 }
 
 function judgeSite({ code, site, typecheck: typed, checker, runtime, others = [] }) {
