@@ -67,6 +67,31 @@ pub(super) struct StaticApiContext<'a> {
 }
 
 impl StaticApiContext<'_> {
+    /// ADR 0710: a role that runs off every effect apply's stack: an event
+    /// handler (unless a synchronous dispatch may deliver it from an apply),
+    /// a deferred callback, a directive apply, rendering, module code, or
+    /// code the compiler discarded.
+    fn runs_off_every_apply(&self, file: &FileFacts, site: Span, allowed: &[Span]) -> bool {
+        use crate::ExecutionRole as Role;
+        match crate::execution_role::semantic_execution_role(
+            file,
+            site,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        ) {
+            Role::DeferredCallback
+            | Role::DirectiveApply
+            | Role::TrackedJsx
+            | Role::UntrackedRendering
+            | Role::DiscardedRendering
+            | Role::ModuleInitialization => true,
+            Role::EventCallback => !self.lookup.synchronous_event_dispatch_present(),
+            _ => false,
+        }
+    }
+
     pub(super) fn check_file(&self, file: &FileFacts) -> StaticDirectiveFileResult {
         let mut result = StaticDirectiveFileResult {
             defects: Vec::new(),
@@ -383,7 +408,7 @@ impl StaticApiContext<'_> {
             } else if let Some(kind) = kind
                 && dialect.throws_inside_action_step(kind)
                 && self.lookup.project_steps_action_callbacks()
-                && runs_unplaced_through_callers(file, call.span, self.lookup, 4)
+                && runs_unplaced_through_callers(file, call.span, self.lookup, 4, false)
             {
                 // ADR 0708: the call runs in a function no call edge places
                 // (an object or class member, a slot, a tag, a function
@@ -473,7 +498,7 @@ impl StaticApiContext<'_> {
                 && dialect.warns_inside_effect_phase(kind)
                 && (dispatched() || {
                     unplaced = self.lookup.project_defers_callbacks()
-                        && runs_unplaced_through_callers(file, call.span, self.lookup, 4);
+                        && runs_unplaced_through_callers(file, call.span, self.lookup, 4, false);
                     unplaced
                 })
                 && !result.violations.iter().any(|violation| {
@@ -635,6 +660,44 @@ impl StaticApiContext<'_> {
                     uncertain: earlier_call
                         || origin.mixed
                         || self.lookup.flush_drains_under_owner(),
+                });
+            }
+            // ADR 0710: a creating call in a function no call edge places (an
+            // object or class member, a getter, a slot, a function handed
+            // where nothing follows it) may run on an apply's stack with no
+            // owner: an obligation, unless the walk above placed it.
+            if let Some(created) = kind
+                && self.client_build
+                && dialect.throws_creating_in_effect_callback(
+                    created,
+                    call.arguments.first().is_some_and(|argument| {
+                        !argument.spread
+                            && matches!(
+                                argument.value,
+                                solid_facts::ast::ArgumentValueKind::Function
+                                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                            )
+                    }),
+                )
+                && !result.violations.iter().any(|violation| {
+                    violation.id == "SC6002"
+                        && violation.location == location(file.path.shared(), call.callee)
+                })
+                && self.lookup.project_defers_callbacks()
+                && runs_unplaced_through_callers(file, call.span, self.lookup, 4, true)
+                && !self.runs_off_every_apply(file, call.span, &allowed)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC6002".into(),
+                    rule: "primitive-in-effect-callback".into(),
+                    message: format!(
+                        "{primitive}() is called in a function no call edge places (a member, a getter, a slot, a function handed on); if an effect's apply runs it with no owner set in between, the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK, and whether one does is not proven"
+                    ),
+                    hint: "Create the computation in the component body or an effect's compute function, where an owner holds it, or parent it explicitly with `runWithOwner(owner, () => …)`.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: crate::blockers::FUNCTION_RUN_UNPLACED.into(),
+                    fixes: vec![],
+                    uncertain: true,
                 });
             }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
@@ -1450,7 +1513,19 @@ fn runs_unplaced_through_callers(
     site: Span,
     lookup: &SemanticLookup<'_>,
     depth: usize,
+    ownerless: bool,
 ) -> bool {
+    // ADR 0710: with `ownerless`, a site a primitive's synchronous callback
+    // runs (other than `untrack`'s) has the owner that primitive sets, and a
+    // body that may be a component's runs under the owner its render sets
+    // (as ADR 0639's net assumes).
+    if ownerless
+        && (owner_set_around(file, site, lookup)
+            || crate::owners::containing_ast_function(&file.ast, site)
+                .is_some_and(|function| lookup.function_may_be_component(file, function)))
+    {
+        return false;
+    }
     if crate::execution_role::unplaced_run(file, site, lookup) {
         return true;
     }
@@ -1462,7 +1537,7 @@ fn runs_unplaced_through_callers(
         // The layers that run in place end at a call in other code: ask
         // there.
         Some(climb) if climb.at != site => {
-            return runs_unplaced_through_callers(file, climb.at, lookup, depth - 1);
+            return runs_unplaced_through_callers(file, climb.at, lookup, depth - 1, ownerless);
         }
         Some(_) | None => site,
     };
@@ -1485,8 +1560,45 @@ fn runs_unplaced_through_callers(
                 .filter(|call| {
                     !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
                 })
-                .any(|call| runs_unplaced_through_callers(caller, call.span, lookup, depth - 1))
+                .any(|call| {
+                    runs_unplaced_through_callers(caller, call.span, lookup, depth - 1, ownerless)
+                })
         })
+}
+
+/// ADR 0710: whether the functions directly around `site` are callbacks of
+/// primitives that run them synchronously, the innermost one not `untrack`'s
+/// (`runWithOwner`, `createRoot`, a computation's compute): that primitive
+/// sets or may set an owner before its callback runs. A plain function on
+/// the way out ends the question: its owner is its caller's.
+fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> bool {
+    let mut at = site;
+    for _ in 0..16 {
+        let Some(function) = file.ast.innermost_function_owning(at) else {
+            return false;
+        };
+        let Some((call, index)) =
+            file.ast
+                .arguments_containing(function.span)
+                .find(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                })
+        else {
+            return false;
+        };
+        let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+            return false;
+        };
+        if primitive != Primitive::Untrack {
+            return lookup.dialect.synchronous_callback_slot(
+                primitive,
+                index,
+                call.arguments.len(),
+            );
+        }
+        at = call.span;
+    }
+    false
 }
 
 fn action_step_body_at(

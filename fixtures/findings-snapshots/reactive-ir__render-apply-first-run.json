@@ -170,6 +170,16 @@
       "start": 4642,
       "end": 4653,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/main.tsx",
+      "start": 989,
+      "end": 995,
+      "fixes": 0
     }
   ]
 }

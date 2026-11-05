@@ -69,6 +69,8 @@ export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_FORBIDDEN_SCOPE: Object.keys(DISPATCH_FIRES),
   FLUSH_IN_ACTION: Object.keys(UNPLACED_STEPS),
   FLUSH_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
+  // ADR 0710: the same layer for a computation created there (SC6002).
+  PRIMITIVE_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
 };
 
 export function flipWriteContext(context, stmts, kit) {

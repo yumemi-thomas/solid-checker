@@ -3738,5 +3738,11 @@
   "found": "flip plan's SC2008 row, witness SC2008 b05",
   "fixed": "ADR 0709",
   "outside": "the mx-recall harness program is withheld on the old build by a remote reactive-dispatch-unresolved obligation, so the flw-apply-slot-module context (module-level slot, apply calls it) cannot fail that build; the fix claims the site on all 252 judged programs (flush-in-effect-callback uncertifiable at the site). Witness b05 and fixture rc21-flush-in-effect-unplaced hold the certified shape"
+ },
+ {
+  "finding": "SC6002: a computation created in a function no call edge places (a module-level object or class method, a getter) on an effect apply's stack threw PRIMITIVE_IN_EFFECT_CALLBACK in Chrome and certified (flip witnesses SC6002 e05, f04, f07; census h11, a custom element's connectedCallback; ADR 0710)",
+  "found": "flip plan's SC6002 row; census h11 (section-4 census:h)",
+  "fixed": "ADR 0710",
+  "outside": "the mx-recall harness program is withheld on the old build by a remote obligation, so flip-write.mjs flw-apply-slot-module (PRIMITIVE_IN_EFFECT_CALLBACK) cannot fail that build; the fix claims the site on 702 of 756 judged programs. fuzz-patterns: census/h11-custom-element-connected left open-defects.json at ADR 0710"
  }
 ]

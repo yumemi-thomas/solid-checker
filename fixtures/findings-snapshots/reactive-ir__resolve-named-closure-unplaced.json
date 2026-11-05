@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 144,
+      "end": 151,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",
@@ -34,6 +44,16 @@
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 1046,
+      "end": 1053,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",

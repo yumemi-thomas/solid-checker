@@ -1306,15 +1306,6 @@
    ]
   },
   {
-   "id": "census/h11-custom-element-connected",
-   "item": "section-4 census:h",
-   "outcome": "false-clean",
-   "codes": [
-    "PRIMITIVE_IN_EFFECT_CALLBACK"
-   ],
-   "certified": false
-  },
-  {
    "id": "census/h22-private-field",
    "item": "section-4 census:h",
    "outcome": "false-clean",
