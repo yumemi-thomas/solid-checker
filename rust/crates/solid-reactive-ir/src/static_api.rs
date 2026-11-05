@@ -93,8 +93,10 @@ impl StaticApiContext<'_> {
             // rules below branch on. A name this dialect does not export
             // resolves to `None` and matches nothing.
             let kind = primitive.primitive();
-            let effect_semantics = (kind == Some(Primitive::CreateEffect))
-                .then(|| classify_effect_call(file, call, Primitive::CreateEffect, self.lookup));
+            // ADR 0701: every primitive the dialect gives an effect slot.
+            let effect_semantics = kind
+                .filter(|kind| dialect.effect_function_slot(*kind).is_some())
+                .map(|kind| classify_effect_call(file, call, kind, self.lookup));
             if effect_semantics
                 .is_some_and(|semantics| semantics.missing_effect_function != ProofStatus::No)
             {

@@ -3543,6 +3543,53 @@
   "rediscovered": "207b13142: 3 false-clean; 6730781e7: recall-gap"
  },
  {
+  "finding": "a resolved solid-js manifest whose version names no release (\"nightly\") was read as an absence: analyzed under the default dialect and certified (flip SC9013, ADR 0700)",
+  "found": "the flip plan's SC9013 row (scripts/flip/PLAN.md), measured with \"version\":\"nightly\"",
+  "fixed": "ADR 0700",
+  "outside": "the generator writes programs against one oracle install; it never writes a project's own node_modules/solid-js manifest. The process test an_unclassified_release_is_analyzed_with_a_named_blocker (fixture unclassified-release-nightly) holds it"
+ },
+ {
+  "finding": "missing-effect-function (SC7001) asked only createEffect: createRenderEffect(() => 1, undefined as any), (…, 3 as any), (…, { effect } as any) and createReaction(undefined as any) certified while Chrome threw (flip SC7001 witnesses f01, f02, f03; ADR 0701)",
+  "found": "the flip plan's SC7001 row (scripts/flip/PLAN.md), witnesses measured in Chrome",
+  "fixed": "ADR 0701",
+  "outside": "the grids judge SC7001 by the runtime code MISSING_EFFECT_FN, which only createEffect emits; createRenderEffect and createReaction fail with a plain TypeError (node._effectFn is not a function; reading 'error' of undefined in the tracker) and no code, so no generated program of theirs can be judged. scripts/flip/witnesses.json (f01-f03, check.mjs SC7001) and fixture rc21-effect-function-slots hold it"
+ },
+ {
+  "finding": "http-response-after-flush (SC7005) certified a header or status declared in a helper or object method the boundary's content calls, in a compute in that content, or in content a wrapper renders through props.children below its own <Loading>: the role gate dropped Unknown and the dominance miss was a continue (flip SC7005, ADR 0703)",
+  "found": "the flip plan's SC7005 row (scripts/flip/PLAN.md), witnesses on the SSR host",
+  "fixed": "ADR 0703",
+  "outside": "the SSR host (ssr.mjs) is its own run, not a grid: its programs rediscover it (ssrIds, pinned by ssr.test.mjs)",
+  "ssrIds": [
+   "ssr-m-helper-header",
+   "ssr-m-helper-status",
+   "ssr-m-method-header",
+   "ssr-m-method-status",
+   "ssr-m-memo-header",
+   "ssr-m-memo-status",
+   "ssr-m-wrapper-header",
+   "ssr-m-wrapper-status"
+  ],
+  "rediscovered": "locally: the build before ADR 0703 gives all 8 false-clean, the fix agree (ssr run 2026-11-05: 18 agree, 0 false clean, 12 uncertifiable)"
+ },
+ {
+  "finding": "server-function-rich-argument (SC7007) judged only calls whose callee resolves to a server function: an alias, a shorthand object slot, a higher-order argument and save.call(undefined, new Date()) certified (flip SC7007 witnesses b02-b05, ADR 0704)",
+  "found": "the flip plan's SC7007 row (scripts/flip/PLAN.md)",
+  "fixed": "ADR 0704",
+  "outside": "no runtime code: the rejection is the server-functions client's (isJSONSafe, @solidjs/web/server-functions client.js), and no host compiles \"use server\" references (scripts/fuzz/README.md, SSR host section). The four witnesses (check.mjs SC7007) and fixture server-function-handed-value are the pin"
+ },
+ {
+  "finding": "the DOM dispatch tables lacked HTMLFormElement.submit and reportError: a listener reached from onSettled through either created a primitive (PRIMITIVE_IN_FORBIDDEN_SCOPE in Chrome) and the program certified (flip DOM dispatch list, ADR 0705). Not generated: replaceWith, replaceChild, replaceChildren need a focus, and a focus() call is itself a hazard that withholds the program on every build (ADR 0645); a user's focus needs CDP input. History.go and Location.* end the harness page.",
+  "found": "the flip plan's DOM dispatch row (notes/missing.md's measured loop), run through the checker by the research agent",
+  "fixed": "ADR 0705",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-flw-settled-form-submit-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-flw-settled-report-error-memo-direct-none"
+  ],
+  "rediscovered": "41875549b: 1998 false-clean, 306 recall-gap of 2304 on the two contexts; fix: 0 false-clean, 2304 recall-gap"
+ },
+ {
   "finding": "SC5007 read only an attribute with a function type: `any`, `unknown`, a prop, a spread and `Loading({ on })` warn in Chrome, certified (ADR 0650)",
   "found": "the flip audit",
   "fixed": "ADR 0650",

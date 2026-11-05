@@ -72,6 +72,12 @@ compiler version is not observable, so the rule fails closed). Such an export,
 and any alias or call whose value the facts do not show to be a function, is an
 **uncertifiable** result.
 
+Registration is the initializer at the declaration (ADR 0702, measured with
+`@solidjs/compiler@2.0.0-rc.21` `transformDirectives`): the compiler rewrites
+`export let f = …` to `registerServerReference(id, <initializer>)` in place, so
+a later reassignment never reaches it. `export let f = async () => {}; f = 1 as
+any` is clean, and `export let n: any = 1; n = async () => {}` is a violation.
+
 ### The `clientWrappers` option
 
 `.solid-checker/rule-options.json`, under `valid-use-server` (or its former

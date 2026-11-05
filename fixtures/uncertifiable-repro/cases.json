@@ -4083,14 +4083,14 @@
     "src/props-condition-render-prop.tsx"
    ],
    "causes": [
-    "SC1001/direct-read-callers-unenumerable/condition/props-escape:other"
+    "SC1004/conditional-return/unnamed-function"
    ],
    "expect": [
     {
-     "rule": "SC1001",
-     "family": "direct-read-callers-unenumerable",
-     "context": "condition",
-     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:other"
+     "rule": "SC1004",
+     "family": "conditional-return",
+     "context": "",
+     "cause": "SC1004/conditional-return/unnamed-function"
     }
    ],
    "source": {
@@ -4161,14 +4161,14 @@
     "src/props-condition-not-in-component.tsx"
    ],
    "causes": [
-    "SC1001/direct-read-callers-unenumerable/condition/props-escape:not-in-component"
+    "SC1004/conditional-return/unnamed-function"
    ],
    "expect": [
     {
-     "rule": "SC1001",
-     "family": "direct-read-callers-unenumerable",
-     "context": "condition",
-     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:not-in-component"
+     "rule": "SC1004",
+     "family": "conditional-return",
+     "context": "",
+     "cause": "SC1004/conditional-return/unnamed-function"
     }
    ],
    "source": {
@@ -4500,14 +4500,14 @@
     "src/unrooted-read.tsx"
    ],
    "causes": [
-    "SC5003/unrooted-read/root-present:exported"
+    "SC5003/unrooted-read/root-mount-pass-unproven/root-present:exported"
    ],
    "expect": [
     {
      "rule": "SC5003",
      "family": "unrooted-read",
-     "context": "",
-     "cause": "SC5003/unrooted-read/root-present:exported"
+     "context": "root-mount-pass-unproven",
+     "cause": "SC5003/unrooted-read/root-mount-pass-unproven/root-present:exported"
     }
    ],
    "source": {

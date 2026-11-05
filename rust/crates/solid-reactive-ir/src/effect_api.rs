@@ -40,6 +40,9 @@ pub(crate) enum EffectFunctionUncertainty {
     RuntimeEntry,
     ArgumentShape,
     RuntimeEntryAndArgumentShape,
+    /// The value is proven non-callable, but it fails only when a function
+    /// the call returns runs, and no run is proven (ADR 0701).
+    ReturnedFunctionRun,
 }
 
 #[derive(Clone, Copy)]
@@ -59,6 +62,7 @@ impl EffectFunctionUncertainty {
             Self::RuntimeEntryAndArgumentShape => {
                 "effect-runtime-entry-and-argument-shape-uncertain"
             }
+            Self::ReturnedFunctionRun => "effect-returned-function-run-unproven",
         }
     }
 }
@@ -92,25 +96,17 @@ pub(crate) fn classify_effect_call(
     lookup: &SemanticLookup<'_>,
 ) -> EffectCallSemantics {
     let server_entry_possible = under_server_directive(file, call);
-    if primitive != Primitive::CreateEffect {
-        // The sibling constructors share the server-entry answer above and
-        // nothing else -- they do not share `createEffect`'s arity.
-        //
-        // 2.0 types `createRenderEffect(compute, effectFn, options?)` with
-        // `effectFn` required and non-nullable, and hands it straight to
-        // `effect()` with no `undefined` guard and no `.effect` dereference
-        // (`@solidjs/signals@2.0.0-rc.0`, `dist/dev.js`). So a missing or
-        // non-callable one is TypeScript's diagnostic, and there is no
-        // pre-allocation throw to excuse the call from the owner pass.
-        // `createTrackedEffect(compute, options?)` has no apply slot at all,
-        // and 1.x's second parameter is a seed value rather than a callback.
+    // ADR 0701: the effect function's slot is the dialect's answer. A
+    // primitive with none shares the server-entry answer below and nothing
+    // else. `createTrackedEffect(compute, options?)` has no effect slot.
+    let Some(slot) = lookup.dialect.effect_function_slot(primitive) else {
         return EffectCallSemantics {
             missing_effect_function: ProofStatus::No,
             missing_effect_uncertainty: EffectFunctionUncertainty::None,
             owner_registration: ProofStatus::Proven
                 .with_server_entry_possible(server_entry_possible),
         };
-    }
+    };
     match lookup.dialect.version() {
         Version::V2 => {}
         // `Version::V1` survives for classification only (ADR 0110 § 1): a
@@ -133,19 +129,23 @@ pub(crate) fn classify_effect_call(
     let call_is_valid = lookup
         .resolved_callee_call(file, call.callee)
         .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
+    // A runtime with no `undefined` guard allocates the node whatever the
+    // argument is, so the owner pass keeps the call.
+    let unguarded_registration =
+        ProofStatus::Proven.with_server_entry_possible(server_entry_possible);
     if call.arguments.iter().any(|argument| argument.spread) {
         // A spread's static tuple type can prove where the apply slot is only
         // when Type Facts reports exactLength. Optional/rest/array/unequal
         // union shapes stay explicit uncertainty. Even an exact spread does
         // not describe a hidden slot's value, so only proven absence (or a
         // visible argument preceding/following exact spreads) is classified.
-        let apply = expanded_argument(file, call, 1, lookup);
+        let apply = expanded_argument(file, call, slot.index, lookup);
         let missing_effect_function = if !call_is_valid {
             ProofStatus::No
         } else {
             match apply {
                 ExpandedArgument::Visible(argument) => {
-                    v2_effect_function_status(file, argument, lookup)
+                    v2_effect_function_status(file, argument, slot, lookup)
                 }
                 ExpandedArgument::Absent => ProofStatus::Proven,
                 ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
@@ -153,53 +153,86 @@ pub(crate) fn classify_effect_call(
                 }
             }
         };
-        let owner_registration = match apply {
-            ExpandedArgument::Visible(argument) => v2_owner_registration(file, argument, lookup)
-                .with_server_entry_possible(server_entry_possible),
-            ExpandedArgument::Absent => ProofStatus::No,
-            ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
-                ProofStatus::Uncertain
+        let owner_registration = if !slot.guards_undefined {
+            unguarded_registration
+        } else {
+            match apply {
+                ExpandedArgument::Visible(argument) => {
+                    v2_owner_registration(file, argument, lookup)
+                        .with_server_entry_possible(server_entry_possible)
+                }
+                ExpandedArgument::Absent => ProofStatus::No,
+                ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
+                    ProofStatus::Uncertain
+                }
             }
         };
-        return EffectCallSemantics {
-            missing_effect_uncertainty: missing_effect_uncertainty(
-                missing_effect_function,
-                server_entry_possible,
-            ),
-            missing_effect_function: missing_effect_function
-                .with_server_entry_possible(server_entry_possible),
+        return finish(
+            missing_effect_function,
+            slot,
+            server_entry_possible,
             owner_registration,
-        };
+        );
     }
 
-    let apply = call.arguments.get(1);
+    let apply = call.arguments.get(slot.index);
+    // 2.0 retains a deprecated, type-correct one-argument `createEffect`
+    // overload returning `never`, while the client runtime throws
+    // MISSING_EFFECT_FN. Invalid raw arguments are owned by TypeScript and
+    // therefore cannot reach this diagnostic.
     let missing_effect_function = if call_is_valid {
         apply.map_or(ProofStatus::Proven, |argument| {
-            v2_effect_function_status(file, argument, lookup)
+            v2_effect_function_status(file, argument, slot, lookup)
         })
     } else {
         ProofStatus::No
     };
+    // The shipped build reads `createEffect`'s apply argument before creating
+    // the effect node: it throws on `=== undefined`, then dereferences
+    // `.effect`. So absence and nullishness are proven pre-allocation throws;
+    // every other bad value is allocated first and fails later.
+    let owner_registration = if slot.guards_undefined {
+        apply.map_or(ProofStatus::No, |argument| {
+            v2_owner_registration(file, argument, lookup)
+                .with_server_entry_possible(server_entry_possible)
+        })
+    } else {
+        unguarded_registration
+    };
+    finish(
+        missing_effect_function,
+        slot,
+        server_entry_possible,
+        owner_registration,
+    )
+}
+
+/// A proof that fails only when a function the call returns runs
+/// (`createReaction`'s tracker) proves nothing at the call: uncertain, with
+/// its own blocker (ADR 0701).
+fn finish(
+    missing_effect_function: ProofStatus,
+    slot: solid_dialect::EffectFunctionSlot,
+    server_entry_possible: bool,
+    owner_registration: ProofStatus,
+) -> EffectCallSemantics {
+    if slot.fails == solid_dialect::EffectFunctionFailure::ReturnedFunctionRun
+        && missing_effect_function == ProofStatus::Proven
+    {
+        return EffectCallSemantics {
+            missing_effect_function: ProofStatus::Uncertain,
+            missing_effect_uncertainty: EffectFunctionUncertainty::ReturnedFunctionRun,
+            owner_registration,
+        };
+    }
     EffectCallSemantics {
-        // 2.0 retains a deprecated, type-correct one-argument overload
-        // returning `never`, while the client runtime throws
-        // MISSING_EFFECT_FN. Invalid raw arguments are owned by TypeScript
-        // and therefore cannot reach this diagnostic.
         missing_effect_uncertainty: missing_effect_uncertainty(
             missing_effect_function,
             server_entry_possible,
         ),
         missing_effect_function: missing_effect_function
             .with_server_entry_possible(server_entry_possible),
-        // The shipped build (`@solidjs/signals@2.0.0-rc.0` exports only
-        // `dist/dev.js`) reads the apply argument before creating the effect
-        // node: it throws on `=== undefined`, then dereferences `.effect`. So
-        // absence and nullishness are proven pre-allocation throws; every
-        // other bad value is allocated first and fails later.
-        owner_registration: apply.map_or(ProofStatus::No, |argument| {
-            v2_owner_registration(file, argument, lookup)
-                .with_server_entry_possible(server_entry_possible)
-        }),
+        owner_registration,
     }
 }
 
@@ -248,9 +281,19 @@ fn expanded_argument<'a>(
 fn v2_effect_function_status(
     file: &FileFacts,
     argument: &ArgumentFact,
+    slot: solid_dialect::EffectFunctionSlot,
     lookup: &SemanticLookup<'_>,
 ) -> ProofStatus {
     match argument.runtime_value_kind {
+        // No bundle is read there: an object literal is the value called,
+        // and an object literal is never callable.
+        RuntimeValueKind::Object if argument.exact_object_literal && !slot.accepts_bundle => {
+            if argument.runtime_type_escape {
+                ProofStatus::Proven
+            } else {
+                ProofStatus::Uncertain
+            }
+        }
         RuntimeValueKind::Function => ProofStatus::No,
         RuntimeValueKind::Nullish | RuntimeValueKind::Primitive | RuntimeValueKind::Array => {
             if argument.runtime_type_escape {

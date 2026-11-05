@@ -308,6 +308,9 @@ fn unproven_hold(
         };
         program.reads.iter().any(|read| at(&read.location))
             || program.async_reads.iter().any(|read| at(&read.location))
+            // An exact setter's call reads no source; a read in its argument
+            // is a call of its own, asked below.
+            || program.writes.iter().any(|write| at(&write.location))
     };
     if file.ast.calls.iter().any(|call| {
         element

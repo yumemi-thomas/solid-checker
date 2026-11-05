@@ -98,10 +98,13 @@ fn http_response_in_file<'a>(
         if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly {
             continue;
         }
-        // Render-time scopes only. An event handler or deferred callback
-        // is a client-time (or post-render) call and is a no-op for a
-        // different reason than the post-flush drop; unknown scopes stay
-        // silent.
+        // ADR 0703: only a role proven to run outside the response's render
+        // is skipped. An event handler, deferred callback, effect or
+        // directive apply is a client-time (or post-render) call, a no-op
+        // for a different reason than the post-flush drop; code the
+        // compiler discarded never runs; a module-scope call runs at import,
+        // in no request. Every other role, `Unknown` and `Unreported`
+        // included, may run in a boundary's content and goes on.
         let allowed = allowed.get_or_insert_with(|| {
             crate::execution_role::allowed_callback_spans(file, ctx.semantic_lookup)
         });
@@ -113,9 +116,14 @@ fn http_response_in_file<'a>(
             ctx.symbol_names,
             ctx.semantic_lookup,
         );
-        if !matches!(
+        if matches!(
             role,
-            ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
+            ExecutionRole::EventCallback
+                | ExecutionRole::DeferredCallback
+                | ExecutionRole::EffectApply
+                | ExecutionRole::DirectiveApply
+                | ExecutionRole::DiscardedRendering
+                | ExecutionRole::ModuleInitialization
         ) {
             continue;
         }
@@ -130,9 +138,6 @@ fn http_response_in_file<'a>(
                         .contains(&(file.path.as_str(), function.span))
                 },
             );
-        if !dominated {
-            continue;
-        }
         // Both spellings come from the dialect rather than from this
         // module. `static_api.rs` already asks `boundary_name` for the
         // same boundary two rules away; this one had `<Loading>` written
@@ -144,6 +149,33 @@ fn http_response_in_file<'a>(
             continue;
         };
         let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
+        let what = if kind == Primitive::HttpStatus {
+            "status"
+        } else {
+            "header"
+        };
+        // ADR 0703: a call no boundary is proven to dominate is not proven
+        // shell content either: a call edge, a method, a compute or a
+        // wrapper's `props.children` may place it below a boundary (the SSR
+        // host drops each). Silence would certify the head; it is an
+        // obligation with the position as its blocker.
+        if !dominated {
+            violations.push(StaticViolation {
+                id: "SC7005".into(),
+                rule: "http-response-after-flush".into(),
+                message: format!(
+                    "{name}() is called where no proof places it in shell content above every <{boundary}> boundary; under streaming SSR the response head commits at the shell flush, so if this call runs in a boundary's content after that flush, the {what} is silently dropped"
+                ),
+                hint: format!(
+                    "Decide the response head in the component the render entry renders, outside every <{boundary}> boundary and not in a helper, method, compute or child the boundary may wrap, or mark the async source this {name}() depends on with deferStream: true."
+                ),
+                location: location(file.path.shared(), call.callee),
+                analysis_context: crate::blockers::RESPONSE_HEAD_POSITION_UNPROVEN.into(),
+                fixes: vec![],
+                uncertain: true,
+            });
+            continue;
+        }
         violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
@@ -271,6 +303,108 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
         if ends_rule {
             return;
         }
+    }
+}
+
+/// ADR 0704: a server function read as a value rather than called (`const s =
+/// save`, `{ save }`, `run(save)`, `save.call(…)`) reaches calls the call loop
+/// never sees, and their arguments cross the client transport unchecked. Each
+/// such reference in client code is an obligation, blocker
+/// `server-function-value-handed`, unless the project's rich-argument
+/// serializer is proven. A reference resolves to its function exactly, as
+/// [`member_of_server_function`] does.
+fn handed_server_function_values(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    serializer_proof: &OnceLock<SerializerProof>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    let mut handed = Vec::new();
+    for identifier in &ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+            continue;
+        }
+        let span = identifier.span;
+        if ast
+            .calls
+            .iter()
+            .any(|call| ast.peel_ts_sugar_span(call.callee) == span)
+            || ast.type_queries.iter().any(|query| query.contains(span))
+            || ast.type_names.iter().any(|name| name.contains(span))
+            || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+            || ast
+                .functions
+                .iter()
+                .any(|scope| scope.body.contains(span) && scope.has_directive(USE_SERVER))
+        {
+            continue;
+        }
+        // The object of a member read hands nothing on, except a member that
+        // invokes it with other arguments (`.call`, `.apply`, `.bind`); an
+        // unresolved member is the call loop's obligation already
+        // (`member_of_server_function`), a resolved one another declaration.
+        if let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == span)
+            && !matches!(
+                file.source_text(member.property),
+                Some("call" | "apply" | "bind")
+            )
+        {
+            continue;
+        }
+        // Through the binder's declaration first: the compiler answers a
+        // shorthand property (`{ save }`) with the property's symbol, the
+        // binder with the value binding's.
+        let Some(symbol) = ast
+            .reference_declaration(span)
+            .and_then(|declaration| ctx.entities.value_symbol(file, declaration))
+            .or_else(|| ctx.entities.value_symbol(file, span))
+        else {
+            continue;
+        };
+        let Some((declaration_file, function)) =
+            ctx.semantic_lookup.function_for_symbol(symbol.as_str())
+        else {
+            continue;
+        };
+        let server_function = function.has_directive(USE_SERVER)
+            || (declaration_file
+                .ast
+                .module_directives
+                .iter()
+                .any(|directive| directive.value == USE_SERVER)
+                && declaration_file.path != file.path);
+        // The declaration's own name is not a handed value.
+        if server_function
+            && !(declaration_file.path == file.path
+                && function.name.as_ref().is_some_and(|name| name.span == span))
+        {
+            handed.push(span);
+        }
+    }
+    if handed.is_empty()
+        || *serializer_proof.get_or_init(|| project_rich_argument_serializer(ctx))
+            == SerializerProof::Enabled
+    {
+        return;
+    }
+    handed.sort_by_key(|span| (span.start, span.end));
+    handed.dedup();
+    for span in handed {
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::ServerFunctionRichArgument {
+                transport: RichArgumentTransport::Unresolved {
+                    reason: "the server function is handed on as a value, and the calls it reaches are not followed, so whether their arguments cross the transport as JSON is unproven".to_string(),
+                },
+            },
+            location: location(file.path.shared(), span),
+            analysis_context: crate::blockers::SERVER_FUNCTION_VALUE_HANDED.into(),
+            fixes: vec![],
+            uncertain: true,
+        });
     }
 }
 
@@ -511,6 +645,7 @@ fn rich_arguments_in_file(
             });
         }
     }
+    handed_server_function_values(ctx, file, serializer_proof, &mut defects);
     (defects, false)
 }
 

@@ -1399,6 +1399,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Where `primitive` takes its effect function, and how the runtime reads
+    /// it there (ADR 0701). `None`: the primitive has no effect-function slot
+    /// this dialect models, which proves nothing about a missing one.
+    fn effect_function_slot(&self, primitive: Primitive) -> Option<crate::EffectFunctionSlot> {
+        let _ = primitive;
+        None
+    }
+
     /// Which argument holds `primitive`'s options object.
     ///
     /// A separate index vocabulary from [`Dialect::callback_positions`], and it

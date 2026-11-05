@@ -1262,9 +1262,19 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
         "focus" | "blur" | "click" | "dispatchEvent" | "checkValidity" | "reportValidity"
     ) || matches!(
         (owner, member),
-        ("HTMLFormElement", "reset" | "requestSubmit")
-            | ("ChildNode", "remove")
-            | ("Node", "removeChild")
+        // ADR 0705: `submit` delivers `formdata`; `replaceWith`,
+        // `replaceChild` and `replaceChildren` blur a focused element they
+        // remove; `reportError` dispatches `error` at the global; a
+        // navigation fires `beforeunload`. Measured in Chrome where the page
+        // survives it (not `History`/`Location`); a state requirement
+        // (focus, a navigation) is unknown, so each is taken to deliver.
+        ("HTMLFormElement", "reset" | "requestSubmit" | "submit")
+            | ("ChildNode", "remove" | "replaceWith")
+            | ("Node", "removeChild" | "replaceChild")
+            | ("ParentNode", "replaceChildren")
+            | ("" | "WindowOrWorkerGlobalScope", "reportError")
+            | ("History", "go")
+            | ("Location", "assign" | "reload" | "replace")
             | ("HTMLInputElement" | "HTMLTextAreaElement", "select")
             | (
                 "HTMLElement",
@@ -2159,6 +2169,17 @@ mod dom_dispatch_tests {
             "HTMLInputElement.select",
             "ChildNode.remove",
             "Node.removeChild",
+            // ADR 0705.
+            "HTMLFormElement.submit",
+            "ChildNode.replaceWith",
+            "Node.replaceChild",
+            "ParentNode.replaceChildren",
+            "reportError",
+            "WindowOrWorkerGlobalScope.reportError",
+            "History.go",
+            "Location.assign",
+            "Location.reload",
+            "Location.replace",
         ] {
             assert!(
                 synchronously_dispatching_dom_member(dispatching),
@@ -2172,8 +2193,8 @@ mod dom_dispatch_tests {
             "Element.getAttribute",
             "Element.scrollIntoView",
             "Element.scrollTo",
-            "HTMLFormElement.submit",
             "Element.setAttribute",
+            "History.pushState",
             "ParentNode.append",
             "Node.appendChild",
             "Animatable.animate",

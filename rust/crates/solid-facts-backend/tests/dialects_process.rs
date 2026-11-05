@@ -763,6 +763,45 @@ fn the_pre_beta_experiment_is_refused_although_its_major_is_carried() {
     );
 }
 
+/// ADR 0700: a resolved `solid-js` whose version names no release
+/// (`nightly`) is analyzed under the default dialect, and the analysis carries
+/// the SC9014 notice with the `solid-version-unclassified` blocker. It used to
+/// certify: an install nobody classified was read as an absence.
+#[test]
+fn an_unclassified_release_is_analyzed_with_a_named_blocker() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unclassified-release-nightly", &[]);
+    let ids = finding_ids(&snapshot);
+    assert!(
+        ids.contains(&"SC1003".to_owned()),
+        "the analysis ran: {ids:?}"
+    );
+    assert_eq!(
+        ids.iter().filter(|id| *id == "SC9014").count(),
+        1,
+        "{ids:?}"
+    );
+    assert_ne!(snapshot["status"], "certified");
+    let notice = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["id"] == "SC9014")
+        .unwrap();
+    assert_eq!(notice["kind"], "uncertifiable");
+    assert_eq!(notice["analysisContext"], "solid-version-unclassified");
+    let message = notice["message"].as_str().unwrap();
+    assert!(message.contains("nightly"), "{message}");
+    assert_eq!(code, 0);
+    assert_eq!(
+        run_checker("unclassified-release-nightly", &["--certify"]).0,
+        1,
+        "an unclassified release cannot certify"
+    );
+}
+
 /// A reviewed release older than the audited one is analyzed, and the
 /// analysis carries one project-level uncertifiable notice naming the release,
 /// its open gaps, and the review. The audited release beside it carries none.

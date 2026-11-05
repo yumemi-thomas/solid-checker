@@ -56,6 +56,8 @@ fixtures/upstream-parity/.staging/
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc21/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc8/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc8/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unclassified-release-nightly/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unclassified-release-nightly/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
@@ -913,6 +915,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-denied-events-flush/node_modules/**
 !fixtures/reactive-ir/rc21-apply-owned-flush/node_modules/
 !fixtures/reactive-ir/rc21-apply-owned-flush/node_modules/**
+!fixtures/reactive-ir/rc21-effect-function-slots/node_modules/
+!fixtures/reactive-ir/rc21-effect-function-slots/node_modules/**
 !fixtures/reactive-ir/rc21-apply-unowned-flush/node_modules/
 !fixtures/reactive-ir/rc21-apply-unowned-flush/node_modules/**
 !fixtures/reactive-ir/rc21-installed-prototype/node_modules/

@@ -67,7 +67,7 @@ export function messageFamily(message) {
     [/return value depends on a reactive condition, but a component body runs once/, "conditional-return"],
     [/runs where a reactive read would not be tracked, but its only evidence/, "type-only-source"],
     [/is never traced to a render or hydrate root/, "unrooted-read"],
-    [/is called without an effect function/, "missing-effect-function"],
+    [/is called without an effect function|is created without a callable effect function/, "missing-effect-function"],
     [/client call to a server function has an unresolved rich-argument/, "server-function-argument"],
     [/^\S+\(\) is called in .*, but no compiler or semantic fact places where this code runs/, "unplaced-call"],
     [/^action .* is called in .*, but no compiler or semantic fact places where this code runs/, "unplaced-action"],

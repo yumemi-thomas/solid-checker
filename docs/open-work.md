@@ -150,6 +150,8 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
+- DOM dispatch list (ADR 0705): `History.go` delivers `beforeunload` only for a cross-document traversal, which the checker cannot tell, so `@solidjs/router`'s `history.go` withholds the program-wide veto and listener-reach proofs (25 corpus obligations in helge-dev, oscartbeaumont-website, sensor-sim).
+- `http-response-after-flush` (SC7005, ADR 0703): shell content is not proven, so a head declared in the root component a render entry renders (the SSR host's `l-shell`) is an obligation, blocker `response-head-position-unproven`. The proof needs the render entry's identity (`renderToStream` is no primitive) and every caller of the component, across files.
 - `http-response-after-flush` (SC7005, ADR 0596) reports by placement only: a boundary child's declaration before its pending read, under a boundary with no pending source, or below a `deferStream` source created outside it is applied at runtime (the SSR host's `l-*` templates) and stays an obligation.
 - `missing-owner` (ADR 0534): unplaced callbacks, object members and module declarations are uncertain when `SiteReach` cannot prove dormancy.
 - A summary consumer's call inside a class member's body (`wrapUse()` or a hook's returned accessor in a constructor or method) is an uncertifiable `strict-read-untracked` wherever the class is constructed or called, in the body (rc.17 warns) as in a handler or a tracked attribute (rc.17 silent): the construction and member call are followed by nothing (ADRs 0516, 0522).

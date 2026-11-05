@@ -54,6 +54,32 @@ pub enum CleanupRule {
 /// conflating them is a bug: `untrack(fn)` and `createRoot(fn)` both take a
 /// callback at index 0, and an effect created inside the first is an orphan
 /// while one created inside the second is not.
+/// Where a primitive takes its effect function, and how the runtime reads it
+/// ([`crate::Dialect::effect_function_slot`], ADR 0701).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EffectFunctionSlot {
+    /// The argument index of the effect function.
+    pub index: usize,
+    /// The runtime accepts an `{ effect, error }` bundle there, and reads
+    /// `effect` from it.
+    pub accepts_bundle: bool,
+    /// The runtime throws before allocating the node when the argument is
+    /// `undefined`, so an absent or nullish one registers no owner.
+    pub guards_undefined: bool,
+    /// When a non-callable value fails.
+    pub fails: EffectFunctionFailure,
+}
+
+/// When a non-callable effect function fails at runtime.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EffectFunctionFailure {
+    /// At the call, or at the node's first run, which the call schedules.
+    Creation,
+    /// Only when a function the call returns runs (`createReaction`'s
+    /// tracker): the call alone proves nothing.
+    ReturnedFunctionRun,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CallbackOwner {
     /// The callback runs under a definite owner this primitive establishes.

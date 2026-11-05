@@ -3,7 +3,8 @@
 `SC7001` · **error** · violation
 
 `createEffect` is called without an effect (apply) function — the removed Solid 1.x
-single-callback form.
+single-callback form — or an effect constructor is handed a value its runtime
+cannot call.
 
 ## What it does
 
@@ -25,6 +26,16 @@ stays silent. An `any`, unresolved value, non-null assertion over a nullable
 value, or non-exact object whose runtime apply function is not known produces
 an **uncertifiable** finding: it may be callable, but silence would falsely
 certify that it is.
+
+The slot is the dialect's answer (`effect_function_slot`, ADR 0701), so
+`createRenderEffect` and `createReaction` are read too. `createRenderEffect`
+takes its effect function second and reads no `{ effect, error }` bundle: the
+runtime hands the value to the node as is, so a cast-hidden `undefined`,
+primitive or object literal is a **violation** (Chrome: `node._effectFn is not
+a function` at the first run). `createReaction` takes it first and reads it
+only when the tracker it returns runs, so a cast-hidden non-callable there is
+**uncertifiable**, blocker `effect-returned-function-run-unproven`: the call
+alone proves no run.
 
 When an otherwise-reporting call is covered by `"use server"`, the finding is
 **uncertifiable**. No core Solid package reads that directive — it is a
