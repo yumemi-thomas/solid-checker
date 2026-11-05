@@ -53,6 +53,8 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 
 Grid at `a92553232`, `mx-recall` whole set, STRICT_READ_UNTRACKED: 62,480 programs, 0 false positive, 152 false cleans, the two known `ref-*` groups; 12 oracle runs inconclusive, not read.
 
+Handoff at `66684ac14` (merge 5, `make verify` green through scratch `verify-seq.sh`). Left of the owner's order, in order: F0 steps 4-6 (`handed_value`'s call arms `v08 f01 f12`, `ArrayMembers` `f02`, ADR 0509's text), F-C, F-D, step 5's census with `value_use.rs`, F-B, step 6's bounds audit (not started). Next ADR number 0689, R's range ends at 0699. A `new Map()` receiver could be proved plain as an array literal is (ADR 0683's +68 U). Review wanted: ADR 0683 +68 U, ADR 0686 +125 U.
+
 Next agent: F0 steps 4-6, F-C, F-D, the census, the bounds audit. Baseline sweep `sweep-m5.json`, build `rm5/`. `make coverage` prints only the first moved row of a fixture: compare snapshots row by row before an update. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
 
 Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open. `a92553232`'s says 24 false positives left the list; it was 23 (67 to 44, 342 to 319 open).
