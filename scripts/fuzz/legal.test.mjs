@@ -101,8 +101,8 @@ describe("the legal grids' reach", () => {
     const empty = [];
     const declared = (code) => [...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])];
     const measured = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
-    // An advisory code is not measured (misuse.mjs MISUSE_CODES), its legal cells with it: named here, so no other code joins it unseen.
-    expect(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !measured.includes(code) && declared(code).length)).toEqual(["ASYNC_OUTSIDE_LOADING_BOUNDARY"]);
+    // An advisory code is measured only as recall-only (misuse.mjs MISUSE_CODES, ADR 0668): none is left out with legal cells.
+    expect(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !measured.includes(code) && declared(code).length)).toEqual([]);
     for (const code of measured) {
       for (const context of declared(code)) {
         const cell = legalCells({ codes: [code], recall: true }).find((candidate) => candidate.context === context);

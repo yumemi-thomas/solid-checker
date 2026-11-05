@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "reactive-dispatch-unresolved",
@@ -624,8 +624,18 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
+      "start": 892,
+      "end": 1058,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
       "start": 892,
       "end": 1058,
@@ -666,6 +676,16 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
+      "start": 1321,
+      "end": 1490,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
       "start": 1321,
       "end": 1490,

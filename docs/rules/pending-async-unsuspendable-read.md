@@ -185,3 +185,5 @@ does not make later revalidation reads safe.
 A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.
 
 A body `clientOnly` loads, or `lazy` where a server pass exists, is uncertifiable, blocker `mount-form-window`: the first mount has no window and a later one does (ADR 0664).
+
+A source whose compute returns `any`, or may throw `NotReadyError`, is uncertifiable, blocker `async-provenance-unproven`, as its SC1001 is: the same text is pending in one program and settled in another (ADR 0665).

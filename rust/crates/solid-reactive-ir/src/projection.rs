@@ -1351,6 +1351,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0665: last, because it decides whether any claim above holds.
+            if read.provenance_open && !read.ssr_client_hole {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "no fact proves whether this source's computation returns a Promise or throws NotReadyError; if it does: {}",
+                    finding.message
+                );
+                crate::blockers::ASYNC_PROVENANCE_UNPROVEN
+                    .clone_into(&mut finding.analysis_context);
+            }
         }
         FindingSeed::Action(action) => {
             if action.is_uncertifiable() {

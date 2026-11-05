@@ -493,6 +493,10 @@ pub struct ReactiveRead {
     /// than a proven violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub uncertain: bool,
+    /// `uncertain` because the read may meet its getter's source pending, not
+    /// because its backing is open: the read is reactive either way (ADR 0665).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub pending_open: bool,
     /// The untracked-rendering role rests on a *missing* compiler fact: the
     /// narrowest JSX region containing the read carries no census entry, so
     /// the producer never reported how — or whether — that expression is
@@ -1423,6 +1427,9 @@ pub struct AsyncRead {
     /// refuted; SC5001 downgrades from proven violation to uncertifiable.
     #[serde(default)]
     pub options_opaque: bool,
+    /// ADR 0665: `options_opaque`, because no fact says the source is async.
+    #[serde(default)]
+    pub provenance_open: bool,
     /// The read sits in a `try`. rc.21 emits the untracked-read diagnostic before
     /// it throws, so SC5001 stands (ADR 0640); a boundary warning needs the throw
     /// to reach it, which a `catch` may stop.

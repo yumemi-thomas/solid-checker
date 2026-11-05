@@ -957,6 +957,22 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
     }
+    // ADR 0665: whether a source's first argument may be a computation. The name
+    // only spares the demand: a source no fact describes stays open.
+    for call in &file.ast.calls {
+        let Some(argument) = call.arguments.first() else {
+            continue;
+        };
+        let creates = file
+            .source_text(file.ast.peel_ts_sugar_span(call.callee))
+            .and_then(|callee| callee.rsplit('.').next())
+            .is_some_and(|name| name.starts_with("create"));
+        if creates && !argument.spread {
+            let value = file.ast.peel_ts_sugar_span(argument.span);
+            add_symbol(value, false);
+            callability_only_spans.insert(value);
+        }
+    }
     // ADR 0652: whether a coerced value is a function (`uncalled-accessor`).
     let coerced = file
         .ast

@@ -82,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4075,
+      "end": 4082,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -136,6 +146,16 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 4595,
+      "end": 4602,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
       "start": 4595,
       "end": 4602,
@@ -186,6 +206,16 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 5294,
+      "end": 5298,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
       "start": 5294,
       "end": 5298,

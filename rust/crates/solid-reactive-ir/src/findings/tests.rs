@@ -12,6 +12,7 @@ fn location(start: u64) -> Location {
 
 fn read(missing_jsx_census: bool) -> ReactiveRead {
     ReactiveRead {
+        pending_open: false,
         summary_attributed: false,
         transported: false,
         kind: "accessor".into(),

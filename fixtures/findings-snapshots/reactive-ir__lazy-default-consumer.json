@@ -22,6 +22,26 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
+      "start": 955,
+      "end": 982,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
+      "start": 989,
+      "end": 1007,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -32,6 +52,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Clean.tsx",
+      "start": 444,
+      "end": 457,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -39,6 +69,16 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
       "start": 560,
       "end": 565,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
+      "start": 784,
+      "end": 803,
       "fixes": 0
     },
     {
@@ -69,6 +109,26 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
       "start": 1051,
       "end": 1056,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
+      "start": 1218,
+      "end": 1233,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
+      "start": 1240,
+      "end": 1254,
       "fixes": 0
     },
     {
@@ -212,6 +272,106 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4202,
+      "end": 4215,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4222,
+      "end": 4236,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4243,
+      "end": 4258,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4265,
+      "end": 4278,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4285,
+      "end": 4299,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4306,
+      "end": 4322,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4329,
+      "end": 4347,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4354,
+      "end": 4369,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4376,
+      "end": 4392,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 4399,
+      "end": 4414,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -219,6 +379,16 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
       "start": 362,
       "end": 367,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
+      "start": 633,
+      "end": 647,
       "fixes": 0
     },
     {
@@ -249,6 +419,36 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
       "start": 1375,
       "end": 1380,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 1602,
+      "end": 1618,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 1625,
+      "end": 1639,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 1646,
+      "end": 1660,
       "fixes": 0
     }
   ]

@@ -12,7 +12,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const OPEN_DEFECTS = join(here, "open-defects.json");
 export const readOpenDefects = (path = OPEN_DEFECTS) => JSON.parse(readFileSync(path, "utf8"));
 
-/** The entry holding a grid row (`{ idPrefix, code, variantPrefix?, contexts?, outcome, item }`), or null. */
+/** The entry holding a grid row (`{ idPrefix, code, variantPrefix?, contexts?, partial?, outcome, item }`), or null. */
 export function heldGridEntry(list, row) {
   return (list.grids ?? []).find((entry) => String(row.id).startsWith(entry.idPrefix) && entry.code === row.code
     && (!entry.contexts || entry.contexts.includes(row.context)) && (!entry.variantPrefix || String(row.variant ?? "").startsWith(entry.variantPrefix))) ?? null;
@@ -23,7 +23,8 @@ export function gridStanding(list, row, problem) {
   const entry = heldGridEntry(list, row);
   if (!entry) return null;
   if (problem === entry.outcome) return { kind: "held", entry };
-  return !problem && ["agree", "clean", "uncertifiable", "recall-gap"].includes(row.outcome) ? { kind: "fixed", entry } : null;
+  // `partial`: the entry names a grid some of whose rows fail, so a passing row says nothing about the rest.
+  return !entry.partial && !problem && ["agree", "clean", "uncertifiable", "recall-gap"].includes(row.outcome) ? { kind: "fixed", entry } : null;
 }
 
 /** The line every gate prints: what is open, so a green run still says it. */

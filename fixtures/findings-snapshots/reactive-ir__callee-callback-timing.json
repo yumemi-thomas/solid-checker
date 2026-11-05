@@ -212,6 +212,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1735,
+      "end": 1743,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -226,6 +236,16 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1941,
+      "end": 1949,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 1941,
       "end": 1949,

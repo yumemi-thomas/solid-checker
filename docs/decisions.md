@@ -1684,3 +1684,23 @@ SC7007 judged only calls whose callee resolves to a server function, so `const s
 <a id="adr-0705"></a>
 ## ADR 0705 — Members the dispatch list lacked
 Supersedes ADR 0642's "Not hazards: `form.submit`". Both dispatch tables (`cleanup.rs` `synchronously_dispatching_dom_member`, the leaf walk; `runtime_semantics.rs` `delivers_synchronously`, the program-wide hazard behind the veto, listener reach and SC2008) now hold `HTMLFormElement.submit` (`formdata` on its caller's stack), the global and `WindowOrWorkerGlobalScope.reportError` (`error`), `ChildNode.replaceWith`, `Node.replaceChild`, `ParentNode.replaceChildren` (`blur`, `focusout` of a focused element they remove), `History.go` and `Location.assign`, `reload`, `replace` (`beforeunload`). Measured in Chrome (rc.21) from an `onSettled` body with a listener that creates a memo: `form.submit` and `reportError` threw `PRIMITIVE_IN_FORBIDDEN_SCOPE` where the build before certified; the blur family throws only with a focus. The navigation members, measured on a same-origin iframe's window: `beforeunload` fires before the call returns for `history.go(0)`, `location.reload()`, `location.assign(…)` and `location.replace(…)`; a same-document `history.go(-1)` fires nothing. Corpus: 25 new obligations (helge-dev, oscartbeaumont-website, sensor-sim), none in their own code: `@solidjs/router`'s `history.go` makes the hazard program-wide, so the veto and listener-reach proofs are withheld there. Each is matched by exact `lib.dom` declaration, and an unknown state (focus, a navigation) is taken to deliver, so an unfocused `replaceWith` is an obligation too. `HTMLSelectElement.remove` was already listed (ADR 0642) and is confirmed through the checker. Owners: `cleanup.rs`, `runtime_semantics.rs`.
+
+<a id="adr-0665"></a>
+## ADR 0665 — A source no fact proves sync or async is open
+
+`computation_provenance` answers `Async`, `Sync` or `Open` for a source's first argument: `Sync` needs a data value, a non-callable type, or a function with a closed return that names no `NotReadyError`, directly or through a call. `Open` joins `async_sources` with `opaque` and `provenance_open`, so SC5001 and SC5003 are uncertifiable, blocker `async-provenance-unproven`, and the read's SC1001 goes with them. `computation_is_async` stays a proof of a Promise for the static rules. A parameter compute (`createMemo(options)`) is open though its type may close it: no fact carries a value's signature. `SC8015`'s gate reads a getter's open source as a reactive read: `pending_open` is not `uncertain` about the backing. An `any` compute of `createOptimistic` now holds as async for SC2009 (Track W).
+
+<a id="adr-0666"></a>
+## ADR 0666 — A `lazy` tag is open
+
+A `lazy` component is pending until its module loads, and `L.preload()` can have done that, so its tag with no `Loading` above is an uncertifiable SC5003, blocker `async-provenance-unproven`. No violation is claimed.
+
+<a id="adr-0667"></a>
+## ADR 0667 — A read in a function nothing places is open under both rules
+
+An object method, class member or array slot has no binding to follow, so a read of a possibly async source there gets two rows, SC5001 and SC5003, both uncertifiable. A function a primitive holds in an options bundle, and a tag function, keep their own place.
+
+<a id="adr-0668"></a>
+## ADR 0668 — A `Loading` covers what it holds
+
+`loading_cover_at` took any `Loading` in a component's body as cover: for the component's own tag at its caller, and for a read beside it. Both false cleans: Chrome warns. A component covers a site as its child, and only with `children` read inside the `Loading`, else `Unresolved`; a `Loading` beside a non-JSX site is `Unresolved`, beside a JSX read it proves nothing. `ASYNC_OUTSIDE_LOADING_BOUNDARY` gets recall cells: 690 of 3,990 misuse programs certify today, each a transported read in tracked JSX, held in `open-defects.json` for the census.

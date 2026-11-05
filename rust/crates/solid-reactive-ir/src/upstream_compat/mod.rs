@@ -74,7 +74,9 @@ impl ReactiveReadIndex {
                     // when their surrounding function is only a possible
                     // component. A style preference cannot promote the 1.x
                     // catalog's historical all-props heuristic into proof.
-                    proven: (!read.uncertain || read.kind.as_ref() != "component-props")
+                    proven: (!read.uncertain
+                        || read.pending_open
+                        || read.kind.as_ref() != "component-props")
                         && !read.host_callback_timing
                         && !read.callee_callback_timing
                         && !read.callback_invocation_unproven

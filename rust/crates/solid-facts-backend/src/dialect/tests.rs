@@ -65,6 +65,7 @@ fn catalog_prose_program() -> Program {
     ];
     Program {
         reads: vec![ReactiveRead {
+            pending_open: false,
             summary_attributed: false,
             transported: false,
             kind: "signal".into(),
@@ -114,6 +115,7 @@ fn catalog_prose_program() -> Program {
             report: true,
         }],
         async_reads: vec![AsyncRead {
+            provenance_open: false,
             accessor: "sampleAsyncAccessor".into(),
             location: location(6),
             declaration: location(7),

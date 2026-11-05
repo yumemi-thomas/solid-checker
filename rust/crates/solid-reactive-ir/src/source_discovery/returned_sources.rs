@@ -68,7 +68,7 @@ pub(super) fn push_callback_return_sources(
                     .created
                     .arguments
                     .first()
-                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                    .is_some_and(|argument| super::source_may_be_async(lookup, file, argument))
             {
                 result.async_sources.push(symbol.clone());
             }

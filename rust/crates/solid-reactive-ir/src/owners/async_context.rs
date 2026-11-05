@@ -41,9 +41,21 @@ pub(super) fn loading_cover_at(
     }) {
         return LoadingCover::Covered;
     }
-    if file.ast.jsx_containing(span).any(|element| {
-        jsx_target_function(lookup, file, element).is_some_and(|(target_file, target)| {
-            target_file.ast.jsx_within(target.body).any(|candidate| {
+    // ADR 0668: a component covers a site only as its child, and only where the
+    // `Loading` holds what it renders of `children`: `<App />` covers neither its
+    // own tag nor a read beside the `Loading` in its body.
+    let mut beside_loading = false;
+    for element in file.ast.jsx_containing(span) {
+        if !element.children.iter().any(|child| child.contains(span)) {
+            continue;
+        }
+        let Some((target_file, target)) = jsx_target_function(lookup, file, element) else {
+            continue;
+        };
+        let loadings = target_file
+            .ast
+            .jsx_within(target.body)
+            .filter(|candidate| {
                 jsx_element_is_loading(
                     target_file,
                     candidate,
@@ -52,9 +64,24 @@ pub(super) fn loading_cover_at(
                     lookup.dialect,
                 )
             })
-        })
-    }) {
-        return LoadingCover::Covered;
+            .collect::<Vec<_>>();
+        if loadings.is_empty() {
+            continue;
+        }
+        let children_in_loading = target_file.ast.members.iter().any(|member| {
+            target.body.contains(member.span)
+                && target_file.source_text(member.property) == Some("children")
+                && loadings
+                    .iter()
+                    .any(|loading| loading.span.contains(member.span))
+        });
+        if children_in_loading {
+            return LoadingCover::Covered;
+        }
+        beside_loading = true;
+    }
+    if beside_loading {
+        return LoadingCover::Unresolved;
     }
     // A wrapper the site is a child of, with no `Loading` of its own, that
     // reads its `children`: it may hand them to another component that has
@@ -86,12 +113,18 @@ pub(super) fn loading_cover_at(
         }
         let call_sites = lookup.function_call_sites(file.path.as_str(), function.span);
         if !call_sites.is_empty() {
-            if file.ast.jsx_within(function.body).any(|candidate| {
-                jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
-            }) {
-                return LoadingCover::Covered;
-            }
-            let mut result = LoadingCover::Uncovered;
+            // ADR 0668: a `Loading` in the body that does not hold the site (the
+            // first check) proves nothing about it: a read beside one still warns.
+            // It stays open, because what the site's value reaches may be inside.
+            let beside = !file.ast.any_jsx_containing(span)
+                && file.ast.jsx_within(function.body).any(|candidate| {
+                    jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
+                });
+            let mut result = if beside {
+                LoadingCover::Unresolved
+            } else {
+                LoadingCover::Uncovered
+            };
             for (caller_file, callee) in call_sites {
                 match loading_cover_at(lookup, caller_file, callee, symbol_names, visited) {
                     LoadingCover::Covered => return LoadingCover::Covered,
@@ -1345,6 +1378,143 @@ pub(crate) fn computation_is_async(
     file.ast
         .function_at(argument)
         .is_some_and(|function| function.r#async)
+}
+
+/// ADR 0665: what a source's first argument says about a first flight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ComputationProvenance {
+    /// A pass of the computation returns a Promise.
+    Async,
+    /// No pass does: a data value, or a function whose return is closed.
+    Sync,
+    /// Nothing proves either: an `any` return, a value no function fact holds,
+    /// a compute that may answer without a flight, or one that may throw
+    /// `NotReadyError` from a sync body.
+    Open,
+}
+
+/// ADR 0665: [`computation_is_async`] is a proof of a Promise, and static rules
+/// read it as one, so "not proven" is this function's third answer.
+pub(crate) fn computation_provenance(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> ComputationProvenance {
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    if argument.spread {
+        return ComputationProvenance::Open;
+    }
+    let value = file.ast.peel_ts_sugar_span(argument.span);
+    if computation_is_async(lookup, file, argument.span) {
+        return if computation_may_answer_sync(lookup, file, argument.span) {
+            ComputationProvenance::Open
+        } else {
+            ComputationProvenance::Async
+        };
+    }
+    if argument.runtime_value_kind.is_data_literal()
+        || matches!(
+            argument.runtime_value_kind,
+            RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+        )
+        || lookup
+            .entity_at(file.path.as_str(), value)
+            .and_then(|entity| entity.callability)
+            == Some(typefacts::Callability::NonCallable)
+    {
+        return ComputationProvenance::Sync;
+    }
+    let function = match argument.value {
+        ArgumentValueKind::Function => file.ast.function_at(value),
+        ArgumentValueKind::Identifier => lookup
+            .function_called_at(file.path.as_str(), value)
+            .filter(|(target, _)| target.path == file.path)
+            .map(|(_, function)| function),
+        _ => None,
+    };
+    let Some(function) = function else {
+        return ComputationProvenance::Open;
+    };
+    let closed = lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|typescript_file| {
+            typescript_file.async_functions.iter().any(|fact| {
+                !fact.return_open
+                    && !fact.can_return_async
+                    && u64::from(function.span.start) == fact.expression.start_byte
+                    && u64::from(function.span.end) == fact.expression.end_byte
+            })
+        });
+    if closed && !may_throw_not_ready(lookup, file, function, 4) {
+        ComputationProvenance::Sync
+    } else {
+        ComputationProvenance::Open
+    }
+}
+
+/// A reference inside `region` to the export `name` of a Solid package, through
+/// a named import or a namespace's member.
+fn solid_import_named(file: &solid_facts::FileFacts, name: &str, region: Span) -> bool {
+    let bindings = || {
+        file.ast
+            .imports
+            .iter()
+            .filter(|import| {
+                import.module == "solid-js"
+                    || import.module.starts_with("solid-js/")
+                    || import.module.starts_with("@solidjs/")
+            })
+            .flat_map(|import| import.bindings.iter())
+    };
+    let named = bindings()
+        .filter(|binding| binding.imported.as_deref() == Some(name))
+        .map(|binding| binding.local.span)
+        .collect::<Vec<_>>();
+    let namespaces = bindings()
+        .filter(|binding| binding.kind == solid_facts::ast::ImportKind::Namespace)
+        .map(|binding| binding.local.span)
+        .collect::<Vec<_>>();
+    if named.is_empty() && namespaces.is_empty() {
+        return false;
+    }
+    let declared_by = |span: Span, spans: &[Span]| {
+        file.ast
+            .reference_declaration(span)
+            .is_some_and(|declaration| spans.contains(&declaration))
+    };
+    file.ast
+        .identifiers
+        .iter()
+        .any(|identifier| region.contains(identifier.span) && declared_by(identifier.span, &named))
+        || file.ast.members.iter().any(|member| {
+            region.contains(member.span)
+                && file.source_text(member.property) == Some(name)
+                && declared_by(file.ast.peel_ts_sugar_span(member.object), &namespaces)
+        })
+}
+
+/// A sync compute that throws `NotReadyError` is pending while it does, and no
+/// return type says so. Its own body, or a function it calls, names the export.
+/// A helper no exact call names is beyond this walk; a project that names the
+/// error in one is what the walk's four levels are for.
+fn may_throw_not_ready(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    depth: usize,
+) -> bool {
+    let names = solid_import_named(file, "NotReadyError", function.span);
+    if names || depth == 0 {
+        return names;
+    }
+    file.ast.calls_within(function.span).any(|call| {
+        lookup
+            .function_called_at(file.path.as_str(), call.callee)
+            .is_some_and(|(target, called)| {
+                called.span != function.span
+                    && may_throw_not_ready(lookup, target, called, depth - 1)
+            })
+    })
 }
 
 /// ADR 0631: the computation may return without a pending flight

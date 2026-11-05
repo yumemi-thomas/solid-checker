@@ -146,3 +146,5 @@ A violation needs two proofs: the source is pending, and the read's first run is
 a `render()` call, which is the only place the runtime checks (`web.dev.js:536-557`). A
 read a condition may delay, or a component mounted later, is uncertifiable, blocker
 `root-mount-pass-unproven` (ADR 0661). A source really pending at a later mount is quiet.
+
+A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). A `Loading` covers what it holds, not what sits beside it (ADR 0668).

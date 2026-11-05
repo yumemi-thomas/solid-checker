@@ -24,6 +24,7 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 | Merge | `059beb67a` from Track W, the first merge | 0 moved by the merge | `make verify` green, `check.mjs all` 181 of 335 (no keep, regress or warn fails), HOST 20 of 24, patterns 381 open |
 | Member types | ADR 0663 | +17 U, all SC9012, 0 V moved | ViewerToolbar explained: a member's type answered for its receiver. `outside`, program in `patterns/values/sibling-type-go` |
 | `clientOnly`, `lazy` + SSR | ADR 0664, `async.md` step 4 | see below | `ExecutionPaths` `DeferredMount` arms; HOST 22 of 25, 3 `NoHydration` rows left; 4 patterns left the open list, 377 open |
+| Open provenance, `lazy`, method reads, cover | ADRs 0665-0668, `async.md` steps 6-8, fuzz contexts | -4 SC1001 V, +687 U (434 SC5003, 128 SC5001, 125 SC9012), `sweep-6.json`: 17,312 U, 379 V | SC5003 5 of 5; 8 patterns left, 369 open; 547 of the U are inferay, whose `@contracts` points at a missing build, so its types are `any`. The 4 V are `useSearch` in `probus-hk`, tell the owner |
 
 Next, owner's order: (1) done, ADR 0659, `ExecutionPaths`, `--rendering hydrated`; (2) done, `scripts/flip/host-witnesses.json`, `check.mjs HOST` 20 of 24, the other 4 marked `open`; `judgeSsr` reads every client rule; (3) SC5003+SC5001 by `async.md`, steps 0-5 done, next 6, 7, 8 and the fuzz contexts (`dyn-jsx-*`, `portal-*`, `*-later`, `BODY_LABEL`, `<Portal>` in a kept grid); (4) SC1002, SC8014, SC8015, SC1001 (add the arm fact and a `NoHydration` blocker: `unplaced_run` misses D1, D3, because both are `MayRun`), SC9012. Latest sweep: `sweep-co.json`, 16,652 U, 383 V (the merge added 25, W's ADR 0705; ADR 0663 added 17).
 
@@ -31,9 +32,13 @@ Next, owner's order: (1) done, ADR 0659, `ExecutionPaths`, `--rendering hydrated
 
 Open for the census: `const hook = c ? useThing : useThing; const t = hook(); createMemo(() => { t.go(1); ... })` is certified and Chrome throws (`research/probes/v1/a`, `v2/a-nosib`). A hook picked by a conditional reaches no `handed_value` arm. Not a sibling-type case. Close it with F0 or the census, and add it to the fuzzer there.
 
+Next: SC1002, SC8014, SC8015, then SC1001, H-D5, F0, SC9012. Latest sweep `sweep-6.json`, build `r6/`. Helpers: `bld.sh <tag>`, `f.sh <tag> [dir]` (one fixture), `tab.py`, `diffg.py <old> <new>` (grid outcome moves), `snapd.py` (moved snapshot rows). Open, all on the build before step 6 too: mx-src `s-async-value-member` 48 and mx-combo 23 pending false cleans; mx-recall `store-dstr-*` in `ref*` and applies 596 (ADR 0657 did not reach them); `open-defects.json`'s partial grid entry holds 690 ASYNC_OUTSIDE false cleans for the census. A parameter compute (`createMemo(options)`) is open: a fact for a value's signature would close it.
+
 Handoff at ADR 0664: helpers `chk.sh` (scratch, oracle path fixed), `rd.py <cmp> <sweep> x` (each added site with its source line), `rm/` (merge build), `r9012/`, `rco/`. Do first: step 6 (`computation_provenance`, four discovery sites, wording flag, C-D4), then 7 (`lazy` tag row), 8 (`j06`), the fuzz contexts. Step 6 reaches W: an `any`-computed `createOptimistic` starts to hold, tell W in the commit.
 
 Surprises:
+- A recall-only code's own cells go in `recallContexts`, with `contexts: []`, or `recall.test.mjs` counts them as base cells.
+- `MISUSE_CODES` left out advisory codes, so SC5003 never had a grid until ADR 0668.
 - ADR 0659 limits to carry: a site in a helper only an arm calls keeps its finding; dependency source is the client graph on both paths; the sweep still runs `csr`.
 - Chain gate and commit with `&&` or an explicit test: a pipeline hid a failed `ownership-gate` once, and the commit had to be amended before pushing.
 - `ef46d0ac6` and `aaaf31cad`: verify-delta rows for rule pages, `.gitignore` and `scripts/flip/`. A progress-file edit now stays in the fast plan.

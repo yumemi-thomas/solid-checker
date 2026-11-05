@@ -42,6 +42,17 @@ pub(crate) struct ReturnedSourceFacts {
     pub(crate) async_source: bool,
 }
 
+/// ADR 0665: a source is read as async unless its first argument proves it is
+/// not. An open one carries `opaque`, so nothing it projects is a violation.
+pub(crate) fn source_may_be_async(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> bool {
+    crate::owners::computation_provenance(lookup, file, argument)
+        != crate::owners::ComputationProvenance::Sync
+}
+
 pub(crate) fn returned_source_facts(
     lookup: &SemanticLookup<'_>,
     origin: &FileFacts,
@@ -55,7 +66,7 @@ pub(crate) fn returned_source_facts(
         async_source: created
             .arguments
             .first()
-            .is_some_and(|argument| computation_is_async(lookup, origin, argument.span)),
+            .is_some_and(|argument| source_may_be_async(lookup, origin, argument)),
     }
 }
 
@@ -163,6 +174,20 @@ pub(crate) fn discover_file_sources(
             }
             continue;
         }
+        // ADR 0666: a `lazy` component is pending while its module loads, and no
+        // fact says the module has not loaded (`L.preload()`): its tag is open.
+        if resolved == Some(Primitive::Lazy) {
+            if let Some(name) = binding.names.first() {
+                let declaration = location(file.path.shared(), name.span);
+                if let Some(symbol) = entities.get(&declaration) {
+                    result
+                        .source_primitives
+                        .push((symbol.clone(), "lazy".into()));
+                    result.async_sources.push(symbol.clone());
+                }
+            }
+            continue;
+        }
         if resolved == Some(Primitive::Dynamic) {
             if let Some(name) = binding.names.first() {
                 let declaration = location(file.path.shared(), name.span);
@@ -170,10 +195,16 @@ pub(crate) fn discover_file_sources(
                     result
                         .source_primitives
                         .push((symbol.clone(), "dynamic".into()));
+                    // ADR 0665: an open source has its options' flag, as the
+                    // other three discovery sites do.
+                    let options = first_answer_options(lookup, file, call, resolved);
+                    if options != AsyncSourceOptions::default() {
+                        result.source_async_options.push((symbol.clone(), options));
+                    }
                     if call
                         .arguments
                         .first()
-                        .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                        .is_some_and(|argument| source_may_be_async(lookup, file, argument))
                     {
                         result.async_sources.push(symbol.clone());
                     }
@@ -281,7 +312,7 @@ pub(crate) fn discover_file_sources(
                     || call
                         .arguments
                         .first()
-                        .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                        .is_some_and(|argument| source_may_be_async(lookup, file, argument))
                 {
                     result.async_sources.push(symbol.clone());
                 }

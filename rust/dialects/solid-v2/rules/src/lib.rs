@@ -612,7 +612,9 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     } else {
         "the accessor is returned by an async computation".to_owned()
     };
-    if read.options_opaque
+    if read.provenance_open {
+        provenance = "no fact proves whether the accessor's computation is async".to_owned();
+    } else if read.options_opaque
         && rule == Rule::PendingAsyncUnsuspendableRead
         && read.leaf_owner.is_none()
     {

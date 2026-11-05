@@ -140,6 +140,8 @@ export const probe = (sig) => ({ k: "probe", sig });
 /** `<button data-act onClick>`, or another element and event (`tag`, `on`, `attrs`: the denied events, ADR 0642). */
 export const button = (id, handler, extra = {}) => ({ k: "button", id, handler, ...extra });
 export const child = (id, e) => ({ k: "child", id, e });
+/** A view item that is a mount of its own, printed bare: `<Portal><K1 /></Portal>` (flip-read.mjs). */
+export const mounted = (id, e) => ({ k: "mounted", id, e });
 export const attr = (id, e) => ({ k: "attr", id, e });
 export const show = (when, children, fallback = []) => ({ k: "show", when, children, fallback });
 export const forEach = (children) => ({ k: "for", children });
@@ -374,6 +376,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           break;
         }
         case "propEl": typeOf(item.e, scope); break;
+        case "mounted": typeOf(item.e, scope); break;
         case "child": case "attr": {
           const type = typeOf(item.e, scope);
           if (type && type.t !== "num") fail(`${where}: a JSX ${item.k} must be a number, not ${type.t}`);
@@ -505,7 +508,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
       switch (e.k) {
         case "num": return T.num;
         case "dom": return T.unknown;
-        case "jsxExpr": checkBlock(e.item.handler, scope, "free"); return T.unknown;
+        case "jsxExpr": if (e.item.handler) checkBlock(e.item.handler, scope, "free"); else typeOf(e.item.e, scope); return T.unknown;
         case "listen": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;

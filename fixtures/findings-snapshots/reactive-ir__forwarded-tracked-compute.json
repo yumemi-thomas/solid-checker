@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 329,
+      "end": 338,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -12,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 525,
+      "end": 534,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -19,6 +39,16 @@
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
       "start": 792,
       "end": 799,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 966,
+      "end": 975,
       "fixes": 0
     },
     {
@@ -89,6 +119,16 @@
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
       "start": 599,
       "end": 605,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 627,
+      "end": 636,
       "fixes": 0
     },
     {

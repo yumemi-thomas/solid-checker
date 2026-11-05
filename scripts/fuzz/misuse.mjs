@@ -19,7 +19,7 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, flipReadContext } from "./flip-read.mjs";
+import { FLIP_READ_CONTEXTS, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, flipReadContext, openSignal } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
@@ -536,8 +536,8 @@ export const SPEC = {
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
     call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: {
-    contexts: ["jsx", "show", "for"], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for"],
+    contexts: [], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
   // rc.17 dev-shared.js: a pending read inside createTrackedEffect or onSettled serves the committed value (and throws while uninitialized).
@@ -658,6 +658,14 @@ export const SPEC = {
 // The flip's shapes (flip-read.mjs, flip-write.mjs): one file per track, so neither edits this table.
 for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS]) {
   for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
+}
+for (const [code, added] of Object.entries(FLIP_READ_LEGAL)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
+for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
+  const spec = SPEC[code];
+  const setup = spec.setup;
+  spec.setup = (variant, name) => (variants[variant] ? [openSignal(name("a"), variants[variant].kind)] : setup(variant, name));
+  spec.recallVariants = [...(spec.recallVariants ?? []), ...Object.keys(variants)];
+  spec.variantContexts = { ...spec.variantContexts, ...Object.fromEntries(Object.entries(variants).map(([variant, { contexts }]) => [variant, contexts])) };
 }
 
 /**
@@ -1020,7 +1028,7 @@ for (const [code, spec] of Object.entries(SPEC)) for (const [variant, contexts] 
  * The codes the matrix measures, in the policy table's order: the defects, claimed by a rule or not ("never quieter than Solid": an
  * unclaimed defect the checker is silent on is a false clean too). An advisory code (Solid documents it as legal) is not measured.
  */
-export const MISUSE_CODES = Object.keys(codePolicy).filter((code) => SPEC[code] && (SPEC[code].typedAway || ["defect-claimed", "defect-unclaimed"].includes(policyOf(code)?.disposition)));
+export const MISUSE_CODES = Object.keys(codePolicy).filter((code) => SPEC[code] && (SPEC[code].typedAway || SPEC[code].recallOnly || ["defect-claimed", "defect-unclaimed"].includes(policyOf(code)?.disposition)));
 /** The codes that have a template (not typed away). */
 export const TEMPLATE_CODES = MISUSE_CODES.filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly);
 /** The codes with a template only the recall grids measure (never drawn, so no other program moves). */

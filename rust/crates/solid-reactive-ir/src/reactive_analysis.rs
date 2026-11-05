@@ -450,6 +450,7 @@ pub(crate) fn collect_project<'facts>(
             async_provenance: true,
             declared_loading: false,
             options_opaque: true,
+            provenance_open: false,
             caught: false,
             component_prop: false,
             ssr_client_hole: false,

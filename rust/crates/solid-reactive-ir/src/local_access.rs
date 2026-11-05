@@ -4108,6 +4108,76 @@ impl LocalAccessContext<'_, '_> {
     /// places climbs into it (its lexical role is no proof), and a function
     /// holding a call of the reader is also run at each inline carrier it is
     /// handed to by name, whose run ADR 0563's predicate decides.
+    /// A function a primitive holds in an options bundle (an effect's `error`
+    /// arm), or a tag this walk follows to its template: both have a place.
+    fn placed_elsewhere(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        let ast = &file.ast;
+        ast.arguments_containing(function.span)
+            .any(|(call, _)| self.lookup.primitive_at_call(file, call.span).is_some())
+            || function_binding_name(file, function).is_some_and(|name| {
+                ast.tagged_template_tags
+                    .iter()
+                    .any(|tag| ast.reference_declaration(*tag) == Some(name.span))
+            })
+    }
+
+    /// ADR 0667: a read of a possibly async source in a function nothing places:
+    /// a window would make it SC5001's, a render SC5003's, and neither is proven.
+    fn push_unplaced_async_reads(
+        &self,
+        file: &solid_facts::FileFacts,
+        read: &solid_facts::ast::CallFact,
+        name: &str,
+        declaration: &Location,
+        options: &AsyncSourceOptions,
+        result: &mut LocalAccessResult,
+    ) {
+        let here = location(file.path.shared(), read.span);
+        if result.async_reads.iter().any(|row| {
+            row.location == here && row.async_provenance && row.execution != ExecutionRole::Unknown
+        }) {
+            return;
+        }
+        for (execution, invocation_context_unproven) in [
+            (ExecutionRole::Unknown, true),
+            (ExecutionRole::TrackedJsx, false),
+        ] {
+            result.async_reads.push(Arc::new(AsyncRead {
+                accessor: format!("{name}()").into(),
+                location: here.clone(),
+                declaration: declaration.clone(),
+                execution,
+                leaf_call_site_gates: Vec::new(),
+                leaf_owner: None,
+                under_loading: false,
+                mount_unresolved: false,
+                settle_unproven: false,
+                call_attributed: true,
+                creation_pass_unproven: false,
+                root_pass_unproven: false,
+                carrier_run_unproven: false,
+                apply_first_run_pending: false,
+                pending_origin: None,
+                pending_apply: None,
+                async_provenance: true,
+                declared_loading: options.declared_loading,
+                options_opaque: options.opaque,
+                provenance_open: options.provenance_open,
+                caught: false,
+                component_prop: false,
+                ssr_client_hole: false,
+                server_rendering_unresolved: false,
+                host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven,
+            }));
+        }
+    }
+
     fn push_call_attributed_async_reads(
         &self,
         file: &solid_facts::FileFacts,
@@ -4153,6 +4223,16 @@ impl LocalAccessContext<'_, '_> {
                         && containing_ast_function(&file.ast, other.span)
                             .is_some_and(|owner| owner.span == function.span)
                 });
+            // ADR 0667: an object method, a class member or a tag function has
+            // no binding to follow to its calls: what runs it, and where, is
+            // not known here.
+            if depth == 0
+                && crate::execution_role::unplaced_run(file, site, self.lookup)
+                && !self.placed_elsewhere(file, function)
+            {
+                self.push_unplaced_async_reads(file, read, name, declaration, &options, result);
+                continue;
+            }
             let Some(binding) = function_binding_name(file, function) else {
                 continue;
             };
@@ -4324,7 +4404,8 @@ impl LocalAccessContext<'_, '_> {
                             pending_apply: Some(location(file.path.shared(), apply)),
                             async_provenance: true,
                             declared_loading: false,
-                            options_opaque: false,
+                            options_opaque: options.opaque,
+                            provenance_open: options.provenance_open,
                             caught: false,
                             component_prop: false,
                             ssr_client_hole: options.ssr_client_bare,
@@ -4371,6 +4452,7 @@ impl LocalAccessContext<'_, '_> {
                     async_provenance: true,
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
+                    provenance_open: options.provenance_open,
                     caught: false,
                     component_prop: false,
                     ssr_client_hole: options.ssr_client_bare,
@@ -4427,6 +4509,7 @@ impl LocalAccessContext<'_, '_> {
         let origin = self.accessor_origins.get(symbol);
         let display_name = call.static_callee(&file.source).unwrap_or(name);
         result.reads.push(Arc::new(ReactiveRead {
+            pending_open: false,
             summary_attributed: false,
             transported: false,
             kind: "accessor".into(),
@@ -5281,6 +5364,7 @@ impl LocalAccessContext<'_, '_> {
                 async_provenance,
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
+                provenance_open: async_options.provenance_open,
                 caught: caught_in_try(file, timing_at),
                 component_prop: self.read_in_component_prop(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
@@ -5583,6 +5667,7 @@ impl LocalAccessContext<'_, '_> {
         // Caller-proven props: a prop every call site passes statically
         // compiles to a plain property — reading it is not a reactive
         // read at all. Unprovable backing stays a proof obligation.
+        let mut pending_open = false;
         let mut uncertain = self.uncertain_prop_sources.contains(symbol)
             || self.lookup.inside_possible_component(file, member.span);
         uncertain |= self.store_may_be_raw(symbol);
@@ -5640,6 +5725,7 @@ impl LocalAccessContext<'_, '_> {
                         .async_getter(prop_declaration, property)
                 })
             {
+                pending_open = !uncertain;
                 uncertain = true;
             }
             if exact_root
@@ -5699,7 +5785,7 @@ impl LocalAccessContext<'_, '_> {
         if !seen.insert(key) {
             return;
         }
-        let read = self.member_read(
+        let mut read = self.member_read(
             file,
             member,
             symbol,
@@ -5707,6 +5793,7 @@ impl LocalAccessContext<'_, '_> {
             (execution, uncertain, prop_head),
             placed_at,
         );
+        read.pending_open = pending_open;
         if let Some(helper) = helper {
             self.project_helper_prop_read(
                 file,
@@ -5784,6 +5871,7 @@ impl LocalAccessContext<'_, '_> {
             origin: None,
             origin_context: Arc::from(""),
             uncertain,
+            pending_open: false,
             missing_jsx_census: missing_jsx_census(file, timing_at, execution),
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
@@ -5876,6 +5964,7 @@ impl LocalAccessContext<'_, '_> {
                 async_provenance: member_async,
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
+                provenance_open: member_options.provenance_open,
                 caught: caught_in_try(file, member),
                 component_prop: self.read_in_component_prop(file, member),
                 ssr_client_hole: member_options.ssr_client_bare,
@@ -6016,6 +6105,7 @@ impl LocalAccessContext<'_, '_> {
                 }
             }
             result.reads.push(Arc::new(ReactiveRead {
+                pending_open: false,
                 summary_attributed: false,
                 transported: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -6269,6 +6359,7 @@ impl LocalAccessContext<'_, '_> {
             };
         }
         result.reads.push(Arc::new(ReactiveRead {
+            pending_open: false,
             summary_attributed: false,
             transported: false,
             kind: "store-path".into(),
@@ -6449,6 +6540,7 @@ impl LocalAccessContext<'_, '_> {
                 {
                     let call_location = location(file.path.shared(), call.span);
                     result.reads.push(Arc::new(ReactiveRead {
+                        pending_open: false,
                         summary_attributed: false,
                         transported: false,
                         kind: "accessor".into(),
@@ -6660,11 +6752,13 @@ impl LocalAccessContext<'_, '_> {
             let Some(symbol) = self.entities.get(&name_location) else {
                 continue;
             };
-            if !self.async_sources.contains(symbol)
-                || self.source_primitives.get(symbol).map(SymbolId::as_str) != Some("dynamic")
-            {
+            let primitive = self.source_primitives.get(symbol).map(SymbolId::as_str);
+            let lazy = primitive == Some("lazy");
+            if !self.async_sources.contains(symbol) || (primitive != Some("dynamic") && !lazy) {
                 continue;
             }
+            let options = self.effective_async_options(symbol);
+            let provenance_open = lazy || options.provenance_open;
             let execution = ExecutionRole::TrackedJsx;
             let cover = read_loading_cover(self.lookup, file, element.name.span, self.symbol_names);
             result.async_reads.push(Arc::new(AsyncRead {
@@ -6704,7 +6798,8 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: None,
                 async_provenance: true,
                 declared_loading: false,
-                options_opaque: false,
+                options_opaque: provenance_open,
+                provenance_open,
                 caught: false,
                 component_prop: false,
                 ssr_client_hole: false,

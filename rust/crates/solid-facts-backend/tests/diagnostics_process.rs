@@ -1171,7 +1171,8 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
                 .is_some_and(|path| path.ends_with("/QueryOptions.tsx"))
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 3, "{rows:#?}");
+    // Three reads, and ADR 0665's SC5003 of the memo over the handed compute.
+    assert_eq!(rows.len(), 4, "{rows:#?}");
     for (wrapper, expected) in [
         ("wrapped", None),
         ("wrappedSnapshot", None),

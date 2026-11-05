@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "propEl", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "mounted", "propEl", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -510,6 +510,7 @@ function render(program, instrument) {
       }
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
+      case "mounted": return [`${ind(depth)}<p data-view="${item.id}">${expr(item.e, depth)}</p>`];
       case "propEl": return [`${ind(depth)}<${item.tag} ${item.prop ?? "a"}={${expr(item.e, depth)}} />`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
       case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
@@ -765,6 +766,8 @@ function signalText(sig, signals, used) {
     case "optimistic-async-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;
     case "deferred": used.add("createDeferred"); return `const ${sig.name} = createDeferred(async () => 1);`;
+    case "open-any": used.add("createMemo"); return `const ${sig.name}f: any = async () => 1;\n  const ${sig.name} = createMemo<number>(() => ${sig.name}f());`;
+    case "open-notready": used.add("createMemo").add("NotReadyError"); return `const ${sig.name} = createMemo(() => { if (Math.random() >= 0) throw new NotReadyError("x"); return 1; });`;
     case "over-async": used.add("createMemo"); return `const ${sig.name}i = createMemo(async () => 1);\n  const ${sig.name} = createMemo(() => ${sig.name}i());`;
     case "store-array": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<number[]>([${sig.init}]);`;
     case "store-empty": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({});`;
@@ -784,7 +787,7 @@ function signalKeys(sig) {
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "projection": return [[sig.name, "{ v: number }"]];
-    case "deferred": case "over-async": return [[sig.name, "Accessor<number>"]];
+    case "deferred": case "over-async": case "open-any": case "open-notready": return [[sig.name, "Accessor<number>"]];
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
     case "async": case "async-dep": case "async-declared": case "async-maybe": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];

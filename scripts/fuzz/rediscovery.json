@@ -3741,5 +3741,49 @@
   "found": "the flip audit, async.md, and the SSR audit's D7",
   "fixed": "ADR 0664",
   "outside": "`clientOnly` needs a second module, and a generated program is one file with no `import()`. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Host witnesses co-read, lz-pending; fixture rc21-deferred-mount holds each branch"
+ },
+ {
+  "finding": "a source whose compute returns `any`, or throws `NotReadyError`, read as a settled signal: SC5003 silent and SC1001 the wrong rule, api/n01, n03, n06, census/f01 (C-D4, ADR 0665)",
+  "found": "the flip audit, j02, j03, async.md step 6",
+  "fixed": "ADR 0665",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-body-open-any-direct-none",
+   "mx-pending-async-untracked-read-body-open-notready-direct-none",
+   "mx-pending-async-untracked-read-root-open-any-direct-none",
+   "mx-pending-async-untracked-read-root-open-notready-direct-none"
+  ],
+  "rediscovered": "wrong-rule on the old build, recall-gap on the new, 96 programs"
+ },
+ {
+  "finding": "a `<Dynamic>` body with no boundary certified, on its own or under `<Portal>`: Chrome warns (ADR 0662, ADR 0668)",
+  "found": "async.md step 3",
+  "fixed": "ADR 0662",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-direct-none",
+   "mx-async-outside-loading-boundary-portal-dyn-x-direct-none"
+  ],
+  "rediscovered": "false-clean on the old build, 297 in each context; the new build reports it"
+ },
+ {
+  "finding": "a `lazy` tag with no boundary certified: census/b04, j14, j15, types/d32 (ADR 0666)",
+  "found": "async.md step 7",
+  "fixed": "ADR 0666",
+  "outside": "`lazy` needs a component value the generator's `stmts` cannot hold as a site: the site is the tag. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Fixture rc21-open-provenance"
+ },
+ {
+  "finding": "a pending read in an object method certified: j06 (ADR 0667)",
+  "found": "the flip audit",
+  "fixed": "ADR 0667",
+  "outside": "a context wraps statements, and `hook-fn-slot` already holds a method: lg-pending-async-untracked-read-memo-x-hook-fn-slot-none moved clean to uncertifiable. The witness SC5003/j06-method and fixture rc21-open-provenance hold the shape"
+ },
+ {
+  "finding": "a `Loading` anywhere in a component read as cover: its own tag at the caller, and a read beside it (ADR 0668)",
+  "found": "writing the fixture for ADR 0666",
+  "fixed": "ADR 0668",
+  "outside": "the grids' views have one mount and no sibling `Loading`. A generator context would need a second site. Fixture rc21-open-provenance holds both"
  }
 ]

@@ -30,6 +30,16 @@
       "start": 965,
       "end": 970,
       "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 1017,
+      "end": 1023,
+      "fixes": 0
     }
   ]
 }

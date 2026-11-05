@@ -200,7 +200,7 @@ export function cellList({ codes, contexts, recall = false } = {}) {
 }
 
 const THROWN = new Set(thrownCodes.map(([, code]) => code));
-const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "LOADING_ON_OUTSIDE_HOLD"];
+const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDDEN_SCOPE", "LOADING_ON_OUTSIDE_HOLD", "ASYNC_OUTSIDE_LOADING_BOUNDARY"];
 /**
  * `--census` (ADR 0614): every (code, context) no misuse or legal cell lists, in its plain shapes: a context a table added for one code, or a
  * code a table never placed, is measured against every other as soon as it exists. The same judge reads them: the runtime says whether the
@@ -273,8 +273,9 @@ export function recallAxes(code, context, base, variants, { legal = false, lean 
   const local = base.filter((shape) => !shape.mount && !shape.source && takes(shape.variant));
   if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS.filter((form) => !lean || !LEAN_DEMOTED.callbacks.includes(form))) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's
-  // strict-read window never opens there: rc.17 is silent on a stale body read, and a pending one re-runs the body without end.
-  const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
+  // strict-read window never opens there: silent on a stale body read, and on rc.21 a pending one retries and renders (ADR 0668). That
+  // pending cell is legal, not misuse: `dyn-fn-body-l` and `dyn-jsx-body-l` in flip-read.mjs hold it.
+  const bodyLabelled = NO_WINDOW_MOUNT.has(code) && ["body", "root"].includes(context);
   // A mount a recall-only context's code cannot take (`recallMountsNotIn`: there Solid reports nothing).
   const mountTakes = (mount) => !SPEC[code].recallMountsNotIn?.[context]?.includes(mount);
   for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount) && !(lean && LEAN_DEMOTED.mounts.includes(mount))) for (const shape of local) shapes.push({ ...shape, mount });
@@ -286,20 +287,20 @@ export function recallAxes(code, context, base, variants, { legal = false, lean 
  * `--pairs <sets>` (misuse.mjs PAIR_SETS, default all): the pair grid's shapes of a base cell (a code's base context, or a legal one),
  * each pair of axis values crossed with the base variants, bindings and layers the cell takes (the layer is the pair's own in
  * `handoff-file`). A pair a shape cannot take is left out, as the recall grids leave it: a source the (code, variant, binding) does not
- * take (`sourcesOf`), `dynamic` but for a module hook (it passes no props) and for a body read rc.17 never labels (`BODY_LABEL`), a
+ * take (`sourcesOf`), `dynamic` but for a module hook (it passes no props) and for a body read no window covers (`NO_WINDOW_MOUNT`), a
  * `try-catch`-free code's hand-off is every one. Recall-only contexts take no pairs.
  */
 export function pairShapes(code, context, { legal = false, sets = PAIR_SETS } = {}) {
   const spec = SPEC[code];
-  // A later mount of an async source (`show-later` × `async-*`): the parent's async memo settles before the button mounts the
+  // A later mount of an async source (`show-later` × `async-*`): the parent's owned async memo settles before the button mounts the
   // component, so its first read is no pending read (measured on the fast runtime, 2026-11-03: rc.17 reports STRICT_READ_UNTRACKED
-  // there, never the pending code). Such a pair of an async template is a legal program in the code's misuse contexts.
+  // there, never the pending code). An unowned memo with no reader does not stay settled: it goes dormant and recomputes (ADR 0661). Such a pair of an async template is a legal program in the code's misuse contexts.
   const settled = (mount, source) => LATER_MOUNTS.includes(mount) && source.startsWith("async-") && spec.setup(null, (prefix) => `${prefix}1`).some((sig) => sig.kind === "async");
   const misuseContext = spec.contexts.includes(context);
   if (!(legal ? [...(spec.legal ?? []), ...spec.contexts] : spec.contexts).includes(context)) return [];
   const onlySettled = legal && misuseContext && !(spec.legal ?? []).includes(context);
   const variants = (legal ? legalVariantsOf(code) : gridVariantsOf(code)).filter(variantFits(code, context)).filter((variant) => !spec.variantSources?.[variant]);
-  const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
+  const bodyLabelled = NO_WINDOW_MOUNT.has(code) && ["body", "root"].includes(context);
   const shapes = [];
   for (const variant of variants) for (const binding of gridBindingsOf(code, variant)) {
     if (sets.includes("mount-source")) {
@@ -326,7 +327,7 @@ export function pairsOption(value) {
   for (const set of sets) if (!PAIR_SETS.includes(set)) throw new Error(`--pairs: unknown pair set ${set} (${PAIR_SETS.join(", ")}, all)`);
   return sets;
 }
-const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
+const NO_WINDOW_MOUNT = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
 /** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
 export const recallLeanOf = (options) => Boolean(options.recall) && !options.recallFull;

@@ -8,6 +8,14 @@
    "outcome": "false-positive",
    "item": "V-D1",
    "note": "a write expression with no [[Set]]: the measured fix is $O/v-d1-checker.patch"
+  },
+  {
+   "idPrefix": "mx-async-outside-loading-boundary-",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "outcome": "false-clean",
+   "item": "census",
+   "partial": true,
+   "note": "ADR 0668 gave this advisory code its first cells: 690 of 3,990 are certified, each a read in tracked JSX with no row, through a module hook, a barrel, a wrapper or a hand-off. The census owns them: a transported read in a render position has no async row today"
   }
  ],
  "patterns": [
@@ -407,39 +415,6 @@
    "item": "C-D2",
    "outcome": "false-positive",
    "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/n01-notready-apply",
-   "item": "C-D4",
-   "outcome": "false-positive",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/n03-notready-body",
-   "item": "C-D4",
-   "outcome": "false-positive",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/n06-notready-in-helper",
-   "item": "C-D4",
-   "outcome": "false-positive",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
    "rules": [
     "strict-read-untracked"
    ]
@@ -949,15 +924,6 @@
    ]
   },
   {
-   "id": "census/b04-lazy-read",
-   "item": "section-4 census:b",
-   "outcome": "false-clean",
-   "codes": [
-    "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-   ],
-   "certified": false
-  },
-  {
    "id": "census/c03-window-arrow-nested-reconcile",
    "item": "section-4 census:c",
    "outcome": "false-positive",
@@ -1167,17 +1133,6 @@
    "certified": true
   },
   {
-   "id": "census/f01-notreadyerror-manual",
-   "item": "section-4 census:f",
-   "outcome": "false-positive",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "census/f02-async-generator-read-after-await",
    "item": "section-4 census:f",
    "outcome": "false-clean",
@@ -1268,24 +1223,6 @@
    "rules": [
     "strict-read-untracked"
    ]
-  },
-  {
-   "id": "census/j14-lazy-resolve-mount",
-   "item": "section-4 census:j",
-   "outcome": "false-clean",
-   "codes": [
-    "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/j15-lazy-import-mount",
-   "item": "section-4 census:j",
-   "outcome": "false-clean",
-   "codes": [
-    "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-   ],
-   "certified": true
   },
   {
    "id": "census/k03-window-createRoot",
@@ -2183,15 +2120,6 @@
     "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
-  },
-  {
-   "id": "types/d32-lazy-body-read",
-   "item": "T-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-   ],
-   "certified": false
   },
   {
    "id": "types/e107-patched-global",
