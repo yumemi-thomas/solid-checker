@@ -865,11 +865,12 @@ pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
         "dispatchEvent" => owner == "EventTarget",
         "click" => owner == "HTMLElement",
         "focus" | "blur" => matches!(owner, "HTMLOrSVGOrMathMLElement" | "HTMLOrSVGElement"),
-        "remove" => owner == "ChildNode",
+        "remove" => matches!(owner, "ChildNode" | "HTMLSelectElement"),
         "removeChild" => owner == "Node",
+        "execCommand" => owner == "Document",
         "select" => matches!(owner, "HTMLInputElement" | "HTMLTextAreaElement"),
         "checkValidity" | "reportValidity" => {
-            owner.starts_with("HTML") && owner.ends_with("Element")
+            owner == "ElementInternals" || (owner.starts_with("HTML") && owner.ends_with("Element"))
         }
         "reset" | "requestSubmit" => owner == "HTMLFormElement",
         "show" | "showModal" | "close" | "requestClose" => owner == "HTMLDialogElement",

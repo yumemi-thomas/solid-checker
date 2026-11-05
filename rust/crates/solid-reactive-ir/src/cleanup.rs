@@ -1278,6 +1278,8 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
             | ("XMLHttpRequest", "open" | "abort" | "send")
             | ("FileReader", "abort")
             | ("Document", "execCommand")
+            | ("ElementInternals", "checkValidity" | "reportValidity")
+            | ("HTMLSelectElement", "remove")
     )
 }
 

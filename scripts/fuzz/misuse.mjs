@@ -166,6 +166,10 @@ const DENIED = {
   "dny-formdata": { tag: "form", on: "onFormData", prep: [], trigger: "new FormData(EL)" },
   "dny-formdata-submit": { tag: "form", on: "onFormData", attrs: 'action="javascript:void 0"', prep: [], trigger: "EL.submit()" },
   "dny-focus-selection": { tag: "div", on: "onFocus", attrs: "contenteditable", prep: [], trigger: "getSelection()!.collapse(EL, 0)" },
+  "dny-blur-select-remove": { tag: "select", on: "onBlur", prep: ["EL.focus()"], trigger: "(EL as HTMLSelectElement).remove()" },
+  // Events of the measured list, so listed calls: `execCommand` needs a focused editable, `ElementInternals` a form-associated element.
+  "dny-input-exec": { tag: "input", on: "onInput", prep: ["EL.focus()"], trigger: 'document.execCommand("insertText", false, "x")' },
+  "dny-invalid-internals": { tag: "x-sc", on: "onInvalid", declares: true, prep: [], trigger: 'const internals: ElementInternals = EL.internals; internals.setValidity({ valueMissing: true }, "m"); internals.checkValidity()' },
 };
 /** Solid's own DOM work: the focused element leaves on the stack of a `flush()`, a disposer or `insert`, with no call of the program's naming it. */
 const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
@@ -1272,7 +1276,9 @@ function deniedContext(context, stmts, kit) {
   const spec = DENIED[context];
   if (spec) {
     const fill = (text) => text.replaceAll("EL", el);
-    return { body: laterRoot(kit, spec.prep.map(fill), fill(spec.trigger)), view: [button(b, stmts, { tag: spec.tag, on: spec.on, attrs: spec.attrs })] };
+    const declared = spec.declares ? [expr(domExpr('declare module "@solidjs/web" { namespace JSX { interface IntrinsicElements { "x-sc": any } } }')),
+      expr(domExpr('if (!customElements.get("x-sc")) customElements.define("x-sc", class extends HTMLElement { static formAssociated = true; internals = this.attachInternals(); })'))] : [];
+    return { ...(declared.length ? { hoisted: declared } : {}), body: laterRoot(kit, spec.prep.map(fill), fill(spec.trigger)), view: [button(b, stmts, { tag: spec.tag, on: spec.on, attrs: spec.attrs })] };
   }
   if (DISPOSALS[context]) {
     const host = kit.name("el"), d = kit.name("f");

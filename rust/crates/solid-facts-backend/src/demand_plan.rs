@@ -1224,33 +1224,35 @@ fn plan_call_demands(
         // ADRs 0639, 0642: these deliver listeners on the caller's stack, and
         // only the resolved call says the callee is `lib.dom`'s. Matched by
         // spelling: the demand states no decision.
-        let argumentless_dispatch = call.arguments.is_empty()
-            && !call.construct
+        let argumentless_dispatch = !call.construct
             && file
                 .ast
                 .member_at(file.ast.peel_ts_sugar_span(call.callee))
                 .is_some_and(|member| {
-                    matches!(
-                        file.source_text(member.property),
-                        Some(
-                            "click"
-                                | "focus"
-                                | "blur"
-                                | "remove"
-                                | "select"
-                                | "checkValidity"
-                                | "reportValidity"
-                                | "requestSubmit"
-                                | "reset"
-                                | "show"
-                                | "showModal"
-                                | "close"
-                                | "requestClose"
-                                | "showPopover"
-                                | "hidePopover"
-                                | "togglePopover"
-                        )
-                    )
+                    let name = file.source_text(member.property);
+                    name == Some("execCommand")
+                        || call.arguments.is_empty()
+                            && matches!(
+                                name,
+                                Some(
+                                    "click"
+                                        | "focus"
+                                        | "blur"
+                                        | "remove"
+                                        | "select"
+                                        | "checkValidity"
+                                        | "reportValidity"
+                                        | "requestSubmit"
+                                        | "reset"
+                                        | "show"
+                                        | "showModal"
+                                        | "close"
+                                        | "requestClose"
+                                        | "showPopover"
+                                        | "hidePopover"
+                                        | "togglePopover"
+                                )
+                            )
                 });
         // The owner walk asks whether the operand of an action body's `yield`
         // is a native promise, which only an exactly resolved standard-library

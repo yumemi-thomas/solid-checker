@@ -3416,5 +3416,29 @@
   "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
   "fixed": "ADR 0642, the denied events",
   "outside": "an IME composition needs CDP input (`Input.imeSetComposition`), which the fuzzer's in-page runner cannot make; fixture rc21-denied-events holds the handler"
+ },
+ {
+  "finding": "`Document.execCommand` and `ElementInternals.checkValidity` deliver `input` and `invalid` on the caller's stack and were no hazard: certified (STRICT_READ_UNTRACKED)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-input-exec-memo-direct-none",
+   "mx-strict-read-untracked-dny-invalid-internals-memo-direct-none"
+  ],
+  "rediscovered": "503efaa84: 28 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "`Document.execCommand` and `ElementInternals.checkValidity` deliver `input` and `invalid` on the caller's stack and were no hazard: certified (REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-input-exec-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-invalid-internals-refresh-direct-none"
+  ],
+  "rediscovered": "503efaa84: 6 false-clean; the fix: recall-gap"
  }
 ]
