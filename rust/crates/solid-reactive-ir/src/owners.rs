@@ -43,7 +43,7 @@ pub(crate) use owner_context::*;
 mod async_context;
 mod creation_pass;
 pub(crate) use async_context::*;
-pub(crate) use creation_pass::read_in_creation_pass;
+pub(crate) use creation_pass::{read_in_creation_pass, read_in_root_pass};
 mod callback_owners;
 pub(crate) use callback_owners::*;
 mod bindings;

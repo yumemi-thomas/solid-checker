@@ -995,3 +995,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-server-entry-only/node_modules/**
 !fixtures/reactive-ir/rc21-hold-open/node_modules/
 !fixtures/reactive-ir/rc21-hold-open/node_modules/**
+!fixtures/reactive-ir/rc21-root-pass/node_modules/
+!fixtures/reactive-ir/rc21-root-pass/node_modules/**

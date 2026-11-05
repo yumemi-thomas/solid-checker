@@ -1301,6 +1301,22 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0661: SC5003's warning fires only inside `render()`, so a read
+            // whose first run is not proven there may be quiet though its source
+            // is pending. SC5001 needs no render: the throw has no such gate.
+            if read.root_pass_unproven
+                && !read.apply_first_run_pending
+                && finding.id == "SC5003"
+                && !read.ssr_client_hole
+                && !read.server_rendering_unresolved
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the first run of this read is not proven inside a render() call, where the runtime checks for a boundary. {}",
+                    finding.message
+                );
+                crate::blockers::ROOT_MOUNT_PASS_UNPROVEN.clone_into(&mut finding.analysis_context);
+            }
             // ADR 0518: a top-level `await` may settle the source before the
             // read runs; a settled read neither needs a boundary (SC5003) nor
             // throws (SC5001). SC5003's `ssrSource: "client"` wording throws

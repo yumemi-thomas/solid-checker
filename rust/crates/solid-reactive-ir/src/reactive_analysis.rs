@@ -461,6 +461,7 @@ pub(crate) fn collect_project<'facts>(
             settle_unproven: false,
             call_attributed: false,
             creation_pass_unproven: false,
+            root_pass_unproven: false,
             carrier_run_unproven: false,
             apply_first_run_pending: false,
             pending_origin: None,
@@ -491,6 +492,7 @@ pub(crate) fn collect_project<'facts>(
             .file_by_path(read.location.path.as_ref())
         else {
             read.creation_pass_unproven = true;
+            read.root_pass_unproven = true;
             continue;
         };
         let (Ok(start), Ok(end)) = (
@@ -505,6 +507,11 @@ pub(crate) fn collect_project<'facts>(
             file,
             solid_facts::core::Span::new(start, end),
             &read.declaration,
+        );
+        read.root_pass_unproven = !crate::owners::read_in_root_pass(
+            ctx.semantic_lookup,
+            file,
+            solid_facts::core::Span::new(start, end),
         );
     }
     static_rules::component_returns_conditionally(ctx, draft);

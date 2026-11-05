@@ -141,3 +141,8 @@ server has a provisional value to render.
 
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — untracked pending reads, which do throw
 - [missing-owner](missing-owner.md) — boundaries need owners
+
+A violation needs two proofs: the source is pending, and the read's first run is inside
+a `render()` call, which is the only place the runtime checks (`web.dev.js:536-557`). A
+read a condition may delay, or a component mounted later, is uncertifiable, blocker
+`root-mount-pass-unproven` (ADR 0661). A source really pending at a later mount is quiet.

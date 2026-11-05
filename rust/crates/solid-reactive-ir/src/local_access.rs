@@ -4317,6 +4317,7 @@ impl LocalAccessContext<'_, '_> {
                             settle_unproven: false,
                             call_attributed: true,
                             creation_pass_unproven: false,
+                            root_pass_unproven: false,
                             carrier_run_unproven: run_unproven,
                             apply_first_run_pending: true,
                             pending_origin: Some(location(file.path.shared(), read.span)),
@@ -4362,6 +4363,7 @@ impl LocalAccessContext<'_, '_> {
                     settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                     call_attributed: true,
                     creation_pass_unproven: false,
+                    root_pass_unproven: false,
                     carrier_run_unproven: run_unproven,
                     apply_first_run_pending: false,
                     pending_origin: None,
@@ -5264,6 +5266,7 @@ impl LocalAccessContext<'_, '_> {
                 // ADR 0563: the carrier that places the read, and every
                 // carrier around it, must run it.
                 creation_pass_unproven: false,
+                root_pass_unproven: false,
                 carrier_run_unproven: leaf_carrier_unproven
                     || placed_at.is_some_and(|carrier| {
                         !crate::carrier_runs::carrier_provably_runs(file, carrier, self.lookup)
@@ -5861,6 +5864,7 @@ impl LocalAccessContext<'_, '_> {
                 settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                 call_attributed: false,
                 creation_pass_unproven: false,
+                root_pass_unproven: false,
                 carrier_run_unproven: crate::carrier_runs::carrier_run_unproven(
                     file,
                     member,
@@ -6693,6 +6697,7 @@ impl LocalAccessContext<'_, '_> {
                 settle_unproven: self.lookup.module_census().may_settle_before_mount(),
                 call_attributed: false,
                 creation_pass_unproven: false,
+                root_pass_unproven: false,
                 carrier_run_unproven: false,
                 apply_first_run_pending: false,
                 pending_origin: None,

@@ -1501,6 +1501,11 @@ pub struct AsyncRead {
     /// (SC5003), so both are uncertifiable, never proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub creation_pass_unproven: bool,
+    /// ADR 0661: the first run of this read is not proven inside a `render()`
+    /// call. SC5003's warning fires only there; a pending source alone is not
+    /// enough.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub root_pass_unproven: bool,
     /// ADR 0504: the read is in the first run of an effect apply that is
     /// proven to run while its async source is still pending
     /// ([`crate::execution_role::pending_apply_first_read`]), so rc.17 throws

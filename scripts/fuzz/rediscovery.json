@@ -3664,5 +3664,11 @@
   "found": "the flip audit",
   "fixed": "ADR 0660",
   "outside": "the recall context generates the boundary's own held child and places only the outside read, so a variant cannot change what the child calls. scripts/flip/witnesses.json holds b03, fixture rc21-hold-open each branch"
+ },
+ {
+  "finding": "SC5003 claimed a violation on a read whose first run is outside render(): a later mount of a pending source is quiet (ADR 0661)",
+  "found": "the flip audit, async.md",
+  "fixed": "ADR 0661",
+  "outside": "ASYNC_OUTSIDE_LOADING_BOUNDARY is in SPEC but not MISUSE_CODES, so it has no cells. scripts/flip/witnesses.json holds e02, fixture rc21-root-pass each branch"
  }
 ]

@@ -359,6 +359,64 @@ pub(crate) fn synchronous_tag_position(
     .then_some(at)
 }
 
+/// ADR 0661: the code at `at` runs whenever its own function does: on no arm of
+/// a conditional, not to the right of a logical, and under JSX holders that
+/// build it when created. An intrinsic's attribute and `<Show when>` itself run
+/// with their element.
+pub(super) fn unconditional_position(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    at: Span,
+) -> bool {
+    let ast = &file.ast;
+    let owner = crate::owners::containing_ast_function(ast, at).map(|function| function.span);
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(ast, span).map(|function| function.span) == owner
+    };
+    if ast.conditional_expressions.iter().any(|conditional| {
+        own(conditional.span)
+            && (conditional.consequent.contains(at) || conditional.alternate.contains(at))
+    }) || ast
+        .logical_expressions
+        .iter()
+        .any(|logical| own(logical.span) && logical.right.contains(at))
+        || ast.if_regions.iter().any(|region| {
+            own(region.consequent)
+                && (region.consequent.contains(at)
+                    || region
+                        .alternate
+                        .is_some_and(|alternate| alternate.contains(at)))
+        })
+    {
+        return false;
+    }
+    ast.jsx_elements
+        .iter()
+        .filter(|holder| holder.span != at && holder.span.contains(at) && own(holder.span))
+        .all(|holder| {
+            if let Some(child) = holder
+                .children
+                .iter()
+                .copied()
+                .find(|child| child.contains(at))
+            {
+                return intrinsic_element(file, holder)
+                    || shown_child(lookup, file, holder, child)
+                    || loading_child(lookup, file, holder, child)
+                    || (holder.member_object.is_none()
+                        && holder.spreads.is_empty()
+                        && context_declaration(lookup, file, holder.name.span).is_some());
+            }
+            intrinsic_element(file, holder)
+                || holder.attributes.iter().any(|attribute| {
+                    attribute.expression.is_some_and(|value| value.contains(at))
+                        && file.source_text(attribute.name) == Some("when")
+                        && element_primitive(lookup, file, holder)
+                            == Some(solid_dialect::Primitive::Show)
+                })
+        })
+}
+
 /// A lowercase, non-member tag of letters and digits.
 fn intrinsic_element(
     file: &solid_facts::FileFacts,
@@ -466,9 +524,24 @@ fn shown_child(
             .boolean_properties
             .iter()
             .all(|property| property.value && file.source_text(property.name) == Some("when"))
-        && when
-            .is_some_and(|when| file.source_text(file.ast.peel_ts_sugar_span(when)) == Some("true"))
+        && when.is_some_and(|when| {
+            literally_truthy(file.source_text(file.ast.peel_ts_sugar_span(when)))
+        })
         && significant_children(file, holder) == [child]
+}
+
+/// `true`, or a number or string literal that is not falsy.
+fn literally_truthy(text: Option<&str>) -> bool {
+    text.is_some_and(|text| {
+        let quoted = text.len() > 2
+            && (text.starts_with('"') || text.starts_with('\''))
+            && text.ends_with(&text[..1]);
+        text == "true"
+            || quoted
+            || text
+                .parse::<f64>()
+                .is_ok_and(|value| value != 0.0 && !value.is_nan())
+    })
 }
 
 /// ADR 0508: `row` is the one child of the dialect's `<For each={[…]}>` (one
@@ -946,32 +1019,65 @@ pub(super) fn direct_render_sites<'a>(
                 return None;
             }
             let arrow = crate::owners::containing_ast_function(ast, element.span)?;
-            if arrow.r#async
-                || arrow.generator
-                || ast.peel_ts_sugar_span(arrow.body) != element.span
-            {
+            if ast.peel_ts_sugar_span(arrow.body) != element.span {
                 return None;
             }
-            let (call, _) = ast.arguments_containing(arrow.span).find(|(call, index)| {
-                *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
-            })?;
-            // A call that runs whenever the module is evaluated: outside every
-            // function and class, in the module's straight-line flow (no
-            // condition, loop, or exit before it; ADR 0503 review).
-            let runs = ast.functions_owning(call.span).next().is_none()
-                && !ast
-                    .classes
-                    .iter()
-                    .any(|class| class.span.contains(call.span))
-                && ast.completion_sites.binary_search(&call.span).is_ok()
-                && lookup
-                    .primitive_at_call(caller, call.span)
-                    .is_some_and(|primitive| {
-                        lookup.dialect.mount_runs_component_synchronously(primitive)
-                    });
-            runs.then_some((caller, call.span))
+            mount_call(lookup, caller, arrow).map(|call| (caller, call))
         })
         .collect()
+}
+
+/// `arrow` is the mount function of a module-scope `render`: argument 0 of a
+/// call that runs whenever the module is evaluated, outside every function and
+/// class, in the module's straight-line flow (no condition, loop, or exit
+/// before it; ADR 0503 review).
+fn mount_call(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    arrow: &solid_facts::ast::FunctionFact,
+) -> Option<Span> {
+    let ast = &file.ast;
+    if arrow.r#async || arrow.generator {
+        return None;
+    }
+    let (call, _) = ast.arguments_containing(arrow.span).find(|(call, index)| {
+        *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
+    })?;
+    let runs = ast.functions_owning(call.span).next().is_none()
+        && !ast
+            .classes
+            .iter()
+            .any(|class| class.span.contains(call.span))
+        && ast.completion_sites.binary_search(&call.span).is_ok()
+        && lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.mount_runs_component_synchronously(primitive));
+    runs.then_some(call.span)
+}
+
+/// ADR 0661: `component` is built while a module-scope `render` runs: a tag at a
+/// synchronous position of the mount function, whatever holders surround it
+/// (`render(() => <div><X /></div>)`). A provider, a fragment and an intrinsic
+/// are holders, which [`direct_render_sites`]'s bare form does not take.
+pub(super) fn mounted_by_root(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> bool {
+    lookup.function_value_is_current(file, component)
+        && lookup
+            .function_call_sites(file.path.as_str(), component.span)
+            .into_iter()
+            .any(|(caller, tag)| {
+                let ast = &caller.ast;
+                ast.jsx_elements
+                    .iter()
+                    .any(|element| element.name.span == tag)
+                    && synchronous_tag_position(lookup, caller, tag).is_some_and(|position| {
+                        crate::owners::containing_ast_function(ast, position)
+                            .is_some_and(|arrow| mount_call(lookup, caller, arrow).is_some())
+                    })
+            })
 }
 
 /// Whether `function` is what a `render`/`hydrate` call mounts: the function

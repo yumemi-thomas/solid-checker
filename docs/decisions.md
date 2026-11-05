@@ -1644,3 +1644,7 @@ No selection could describe a hydrated app: `csr` is false for it, node hid clie
 <a id="adr-0660"></a>
 ## ADR 0660 — SC5006 reads a hold no row shows
 The hold asked only no-argument calls and trusted any resolved function, so `o.r(2)` under `<Loading on>` warned in Chrome with no SC5006. Arguments no longer exempt a call. A resolved target counts only if `unplaced_run` clears its body, until F0's `function_summary_complete`. A literal's accessor and a source handed to a call under the boundary are obligations too. Owner: `loading_hold.rs`.
+
+<a id="adr-0661"></a>
+## ADR 0661 — SC5003 needs a first run inside `render()`
+`ASYNC_OUTSIDE_LOADING_BOUNDARY` fires only while `render()` is on the stack, so "on the creating pass's stack" kept false violations: a component that creates its memo and mounts later is pending and quiet. `read_in_root_pass` proves an unconditional position, then a chain to a module-scope mount, and SC5003 is uncertifiable without it, `root-mount-pass-unproven`. `read_in_creation_pass` stays the proof that the source is pending, so V needs both. SC5001 has no render gate: a later own memo still throws. The chain now takes any synchronous holder under `render`, not only a bare tag. `<Show when={1}>` counts as a literal. The old text "a settled read" was wrong for `e02`: a dormant module memo recomputes on the later read. Owners: `owners/creation_pass.rs`, `owners/async_context.rs`.
