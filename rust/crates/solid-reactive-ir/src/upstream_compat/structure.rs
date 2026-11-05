@@ -17,7 +17,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole, ImportKind, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, text};
+use super::{ReadEvidence, UpstreamCompatContext, text};
 use crate::{Fix, StaticViolation, TextEdit, location};
 
 pub(super) fn check_file(
@@ -62,21 +62,15 @@ fn prefer_for(
         if text(file, member.property) != "map" || call.arguments.len() != 1 {
             continue;
         }
-        let standard_array_map = context
+        let target = context
             .lookup
             .resolved_callee_call(file, call.callee)
             .filter(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
-            .and_then(|resolved| resolved.declaration.as_ref())
-            .is_some_and(|declaration| {
-                declaration.standard_library && declaration.name.as_ref() == "map"
-            });
-        if !standard_array_map {
-            continue;
-        }
-        if !context
-            .reactive_reads
-            .has_proven_read(context, file, member.object)
-        {
+            .and_then(|resolved| resolved.declaration.as_ref());
+        // A row may sit at the whole path (`store.list.map`), so the read is
+        // asked of the callee: it holds nothing but the receiver and `map`.
+        let evidence = context.reactive_reads.evidence(context, file, call.callee);
+        if evidence == ReadEvidence::Settled {
             continue;
         }
         let argument = &call.arguments[0];
@@ -105,9 +99,26 @@ fn prefer_for(
         // `<For each>` for it would be a type and runtime error, not merely an
         // unsafe autofix. Async callbacks are also left to TypeScript because
         // the published Solid 1.x types reject their Promise-valued children.
-        let receiver_is_array = super::expression_array_shape(context, file, member.object)
-            .is_some_and(typefacts::ArrayShape::is_array_or_tuple);
-        if !receiver_is_array {
+        // ADR 0671: a target proven to be another `map`, or a receiver proven
+        // no array, ends it; `any` and a union that mixes the two decide
+        // nothing.
+        let shape = super::expression_array_shape(context, file, member.object);
+        let other_map = target.is_some_and(|d| !(d.standard_library && d.name.as_ref() == "map"));
+        if other_map || shape == Some(typefacts::ArrayShape::NotArray) {
+            continue;
+        }
+        let proven = evidence == ReadEvidence::Proven
+            && target.is_some()
+            && shape.is_some_and(typefacts::ArrayShape::is_array_or_tuple);
+        if !proven {
+            violations.push(unproven_preference(
+                file,
+                call.span,
+                "SC8014",
+                "prefer-for",
+                "This rendered `Array#map` may be reactive, and nothing here proves its receiver \
+                 is a reactive array.",
+            ));
             continue;
         }
         let one_parameter_arrow = argument.value == ArgumentValueKind::Function
@@ -499,6 +510,37 @@ fn show_conditional_replacement_with_name(
     )
 }
 
+fn unproven_show(file: &FileFacts, span: solid_facts::core::Span) -> StaticViolation {
+    unproven_preference(
+        file,
+        span,
+        "SC8015",
+        "prefer-show",
+        "This rendered condition may be reactive, and nothing here proves or rules out a read.",
+    )
+}
+
+/// ADR 0671: a preference site whose governing input may read, or whose shape
+/// is open. Never a fix: the rewrite rests on what is not proven.
+fn unproven_preference(
+    file: &FileFacts,
+    span: solid_facts::core::Span,
+    id: &str,
+    rule: &str,
+    message: &str,
+) -> StaticViolation {
+    StaticViolation {
+        id: id.into(),
+        rule: rule.into(),
+        message: message.into(),
+        hint: "Only a proven reactive read makes this a preference.".into(),
+        location: location(file.path.shared(), span),
+        analysis_context: crate::blockers::PREFERENCE_READ_UNPROVEN.into(),
+        fixes: vec![],
+        uncertain: true,
+    }
+}
+
 fn prefer_show(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -516,11 +558,13 @@ fn prefer_show(
         if jsx_expression_position(file, logical.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        if !context
-            .reactive_reads
-            .has_proven_read(context, file, logical.left)
-        {
-            continue;
+        match context.reactive_reads.evidence(context, file, logical.left) {
+            ReadEvidence::Proven => {}
+            ReadEvidence::Settled => continue,
+            ReadEvidence::Open => {
+                violations.push(unproven_show(file, logical.span));
+                continue;
+            }
         }
         violations.push(StaticViolation {
             id: "SC8015".into(),
@@ -546,11 +590,16 @@ fn prefer_show(
         if jsx_expression_position(file, conditional.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        if !context
+        match context
             .reactive_reads
-            .has_proven_read(context, file, conditional.test)
+            .evidence(context, file, conditional.test)
         {
-            continue;
+            ReadEvidence::Proven => {}
+            ReadEvidence::Settled => continue,
+            ReadEvidence::Open => {
+                violations.push(unproven_show(file, conditional.span));
+                continue;
+            }
         }
         let fixes = solid_component_fix_target(file, "Show", conditional.span, may_add_import)
             .map(|target| {

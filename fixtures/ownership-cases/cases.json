@@ -3123,6 +3123,191 @@
     "absent": []
    },
    "note": "Kept divergence (ADR 0657): eslint-plugin-solid 0.14.5 reads the parameter pattern only. In rc.21 a destructure through a wrapper Gets the prop at setup and Chrome warns STRICT_READ_UNTRACKED, so a pattern whose value holds a prop or store root is an uncertifiable, blocker destructure-root-unproven."
+  },
+  {
+   "id": "prefer-for/solid-v2/store-receiver/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore, For } from \"solid-js\";\nconst [s] = createStore({ l: [1] });\nexport const App = () => <ul>{s.l.map((x) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "s.l.map((x) => <li>{x}</li>)"
+      },
+      "fix": {
+       "behavior": "safe",
+       "text": "import { createStore, For } from \"solid-js\";\nconst [s] = createStore({ l: [1] });\nexport const App = () => <ul>{<For each={s.l}>{(x) => <li>{x}</li>}</For>}</ul>;\n"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "ADR 0671: a store path's read row spans the callee, so the read is asked of the callee. Upstream's isArrayMap-only check had no store notion to lose."
+  },
+  {
+   "id": "prefer-for/solid-v2/open-receiver-type/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, createStore } from \"solid-js\";\nconst [l] = createSignal<any>([1]);\nexport const App = () => <ul>{l().map((x: number) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "l().map((x: number) => <li>{x}</li>)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence, ADR 0671: an any receiver is no proof either way. Upstream reports any map; this port needs a proven array, so an any stays open rather than silent."
+  },
+  {
+   "id": "prefer-for/solid-v2/open-optional-receiver/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, createStore } from \"solid-js\";\nconst [l] = createSignal<number[] | undefined>([1]);\nexport const App = () => <ul>{l()?.map((x) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "l()?.map((x) => <li>{x}</li>)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence, ADR 0671: a union mixing array and non-array proves neither."
+  },
+  {
+   "id": "prefer-show/solid-v2/open-method-test/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, createStore } from \"solid-js\";\nconst [s] = createSignal(true);\nconst o = { r() { return s(); } };\nexport const App = () => <div>{o.r() ? <a /> : <b />}</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "o.r() ? <a /> : <b />"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence, ADR 0671: a project method's call may read, and no row settles it, so the site stays open."
+  },
+  {
+   "id": "prefer-for/solid-v2/settled-literal-receiver/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "import { createSignal } from \"solid-js\";\n",
+    "text": "const rows = [1, 2];\nexport const App = () => <ul>{rows.map((x) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [
+    "preferences"
+   ],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "prefer-for",
+      "reason": "a const array literal can hold no read"
+     }
+    ]
+   },
+   "note": "ADR 0671: a literal settles the root, so no obligation."
+  },
+  {
+   "id": "prefer-show/solid-v2/settled-identifier-test/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "import { createSignal } from \"solid-js\";\n",
+    "text": "export const App = () => {\n  const on = Math.random() > 0.5;\n  return <div>{on ? <a /> : <b />}</div>;\n};\n"
+   },
+   "ruleOptions": {},
+   "presets": [
+    "preferences"
+   ],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "prefer-show",
+      "reason": "a bare identifier as a test reaches no trap"
+     }
+    ]
+   },
+   "note": "ADR 0671: a value captured once is no read at this position."
   }
  ]
 }

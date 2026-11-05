@@ -3759,6 +3759,7 @@
 "SC8014/d04-for-store": {
 "rule": "SC8014",
 "kind": "pref",
+"proved": true,
 "source": "import { createStore } from \"solid-js\"; const [s] = createStore({ l: [1] }); export function App() { return <ul>{s.l.map((x) => <li>{x}</li>)}</ul>; }\n",
 "runtime": {
 "diagnostics": [],

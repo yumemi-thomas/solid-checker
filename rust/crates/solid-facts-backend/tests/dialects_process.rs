@@ -96,27 +96,26 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
         defaults, preset,
         "the compatibility preset must be redundant once preferences are default-enabled"
     );
-    assert_eq!(
+    let count = |id: &str, kind: &str| {
         defaults
             .iter()
-            .filter(|finding| finding["id"] == "SC8014")
-            .count(),
-        6,
-        "array Type Facts plus direct, prop-head, prop-accessor, interprocedural, and v2 async facts select six lists: {defaults:#?}"
+            .filter(|finding| finding["id"] == id && finding["kind"] == kind)
+            .count()
+    };
+    assert_eq!(
+        count("SC8014", "violation"),
+        7,
+        "array Type Facts plus direct, prop-head, prop-accessor, interprocedural, store and v2 async facts select seven lists: {defaults:#?}"
     );
     assert_eq!(
-        defaults
-            .iter()
-            .filter(|finding| finding["id"] == "SC8015")
-            .count(),
+        count("SC8015", "violation"),
         5,
         "per-prop caller facts must keep the static sibling clean: {defaults:#?}"
     );
-    assert!(
-        defaults
-            .iter()
-            .all(|finding| finding["kind"] == "violation")
-    );
+    // ADR 0671: a receiver or test that may read and is not decided.
+    assert_eq!(count("SC8014", "uncertifiable"), 6, "{defaults:#?}");
+    assert_eq!(count("SC8015", "uncertifiable"), 2, "{defaults:#?}");
+    assert_eq!(defaults.len(), 20, "{defaults:#?}");
     let v2_source = std::fs::read_to_string(fixture_root.join("preferences-v2/App.tsx"))
         .expect("read v2 preference fixture");
     let starts = defaults

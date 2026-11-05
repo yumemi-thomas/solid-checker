@@ -522,6 +522,16 @@
       "fixes": 0
     },
     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 736,
+      "end": 916,
+      "fixes": 0
+    },
+    {
       "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "uncertifiable",

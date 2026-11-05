@@ -1714,3 +1714,14 @@ A `.then` handler handed by name is followed as a literal is. A parameter called
 ## ADR 0670 — A destructure in a strict window stays a site
 
 ADR 0657's generic arm dropped applies, `ref`s and untracked callbacks as fresh reads. They are, but a store's Get there warns, so they stay uncertifiable. The grid held 596 such false cleans, unlisted when ADR 0665 landed; 152 remain, a `ref` in a row, by name or from a factory, held in `open-defects.json`.
+
+<a id="adr-0671"></a>
+## ADR 0671 — A preference's read is proven, settled, or open
+
+`has_proven_read` was a boolean, so anything it could not prove read as no read: `o.r() ? <a /> : <b />` and `props.c() && <b />` were
+certified. `ReactiveReadIndex::evidence` answers `Proven`, `Settled` or `Open`. A site is settled only if nothing evaluated can read: no
+read row, no call but an exact standard-library one, no Get on a root that is not a literal, a primitive or a `const` of one. A bare
+identifier as a test reaches no trap. `Open` reports SC8014 or SC8015 uncertain, blocker `preference-read-unproven`, with no fix. SC8014's
+array test is three-valued too: `any` and `T[] | undefined` are open; a proven other `map` or a proven non-array still ends it. Proved: a
+store receiver, whose row spans `s.l.map`, outside the receiver, so the read is asked of the callee. Kept upstream's position gates. A
+primitive-typed identifier as a Get root stays open: `RuntimeValueDomain` has no primitive bit. `props.x` with every caller static settles.

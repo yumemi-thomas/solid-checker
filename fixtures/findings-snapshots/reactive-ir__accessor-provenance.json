@@ -402,6 +402,16 @@
       "fixes": 0
     },
     {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 6988,
+      "end": 7044,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -409,6 +419,36 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 6989,
       "end": 7000,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 7313,
+      "end": 7369,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 7470,
+      "end": 7508,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 7595,
+      "end": 7634,
       "fixes": 0
     },
     {
@@ -479,6 +519,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 9053,
       "end": 9071,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 9274,
+      "end": 9324,
       "fixes": 0
     },
     {

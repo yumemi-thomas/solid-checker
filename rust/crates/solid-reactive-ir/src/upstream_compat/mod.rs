@@ -42,6 +42,18 @@ struct IndexedReactiveRead {
     proven: bool,
 }
 
+/// What evaluating a governing expression says about a reactive read (ADR
+/// 0671). A preference is a claim too: `Open` is neither a report nor a clean.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ReadEvidence {
+    /// The expression performs a proven reactive read.
+    Proven,
+    /// Something in it may read and nothing here decides whether it does.
+    Open,
+    /// Nothing in it can read.
+    Settled,
+}
+
 /// Exact reactive reads already proven by local and interprocedural analysis,
 /// grouped once by file for the preference rules that ask whether evaluating a
 /// governing expression subscribes. This is deliberately downstream of the
@@ -88,6 +100,50 @@ impl ReactiveReadIndex {
             reads.sort_by_key(|read| (read.span.start, read.span.end, read.proven));
         }
         Self { by_path }
+    }
+
+    /// ADR 0671: [`Self::has_proven_read`], else whether anything evaluated
+    /// here could read and is not decided. A read row of any standing inside
+    /// `expression`, a nested function's included (`.filter` runs one in
+    /// place), is open. So is every call that is not an exact standard-library
+    /// one, and every Get on a root no literal settles: any such root may be a
+    /// store, a props object or an accessor property. A bare identifier as a
+    /// test reaches no trap, so it settles.
+    pub(super) fn evidence(
+        &self,
+        context: &UpstreamCompatContext<'_>,
+        file: &FileFacts,
+        expression: Span,
+    ) -> ReadEvidence {
+        if self.has_proven_read(context, file, expression) {
+            return ReadEvidence::Proven;
+        }
+        let expression = file.ast.peel_ts_sugar_span(expression);
+        let row = self
+            .by_path
+            .get(file.path.as_str())
+            .is_some_and(|reads| reads.iter().any(|read| expression.contains(read.span)));
+        let root_open = |root: Span| !settled_value(context, file, root, SETTLED_DEPTH);
+        let open_call = file.ast.calls_within(expression).any(|call| {
+            !standard_library_call(context, file, call)
+                || call
+                    .arguments
+                    .iter()
+                    .any(|argument| argument.spread || root_open(argument.span))
+        });
+        let open_member = file.ast.members_within(expression).any(|member| {
+            let root = member_root(file, member.span)
+                .map_or(member.object, |root| file.ast.peel_ts_sugar_span(root));
+            // A call result is the call's, a member's own span is its root's.
+            file.ast.call_at(root).is_none()
+                && root_open(root)
+                && !static_prop_member(context, file, member, root)
+        });
+        if row || open_call || open_member {
+            ReadEvidence::Open
+        } else {
+            ReadEvidence::Settled
+        }
     }
 
     /// Whether evaluating exactly `expression` performs a proven reactive
@@ -164,6 +220,102 @@ impl ReactiveReadIndex {
                     == crate::source_discovery::PropUse::Reactive
         })
     }
+}
+
+const SETTLED_DEPTH: usize = 6;
+
+/// `props.name` where every caller passes a static value: a plain property.
+fn static_prop_member(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    member: &solid_facts::ast::MemberFact,
+    root: Span,
+) -> bool {
+    file.ast.peel_ts_sugar_span(member.object) == root
+        && file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_err()
+        && source_symbol_at(context, file, root)
+            .and_then(|symbol| context.prop_sources.get(symbol))
+            .is_some_and(|(_, declaration)| {
+                context
+                    .props_reactivity
+                    .prop_use(declaration, text(file, member.property))
+                    == crate::source_discovery::PropUse::Static
+            })
+}
+
+/// A call of a standard-library declaration, exactly resolved. Its receiver
+/// and arguments are read by the caller of this test.
+fn standard_library_call(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    context
+        .lookup
+        .resolved_callee_call(file, call.callee)
+        .filter(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+        .and_then(|resolved| resolved.declaration.as_ref())
+        .is_some_and(|declaration| declaration.standard_library)
+}
+
+/// Whether a Get on the value at `span` can reach no trap and no getter: a
+/// proven primitive, a nested function, or a literal of such values held
+/// directly or by a `const`. Everything else may be a store or a props object.
+fn settled_value(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if context.lookup.proven_primitive(file, span, depth) || file.ast.function_at(span).is_some() {
+        return true;
+    }
+    if let Some(literal) = file.ast.array_literal_at(span) {
+        return literal.elements.iter().all(|element| {
+            element.kind == solid_facts::ast::ArrayElementKind::Value
+                && settled_value(context, file, element.span, depth - 1)
+        });
+    }
+    if let Some(shape) = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)
+    {
+        return shape.closed
+            && shape
+                .properties
+                .iter()
+                .all(|property| property.getter.is_none())
+            && file.ast.object_properties_within(span).all(|property| {
+                settled_value(
+                    context,
+                    file,
+                    property.shorthand_binding.unwrap_or(property.value),
+                    depth - 1,
+                )
+            });
+    }
+    file.ast
+        .reference_declaration(span)
+        .and_then(|declaration| {
+            file.ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+        })
+        .filter(|binding| binding.immutable && binding.names.len() == 1)
+        .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Identifier)
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| settled_value(context, file, initializer, depth - 1))
 }
 
 pub(super) fn source_symbol_at<'a>(

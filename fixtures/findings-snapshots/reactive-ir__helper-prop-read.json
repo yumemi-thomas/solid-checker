@@ -332,6 +332,26 @@
       "fixes": 0
     },
     {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 9873,
+      "end": 9906,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 10091,
+      "end": 10126,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

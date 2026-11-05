@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1216,
+      "end": 1273,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",

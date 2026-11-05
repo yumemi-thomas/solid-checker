@@ -150,6 +150,26 @@
       "start": 6892,
       "end": 6904,
       "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 7026,
+      "end": 7052,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 7139,
+      "end": 7177,
+      "fixes": 0
     }
   ]
 }

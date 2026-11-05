@@ -3814,5 +3814,11 @@
    "mx-strict-read-untracked-ref-store-dstr-for-of-direct-none"
   ],
   "rediscovered": "596 false-clean on the old build, 152 on the new, held in open-defects.json"
+ },
+ {
+  "finding": "SC8014 and SC8015 certified a governing expression that may read, or a receiver typed any (ADR 0671)",
+  "found": "scripts/flip/witnesses.json, i03 i05 d04 d05 i08 d02 d03",
+  "fixed": "ADR 0671",
+  "outside": "a preference has no runtime truth, so no grid judges it; the cases are in fixtures/ownership-cases/cases.json"
  }
 ]

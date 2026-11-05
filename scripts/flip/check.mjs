@@ -79,7 +79,7 @@ async function judge(id) {
     return;
   }
   if (w.kind === "clean") ok = w.rule === "SC9012" ? out.status !== "certified" : own.length > 0;
-  else if (w.kind === "pref") ok = own.some((f) => f.kind === "uncertifiable");
+  else if (w.kind === "pref") ok = own.some((f) => f.kind === (w.proved ? "violation" : "uncertifiable"));
   else if (w.kind === "warn") ok = !own.some((f) => f.kind === "violation");
   else if (w.kind === "keep") ok = was.filter((f) => f.startsWith(w.rule)).every((f) => now.includes(f));
   else ok = out.status !== "certified";
