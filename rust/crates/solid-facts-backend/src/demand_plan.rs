@@ -254,6 +254,13 @@ fn collect_symbol_spans(
     for property in &file.ast.object_properties {
         if !property.computed {
             add_symbol(property.key, true);
+            // ADR 0650: `Loading({ on })` is judged like `<Loading on>`.
+            if file.source_text(property.key) == Some("on") {
+                let value = file.ast.peel_ts_sugar_span(property.value);
+                add_symbol(value, false);
+                type_descriptor_spans.insert(value);
+                spans.runtime_value_domain_spans.insert(value);
+            }
         }
     }
     // Component identity is a semantic type/usage question. Demand the type
@@ -313,6 +320,13 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
                 declared_key_spans.insert(spread.argument);
             }
         }
+        // ADR 0650: a spread onto a component may carry `on`; a complete
+        // declared key set is what closes it (`loading-on-accessor`).
+        if dialect.semantic_demands.spread_declared_keys && !native {
+            for spread in &element.spreads {
+                declared_key_spans.insert(spread.argument);
+            }
+        }
         for attribute in &element.attributes {
             let Some(expression) = attribute.expression else {
                 continue;
@@ -336,6 +350,9 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
                 let runtime_expression = file.ast.peel_ts_sugar_span(expression);
                 add_symbol(runtime_expression, false);
                 type_descriptor_spans.insert(runtime_expression);
+                // ADR 0650: callability skips a nullish constituent, and the
+                // warning needs the function itself on the first run.
+                runtime_value_domain_spans.insert(runtime_expression);
             }
             // A native event-handler value is judged by its resolved type:
             // `reactive-handler-frozen` (both catalogs) proves the

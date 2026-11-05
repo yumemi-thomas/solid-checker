@@ -3541,5 +3541,21 @@
    "mx-reactive-write-in-owned-scope-dny-typo-event-refresh-direct-none"
   ],
   "rediscovered": "207b13142: 3 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "SC5007 read only an attribute with a function type: `any`, `unknown`, a prop, a spread and `Loading({ on })` warn in Chrome, certified (ADR 0650)",
+  "found": "the flip audit",
+  "fixed": "ADR 0650",
+  "grid": "mx-recall",
+  "code": "LOADING_ON_ACCESSOR",
+  "ids": [
+   "mx-loading-on-accessor-on-any-accessor-direct-none",
+   "mx-loading-on-accessor-on-unknown-accessor-direct-none",
+   "mx-loading-on-accessor-on-spread-accessor-direct-none",
+   "mx-loading-on-accessor-on-json-accessor-direct-none",
+   "mx-loading-on-accessor-on-prop-accessor-direct-none",
+   "mx-loading-on-accessor-on-call-accessor-direct-none"
+  ],
+  "rediscovered": "895fbf806: 9,540 false cleans; ADR 0650: 0"
  }
 ]

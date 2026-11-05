@@ -51,3 +51,42 @@ export function Shadowed() {
   const Loading = (props: { on?: unknown; children?: unknown }) => props.children;
   return <Loading on={route}><p /></Loading>;
 }
+
+// ADR 0650: only a proven non-function states nothing.
+export function Open(props: { maybe?: () => number; any: any; open: unknown }) {
+  const [route] = createSignal(0);
+  const spread = { on: route };
+  return (
+    <>
+      <Loading on={props.any} fallback="x"><p /></Loading>
+      <Loading on={props.open} fallback="x"><p /></Loading>
+      <Loading on={props.maybe} fallback="x"><p /></Loading>
+      <Loading {...spread} fallback="x"><p /></Loading>
+      <Loading on={route} {...(props.any as object)} fallback="x"><p /></Loading>
+    </>
+  );
+}
+
+// A later `on` settles an open spread; a spread closed against `on` adds none.
+export function Settled(props: { any: any }) {
+  const [route] = createSignal(0);
+  const closed = { fallback: "x" };
+  return (
+    <>
+      <Loading {...props.any} on={route()} fallback="x"><p /></Loading>
+      <Loading {...closed} on={route()}><p /></Loading>
+      <Loading {...closed}><p /></Loading>
+    </>
+  );
+}
+
+// The component called by hand.
+export function ByHand(props: { any: any }) {
+  const [route] = createSignal(0);
+  return [
+    Loading({ on: route, fallback: "x", children: "y" }),
+    Loading({ on: route(), fallback: "x", children: "y" }),
+    Loading({ fallback: "x", children: "y" }),
+    Loading(props.any),
+  ];
+}
