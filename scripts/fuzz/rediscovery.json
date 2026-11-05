@@ -3816,5 +3816,11 @@
    "lg-store-write-outside-setter-handler-noop-assign-null-direct-none"
   ],
   "rediscovered": "the checker at fbecfa142 on `focus.mjs --grids lg-recall` (misuse.mjs STORE_NO_OPS variants): 540 false-positive of 540; the fix: 108 clean (noop-nullish, noop-and proven), 432 uncertifiable. fuzz-patterns: 16 values/d1-*/t1-* entries left open-defects.json"
+ },
+ {
+  "finding": "SC2003: a store handed to a project function's parameter (`bump(st)`, `w(s.o)`) or to a callback's parameter by a project higher-order function (`each = (f) => f(s.l)`) and written there certified: a write through a parameter asked nothing of its callers (flip witnesses SC2003 c04, j05, j06; ADR 0719)",
+  "found": "flip plan SC2003 row; fuzz-patterns values/d2-handler-link, d2-handler-root, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper",
+  "fixed": "ADR 0719",
+  "outside": "model.mjs names a function's parameters positionally (`p0`) and STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name, so no flip-write.mjs context can hand the store to a parameter the site writes through (a parameter named like the store needs model.mjs, outside this track's file). fuzz-patterns: values/d2-handler-link, d2-handler-root, d2n-foreach-write, d2n-map-write, d2n-root-array-foreach, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper left open-defects.json at ADR 0719; the witnesses and fixture store-parameter-flow pin the rest"
  }
 ]

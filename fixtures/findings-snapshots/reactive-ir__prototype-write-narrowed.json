@@ -70,6 +70,16 @@
       "start": 1167,
       "end": 1233,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prototype-write-narrowed/source.ts",
+      "start": 1636,
+      "end": 1672,
+      "fixes": 0
     }
   ]
 }

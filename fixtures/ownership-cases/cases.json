@@ -346,6 +346,15 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "props.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
      }
     ],
     "absent": []
@@ -435,6 +444,41 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "span": { "marker": "seeded.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "no-store-mutation-outside-setter/parameter-flow/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\ntype N = { n: number };\n// A store handed to a parameter is written through its proxy (ADR 0719).\nconst bump = (o: N) => { o.n = 5; };\n// Only plain values reach this one.\nconst plain = (p: N) => { p.n = 4; };\n// A link past the root is not proven wrapped.\nconst link = (q: N) => { q.n = 2; };\nconst [st] = createStore({ n: 1, user: { n: 1 } });\nexport function Handed() {\n  bump(st);\n  plain({ n: 0 });\n  link(st.user);\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": { "marker": "o.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "q.n" },
       "fix": { "behavior": "none" },
       "typescript": { "ownership": "checker-only", "diagnostics": [] }
      }

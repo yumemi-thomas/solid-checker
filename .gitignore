@@ -1015,3 +1015,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-standard-library-alias/node_modules/**
 !fixtures/reactive-ir/store-operation-may-not-write/node_modules/
 !fixtures/reactive-ir/store-operation-may-not-write/node_modules/**
+!fixtures/reactive-ir/store-parameter-flow/node_modules/
+!fixtures/reactive-ir/store-parameter-flow/node_modules/**

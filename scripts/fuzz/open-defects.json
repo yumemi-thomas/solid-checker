@@ -2718,24 +2718,6 @@
    "certified": true
   },
   {
-   "id": "values/d2-handler-link",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2-handler-root",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d2-identity-return",
    "item": "V-D2",
    "outcome": "false-clean",
@@ -2772,25 +2754,7 @@
    "certified": true
   },
   {
-   "id": "values/d2n-foreach-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d2n-forof-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-map-write",
    "item": "V-D2",
    "outcome": "false-clean",
    "codes": [
@@ -2818,15 +2782,6 @@
   },
   {
    "id": "values/d2n-object-values-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-root-array-foreach",
    "item": "V-D2",
    "outcome": "false-clean",
    "codes": [
@@ -3285,15 +3240,6 @@
    "certified": true
   },
   {
-   "id": "values/t6-context-store-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/t6-eager-hook-props",
    "item": "V-D2",
    "outcome": "false-clean",
@@ -3304,24 +3250,6 @@
   },
   {
    "id": "values/t6-for-row-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t6-hook-store-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t6-prop-store-helper",
    "item": "V-D2",
    "outcome": "false-clean",
    "codes": [

@@ -150,6 +150,26 @@
       "start": 3741,
       "end": 3755,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-standard-library-writes/App.tsx",
+      "start": 3928,
+      "end": 3958,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-standard-library-writes/App.tsx",
+      "start": 3968,
+      "end": 3975,
+      "fixes": 0
     }
   ]
 }

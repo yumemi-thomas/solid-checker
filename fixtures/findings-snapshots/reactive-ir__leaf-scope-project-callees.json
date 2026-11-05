@@ -132,6 +132,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/lib/classes.ts",
+      "start": 87,
+      "end": 95,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -139,6 +149,26 @@
       "path": "fixtures/reactive-ir/leaf-scope-project-callees/lib/classes.ts",
       "start": 206,
       "end": 215,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/lib/dom-helpers.ts",
+      "start": 144,
+      "end": 156,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/lib/dom-helpers.ts",
+      "start": 270,
+      "end": 278,
       "fixes": 0
     },
     {

@@ -252,6 +252,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-onsettled-new.tsx",
+      "start": 220,
+      "end": 232,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -739,6 +749,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-object.tsx",
       "start": 680,
       "end": 737,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-parameter-callee.tsx",
+      "start": 428,
+      "end": 442,
       "fixes": 0
     },
     {
