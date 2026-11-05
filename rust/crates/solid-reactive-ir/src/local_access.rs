@@ -2074,6 +2074,46 @@ impl LocalAccessContext<'_, '_> {
         self.discover_call_as(file, call, call.callee, allowed, result, seen);
     }
 
+    /// ADR 0516: a known accessor read in a function that reaches a place the
+    /// analysis does not follow (a primitive position the role index does not
+    /// admit, an alias, an object literal slot) may run there: an obligation,
+    /// never silence. The reachable-call index and the role proofs answer only
+    /// for the calls and positions they model; "no row" is not "never runs". A
+    /// class member's body (`class K { constructor() { r1(); } } new K();` in a
+    /// component body) is such a place: the construction or the member call
+    /// that runs it is followed by neither.
+    fn unreached_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        mention: &Location,
+        result: &mut LocalAccessResult,
+        seen: &mut HashSet<(Arc<str>, u64, u64)>,
+    ) {
+        if let Some(accessor) = self.accessors.get(symbol)
+            && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
+            && (function_escapes_unfollowed(file, call.callee, self.lookup)
+                || crate::execution_role::inside_class_member(file, call.callee, self.lookup))
+            && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
+        {
+            self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
+        }
+    }
+
+    /// The write half of "no row is not never runs". Empty until the flip's
+    /// SC2001 commit (`scripts/flip/PLAN.md`), so the read and write tracks
+    /// edit different functions.
+    #[allow(clippy::unused_self)]
+    fn unreached_write(
+        &self,
+        _file: &solid_facts::FileFacts,
+        _call: &solid_facts::ast::CallFact,
+        _symbol: &str,
+        _result: &mut LocalAccessResult,
+    ) {
+    }
+
     /// [`Self::discover_call`] for the call `call` invoking the function the
     /// reference `target` names: `call.callee` itself, a dispatch's `f`, a
     /// composite callee's operand (ADR 0516). `target` decides the symbol and
@@ -2247,30 +2287,8 @@ impl LocalAccessContext<'_, '_> {
                         || enclosing_render_function(file, call.callee, self.lookup))))
             .then_some(1)
         }) else {
-            // ADR 0516: a known accessor read in a function that reaches a
-            // place the analysis does not follow (a primitive position the
-            // role index does not admit, an alias, an object literal slot)
-            // may run there: an obligation, never silence. The reachable-call
-            // index and the role proofs above answer only for the calls and
-            // positions they model; "no row" is not "never runs". A class
-            // member's body (`class K { constructor() { r1(); } } new K();`
-            // in a component body) is such a place: the construction or the
-            // member call that runs it is followed by neither.
-            if let Some(accessor) = self.accessors.get(symbol)
-                && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
-                && (function_escapes_unfollowed(file, call.callee, self.lookup)
-                    || crate::execution_role::inside_class_member(file, call.callee, self.lookup))
-                && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
-            {
-                self.push_accessor_read(
-                    file,
-                    call,
-                    symbol,
-                    accessor,
-                    ExecutionRole::Unknown,
-                    result,
-                );
-            }
+            self.unreached_read(file, call, symbol, &mention, result, seen);
+            self.unreached_write(file, call, symbol, result);
             return;
         };
         let key = (mention.path.clone(), mention.start_byte, mention.end_byte);

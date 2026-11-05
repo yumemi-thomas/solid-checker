@@ -19,6 +19,8 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
+import { FLIP_READ_CONTEXTS, flipReadContext } from "./flip-read.mjs";
+import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -649,6 +651,10 @@ export const SPEC = {
     call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
   },
 };
+// The flip's shapes (flip-read.mjs, flip-write.mjs): one file per track, so neither edits this table.
+for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS]) {
+  for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
+}
 
 /**
  * The rc.17 API variants (recall grids only), per code: each measured on the fast runtime before it got cells (2026-11-03), misuse
@@ -1403,6 +1409,8 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit);
+  if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
   if (zero) return zeroRunContext(zero[1], zero[2], stmts, kit);

@@ -689,6 +689,49 @@ pub(crate) fn inside_class_member(
     })
 }
 
+/// The flip's shared question (`scripts/flip/PLAN.md`): the site may run, and
+/// a layer between it and the code around it runs by a way no call edge
+/// follows: a function written as an object member (method, accessor or slot),
+/// a class element (a member, a field initializer), a tag function, an array
+/// element, or a function handed where the analysis does not follow. Many of
+/// these have no call node at all (a getter, `toString`, an iterator, a tag),
+/// so the answer comes from what holds the function, not from its calls.
+#[allow(dead_code)]
+pub(crate) fn unplaced_run(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if matches!(SiteReach::new(lookup).site(file, span), Reach::Unreached(_)) {
+        return false;
+    }
+    let ast = &file.ast;
+    ast.classes
+        .iter()
+        .flat_map(|class| &class.elements)
+        .any(|element| element.value.is_some_and(|value| value.contains(span)))
+        || ast.functions_owning(span).any(|function| {
+            let value = function.span;
+            ast.object_properties
+                .iter()
+                .any(|property| ast.peel_ts_sugar_span(property.value) == value)
+                || ast.array_literals.iter().any(|literal| {
+                    ast.array_literal_at(*literal).is_some_and(|array| {
+                        array
+                            .elements
+                            .iter()
+                            .any(|element| ast.peel_ts_sugar_span(element.span) == value)
+                    })
+                })
+                || crate::owners::function_binding_name(file, function).is_some_and(|name| {
+                    ast.tagged_template_tags
+                        .iter()
+                        .any(|tag| ast.reference_declaration(*tag) == Some(name.span))
+                })
+        })
+        || crate::local_access::function_escapes_unfollowed(file, span, lookup)
+}
+
 impl SiteReach<'_, '_> {
     /// ADR 0576: whether a read of the lazy computation `call` creates is
     /// proven: its result is bound to a `const` (the identifier, or the first
