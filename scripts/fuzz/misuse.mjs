@@ -181,10 +181,10 @@ const DENIED = {
 const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click"];
-const DENIED_OTHER = ["dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+const DENIED_OTHER = ["dny-load-append", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
-const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load"];
+const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
 
 const ZERO_READS = ["zero-body-empty", "zero-body-var", "zero-await-empty", "zero-await-var"];
 const firesAt = (...positions) => positions.flatMap((position) => FIRES.map((fire) => `evt-${position}-fire-${fire}`));
@@ -1315,6 +1315,8 @@ function deniedContext(context, stmts, kit) {
       return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(u, stmts), button(b, [expr(domExpr(`document.querySelector<HTMLElement>('[data-act="${u}"]')!.click()`))], { on: "onBlur" })] };
     }
     case "dny-flush-unmount": return { sigs: [gone], body: laterRoot(kit, [`${el}.focus()`, `${gone.setter}(0)`], "1"), view: [show(read(gone.name), [button(b, stmts, { tag: "input", on: "onBlur" })])] };
+    case "dny-load-append": return { body: [decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "iframe", on: "onLoad" })))])), ...laterRoot(kit, [], "document.body.appendChild(Inner() as any)")], view: [] };
+    case "dny-flush-popover": return { sigs: [gone], body: laterRoot(kit, [`${el}.showPopover()`, `${gone.setter}(0)`], "1"), view: [button(b, stmts, { tag: "div", on: "onBeforeToggle", attrs: `popover={${gone.name}() ? "auto" : undefined}` })] };
     case "dny-flush-load": return { sigs: [gone], body: [expr(prim("timer", fn([expr(domExpr(`${gone.setter}(1)`))])))], view: [show(read(gone.name), [button(b, stmts, { tag: "iframe", on: "onLoad" })])] };
     default: throw new Error(`no denied context ${context}`);
   }

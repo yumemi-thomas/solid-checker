@@ -3470,5 +3470,40 @@
    "mx-reactive-write-in-owned-scope-dny-dispatch-any-refresh-direct-none"
   ],
   "rediscovered": "91ecc5757: 15 false-clean; the fix: recall-gap"
+ },
+ {
+  "finding": "an iframe appended in a body delivers `load` there (`b02`): certified",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-load-append-memo-direct-none",
+   "mx-strict-read-untracked-dny-load-append-signal-direct-none"
+  ],
+  "rediscovered": "207b13142: 14 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "an iframe appended in a body delivers `load` there, and the handler's write threw (`b02`): certified",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-load-append-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-load-append-signal-direct-none"
+  ],
+  "rediscovered": "207b13142: 3 false-clean; 6730781e7: recall-gap"
+ },
+ {
+  "finding": "a `popover` attribute Solid writes in a flush delivers `beforetoggle`, and its `flush()` warned (`b09`): certified",
+  "found": "the Opus ruling on sync dispatch, Chrome-confirmed",
+  "fixed": "ADR 0642, the denied events",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-dny-flush-popover-x-direct-none"
+  ],
+  "rediscovered": "207b13142: 1 false-clean; 6730781e7: recall-gap"
  }
 ]
