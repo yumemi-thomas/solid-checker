@@ -51,8 +51,11 @@ optional (`el?.scrollIntoView()`) or not (ADR 0439). An inline callback
 provably runs it: over an empty or unknown-length receiver (`items().forEach`,
 a `NodeList`) the finding is uncertifiable (ADR 0563). One that dispatches an
 event synchronously (`focus`, `click`, `dispatchEvent`, dialog and popover
-toggles, `AbortController.abort`) keeps the obligation, since a listener it
-reaches may call `onCleanup`; so does an optional `getContext`.
+toggles, `AbortController.abort`, and since ADR 0705 `form.submit`,
+`reportError`, `replaceWith`, `replaceChild`, `replaceChildren`,
+`History.go`, `Location.assign`/`reload`/`replace`) keeps the obligation,
+since a listener it reaches may call `onCleanup`; so does an optional
+`getContext`.
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an

@@ -3576,5 +3576,17 @@
   "found": "the flip plan's SC7007 row (scripts/flip/PLAN.md)",
   "fixed": "ADR 0704",
   "outside": "no runtime code: the rejection is the server-functions client's (isJSONSafe, @solidjs/web/server-functions client.js), and no host compiles \"use server\" references (scripts/fuzz/README.md, SSR host section). The four witnesses (check.mjs SC7007) and fixture server-function-handed-value are the pin"
+ },
+ {
+  "finding": "the DOM dispatch tables lacked HTMLFormElement.submit and reportError: a listener reached from onSettled through either created a primitive (PRIMITIVE_IN_FORBIDDEN_SCOPE in Chrome) and the program certified (flip DOM dispatch list, ADR 0705). Not generated: replaceWith, replaceChild, replaceChildren need a focus, and a focus() call is itself a hazard that withholds the program on every build (ADR 0645); a user's focus needs CDP input. History.go and Location.* end the harness page.",
+  "found": "the flip plan's DOM dispatch row (notes/missing.md's measured loop), run through the checker by the research agent",
+  "fixed": "ADR 0705",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-flw-settled-form-submit-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-flw-settled-report-error-memo-direct-none"
+  ],
+  "rediscovered": "41875549b: 1998 false-clean, 306 recall-gap of 2304 on the two contexts; fix: 0 false-clean, 2304 recall-gap"
  }
 ]

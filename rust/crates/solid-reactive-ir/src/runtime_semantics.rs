@@ -858,6 +858,10 @@ pub(crate) fn event_keeps_delivery_proof(attribute: &str) -> bool {
 }
 
 pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
+    // ADR 0705: the global `reportError` dispatches `error` at the window.
+    if qualified_name == "reportError" {
+        return true;
+    }
     let Some((owner, member)) = qualified_name.rsplit_once('.') else {
         return false;
     };
@@ -867,6 +871,14 @@ pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
         "focus" | "blur" => matches!(owner, "HTMLOrSVGOrMathMLElement" | "HTMLOrSVGElement"),
         "remove" => matches!(owner, "ChildNode" | "HTMLSelectElement"),
         "removeChild" => owner == "Node",
+        // ADR 0705, as `cleanup.rs`'s table.
+        "replaceWith" => owner == "ChildNode",
+        "replaceChild" => owner == "Node",
+        "replaceChildren" => owner == "ParentNode",
+        "submit" => owner == "HTMLFormElement",
+        "reportError" => owner == "WindowOrWorkerGlobalScope",
+        "go" => owner == "History",
+        "assign" | "reload" | "replace" => owner == "Location",
         "execCommand" => owner == "Document",
         "select" => matches!(owner, "HTMLInputElement" | "HTMLTextAreaElement"),
         "checkValidity" | "reportValidity" => {

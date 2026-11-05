@@ -41,6 +41,13 @@ SC2001.
   `server-function-value-handed`, unless the serializer is proven. First cut walked symbol references project-wide: the IR read
   ratchet (`make ir-read-lint`) refused the raw `facts.files`/`file_by_path` reads, so it was rewritten. Witnesses b02-b05 hold
   (109 of 311). Corpus 0 moved (a `loadUserData.keyFor` member read moved and was excluded). Runtime not measured.
+- **DOM dispatch list** (ADR 0705): rows in both `cleanup.rs` `synchronously_dispatching_dom_member` and `runtime_semantics.rs`
+  `delivers_synchronously`: `HTMLFormElement.submit`, global and `WindowOrWorkerGlobalScope.reportError`, `ChildNode.replaceWith`,
+  `Node.replaceChild`, `ParentNode.replaceChildren`, `History.go`, `Location.assign`/`reload`/`replace`. Supersedes ADR 0642's
+  "form.submit is no hazard". Chrome: submit/reportError throw from onSettled (were certified); navigation measured in an iframe
+  (`beforeunload` sync for go(0), reload, assign, replace). Fuzzer: `flip-write.mjs` contexts `flw-settled-form-submit`,
+  `flw-settled-report-error` (PRIMITIVE_IN_FORBIDDEN_SCOPE): old 1998 false clean of 2304, new 0. Corpus +25 U (router's
+  `history.go` withholds program-wide proofs), 0 removed. Fixture `leaf-scope-dispatch-members`.
 - Picked from claude/flip-reads: `ce6a831b2`, `ae2327986` (stale tests; R's progress-file hunk dropped), `ef46d0ac6`
   (verify-delta maps rule pages and `.gitignore`), `aaaf31cad` (maps `scripts/flip/`).
 
@@ -66,7 +73,7 @@ SC2001.
 
 ## Next
 
-SC7007 and SC7006 SSR follow-ups and `client_build` once the SSR report lands; DOM dispatch list (research section 6: both `cleanup.rs` and `runtime_semantics.rs` `delivers_synchronously`), then SC2006. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
+SC7007 and SC7006 SSR follow-ups and `client_build` once the SSR report lands; then SC2006 (after `client_build`), SC2008, SC6002. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
 `~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)

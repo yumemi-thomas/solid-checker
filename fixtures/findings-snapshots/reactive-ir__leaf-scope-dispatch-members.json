@@ -1,0 +1,55 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-dispatch-members/App.tsx",
+      "start": 420,
+      "end": 438,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-dispatch-members/App.tsx",
+      "start": 516,
+      "end": 527,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-dispatch-members/App.tsx",
+      "start": 631,
+      "end": 652,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-dispatch-members/App.tsx",
+      "start": 687,
+      "end": 716,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-dispatch-members/App.tsx",
+      "start": 796,
+      "end": 811,
+      "fixes": 0
+    }
+  ]
+}
