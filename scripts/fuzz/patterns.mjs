@@ -30,12 +30,14 @@ export function patternCases(root = PATTERNS) {
 
 const ENTRY = (clickAll) => `import { OBSERVE, flush } from "solid-js";
 import { render } from "@solidjs/web";
-import * as mod from "./App";
 const rec: any = { diagnostics: [], errors: [] };
 (globalThis as any).__log = () => {};
 window.addEventListener("error", (e) => rec.errors.push(String((e as any).error?.message ?? e.message)));
 window.addEventListener("unhandledrejection", (e: any) => rec.errors.push(String(e.reason?.message ?? e.reason)));
 OBSERVE!.diagnostics.subscribe((ev: any) => rec.diagnostics.push(ev.code));
+// Imported after the subscription, so a diagnostic raised while App's module evaluates is recorded too. A module that fails
+// to load fails the entry, as a static import did: the program did not run.
+const mod: any = await import("./App");
 try { render(() => <mod.App />, document.getElementById("root")!); } catch (e: any) { rec.errors.push(e.message); }
 try { flush(); } catch (e: any) { rec.errors.push(e.message); }
 await new Promise((r) => setTimeout(r, 50));

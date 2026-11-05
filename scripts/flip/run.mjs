@@ -34,12 +34,15 @@ for (const id of ids) {
   writeFileSync(join(dir, "App.tsx"), readFileSync(join(casesDir, id, "App.tsx")));
   writeFileSync(join(dir, "entry.tsx"), `import { OBSERVE, flush } from "solid-js";
 import { render } from "@solidjs/web";
-import * as mod from "./App";
 const rec: any = { diagnostics: [], errors: [], logs: [], hasFocus: document.hasFocus() };
 (window as any).__log = (...a: any[]) => rec.logs.push(((window as any).__phase ?? "?") + ": " + a.map(String).join(" "));
 window.addEventListener("error", (e) => rec.errors.push(((window as any).__phase ?? "?") + ": " + String((e as any).error?.message ?? e.message)));
 window.addEventListener("unhandledrejection", (e: any) => rec.errors.push(((window as any).__phase ?? "?") + ": rejection " + String(e.reason?.message ?? e.reason)));
 OBSERVE!.diagnostics.subscribe((ev: any) => rec.diagnostics.push({ phase: (window as any).__phase ?? "?", code: ev.code, message: String(ev.message ?? "").slice(0, 160) }));
+// Imported after the subscription, so a diagnostic raised while App's module evaluates is recorded too.
+(window as any).__phase = "module";
+let mod: any = {};
+try { mod = await import("./App"); } catch (e: any) { rec.errors.push("module: " + e.message); }
 (window as any).__phase = "render";
 try { render(() => <mod.App />, document.getElementById("root")!); } catch (e: any) { rec.errors.push("render: " + e.message); }
 try { flush(); } catch (e: any) { rec.errors.push("flush: " + e.message); }
