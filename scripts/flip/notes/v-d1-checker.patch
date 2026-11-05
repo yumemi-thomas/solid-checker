@@ -1,0 +1,213 @@
+diff --git a/rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs b/rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs
+index 235fad0e1..f88b7e4ab 100644
+--- a/rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs
++++ b/rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs
+@@ -1311,6 +1311,9 @@ fn no_direct_mutation(
+             uncertain: props
+                 || typed_store.is_some()
+                 || past_root
++                || (store
++                    && logical_assignment_writes(file, context, symbol, written, root)
++                        == Some(false))
+                 || standing == WriteStanding::Unproven,
+         });
+     }
+@@ -2968,6 +2971,140 @@ fn tsc_reports_in(file: &FileFacts) -> bool {
+     !javascript && !file.ast.typescript_directive_comment
+ }
+ 
++/// The literal a proven store holds at `path` (a member chain from `root`, or
++/// `root`), read from its own initializer. Only ADR 0491's proof makes that the
++/// current value: nothing else can write the store, so the literal stands.
++fn store_literal_at(
++    file: &FileFacts,
++    context: &UpstreamCompatContext<'_>,
++    symbol: &crate::SymbolId,
++    member: Span,
++    root: Span,
++) -> Option<Span> {
++    if !links_proven_wrappable(file, context, member, root) {
++        return None;
++    }
++    let (_, declaration) = context.accessors.get(symbol)?;
++    if declaration.path.as_ref() != file.path.as_str() {
++        return None;
++    }
++    let binding = file.ast.bindings.iter().find(|binding| {
++        binding
++            .names
++            .iter()
++            .any(|name| u64::from(name.span.start) == declaration.start_byte)
++    })?;
++    let call = file.ast.call_at(binding.call_initializer?)?;
++    let mut value = file.ast.peel_ts_sugar_span(call.arguments.first()?.span);
++    let mut keys = Vec::new();
++    let mut link = file.ast.peel_ts_sugar_span(member);
++    while link != file.ast.peel_ts_sugar_span(root) {
++        let fact = file.ast.member_at(link)?;
++        keys.push(file.source_text(fact.property)?);
++        link = file.ast.peel_ts_sugar_span(fact.object);
++    }
++    for key in keys.iter().rev() {
++        value = file
++            .ast
++            .peel_ts_sugar_span(crate::execution_role::closed_literal_slot_value(
++                file, value, key,
++            )?);
++    }
++    Some(value)
++}
++
++/// V-D1: a logical assignment `Set`s only when its test passes. The operator
++/// is the source between the target and the value, and the literal the store
++/// holds decides the test: anything else may skip the write, where Chrome is
++/// silent, so it proves nothing.
++fn logical_assignment_writes(
++    file: &FileFacts,
++    context: &UpstreamCompatContext<'_>,
++    symbol: &crate::SymbolId,
++    written: Span,
++    root: Span,
++) -> Option<bool> {
++    let assignment = file
++        .ast
++        .assignments
++        .iter()
++        .find(|assignment| file.ast.peel_ts_sugar_span(assignment.target) == written)?;
++    let between = file.source_text(Span::new(
++        assignment.target.end,
++        assignment.value_span.start,
++    ))?;
++    let operator = ["??=", "||=", "&&="]
++        .into_iter()
++        .find(|operator| between.contains(operator))?;
++    let writes = store_literal_at(file, context, symbol, written, root)
++        .and_then(|value| file.source_text(value))
++        .is_some_and(|text| {
++            let nullish = matches!(text, "null" | "undefined");
++            let falsy = nullish || matches!(text, "0" | "false" | "\"\"" | "''");
++            let known = falsy
++                || text == "true"
++                || text.parse::<f64>().is_ok()
++                || (text.len() > 2 && matches!(text.as_bytes()[0], b'"' | b'\''));
++            known
++                && match operator {
++                    "??=" => nullish,
++                    "||=" => falsy,
++                    _ => !falsy,
++                }
++        });
++    Some(writes)
++}
++
++/// V-D1: whether this call of an in-place method writes on every run. `sort`,
++/// `reverse`, `fill` and `copyWithin` read their length first: on a short array
++/// or an empty range they write nothing, and Chrome is silent. Only a literal
++/// the store provably still holds, with no elision, proves the length.
++fn mutator_always_writes(
++    file: &FileFacts,
++    context: &UpstreamCompatContext<'_>,
++    symbol: &crate::SymbolId,
++    call: &solid_facts::ast::CallFact,
++    method: &str,
++    callee: Span,
++    root: Span,
++) -> bool {
++    if !matches!(method, "sort" | "reverse" | "fill" | "copyWithin") {
++        return true;
++    }
++    let receiver = file
++        .ast
++        .member_at(callee)
++        .map(|member| file.ast.peel_ts_sugar_span(member.object));
++    let length = receiver
++        .and_then(|receiver| store_literal_at(file, context, symbol, receiver, root))
++        .and_then(|value| file.ast.array_literal_at(value))
++        .filter(|array| {
++            array
++                .elements
++                .iter()
++                .all(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)
++        })
++        .map(|array| array.elements.len());
++    let Some(length) = length else {
++        return false;
++    };
++    let index = |argument: usize| {
++        call.arguments
++            .get(argument)
++            .and_then(|argument| file.source_text(argument.span))
++            .and_then(|text| text.parse::<usize>().ok())
++    };
++    match method {
++        "sort" | "reverse" => length >= 2,
++        "fill" => length >= 1 && call.arguments.len() == 1,
++        _ => {
++            call.arguments.len() == 2
++                && index(0).is_some_and(|target| target < length)
++                && index(1).is_some_and(|start| start < length)
++        }
++    }
++}
++
+ /// The nine in-place `Array.prototype` methods upstream names
+ /// (`MUTATING_METHODS`).
+ const ARRAY_MUTATORS: [&str; 9] = [
+@@ -3065,6 +3202,15 @@ fn no_store_mutator_call(
+         let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
+             continue;
+         };
++        let writes = mutator_always_writes(
++            file,
++            context,
++            symbol,
++            call,
++            text(file, member.property),
++            callee,
++            root,
++        );
+         defects.push(StaticDefect {
+             kind: StaticDefectKind::DirectMutation {
+                 name: name.as_str().to_owned(),
+@@ -3073,7 +3219,10 @@ fn no_store_mutator_call(
+             location: location(file.path.shared(), call.span),
+             analysis_context: String::new(),
+             fixes: vec![],
+-            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
++            uncertain: typed_store.is_some()
++                || past_root
++                || !writes
++                || standing == WriteStanding::Unproven,
+         });
+     }
+ }
+@@ -3395,6 +3544,17 @@ fn no_store_standard_library_write(
+             }
+             true
+         };
++        // V-D1: `Object.assign` writes only an own enumerable key of a source:
++        // only a closed literal with one states that it has any.
++        let copies = text(file, member.property) != "assign"
++            || call.arguments.iter().skip(1).any(|source| {
++                !source.spread
++                    && file.ast.object_get_shapes.iter().any(|shape| {
++                        shape.span == file.ast.peel_ts_sugar_span(source.span)
++                            && shape.closed
++                            && !shape.properties.is_empty()
++                    })
++            });
+         defects.push(StaticDefect {
+             kind: StaticDefectKind::DirectMutation {
+                 name: name.as_str().to_owned(),
+@@ -3403,7 +3563,10 @@ fn no_store_standard_library_write(
+             location: location(file.path.shared(), call.span),
+             analysis_context: String::new(),
+             fixes: vec![],
+-            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
++            uncertain: typed_store.is_some()
++                || past_root
++                || !copies
++                || standing == WriteStanding::Unproven,
+         });
+     }
+ }
