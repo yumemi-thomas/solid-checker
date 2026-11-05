@@ -3750,5 +3750,11 @@
   "found": "flip plan's SC3001 row (corpus, rc.21, --runtime-target browser)",
   "fixed": "ADR 0711",
   "outside": "the generator imports every primitive by its own name from solid-js and never writes a missing export or module, and the producer misattribution was not reproduced outside those two projects; the corpus sweep shows both sites uncertifiable"
+ },
+ {
+  "finding": "SC2009: an async optimistic setter handed to a component as a prop value (`<K s={setO} />`, K calling `props.s(2)` from a handler) threw OPTIMISTIC_WRITE_BEFORE_LOAD in Chrome and certified (flip witness SC2009 a04; ADR 0712)",
+  "found": "flip plan's SC2009 row",
+  "fixed": "ADR 0712",
+  "outside": "a recall context receives the site's statements, not the setter's name, so it cannot write a JSX element handing the setter itself to a component; the witness and fixture rc21-optimistic-handed-prop pin it"
  }
 ]
