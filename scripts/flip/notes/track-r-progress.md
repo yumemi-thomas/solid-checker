@@ -37,7 +37,11 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 
 | SC1001 steps 0, 4, 6, 7 | `e918518de`, ADRs 0675, 0676 | -4 U, -1 V (`CloudStorageContext:238`, V to U, no Chrome truth: the file does not load on rc.21), `sweep-s4.json`: 18,502 U, 376 V | proved V: `r11 r18 r19 z01 n14`, other store, signal's own. Proved silent: `n06 r15 z03 z05 z08`, tracked effect, after every await. Now uncertifiable: `r13 r14`, `storePath`. Step 5 skipped: `n13 n22 n23` hold. Step 8: done by step 0's hint. Left: D1, D3, D6, D15, ADR 0664's limit, arm-only helper, Q4/Q5/C-D4 (step 9), `r-dyn` check. `outside`: a tuple destructure is not in the model. Patterns 319 open (44 FP, 272 FC, 3 no run). Note `z02 r12` stay U: SC2001 and the read both say a handler's setter call is unplaced, which is W's write role |
 
-Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open.
+Grid at `a92553232`, `mx-recall` whole set, STRICT_READ_UNTRACKED: 62,480 programs, 0 false positive, 152 false cleans, the two known `ref-*` groups; 12 oracle runs inconclusive, not read.
+
+Next agent: `sc1001.md` D1 and D3 (arm fact, `NoHydration` blocker), the arm-only helper, D6, D15, ADR 0664's limit, step 9, `r-dyn`; then H-D5, F0, the census. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
+
+Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open. `a92553232`'s says 24 false positives left the list; it was 23 (67 to 44, 342 to 319 open).
 
 The 152 were not one cause, and the "ref role" label was inferred. Measured: 72 `ref-row`, `callee_roles.control-flow`; 80 layered `ref-named`/`ref-factory`, `callee_roles.named-callback-untracked` (logged on `ref-named` only). Two `open-defects.json` entries now. Not fixed.
 
