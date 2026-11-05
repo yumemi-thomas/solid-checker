@@ -1,47 +1,5 @@
 [
 {
-"id": "api/k-bodyDirect-reconcileKey",
-"kind": "rejected",
-"error": "App.tsx(11,37): error TS2554: Expected 1 arguments, but got 2.",
-"openOutcome": "false-positive",
-"item": "C-D2"
-},
-{
-"id": "api/k-host-reconcileKey",
-"kind": "rejected",
-"error": "App.tsx(11,68): error TS2554: Expected 1 arguments, but got 2.",
-"openOutcome": "false-positive",
-"item": "C-D2"
-},
-{
-"id": "api/k-micro-reconcileKey",
-"kind": "rejected",
-"error": "App.tsx(11,60): error TS2554: Expected 1 arguments, but got 2.",
-"openOutcome": "false-positive",
-"item": "C-D2"
-},
-{
-"id": "api/k-namedTimer-reconcileKey",
-"kind": "rejected",
-"error": "App.tsx(11,56): error TS2554: Expected 1 arguments, but got 2.",
-"openOutcome": null,
-"item": null
-},
-{
-"id": "api/k-then-reconcileKey",
-"kind": "rejected",
-"error": "App.tsx(11,68): error TS2554: Expected 1 arguments, but got 2.",
-"openOutcome": "false-positive",
-"item": "C-D2"
-},
-{
-"id": "api/k-timer-reconcileKey",
-"kind": "rejected",
-"error": "App.tsx(11,56): error TS2554: Expected 1 arguments, but got 2.",
-"openOutcome": "false-positive",
-"item": "C-D2"
-},
-{
 "id": "census/a06-object-fromentries",
 "kind": "rejected",
 "error": "App.tsx(11,13): error TS2352: Conversion of type '{ [k: string]: Sou",
@@ -89,13 +47,6 @@
 "error": "App.tsx(11,14): error TS2871: This expression is always nullish.",
 "openOutcome": "false-clean",
 "item": "section-4 census:e"
-},
-{
-"id": "census/f01-notreadyerror-manual",
-"kind": "rejected",
-"error": "App.tsx(11,51): error TS2554: Expected 1 arguments, but got 0.",
-"openOutcome": "false-positive",
-"item": "section-4 census:f"
 },
 {
 "id": "census/f05-using-dispose-write",
@@ -810,13 +761,6 @@
 "error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
 "openOutcome": null,
 "item": null
-},
-{
-"id": "types/e411-show-fn-child",
-"kind": "rejected",
-"error": "App.tsx(16,11): error TS2745: This JSX tag's 'children' prop expects type 'never' which requires multiple children, but only a single child ",
-"openOutcome": "false-positive",
-"item": "T-D2"
 },
 {
 "id": "types/e604-async-apply-read",

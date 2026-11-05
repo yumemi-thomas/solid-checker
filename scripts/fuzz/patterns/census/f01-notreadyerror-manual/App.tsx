@@ -8,7 +8,7 @@ const [w, setW] = createSignal(0);
 const [on, setOn] = createSignal(true);
 let runs = 0;
 export function App() {
-  const m = createMemo(() => { if (c() < 5) throw new NotReadyError(); return c(); });
+  const m = createMemo(() => { if (c() < 5) throw new NotReadyError(null as any); return c(); });
   createEffect(() => c2(), () => { log("apply", own()); try { const v = m(); log("apply", "read " + v); } catch (e) { log("apply", "threw " + (e as Error).name); } });
   return <Loading fallback="f"><i>{m()}</i></Loading>;
 }

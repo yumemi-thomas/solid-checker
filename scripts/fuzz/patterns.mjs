@@ -127,7 +127,7 @@ export function judgePattern({ codes, failure }, findings) {
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const claimed = codes.filter((code) => (codeRules[code] ?? []).length);
   const missed = claimed.filter((code) => !relevant.some((finding) => coversCode(code, finding)));
-  const contradicted = relevant.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !codesForRule(finding.rule).some((code) => codes.includes(code)));
+  const contradicted = relevant.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !finding.claimsSilent && !codesForRule(finding.rule).some((code) => codes.includes(code)));
   if (contradicted.length) return { outcome: "false-positive", codes: claimed, rules: [...new Set(contradicted.map((finding) => finding.rule))] };
   if (missed.length) return { outcome: "false-clean", codes: missed, certified: !relevant.some((finding) => finding.kind === "uncertifiable") };
   return { outcome: "fine", codes: claimed };

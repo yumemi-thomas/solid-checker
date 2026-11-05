@@ -8,7 +8,7 @@ const [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });
 let runs = 0;
 function Hidden() { runs += 1; log("Hidden", "body " + own() + " runs=" + runs + " w=" + w()); return <i>h</i>; }
 export function App() {
-  Promise.resolve().then(() => { log("ran", own()); setSt("items", reconcile([{ id: 2 }], (it: any) => (w(), it.id))); });
+  Promise.resolve().then(() => { log("ran", own()); setSt(reconcile({ x: 1, items: [{ id: 2 }] }, (it: any) => (w(), it.id))); });
   return <i>app</i>;
 }
 export async function after() { (window as any).__go?.(); await new Promise((r) => setTimeout(r, 20)); }

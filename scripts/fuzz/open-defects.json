@@ -2306,15 +2306,6 @@
    "certified": true
   },
   {
-   "id": "types/e411-show-fn-child",
-   "item": "T-D2",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "types/e421-pending-body-dynamic",
    "item": "T-D3",
    "outcome": "false-positive",
