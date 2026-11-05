@@ -115,6 +115,11 @@ describe("printed forms", () => {
     const program = generateShape({ seed: 1 }, { code: "FLUSH_IN_EFFECT_CALLBACK", context: "effect-apply" }, { variant: null, binding: "direct", layer: "none", mount: "show-later" }, 0).program;
     expect(drivingPlan(program).clicks[0]).toBe("pm1");
   });
+  it("an element the program's own trigger takes away is not on the click plan; one it keeps stays", () => {
+    const plan = (context) => drivingPlan(generateShape({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context }, { variant: null, binding: "direct", layer: "none", mount: "root" }, 0).program).clicks;
+    expect(plan("dny-blur-disabled")).toEqual([]);
+    expect(plan("dny-blur-move")).toHaveLength(1);
+  });
   it("each recall mount has its parent lines; dynamic and Portal import from @solidjs/web", () => {
     for (const mount of RECALL_MOUNTS) {
       const used = new Set(); const web = new Set();

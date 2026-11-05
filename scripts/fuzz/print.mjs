@@ -905,7 +905,7 @@ export function drivingPlan(program) {
   // A parent that mounts its child later (mounts.mjs LATER_MOUNTS) does so on its button, before the child's own buttons exist.
   program.components.filter((c) => c.mount).forEach((component, index) => { if (LATER_MOUNTS.includes(component.mount)) clicks.push(`pm${index + 1}`); });
   for (const { node } of walk(program)) {
-    if (node.k === "button" || node.k === "hbutton") clicks.push(node.id);
+    if ((node.k === "button" || node.k === "hbutton") && !node.undriven) clicks.push(node.id);
     // A callback prop called from its child's handler (model.mjs `cbProp`), or attached as it (`attached`): the child's button.
     if (node.k === "cbprop" && (node.call === "handler" || node.call === "attached")) clicks.push(`k${node.id.replace(/^\D+/, "")}`);
   }

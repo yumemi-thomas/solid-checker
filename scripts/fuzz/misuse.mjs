@@ -1311,8 +1311,28 @@ function laterRoot(kit, prep, trigger, solid, web) {
     expr(prim("timer", fn([...prep.map((text) => expr(domExpr(text))), expr(domExpr(`render(() => <Later />, ${host})`, ["render"]))]))),
   ];
 }
+/**
+ * The contexts whose own timer disables or removes the driven element before any click: nothing can click it, the fast hosts skip it, and
+ * Playwright waits out its actionability check (12 of 29 sampled `dny-*` programs were `harness-error` in Chrome, every time, so these
+ * contexts had no oracle at all). `undriven` takes it off the click plan; the trigger, not the driver, is what these contexts measure.
+ */
+const TAKEN_AWAY = new Set(["dny-blur-disabled", "dny-blur-replace", "dny-focusout-replace", "dny-change-typed", "dny-blur-select-remove",
+  ...Object.keys(DISPOSALS), "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-shared-fn", "dny-chain-click",
+  "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer"]);
+function undriven(tree, id) {
+  if (Array.isArray(tree)) { for (const item of tree) undriven(item, id); return; }
+  if (tree === null || typeof tree !== "object") return;
+  if ((tree.k === "button" || tree.k === "hbutton") && tree.id === id) tree.undriven = true;
+  for (const value of Object.values(tree)) undriven(value, id);
+}
 function deniedContext(context, stmts, kit) {
-  const b = kit.name("b"), el = anyEl(b);
+  const b = kit.name("b");
+  const built = deniedContextOf(context, stmts, kit, b);
+  if (TAKEN_AWAY.has(context)) undriven(built, b);
+  return built;
+}
+function deniedContextOf(context, stmts, kit, b) {
+  const el = anyEl(b);
   if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
   if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
