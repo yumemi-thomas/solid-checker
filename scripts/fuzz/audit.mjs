@@ -52,7 +52,7 @@ const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: tr
 
 /**
  * The oracle jobs one run may take, the account's concurrent runners (20, the most run 41775917761 ran at once), and the part size a
- * grid is not split below (ADR 0617). GitHub starts a matrix's jobs in no fixed order (that run's shard 0 started 29th), so a job past
+ * grid is not split below (ADR 0620). GitHub starts a matrix's jobs in no fixed order (that run's shard 0 started 29th), so a job past
  * the runners waits whatever its size: the split keeps every part a job of its own.
  */
 export const ORACLE_RUNNERS = 20;

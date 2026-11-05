@@ -18,7 +18,7 @@ describe("the recall axes are opt-in", () => {
   it("adds no base cell and draws no recall-only code at random", () => {
     expect(cellList().every((cell) => TEMPLATE_CODES.includes(cell.code))).toBe(true);
     expect(TEMPLATE_CODES).not.toContain("LOADING_ON_OUTSIDE_HOLD");
-    expect(RECALL_TEMPLATE_CODES).toEqual(["MISSING_EFFECT_FN", "LOADING_ON_OUTSIDE_HOLD"]);
+    expect(RECALL_TEMPLATE_CODES).toEqual(["MISSING_EFFECT_FN", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "ON_FLUSH_IN_OWNED_SCOPE", "OPTIMISTIC_WRITE_BEFORE_LOAD", "CAUGHT_REACTIVE_READ"]);
     const recall = cellList({ recall: true });
     expect(recall.length).toBeGreaterThan(cellList().length);
     expect(recall.filter((cell) => recallContextsOf(cell.code).includes(cell.context)).length).toBe(recall.length - cellList().length);

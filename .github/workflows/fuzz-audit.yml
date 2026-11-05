@@ -12,7 +12,7 @@ name: Fuzz audit
 #   shard   one runner per shard: every grid restricted to shard i of N, no oracle; its oracle candidates
 #   pick    the whole run's oracle sample (one --ids manifest per grid) from every shard's candidates, and the oracle jobs
 #   oracle  one runner per grid and part: the differential (Chrome against the fast path) on that part of the grid's sample (the recall
-#           samples are split over at most 20 jobs, the account's concurrent runners, the largest part split first: audit.mjs oracleParts, ADR 0617)
+#           samples are split over at most 20 jobs, the account's concurrent runners, the largest part split first: audit.mjs oracleParts, ADR 0620)
 #   report  the verdict (fails when something needs a look) and the outcomes that moved from the earlier audit
 #
 # Each shard keeps its warm state between runs: the fuzzer's runtime and type-check caches (keyed by program bytes and the

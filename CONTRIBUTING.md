@@ -141,7 +141,7 @@ tsrs or Oxc nodes across fact-domain interfaces.
 ## The pre-release run and the reproduction set
 
 Precision work iterates on `fixtures/uncertifiable-repro` (ADR 0446), a few
-small projects on published rc.17 bytes: one short case per cause or shape, in
+small projects on published rc.21 bytes: one short case per cause or shape, in
 one table, `cases.json`, with a `kind` (`uncertifiable`, `violation`, `clean`).
 `make repro-causes` checks that each case still produces what it stands for,
 `make repro-budget` that the set stays small, and `make coverage` pins its
@@ -152,7 +152,7 @@ taken in.
 Once before each release, run the checker locally over many pinned public
 Solid 2 repositories, then discard them:
 
-1. Write the release manifest (shape of `scripts/corpus/rc17-manifest.json`:
+1. Write the release manifest (shape of `scripts/corpus/rc21-manifest.json`:
    each app's repository and commit, its projects, the configuration), restore
    it (clone at the commits, install frozen), and build the release checker
    (`make build-checker-release`).

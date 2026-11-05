@@ -1937,19 +1937,10 @@
     "src/select.test.tsx"
    ],
    "causes": [
-    "SC1001/open-program-boundary/unplaced-read/handler-placed",
-    "SC1001/open-program-boundary/unplaced-read/condition/handler-placed",
-    "SC2001/open-program-boundary/unplaced-write/handler-placed",
     "SC4001/open-program-boundary/exported-function-callers/call",
     "SC9012/open-program-boundary/parameter-member-call/exported-parameter-member-dispatch"
    ],
    "expect": [
-    {
-     "rule": "SC1001",
-     "family": "unplaced-read",
-     "context": "condition",
-     "cause": "SC1001/open-program-boundary/unplaced-read/condition/handler-placed"
-    },
     {
      "rule": "SC4001",
      "family": "exported-function-callers",
@@ -1961,18 +1952,6 @@
      "family": "parameter-member-call",
      "context": "exported-parameter-member-dispatch",
      "cause": "SC9012/open-program-boundary/parameter-member-call/exported-parameter-member-dispatch/function-declaration"
-    },
-    {
-     "rule": "SC2001",
-     "family": "unplaced-write",
-     "context": "",
-     "cause": "SC2001/open-program-boundary/unplaced-write/handler-placed"
-    },
-    {
-     "rule": "SC1001",
-     "family": "unplaced-read",
-     "context": "",
-     "cause": "SC1001/open-program-boundary/unplaced-read/handler-placed"
     }
    ],
    "source": {
@@ -10944,7 +10923,7 @@
   {
    "id": "clean-effect-returns-cleanup",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-effect-returns-cleanup.tsx"
    ],
@@ -14262,7 +14241,7 @@
   {
    "id": "clean-render-effect-cleanup",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-render-effect-cleanup.tsx"
    ],

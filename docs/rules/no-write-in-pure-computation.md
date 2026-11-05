@@ -397,3 +397,5 @@ using it on application state reintroduces the feedback loops this rule prevents
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same constraint for actions
 
 A write in a layer of a callback named by its binding is judged at that callback's positions (ADR 0517); several `untrack` positions with no rejecting one are an obligation.
+
+A write in a handler is proven ownerless only while no call can deliver the handler under an owner. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the write uncertifiable.

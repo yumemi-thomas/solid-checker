@@ -644,6 +644,9 @@ fn forbidden_operation_kind(
     leaf_forbids(dialect, file, call, kind).then(|| match kind {
         Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
         Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
+        _ if dialect.leaf_call_throws_observer_guard(kind) => {
+            crate::LeafOwnerOperationKind::ObserverGuarded(primitive.to_string())
+        }
         _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
     })
 }
@@ -1245,7 +1248,9 @@ fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
 /// `show`/`showModal`/`close`/`requestClose`, `AbortController.abort`
 /// (`abort` on its signal), `XMLHttpRequest.open`/`abort`/`send`
 /// (`readystatechange`, `abort`, `loadstart`), `FileReader.abort` (`abort`,
-/// `loadend`) and `Document.execCommand` (`input`).
+/// `loadend`), `Document.execCommand` (`input`) and, measured against ADR 0329's
+/// "tree mutation stays trusted", what moves focus without naming it (ADR 0642):
+/// `remove`/`removeChild` of a focused element (`blur`) and `select` (`focus`).
 /// `lib.dom` also declares `dispatchEvent`, `focus` and `blur` as globals for
 /// `window`.
 fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
@@ -1258,6 +1263,9 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
     ) || matches!(
         (owner, member),
         ("HTMLFormElement", "reset" | "requestSubmit")
+            | ("ChildNode", "remove")
+            | ("Node", "removeChild")
+            | ("HTMLInputElement" | "HTMLTextAreaElement", "select")
             | (
                 "HTMLElement",
                 "showPopover" | "hidePopover" | "togglePopover"
@@ -2146,6 +2154,9 @@ mod dom_dispatch_tests {
             "HTMLDialogElement.showModal",
             "HTMLDialogElement.close",
             "AbortController.abort",
+            "HTMLInputElement.select",
+            "ChildNode.remove",
+            "Node.removeChild",
         ] {
             assert!(
                 synchronously_dispatching_dom_member(dispatching),
@@ -2159,10 +2170,8 @@ mod dom_dispatch_tests {
             "Element.getAttribute",
             "Element.scrollIntoView",
             "Element.scrollTo",
-            "HTMLInputElement.select",
             "HTMLFormElement.submit",
             "Element.setAttribute",
-            "ChildNode.remove",
             "ParentNode.append",
             "Node.appendChild",
             "Animatable.animate",

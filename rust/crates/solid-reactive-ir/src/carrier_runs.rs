@@ -56,6 +56,10 @@ pub(crate) fn carrier_provably_runs(
     let Some(call) = ast.calls.iter().find(|call| call.span == carrier) else {
         return false;
     };
+    // ADR 0628: `untrack(f)` runs `f` before it returns.
+    if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack) {
+        return true;
+    }
     let kind = if call.construct {
         typefacts::CallKind::Construct
     } else {

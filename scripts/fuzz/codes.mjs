@@ -4,7 +4,7 @@
 // drift. `codeRules` is derived from the policy table below.
 
 // --- The policy table (phase D) -------------------------------------------------------------------------------
-// Every rc.17 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
+// Every rc.21 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
 // the comparison (`disposition`), and how loud Solid is about it (`severity`: "error" throws or is an engine failure,
 // "warn" and "info" report). codes.test.mjs greps `code: "X"` across the pinned dev dists and fails on a code that is
 // not here, so a Solid bump cannot add noise silently.
@@ -60,13 +60,20 @@ export const codePolicy = {
   // ADR 0517: SC5006 records an obligation for a `<Loading on>` whose hold it cannot prove its own; it never claims a violation,
   // so a runtime diagnostic it covers is a recall gap, never agree.
   LOADING_ON_OUTSIDE_HOLD: claimed(["loading-on-outside-hold"], "warn"),
+  // New on rc.21. `<Loading on={fn}>` (SC5007) and `onFlush` under a children-capable owner (SC3002).
+  LOADING_ON_ACCESSOR: claimed(["loading-on-accessor"], "warn"),
+  ON_FLUSH_IN_OWNED_SCOPE: claimed(["on-flush-in-owned-scope"], "warn"),
+  // SC2009 and SC5008 (ADRs 0636, 0637): each proven in the pass that creates the source.
+  OPTIMISTIC_WRITE_BEFORE_LOAD: claimed(["optimistic-write-before-load"], "error"),
+  CAUGHT_REACTIVE_READ: claimed(["caught-reactive-read"], "warn"),
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: claimed(["leaf-owner-forbidden-call"], "error"),
   DYNAMIC_STATIC_PROMISE: claimed(["static-dynamic-async-source"], "error"),
 
   // Defects no rule claims.
   PRIMITIVE_IN_EFFECT_CALLBACK: claimed(["primitive-in-effect-callback"], "error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
-  ASYNC_STORE_SETTER: unclaimed("error"),
+  // Invariant 1: the setter callback is `(state) => void | T`, so an async one is TS2345 and tsc reports it.
+  ASYNC_STORE_SETTER: { rules: [], disposition: "out-of-scope", severity: "error", note: "typed away: the published types reject an async setter callback" },
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn", "decided not to build: docs/open-work.md, `UNCOMMITTED_INPUT_OVERWRITTEN`"),
 
   // The engine's reaction to an earlier failure.
@@ -105,6 +112,7 @@ export const codePolicy = {
   // The typings reject a bad target, so tsc reports it (invariant 1): the checker stays silent.
   INVALID_REFRESH_TARGET: outOfScope("error", "typed away"),
   INVALID_AFFECTS_TARGET: outOfScope("error", "typed away"),
+  ASYNC_MEMO_ELEMENT: outOfScope("error", "SSR"),
   DYNAMIC_ASYNC_COMPONENT: outOfScope("error", "SSR"),
   LATE_HEADER_WRITE: outOfScope("error", "SSR"),
   LAZY_ASSET_UNMAPPED: outOfScope("warn", "SSR"),
@@ -160,7 +168,7 @@ export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family
  * (checked in the pinned `@solidjs/signals` dev dist). `LOADING_ON_OUTSIDE_HOLD` is reported from the boundary's notification in the
  * flush too (ADR 0517).
  */
-export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD"];
+export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "CAUGHT_REACTIVE_READ"];
 export const isPlacelessCode = (code) => placelessCodes.includes(code);
 
 /** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */
@@ -195,7 +203,15 @@ export function codeOfThrown(message) {
  * Rules whose violation stands beside a code as a claim of its own, so it never names that code wrongly: an effect created in an apply throws
  * PRIMITIVE_IN_EFFECT_CALLBACK and is an unowned effect too, the leak a production build keeps (ADR 0483).
  */
-export const besideCode = { PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"] };
+export const besideCode = {
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"],
+  // ADR 0641: masked, not reported. In these programs Chrome reports only the row's code, because the first throw stops the run; each
+  // twin with that cause removed reports the other rule's code. `createEffect(fn, undefined)`, given an apply: PRIMITIVE_IN_EFFECT_CALLBACK
+  // in an apply or a reaction, PRIMITIVE_IN_FORBIDDEN_SCOPE in a leaf. A helper shared with a tracked effect, the effect removed:
+  // NO_OWNER_CLEANUP and NO_OWNER_EFFECT, three times each.
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: ["missing-owner"], CLEANUP_IN_FORBIDDEN_SCOPE: ["missing-owner"],
+  MISSING_EFFECT_FN: ["primitive-in-effect-callback", "leaf-owner-forbidden-call"],
+};
 /**
  * Rules whose defect the runtime names for only some of what they claim, so its silence contradicts nothing. `primitive-in-directive-application`:
  * a `ref` apply has no owner (`onCleanup` there reports NO_OWNER_CLEANUP), an effect created there warns NO_OWNER_EFFECT and a memo, the same leak, warns

@@ -4262,6 +4262,19 @@ fn climb_in_place_layers_recording(
     (climb.at != span).then_some(climb)
 }
 
+/// ADR 0628: the call that runs `function` in place, one layer of
+/// [`climb_in_place_layers`].
+pub(crate) fn in_place_layer_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    match layer_run(file, function, lookup) {
+        LayerRun::InPlace(call) => Some(call),
+        _ => None,
+    }
+}
+
 /// [`climb_in_place_layers`] continued through the generators stepped at
 /// their own call (ADR 0516): `(function* () { r(); yield 1; })().next()`
 /// runs some of its body, or none, on the stack of that call, so the climb

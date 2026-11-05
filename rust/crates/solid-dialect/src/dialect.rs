@@ -294,6 +294,34 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether an unlabelled `untrack` in an open strict-read window keeps the
+    /// pending throw for a source the window's own owner created. It does not
+    /// open a window of its own, so only that pending read is affected: a
+    /// settled read stays silent.
+    fn untrack_keeps_own_pending_throw(&self) -> bool {
+        false
+    }
+
+    /// Whether a leaf owner's forbidden call of this primitive throws the
+    /// observer guard's code (`resolve`, `until`), not the leaf owner's.
+    fn leaf_call_throws_observer_guard(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// Whether an effect's apply opens a strict-read window for its queue's
+    /// event alone, so a handler it dispatches reads under another event, in
+    /// no window.
+    fn effect_window_takes_only_its_event(&self) -> bool {
+        false
+    }
+
+    /// Whether an optimistic setter of an async source throws before the
+    /// source's first answer lands.
+    fn refuses_optimistic_write_before_load(&self) -> bool {
+        false
+    }
+
     /// Whether this primitive clears tracking around a callback it nonetheless
     /// runs **before its own call returns**.
     ///
@@ -576,6 +604,13 @@ pub trait Dialect: Sync {
     /// The default claims nothing.
     fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether a call of `primitive` drains the queue on its caller's stack,
+    /// under its caller's owner (ADR 0613, 0644). The default claims nothing.
+    fn drains_queue_on_caller_stack(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
         false
     }
 

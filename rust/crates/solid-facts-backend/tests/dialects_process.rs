@@ -764,9 +764,9 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
-    // rc.17 is the audited release (ADR 0194): the same project, analyzed, no
+    // rc.21 is the audited release (ADR 0194): the same project, analyzed, no
     // notice. rc.13, a read release older than it, carries one.
-    let (code, audited) = run_checker("unaudited-release-rc17", &[]);
+    let (code, audited) = run_checker("unaudited-release-rc21", &[]);
     let ids = finding_ids(&audited);
     assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
     assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
@@ -815,7 +815,7 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     let hint = notice["hint"].as_str().unwrap();
     assert!(
         hint.contains("docs/release-audits/2026-09-26-solid-2-rc1-rc8-release-review.md")
-            && hint.contains("to 2.0.0-rc.17, the audited release of each"),
+            && hint.contains("to 2.0.0-rc.21, the audited release of each"),
         "the notice points at the review and the audited release: {hint}"
     );
     let gaps = notice["evidence"]

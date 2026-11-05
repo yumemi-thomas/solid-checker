@@ -2,13 +2,13 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/rule-negatives/Await.tsx",
-      "start": 583,
-      "end": 590,
+      "start": 664,
+      "end": 673,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rule-negatives/Await.tsx",
-      "start": 664,
-      "end": 673,
+      "start": 689,
+      "end": 699,
       "fixes": 0
     }
   ]

@@ -171,7 +171,7 @@ compiler-facts-identity:
 verify-delta:
 	$(BUN) scripts/verify-delta.mjs $(if $(BASE),--base $(BASE))
 
-# The runtime oracle's pinned Solid 2.0.0-rc.17 install (ADR 0453): the committed
+# The runtime oracle's pinned Solid 2.0.0-rc.21 install (ADR 0453): the committed
 # manifest and lockfile in scripts/runtime-oracle-install, reproduced by `npm ci`.
 # scripts/runtime-oracle.mjs defaults --install to it.
 runtime-oracle-install:

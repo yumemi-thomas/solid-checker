@@ -25,6 +25,7 @@ pub(crate) fn loading_on_outside_hold_obligations(
 ) -> Vec<StaticViolation> {
     let mut obligations = Vec::new();
     for file in &facts.files {
+        loading_on_accessor_violations(file, lookup, &mut obligations);
         let primitives = lookup.primitives(file);
         for (index, element) in file.ast.jsx_elements.iter().enumerate() {
             if !super::known_primitive(&primitives.jsx[index])
@@ -69,6 +70,69 @@ pub(crate) fn loading_on_outside_hold_obligations(
         }
     }
     obligations
+}
+
+/// ADR 0624: `LOADING_ON_ACCESSOR`. rc.21 warns once, on the boundary's first
+/// run, when `on` evaluates to a function: it is the dependency's value, and an
+/// accessor handed instead is never called, so the boundary never re-arms. `on`
+/// is typed `any`, so `tsc` is silent. Proven for a function literal and for a
+/// value Type Facts call a function; a mixed union is an obligation, and any
+/// other value states nothing.
+fn loading_on_accessor_violations(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
+    let primitives = lookup.primitives(file);
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if !super::known_primitive(&primitives.jsx[index])
+            .is_some_and(|primitive| lookup.dialect.boundary_on_may_hold_outside(primitive))
+        {
+            continue;
+        }
+        let Some(value) = element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.namespace.is_none()
+                    && file.source_text(attribute.local_name) == Some("on")
+            })
+            .and_then(|attribute| attribute.expression)
+            .map(|value| file.ast.peel_ts_sugar_span(value))
+        else {
+            continue;
+        };
+        let literal = file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == value);
+        let callability = lookup
+            .entity_at(file.path.as_str(), value)
+            .and_then(|entity| entity.callability);
+        let proven = literal
+            || matches!(
+                callability,
+                Some(typefacts::Callability::Callable | typefacts::Callability::UntypedCallable)
+            );
+        if !proven && callability != Some(typefacts::Callability::Mixed) {
+            continue;
+        }
+        violations.push(StaticViolation {
+            id: "SC5007".into(),
+            rule: "loading-on-accessor".into(),
+            message: "`on` received a function; the boundary never calls it, so nothing is read \
+                      and the boundary never re-arms"
+                .into(),
+            hint: "Pass the dependency's value: `on={route()}`, or `on={[query(), page()]}` for \
+                   several."
+                .into(),
+            location: location(file.path.shared(), value),
+            analysis_context: String::new(),
+            fixes: vec![],
+            uncertain: !proven,
+        });
+    }
 }
 
 /// Why the boundary's hold is not proven to be its own, or `None` when no

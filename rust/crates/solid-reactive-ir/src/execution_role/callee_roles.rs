@@ -467,6 +467,18 @@ pub(super) fn semantic_role_before_awaits(
             )
         );
     }
+    // ADR 0628: a label that is not one non-empty string may open no window.
+    if file.ast.arguments_containing(span).any(|(call, index)| {
+        index == 0
+            && direct_callback_contains(file, call.arguments[index].span, span)
+            && lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack)
+            && super::untrack_label(file, call) == super::UntrackLabel::Unproven
+    }) {
+        return role_arm!(
+            "callee_roles.untrack-label-unproven",
+            ExecutionRole::Unknown
+        );
+    }
     if file.ast.arguments_containing(span).any(|(call, index)| {
         crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
@@ -474,6 +486,8 @@ pub(super) fn semantic_role_before_awaits(
             .is_some_and(|primitive| {
                 callback_execution_at_call(file, call, primitive, index, lookup).is_some()
                     && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
+                    && (primitive != solid_dialect::Primitive::Untrack
+                        || super::untrack_label(file, call) == super::UntrackLabel::Window)
                     && direct_callback_contains(file, call.arguments[index].span, span)
                     // ADR 0548: an exact bundle's `error` member runs before
                     // the window opens.

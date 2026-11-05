@@ -192,6 +192,18 @@
       "fixes": 0,
       "message": "reactive accessor \"read\" is read through wrapUse in a callback that runs with tracking off, which does not track; the read sees the current value once and never updates when \"read\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. No strict-read window is open for this read (a map function opens one only when the call passes a `name`), so Solid's development warning does not point out the stale value."
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0,
+      "message": "solid-js 2.0.0-rc.17, @solidjs/signals 2.0.0-rc.17 and @solidjs/web 2.0.0-rc.17 are installed; this build's Solid 2 vocabulary was audited on solid-js 2.0.0-rc.21, @solidjs/signals 2.0.0-rc.21 and @solidjs/web 2.0.0-rc.21, and 1 gap in what it knows about this installation is still open, so the analysis ran and cannot certify the project",
+      "hint": "Findings beside this notice stand; certification waits on the gaps. To certify, pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.21, the audited release of each, a transitive one with an overrides or resolutions entry, because a dependency's own range can admit later releases; this project resolves solid-js 2.0.0-rc.17, @solidjs/signals 2.0.0-rc.17 and @solidjs/web 2.0.0-rc.17."
     }
   ]
 }

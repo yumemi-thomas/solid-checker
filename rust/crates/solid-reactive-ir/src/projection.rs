@@ -208,6 +208,24 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::LISTENER_REACH => (
+            format!(
+                "{callee} registers a listener that calls project code, and the program holds a synchronous dispatch not proven to run with no owner and no strict-read window, so that code may run on the dispatcher's stack; no proof follows the listener to the reads and writes it reaches, so whether they are legal can be neither proven nor ruled out"
+            ),
+            "Dispatch from an event handler, a timer or after an await, or register the listener where it is the only caller (ADR 0645).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::INSTALLED_MEMBER => (
+            format!(
+                "{callee} installs a prototype or an accessor on an object, and no Get or write of that object is followed to what it installed: a store as a prototype makes each of them the store's, and an installed setter makes a plain write a call; whether one runs where Solid warns can be neither proven nor ruled out"
+            ),
+            "Read the store or call the setter by name, where the rules can see it (ADR 0643).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
             format!(
                 "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"
@@ -663,6 +681,13 @@ pub fn project_findings(
             program
                 .leaf_operations
                 .iter()
+                // A call written in the tracked scope has the rule's own finding.
+                .filter(|operation| {
+                    !operation.observer_guarded()
+                        || !program.static_violations.iter().any(|violation| {
+                            !violation.uncertain && violation.location == operation.location
+                        })
+                })
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
@@ -1181,8 +1206,26 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // flight neither throws (SC5001) nor needs a boundary (SC5003,
             // SC5005; ADR 0430) — so the finding is no longer a *proven*
             // defect and becomes a proof obligation instead.
-            if read.options_opaque && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005")
+            if (read.options_opaque
+                && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005"))
+                || (read.caught && matches!(finding.id.as_str(), "SC5003" | "SC5005"))
             {
+                finding.kind = "uncertifiable".into();
+            }
+            // ADR 0641: rc.21 warns from a render effect that hits the pending
+            // value, and a component's prop is a getter: the child decides
+            // whether one ever reads it. Nothing here follows it to the child.
+            if read.component_prop && finding.id == "SC5003" {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "{}; this read is a component prop, a getter the child may read in a render, in an effect, or never",
+                    finding.message
+                );
+            }
+            // ADR 0632: a declared value is served through the first flight,
+            // so a read past the creating pass throws, or warns in a leaf, only
+            // on a re-ask nothing here proves.
+            if read.declared_loading && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
             // The same escalation for the execution window: a host that may

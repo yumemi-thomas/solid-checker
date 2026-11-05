@@ -862,6 +862,7 @@ pub const FUNCTION_FLAG_EXPORTED: u64 = 1 << 0;
 pub const FUNCTION_FLAG_ASYNC: u64 = 1 << 1;
 pub const FUNCTION_FLAG_ARROW: u64 = 1 << 2;
 pub const ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC: u64 = 1 << 0;
+pub const ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC: u64 = 1 << 1;
 
 pub(crate) const TABLE_TRANSITION_VERSION: u64 = 1;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
@@ -1834,7 +1835,9 @@ fn decode_file_fact(
         let symbol = cursor.string_index(strings, "async symbol")?;
         let target = cursor.string_index(strings, "async target")?;
         let flags = cursor.u64()?;
-        if flags & !ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0 {
+        if flags & !(ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC | ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC)
+            != 0
+        {
             return Err(format!("packed async function has unknown flags {flags}"));
         }
         async_functions.push(AsyncFunctionFact {
@@ -1842,6 +1845,7 @@ fn decode_file_fact(
             symbol,
             target,
             can_return_async: flags & ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0,
+            may_answer_sync: flags & ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC != 0,
             calls_after_await: cursor.locations(strings)?,
         });
     }

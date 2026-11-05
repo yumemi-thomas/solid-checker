@@ -14,12 +14,16 @@ pub(crate) enum DispatchReceiver {
     /// The global `document`, where the dialect says it reaches no JSX
     /// handler (ADR 0435).
     Document,
+    /// An element the function creates and attaches only under `document.body`
+    /// or the root element, on a path nothing in the program listens on
+    /// (ADR 0640).
+    NoListener,
 }
 
 impl DispatchReceiver {
     /// A receiver that cannot reach an element handler.
     const fn excluded(self) -> bool {
-        matches!(self, Self::Window | Self::Document)
+        matches!(self, Self::Window | Self::Document | Self::NoListener)
     }
 }
 
@@ -48,6 +52,10 @@ pub(crate) enum DispatchCaller {
     /// census): a delivery it makes runs on the stack of a delivery, which
     /// has no owner and no window (ADR 0437).
     EventHandler,
+    /// A `createEffect`'s apply on a dialect whose effect window takes only
+    /// its queue's event (ADR 0639): a delivery reads in no window, and still
+    /// runs under the owner and inside the flush.
+    EffectApply,
 }
 
 impl DispatchCaller {
@@ -60,6 +68,7 @@ impl DispatchCaller {
             Self::TestRunner => "test runner callback",
             Self::TestHelper => "test-only helper",
             Self::EventHandler => "event handler",
+            Self::EffectApply => "effect apply",
         }
     }
 }
@@ -77,7 +86,7 @@ impl DispatchSite {
     /// Whether the site withholds ownerless event proofs (owner and write
     /// roles): a delivery can inherit its caller's owner.
     pub(crate) const fn withholds_owner_proofs(&self) -> bool {
-        !self.receiver.excluded() && self.caller.is_none()
+        !self.receiver.excluded() && matches!(self.caller, None | Some(DispatchCaller::EffectApply))
     }
 
     /// Whether the site withholds an event handler's untracked-read proof: a
@@ -85,6 +94,49 @@ impl DispatchSite {
     /// with no window excludes it.
     pub(crate) const fn withholds_read_proofs(&self) -> bool {
         !self.receiver.excluded()
+            && !matches!(
+                self.caller,
+                Some(
+                    DispatchCaller::FreshStack
+                        | DispatchCaller::AwaitContinuation
+                        | DispatchCaller::ModuleInitialization
+                        | DispatchCaller::TestRunner
+                        | DispatchCaller::TestHelper
+                        | DispatchCaller::EventHandler
+                        | DispatchCaller::EffectApply
+                )
+            )
+    }
+
+    /// A delivery in an effect's apply that reaches a handler. Its read proof
+    /// holds only while no flush drains under an owner.
+    pub(crate) const fn delivers_in_effect_apply(&self) -> bool {
+        !self.receiver.excluded() && matches!(self.caller, Some(DispatchCaller::EffectApply))
+    }
+
+    /// ADR 0645: whether a listener may run on this site's stack under an owner
+    /// or in a strict-read window. `window` and `document` reach no JSX handler,
+    /// so the proofs above leave them out, but a listener is on them.
+    pub(crate) const fn withholds_listener_proofs(&self) -> bool {
+        !matches!(self.receiver, DispatchReceiver::NoListener)
+            && !matches!(
+                self.caller,
+                Some(
+                    DispatchCaller::FreshStack
+                        | DispatchCaller::AwaitContinuation
+                        | DispatchCaller::ModuleInitialization
+                        | DispatchCaller::TestRunner
+                        | DispatchCaller::TestHelper
+                        | DispatchCaller::EventHandler
+                )
+            )
+    }
+
+    /// Whether a delivery may run inside an effect's apply, whose `flush()` guard
+    /// takes no event (ADR 0639). The same callers exclude it as a strict-read
+    /// window, but the receiver does not: a listener on `window` flushes too.
+    pub(crate) const fn withholds_flush_proofs(&self) -> bool {
+        !matches!(self.receiver, DispatchReceiver::NoListener)
             && !matches!(
                 self.caller,
                 Some(
@@ -147,6 +199,89 @@ impl SemanticLookup<'_> {
         })
     }
 
+    /// ADR 0634: some analyzed file names `markRaw` or writes a `shallow`
+    /// option. A record that entered a shallow store is raw for every later
+    /// store (`createStore(rec)` returns it as it is), so a store over a value
+    /// no literal states may then be no proxy.
+    pub(crate) fn raw_store_values_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::RawStoreValues);
+        *self.raw_store_values.get_or_init(|| {
+            self.files().iter().any(|file| {
+                file.ast
+                    .identifiers
+                    .iter()
+                    .any(|identifier| file.source_text(identifier.span) == Some("markRaw"))
+                    || file.ast.object_properties.iter().any(|property| {
+                        file.source_text(property.key)
+                            .is_some_and(|key| key.trim_matches(['"', '\'']) == "shallow")
+                    })
+            })
+        })
+    }
+
+    /// ADR 0634: the store the binding `binding` holds, created in `file`,
+    /// may be its raw value: its value is `markRaw(...)`, or names a value no
+    /// literal or derive function states and some file may mark one raw.
+    pub(crate) fn store_value_may_be_raw(
+        &self,
+        file: &FileFacts,
+        binding: &solid_facts::ast::BindingFact,
+    ) -> bool {
+        use solid_facts::ast::ArgumentValueKind;
+        let Some(call) = binding
+            .call_initializer
+            .and_then(|initializer| file.ast.call_at(initializer))
+        else {
+            return false;
+        };
+        if !matches!(
+            self.primitive_at_call(file, call.span),
+            Some(
+                solid_dialect::Primitive::CreateStore
+                    | solid_dialect::Primitive::CreateOptimisticStore
+            )
+        ) {
+            return false;
+        }
+        let Some(first) = call.arguments.first() else {
+            return false;
+        };
+        let value = file.ast.peel_ts_sugar_span(first.span);
+        if first.runtime_value_kind.is_data_literal()
+            || file.ast.array_literals.contains(&value)
+            || file
+                .ast
+                .object_get_shapes
+                .iter()
+                .any(|shape| shape.span == value)
+            || matches!(
+                first.value,
+                ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
+            )
+        {
+            return false;
+        }
+        self.raw_store_values_present()
+    }
+
+    /// ADR 0634: [`Self::store_value_may_be_raw`] of the store declared at
+    /// `declaration`, for a read any layer reports.
+    pub(crate) fn store_declared_may_be_raw(&self, declaration: &crate::Location) -> bool {
+        self.file_by_path(declaration.path.as_ref())
+            .is_some_and(|file| {
+                file.ast
+                    .bindings
+                    .iter()
+                    .find(|binding| {
+                        binding
+                            .names
+                            .iter()
+                            .any(|name| u64::from(name.span.start) == declaration.start_byte)
+                    })
+                    .is_some_and(|binding| self.store_value_may_be_raw(file, binding))
+            })
+    }
+
     /// ADR 0356, narrowed by ADR 0435: DOM dispatch runs handlers on its
     /// caller's stack. A visible synchronous dispatch withholds the ownerless
     /// proof for event-only invocations unless its target cannot reach a JSX
@@ -163,28 +298,48 @@ impl SemanticLookup<'_> {
     /// window.
     pub(crate) fn synchronous_event_read_dispatch_present(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
-        self.dispatch_veto().1
+        let veto = self.dispatch_veto();
+        // An apply's delivery has no window and no owner only while the queue
+        // drains on an empty stack: under an owned flush it has that owner,
+        // and the handler's write throws (`g10`, ADR 0639 with ADR 0613).
+        veto.1 || (veto.4 && self.flush_drains_under_owner())
     }
 
-    /// The two veto answers, owner proofs and read proofs
+    /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
+    pub(crate) fn synchronous_event_flush_dispatch_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
+        self.dispatch_veto().2
+    }
+
+    /// [`DispatchSite::withholds_listener_proofs`] of any dispatch of the program.
+    pub(crate) fn synchronous_listener_dispatch_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
+        self.dispatch_veto().3
+    }
+
+    /// The veto answers, owner, read, flush and listener proofs
     /// ([`Self::synchronous_event_dispatch_present`],
-    /// [`Self::synchronous_event_read_dispatch_present`]): the section
+    /// [`Self::synchronous_event_read_dispatch_present`],
+    /// [`Self::synchronous_event_flush_dispatch_present`]): the section
     /// [`crate::base::reads::Section::DispatchVeto`] binds them, and the memo
     /// [`super::project_memos::DispatchVetoAnswer`] keeps them between builds
     /// (ADR 0450). With no
     /// call anywhere that resolves to a dispatch (the hazard
     /// [`crate::base::Hazard::SynchronousDispatch`]) neither holds, whatever
     /// the censuses say, and they are not computed.
-    pub(crate) fn dispatch_veto(&self) -> (bool, bool) {
+    pub(crate) fn dispatch_veto(&self) -> (bool, bool, bool, bool, bool) {
         #[cfg(debug_assertions)]
         VetoComputation::assert_not_computing();
         if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
-            return (false, false);
+            return (false, false, false, false, false);
         }
         let sites = self.event_dispatch_sites();
         (
             sites.iter().any(DispatchSite::withholds_owner_proofs),
             sites.iter().any(DispatchSite::withholds_read_proofs),
+            sites.iter().any(DispatchSite::withholds_flush_proofs),
+            sites.iter().any(DispatchSite::withholds_listener_proofs),
+            sites.iter().any(DispatchSite::delivers_in_effect_apply),
         )
     }
 
@@ -205,6 +360,7 @@ impl SemanticLookup<'_> {
                         DispatchReceiver::Unknown => "unknown",
                         DispatchReceiver::Window => "window",
                         DispatchReceiver::Document => "document",
+                        DispatchReceiver::NoListener => "no listener",
                     }
                     .to_owned(),
                     caller: site.caller.map(|caller| caller.word().to_owned()),
@@ -237,8 +393,9 @@ impl SemanticLookup<'_> {
             let _guard = VetoComputation::enter();
             let mut sites = self.placed_dispatch_sites().to_vec();
             for site in &mut sites {
+                // Every receiver: the flush veto reads the caller of a `window`
+                // dispatch too.
                 if site.caller.is_none()
-                    && !site.receiver.excluded()
                     && self.file_by_path(&site.path).is_some_and(|file| {
                         crate::execution_role::dispatch_in_event_only_function(
                             file, site.span, self,
@@ -247,7 +404,6 @@ impl SemanticLookup<'_> {
                 {
                     site.caller = Some(DispatchCaller::EventHandler);
                 } else if site.caller.is_none()
-                    && !site.receiver.excluded()
                     && self.file_by_path(&site.path).is_some_and(|file| {
                         crate::execution_role::dispatch_in_test_only_function(file, site.span, self)
                     })
@@ -265,6 +421,7 @@ impl SemanticLookup<'_> {
     fn placed_dispatch_sites(&self) -> &[DispatchSite] {
         self.placed_event_dispatch.get_or_init(|| {
             let mut sites = Vec::new();
+            let mut click_listener = None;
             // The calls the base index lists as dispatches, per file in file
             // order ([`crate::base::Hazard::SynchronousDispatch`], the same
             // resolution of each call's callee), not every call of the
@@ -282,20 +439,261 @@ impl SemanticLookup<'_> {
                         continue;
                     };
                     let receiver = match name {
-                        "HTMLElement.click" => DispatchReceiver::Element,
+                        "HTMLElement.click"
+                            if self.created_element_unattached_to_a_listener(file, call)
+                                && !*click_listener
+                                    .get_or_insert_with(|| self.program_listens_for_click()) =>
+                        {
+                            DispatchReceiver::NoListener
+                        }
+                        // ADR 0642: that element's uses hold no `focus`, so it
+                        // never has focus to lose, whatever listens above it.
+                        "ChildNode.remove"
+                            if self.created_element_unattached_to_a_listener(file, call) =>
+                        {
+                            DispatchReceiver::NoListener
+                        }
                         "EventTarget.dispatchEvent" => self.dispatch_receiver(file, call),
-                        _ => continue,
+                        _ => DispatchReceiver::Element,
                     };
                     sites.push(DispatchSite {
                         path: file.path.to_string(),
                         span: call.span,
                         receiver,
-                        caller: self.dispatch_caller(file, call),
+                        caller: self
+                            .dispatch_caller(file, call)
+                            .or_else(|| self.dispatch_in_effect_apply(file, call.span)),
                     });
                 }
             }
             sites
         })
+    }
+
+    /// ADR 0640: the receiver of this `click()` is a `const` the function fills
+    /// from `document.createElement("a")`, and every use of it is a property write
+    /// (no `on*`), `click()`, `remove()`, or the argument of an append to
+    /// `document.body` or the root element. Its path holds no JSX element.
+    fn created_element_unattached_to_a_listener(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let ast = &file.ast;
+        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+            return false;
+        };
+        let Some(declared) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+        else {
+            return false;
+        };
+        let created = ast
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declared)
+            })
+            .and_then(|binding| binding.call_initializer)
+            .and_then(|initializer| ast.call_at(initializer));
+        let creator =
+            created.and_then(|created| ast.member_at(ast.peel_ts_sugar_span(created.callee)));
+        if !creator.is_some_and(|creator| {
+            file.source_text(creator.property) == Some("createElement")
+                && self.global_dom_variable(file, ast.peel_ts_sugar_span(creator.object))
+                    == Some("document")
+        }) {
+            return false;
+        }
+        // ADR 0645: an anchor's activation names no other element. A `label`
+        // clicks its control, and a checkbox fires `change` (Chrome).
+        if !created.is_some_and(|created| {
+            created.arguments.len() == 1
+                && matches!(
+                    file.source_text(ast.peel_ts_sugar_span(created.arguments[0].span)),
+                    Some("\"a\"" | "'a'" | "`a`")
+                )
+        }) {
+            return false;
+        }
+        ast.identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.span != declared
+                    && ast.reference_declaration(identifier.span) == Some(declared)
+            })
+            .all(|identifier| {
+                let Some(used) = ast
+                    .members
+                    .iter()
+                    .find(|used| ast.peel_ts_sugar_span(used.object) == identifier.span)
+                else {
+                    return self.appended_under_the_root(file, identifier.span);
+                };
+                let property = file.source_text(used.property).unwrap_or("on");
+                if ast.computed_members.contains(&used.span) {
+                    return false;
+                }
+                let called = ast.calls_with_peeled_callee(used.span).next().is_some();
+                if called {
+                    matches!(property, "click" | "remove")
+                } else {
+                    !property.starts_with("on")
+                        && ast
+                            .assignments
+                            .iter()
+                            .any(|assignment| assignment.target.contains(used.span))
+                }
+            })
+    }
+
+    /// `value` is the one argument of `document.body.append(value)`, or of
+    /// `appendChild` on it or on `document.documentElement`.
+    fn appended_under_the_root(&self, file: &solid_facts::FileFacts, value: Span) -> bool {
+        let ast = &file.ast;
+        ast.arguments_containing(value).any(|(call, _)| {
+            call.arguments.len() == 1
+                && ast.peel_ts_sugar_span(call.arguments[0].span) == value
+                && ast
+                    .member_at(ast.peel_ts_sugar_span(call.callee))
+                    .is_some_and(|append| {
+                        matches!(
+                            file.source_text(append.property),
+                            Some("append" | "appendChild")
+                        ) && ast
+                            .member_at(ast.peel_ts_sugar_span(append.object))
+                            .is_some_and(|root| {
+                                matches!(
+                                    file.source_text(root.property),
+                                    Some("body" | "documentElement")
+                                ) && self
+                                    .global_dom_variable(file, ast.peel_ts_sugar_span(root.object))
+                                    == Some("document")
+                            })
+                    })
+        })
+    }
+
+    /// ADR 0640: something in the program may hear a `click` that bubbles to the
+    /// root: a handler on a JSX `body` or `html`, an `onclick` property, or an
+    /// `addEventListener` for `click` or an event nothing names, on a target
+    /// other than one whose declaration has no place on a DOM path. ADR 0645:
+    /// the census is of every way to reach the method, not of its direct calls:
+    /// a bare `addEventListener`, a literal key, a read of the method (`.call`,
+    /// an alias), a computed key on a DOM global.
+    fn program_listens_for_click(&self) -> bool {
+        self.files().iter().any(|file| {
+            let ast = &file.ast;
+            let quiet = |callee: Span| {
+                ast.calls_with_peeled_callee(callee)
+                    .next()
+                    .is_some_and(|call| self.registers_no_click(file, call))
+            };
+            let named = |member: &solid_facts::ast::MemberFact, name: &str| {
+                if ast.computed_members.binary_search(&member.span).is_ok() {
+                    ast.literal_computed_members
+                        .iter()
+                        .any(|literal| literal.span == member.span && literal.key == name)
+                } else {
+                    file.source_text(member.property) == Some(name)
+                }
+            };
+            ast.jsx_elements.iter().any(|element| {
+                matches!(file.source_text(element.name.span), Some("body" | "html"))
+                    && element.attributes.iter().any(|attribute| {
+                        file.source_text(attribute.local_name)
+                            .is_none_or(|name| name.starts_with("on"))
+                    })
+            }) || ast.assignments.iter().any(|assignment| {
+                let target = ast.peel_ts_sugar_span(assignment.target);
+                file.source_text(target).is_none()
+                    || ast
+                        .member_at(target)
+                        .is_some_and(|member| named(member, "onclick"))
+            }) || ast.object_properties.iter().any(|property| {
+                file.source_text(property.key)
+                    .is_some_and(|key| key.trim_matches(['\'', '"']) == "onclick")
+            }) || ast.members.iter().any(|member| {
+                (named(member, "addEventListener") && !quiet(member.span))
+                    || (ast.computed_members.binary_search(&member.span).is_ok()
+                        && !ast
+                            .literal_computed_members
+                            .iter()
+                            .any(|literal| literal.span == member.span)
+                        && self
+                            .global_dom_variable(file, ast.peel_ts_sugar_span(member.object))
+                            .is_some())
+            }) || ast.identifiers.iter().any(|identifier| {
+                file.source_text(identifier.span) == Some("addEventListener")
+                    && ast.reference_declaration(identifier.span).is_none()
+                    && !ast
+                        .members
+                        .iter()
+                        .any(|member| member.property == identifier.span)
+                    && !quiet(identifier.span)
+            })
+        })
+    }
+
+    /// The call registers a listener for a literal event other than `click`, or
+    /// on a target whose declaration has no place on a DOM path.
+    fn registers_no_click(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let names_another_event = call.arguments.first().is_some_and(|event| {
+            !event.spread
+                && file.source_text(event.span).is_some_and(|text| {
+                    let quoted = text.len() >= 2
+                        && matches!(text.as_bytes()[0], b'"' | b'\'')
+                        && text.as_bytes()[text.len() - 1] == text.as_bytes()[0];
+                    quoted && !text[1..text.len() - 1].eq_ignore_ascii_case("click")
+                })
+        });
+        names_another_event
+            || self
+                .resolved_callee_call(file, call.callee)
+                .and_then(crate::runtime_semantics::standard_call_name)
+                .is_some_and(|name| {
+                    name.split('.').next().is_some_and(|target| {
+                        matches!(
+                            target,
+                            "AbortSignal"
+                                | "BroadcastChannel"
+                                | "EventSource"
+                                | "MediaQueryList"
+                                | "MessagePort"
+                                | "WebSocket"
+                                | "Worker"
+                                | "XMLHttpRequest"
+                        )
+                    })
+                })
+    }
+
+    /// ADR 0639: `site` is written directly in a `createEffect`'s apply. A render
+    /// effect's window is the body's, and takes any event.
+    fn dispatch_in_effect_apply(
+        &self,
+        file: &solid_facts::FileFacts,
+        site: Span,
+    ) -> Option<DispatchCaller> {
+        (self.dialect.effect_window_takes_only_its_event()
+            && file.ast.arguments_containing(site).any(|(call, index)| {
+                crate::execution_role::direct_callback_contains(
+                    file,
+                    call.arguments[index].span,
+                    site,
+                ) && self.primitive_at_call(file, call.span)
+                    == Some(solid_dialect::Primitive::CreateEffect)
+                    && self
+                        .dialect
+                        .apply_callback_argument(solid_dialect::Primitive::CreateEffect)
+                        == Some(index)
+            }))
+        .then_some(DispatchCaller::EffectApply)
     }
 
     /// `window.dispatchEvent(…)` and `document.dispatchEvent(…)` where the

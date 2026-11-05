@@ -693,7 +693,7 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
         let resolved = view.resolved_callee_call(call.callee);
         if resolved
             .and_then(crate::runtime_semantics::standard_call_name)
-            .is_some_and(|name| matches!(name, "EventTarget.dispatchEvent" | "HTMLElement.click"))
+            .is_some_and(crate::runtime_semantics::delivers_synchronously)
         {
             entries.push((Hazard::SynchronousDispatch, ordinal(index)));
         }

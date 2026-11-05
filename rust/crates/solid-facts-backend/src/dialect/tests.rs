@@ -124,6 +124,8 @@ fn catalog_prose_program() -> Program {
             async_provenance: true,
             declared_loading: false,
             options_opaque: false,
+            caught: false,
+            component_prop: false,
             ssr_client_hole: false,
             server_rendering_unresolved: false,
             host_callback_timing: false,
@@ -1150,7 +1152,7 @@ fn the_notice_identity_is_the_one_the_catalog_publishes() {
     // The advice pins all three, and names what it found.
     assert!(
             finding.hint.contains(
-                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.17, the audited release of each"
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.21, the audited release of each"
             ) && finding
                 .hint
                 .contains(&format!("this project resolves {found}")),

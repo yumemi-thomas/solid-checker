@@ -50,6 +50,21 @@ pub(crate) struct AsyncSourceOptions {
     pub(crate) opaque: bool,
 }
 
+/// [`async_source_options`], with a compute that may answer synchronously
+/// (ADR 0631) read as opaque options are: nothing it projects is proven.
+pub(crate) fn first_answer_options(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+) -> AsyncSourceOptions {
+    let mut options = async_source_options(file, call, primitive, lookup.dialect);
+    options.opaque |= call.arguments.first().is_some_and(|argument| {
+        crate::owners::computation_may_answer_sync(lookup, file, argument.span)
+    });
+    options
+}
+
 /// Reads the async/hydration option surface of one source-creating call, as
 /// far as the options argument is statically readable. Value claims
 /// (`seedLoadingValue: true`, `ssrSource: "client"` with nothing declared)

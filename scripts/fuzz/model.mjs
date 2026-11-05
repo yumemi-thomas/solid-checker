@@ -78,6 +78,12 @@ export const nul = () => ({ k: "nul" });
 export const jsx = () => ({ k: "jsx" });
 /** `createOwner()` (the recall axes' bound owner: `const o = createOwner(); runWithOwner(o, ...)`). */
 export const createOwnerExpr = () => ({ k: "createOwner" });
+/** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
+/** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641). */
+export const propEl = (tag, e) => ({ k: "propEl", tag, e });
+export const domExpr = (text, web, solid) => ({ k: "dom", text, ...(web ? { webNames: web } : {}), ...(solid ? { solidNames: solid } : {}) });
+/** `el.addEventListener(type, fn)`: a listener the program dispatches to itself. */
+export const listenExpr = (target, type, fn) => ({ k: "listen", target, type, fn });
 
 /**
  * Control-flow statements (the recall axes, misuse.mjs RECALL_LAYERS and the after-await contexts): `body` runs exactly once, in the
@@ -97,7 +103,9 @@ export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", 
   "handoff-assign-param", "handoff-assign-returned", "handoff-assign-this"];
 /** T2 `depth`: the site under N closures each called in place, N at and around the engine's 16-layer climb bound. */
 export const DEPTH_FORMS = ["depth-15", "depth-16", "depth-17"];
-export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
+/** A carrier that runs its callback zero times, or for a length nothing states (ADRs 0563, 0566, 0580): a program's site there runs nothing. */
+export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
+export const CTL_FORMS = [...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
 export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
@@ -158,8 +166,9 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
 export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
-/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`. */
-export const loadingView = (on, children) => ({ k: "loading", on, children });
+/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`;
+ * `onExpr`: the `on` attribute's expression as written (LOADING_ON_ACCESSOR). */
+export const loadingView = (on, children, onExpr = null) => ({ k: "loading", on, children, onExpr });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
@@ -181,7 +190,23 @@ export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe")
 /** `createStore<{ v: number; a?: { v: number } }>({ v })`: an optional link (`s.a.v = 7` is TS18048: the typed-away templates);
  * `leaf`: `a?: { b?: number }`, open-work.md's form (`s.a.b = 1`). */
 export const storeLinkSignal = (name, init, leaf = false) => ({ ...signal(name, init, "probe"), kind: leaf ? "store-link-leaf" : "store-link" });
+/** `createStore<number[]>([v])`: a store that is an array (an iteration reads `length`). */
+export const storeArraySignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-array" });
+/** `createStore<{ v?: number }>({})`: no key to read yet (rc.21 is silent on `{ ...s }`). */
+export const storeEmptySignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-empty" });
+/** `createStore({ v, a: { v }, items: [v] }, { shallow: true })`: every value is served raw. */
+export const storeShallowSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-shallow" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+/** A derived store whose first answer has not landed: `createStore(async () => ({ v }), { v })`. */
+export const storeAsyncSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-async" });
+/** A store over a record that entered a shallow store first: raw, no proxy (ADR 0634). */
+export const storeRawSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-raw" });
+/** A store holding a class instance whose method writes `this` (ADR 0638). */
+export const storeClassSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-class" });
+/** `createMemo(async () => 1, { loadingValue: 0 })`: served through its first flight (ADR 0632). */
+export const asyncDeclaredSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-declared" });
+/** A compute that may answer without a flight (ADR 0631): typed `number | Promise<number>`, the plain value at run time. */
+export const asyncMaybeSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-maybe" });
 /**
  * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),
  * `createOptimistic(init)` (`optimistic`), a writable memo `createSignal(() => init)` (`writable-memo`), `createOptimisticStore`
@@ -345,6 +370,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           checkBlock(item.handler, scopeOf(scope), "free");
           break;
         }
+        case "propEl": typeOf(item.e, scope); break;
         case "child": case "attr": {
           const type = typeOf(item.e, scope);
           if (type && type.t !== "num") fail(`${where}: a JSX ${item.k} must be a number, not ${type.t}`);
@@ -475,6 +501,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
     function typeOf(e, scope) {
       switch (e.k) {
         case "num": return T.num;
+        case "dom": return T.unknown;
+        case "listen": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
         case "own": return ownType(e, scope);

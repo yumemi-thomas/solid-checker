@@ -72,16 +72,6 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1503,
-      "end": 1509,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -99,16 +89,6 @@
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 1529,
       "end": 1535,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1809,
-      "end": 1815,
       "fixes": 0
     },
     {

@@ -25,9 +25,10 @@ describe("the audit's oracle sample", () => {
     }
   });
 
-  it("takes focus.mjs's sample: one program per code, context and outcome", () => {
+  // `source` and `mount` refine the old strata, so every code, context and outcome keeps a program (ADR 0641).
+  it("takes focus.mjs's sample: one program per code, context, source, mount and outcome", () => {
     expect(ORACLE_PER_STRATUM).toBe("1");
-    expect(ORACLE_AXES).toBe("code,context,outcome");
+    expect(ORACLE_AXES).toBe("code,context,source,mount,outcome");
     expect(AUDIT_GRIDS.toSorted()).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo", "mx-census", "mx-recall", "lg-recall", "mx-pairs", "lg-pairs"].toSorted());
   });
 });

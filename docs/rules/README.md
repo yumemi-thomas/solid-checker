@@ -1,7 +1,7 @@
 # Rules
 
-solid-checker ships one dialect-owned catalog: 34 identities for Solid 2.0,
-with unprefixed rule names: 28 rule identities a project configures (SC2004 and
+solid-checker ships one dialect-owned catalog: 36 identities for Solid 2.0,
+with unprefixed rule names: 30 rule identities a project configures (SC2004 and
 SC2005 share one name), two obligations
 (SC9005 and SC9012, [ADR 0440](../decisions.md#adr-0440)) and four findings
 decided before or beside the analysis (SC9013 to SC9016).
@@ -96,12 +96,16 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC2006 | [flush-in-action](flush-in-action.md) | error | on |
 | SC2007 | [static-dynamic-async-source](static-dynamic-async-source.md) | error | on |
 | SC2008 | [flush-in-effect-callback](flush-in-effect-callback.md) | warning | on |
+| SC2009 | [optimistic-write-before-load](optimistic-write-before-load.md) | error | on |
 | SC3001 | [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) | error | on |
+| SC3002 | [on-flush-in-owned-scope](on-flush-in-owned-scope.md) | warning | on |
 | SC4001 | [missing-owner](missing-owner.md) | warning | on |
 | SC4002 | [missing-context-provider](missing-context-provider.md) | error | on |
 | SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error | on |
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning | on |
 | SC5006 | [loading-on-outside-hold](loading-on-outside-hold.md) | warning | on |
+| SC5007 | [loading-on-accessor](loading-on-accessor.md) | warning | on |
+| SC5008 | [caught-reactive-read](caught-reactive-read.md) | warning | on |
 | SC6001 | [primitive-in-directive-application](primitive-in-directive-application.md) | warning | on |
 | SC6002 | [primitive-in-effect-callback](primitive-in-effect-callback.md) | error | on |
 | SC7001 | [missing-effect-function](missing-effect-function.md) | error | on |

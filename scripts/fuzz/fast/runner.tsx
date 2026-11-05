@@ -102,7 +102,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   try {
     const plan = JSON.parse(readFileSync(join(caseDir, 'sites.json'), 'utf8'));
     const captured = await captureArtifact(async () => {
-      const mod = await load();
+      // Rendered from the case's entry, in the task that evaluates App.tsx (fast.mjs ENTRY_SOURCE).
+      (globalThis as any).__scMount = (mod: Record<string, unknown>) => {
       const root = document.createElement('div'); root.id = 'root'; document.body.append(root);
       phase = 'render';
       // As scripts/runtime-oracle.mjs: every exported capitalized function renders in its own root.
@@ -113,6 +114,9 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
         try { disposers.push(render(() => <Component />, host)); }
         catch (e) { errors.push({ phase, kind: 'render', export: name, ...describeError(e) }); }
       }
+      };
+      await load();
+      const root = document.getElementById('root') as HTMLElement;
       phase = 'exercise';
       await pause(settings.pauseMs);
       for (let pass = 0; pass < settings.eventPasses; pass++) {

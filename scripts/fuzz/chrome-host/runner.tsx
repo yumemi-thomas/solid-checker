@@ -103,7 +103,9 @@ async function runCase() {
   try {
     const plan = await (await fetch(`/cases/${id}/sites.json`)).json();
     const captured = await captureArtifact(async () => {
-      const mod = await import(/* @vite-ignore */ `/cases/${id}/App.tsx`);
+      // Rendered from the entry module, in the task that evaluates App.tsx, as a page's own entry does (the oracle's `mainSource`). A
+      // dynamic import's continuation is a microtask later: a module-scope async source had answered by then, where Chrome's has not.
+      (globalThis as any).__scMount = (mod: Record<string, unknown>) => {
       const root = document.createElement('div'); root.id = 'root'; document.body.append(root);
       phase = 'render';
       for (const [name, value] of Object.entries(mod).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
@@ -115,6 +117,9 @@ async function runCase() {
         try { disposers.push(render(() => <Component />, host)); }
         catch (e) { consoleErrors.push(`render failed ${name} ${String((e as any)?.message ?? e)}`); setTimeout(() => { throw e; }); }
       }
+      };
+      await import(/* @vite-ignore */ `/cases/${id}/sc-entry.ts`);
+      const root = document.getElementById('root') as HTMLElement;
       phase = 'exercise';
       await pause(settings.pauseMs);
       for (let pass = 0; pass < settings.eventPasses; pass++) {

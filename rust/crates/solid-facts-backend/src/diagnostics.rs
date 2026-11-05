@@ -610,6 +610,7 @@ impl DiagnosticSession {
                 .premises
                 .push("standard runtime configuration (ADRs 0266/0268)".into());
         }
+        snapshot.premises.push("dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner".into());
         if let solid_reactive_ir::router_params::RouterParamsStatus::Applies { version } =
             &router_params
         {
@@ -1537,7 +1538,7 @@ fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
     };
     if withheld.is_empty() {
         let why = match site.receiver.as_str() {
-            "window" | "document" => format!("receiver {}", site.receiver),
+            "window" | "document" | "no listener" => format!("receiver {}", site.receiver),
             _ => format!("caller {}", site.caller.as_deref().unwrap_or("unproven")),
         };
         return format!("synchronous dispatch (ADR 0435) at {at} excluded: {why}");

@@ -140,6 +140,16 @@
       "start": 2540,
       "end": 2546,
       "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 2584,
+      "end": 2591,
+      "fixes": 0
     }
   ]
 }

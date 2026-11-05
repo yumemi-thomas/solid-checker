@@ -11,6 +11,21 @@ A positively identified visible configuration use makes it uncertifiable,
 with the veto site related. Missing reference evidence does not veto this
 conditional premise.
 
+A whole store is read by more than its members (ADRs 0620, 0621, measured on
+rc.21): `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Array.from(s)` and
+`${s}` on any store; `for…of`, an array or call spread and array destructuring on
+an array; `{...s}`, `Object.values`, `Object.entries` and `Object.assign` on an
+object that holds a key. A store of unknown shape is uncertifiable there, and
+`Object.keys`, `in`, `hasOwn`, `for…in` and `snapshot` read nothing on a settled store.
+A `merge` view's Get lands on its last source that holds the key: a key a literal
+serves reads nothing (ADR 0630). A store over a value no literal states may be its
+raw value where a project uses `markRaw` or a shallow store (ADR 0634).
+
+`untrack` scopes the wrapped read: a Get of a store proxy it returns warns
+(`const o = untrack(() => s.o); o.x`), proven where the store's literal initial value
+holds an object or array there (ADR 0629). A labelled `untrack(fn, "name")` opens a
+window wherever it runs (ADR 0628).
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top
@@ -342,3 +357,5 @@ A read in a callback named at its sole `createRoot`/`runWithOwner` position, or 
 ADRs 0528–0530: eager IIFEs in handler expressions do not inherit the yielded handler's dispatch exemption. Binding-dispatched reads in proven in-place layers retain an undecided enclosing-summary row (an obligation). A closed dynamic-only component entry has the unwindowed role: a stale snapshot, with no promise of a runtime diagnostic; mixed entries stay unproven. Under `dynamicCore`'s unlabelled `untrack`, a read in `flush(fn)` (which keeps the label) is such a snapshot too, also through a closure it calls (ADR 0571).
 
 Placement climbs that exhaust their budget retain an uncertifiable read (ADR 0532): 16 in-place layers, eight generator steps, or eight layers inspected for a pre-suspension window. Outer unread layers cannot supply a deferred or unwindowed role.
+
+A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.

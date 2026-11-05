@@ -1925,6 +1925,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
+        self.key_probed_operands.push(span(statement.right.span()));
         let whole = span(statement.span);
         self.loop_statements.push(whole);
         self.push_iterated_loop_repeats(
@@ -1999,6 +2000,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
+        if let Some(handler) = &statement.handler {
+            self.try_catches.push(TryCatchFact {
+                block: span(statement.block.span),
+                handler: span(handler.span),
+            });
+        }
         let head = statement.block.body.first().and_then(|first| match first {
             oxc_ast::ast::Statement::ExpressionStatement(expression) => {
                 match &expression.expression {
@@ -2719,6 +2726,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
+        if expression.operator == oxc_ast::ast::BinaryOperator::In {
+            self.key_probed_operands.push(span(expression.right.span()));
+        }
         use oxc_syntax::operator::BinaryOperator;
         // Every binary operator yields a number, bigint, string or boolean.
         self.primitive_results.push(span(expression.span));

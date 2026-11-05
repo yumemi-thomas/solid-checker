@@ -802,6 +802,286 @@ pub(super) fn hook_source_pending(
                 .any(|site| render_runs_first(lookup, site.entry, site.render))))
 }
 
+/// ADR 0628: the binding declared at `declared` is the value of a creation or
+/// of a hook returning a fresh source, run where the binding is. A value
+/// `createRoot(() => createMemo(...))` hands back belongs to the root's owner.
+pub(super) fn binding_creates_here(
+    file: &solid_facts::FileFacts,
+    declared: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declared))
+        .and_then(|binding| binding.call_initializer)
+        .and_then(|initializer| file.ast.call_at(initializer))
+        .is_some_and(|call| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| lookup.dialect.creates_reactive_source(primitive))
+                || lookup.returned_source_at(file, call.span).is_some()
+        })
+}
+
+/// ADR 0628: the head of `value` (`m`, `h.m`, `h.a.b`) is a `const` holding the
+/// result of a call no primitive states, directly or through what its
+/// initializer names (`const a = h.m`, `const [, a] = [0, m]`): a hook whose
+/// body may have created the value under the same owner.
+pub(crate) fn hook_result_root<'f>(
+    file: &'f solid_facts::FileFacts,
+    value: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f CallFact> {
+    hook_result_within(file, value, lookup, 4)
+}
+
+fn hook_result_within<'f>(
+    file: &'f solid_facts::FileFacts,
+    value: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> Option<&'f CallFact> {
+    let ast = &file.ast;
+    let mut object = ast.peel_ts_sugar_span(value);
+    while let Some(member) = ast.member_at(object) {
+        object = ast.peel_ts_sugar_span(member.object);
+    }
+    let declaration = ast.reference_declaration(object)?;
+    let holder = ast.bindings.iter().find(|candidate| {
+        candidate.immutable && candidate.names.iter().any(|name| name.span == declaration)
+    })?;
+    let initializer = ast.peel_ts_sugar_span(holder.initializer?);
+    if let Some(call) = ast.call_at(initializer) {
+        return (!call.construct && lookup.primitive_at_call(file, call.span).is_none())
+            .then_some(call);
+    }
+    let depth = depth.checked_sub(1)?;
+    ast.identifiers
+        .iter()
+        .filter(|identifier| {
+            initializer.contains(identifier.span)
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+        .find_map(|identifier| hook_result_within(file, identifier.span, lookup, depth))
+}
+
+/// ADR 0628: the project function `call` runs reads its parameter `index` under
+/// an exact `untrack` written in its own body: `untrack(f)`, or
+/// `untrack(() => f())`. The summaries see nothing there: an `untrack`
+/// callback reads silently unless the caller's window keeps the pending throw.
+pub(crate) fn callee_reads_parameter_under_untrack(
+    file: &solid_facts::FileFacts,
+    call: &CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some((callee_file, callee, true)) = project_callee_at_parameter(file, call, index, lookup)
+    else {
+        return false;
+    };
+    let Some(parameter) = callee
+        .parameters
+        .get(index)
+        .filter(|parameter| parameter.shape == BindingShape::Identifier)
+        .and_then(|parameter| parameter.names.first())
+        .map(|name| name.span)
+    else {
+        return false;
+    };
+    let ast = &callee_file.ast;
+    let names_parameter =
+        |span: Span| ast.reference_declaration(ast.peel_ts_sugar_span(span)) == Some(parameter);
+    ast.calls.iter().any(|candidate| {
+        callee.body.contains(candidate.span)
+            && lookup.primitive_at_call(callee_file, candidate.span)
+                == Some(solid_dialect::Primitive::Untrack)
+            && candidate.arguments.first().is_some_and(|first| {
+                let first = ast.peel_ts_sugar_span(first.span);
+                names_parameter(first)
+                    || ast.function_at(first).is_some_and(|literal| {
+                        ast.calls.iter().any(|inner| {
+                            literal.body.contains(inner.span) && names_parameter(inner.callee)
+                        })
+                    })
+            })
+    })
+}
+
+/// ADR 0628: the read `read` (a call's callee or a member, `h.m` or `h.s.a`, or a
+/// slot of `const { m } = useM()`) is of the source declared at `declared` in
+/// `hook_file`, through a call of the function declaring it written directly
+/// in one of `layers`, which all run under one owner, and the source's own
+/// creation sits directly in that function. So the source's `_parent` is the
+/// owner the read runs under (`@solidjs/signals@2.0.0-rc.21`
+/// `dist/dev-shared.js:6143-6149`). A hook call in a root, a stored result or
+/// an alias of it is not followed: an obligation.
+pub(super) fn read_of_hook_called_in(
+    file: &solid_facts::FileFacts,
+    read: Span,
+    layers: &[&FunctionFact],
+    hook_file: &solid_facts::FileFacts,
+    declared: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(hook) = crate::owners::containing_ast_function(&hook_file.ast, declared) else {
+        return false;
+    };
+    let Some(binding) = hook_file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declared))
+    else {
+        return false;
+    };
+    let read = ast.peel_ts_sugar_span(read);
+    // The name of the call's result, and the key the read takes of it.
+    let mut object = read;
+    let mut head = None;
+    while let Some(member) = ast.member_at(object) {
+        head = Some(member);
+        object = ast.peel_ts_sugar_span(member.object);
+    }
+    let Some(declaration) = ast.reference_declaration(object) else {
+        return false;
+    };
+    let Some(holder) = ast.bindings.iter().find(|candidate| {
+        candidate.immutable
+            && candidate.names.iter().any(|name| name.span == declaration)
+            && !crate::indexes::binding_written(file, declaration)
+    }) else {
+        return false;
+    };
+    let Some(call) = holder
+        .initializer
+        .and_then(|initializer| ast.call_at(ast.peel_ts_sugar_span(initializer)))
+    else {
+        return false;
+    };
+    // `const m = useM()`, with `useM` returning a fresh source: the holder is
+    // that source.
+    if head.is_none() && holder.shape == BindingShape::Identifier {
+        return crate::owners::containing_ast_function(ast, call.span)
+            .is_some_and(|function| layers.iter().any(|layer| layer.span == function.span))
+            && lookup.returned_source_at(file, call.span).is_some();
+    }
+    let key = match holder.shape {
+        BindingShape::Identifier => {
+            let Some(head) = head.filter(|head| {
+                !ast.computed_members.contains(&head.span)
+                    && ast.optional_members.binary_search(&head.span).is_err()
+            }) else {
+                return false;
+            };
+            file.source_text(head.property).map(str::to_owned)
+        }
+        BindingShape::Object => holder
+            .object_slots
+            .iter()
+            .find(|slot| slot.local.span == declaration && slot.plain_identifier_key)
+            .map(|slot| slot.property.to_string()),
+        _ => None,
+    };
+    let Some(key) = key else {
+        return false;
+    };
+    !call.construct
+        && crate::owners::containing_ast_function(ast, call.span)
+            .is_some_and(|function| layers.iter().any(|layer| layer.span == function.span))
+        && project_callee_at_parameter(file, call, 0, lookup).is_some_and(
+            |(callee_file, callee, _)| {
+                callee_file.path == hook_file.path && callee.span == hook.span
+            },
+        )
+        && hook_returned_slot_holds(hook_file, hook, binding, &key)
+}
+
+/// ADR 0628: the read goes through a module `const` holding a call's result
+/// (`const shared = useVals(); shared.a()`), written nowhere, directly or through
+/// local `const`s and closures that name only such holders: the hook ran at
+/// module scope, so what it made belongs to no owner of a body.
+pub(crate) fn read_of_module_hook_result(file: &solid_facts::FileFacts, read: Span) -> bool {
+    read_of_module_hook_within(file, read, 4)
+}
+
+fn read_of_module_hook_within(file: &solid_facts::FileFacts, read: Span, depth: usize) -> bool {
+    let ast = &file.ast;
+    let head_of = |span: Span| {
+        let mut object = ast.peel_ts_sugar_span(span);
+        while let Some(member) = ast.member_at(object) {
+            object = ast.peel_ts_sugar_span(member.object);
+        }
+        ast.reference_declaration(object)
+    };
+    let Some(declaration) = head_of(read) else {
+        return false;
+    };
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+    }) else {
+        return false;
+    };
+    let Some(initializer) = binding.initializer.map(|span| ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    if crate::indexes::binding_written(file, declaration)
+        || ast
+            .assignments
+            .iter()
+            .any(|assignment| head_of(assignment.target) == Some(declaration))
+    {
+        return false;
+    }
+    if crate::indexes::at_module_scope(ast, declaration) {
+        return ast.call_at(initializer).is_some();
+    }
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let mut named = ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            initializer.contains(identifier.span)
+                && ast
+                    .reference_declaration(identifier.span)
+                    .is_some_and(|declared| !initializer.contains(declared))
+        })
+        .peekable();
+    named.peek().is_some()
+        && named.all(|identifier| read_of_module_hook_within(file, identifier.span, depth))
+}
+
+/// Whether a return of `hook` is a closed literal holding the source `binding`
+/// declares under `key`.
+fn hook_returned_slot_holds(
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    binding: &BindingFact,
+    key: &str,
+) -> bool {
+    let hook_ast = &hook_file.ast;
+    let source_name = binding.names.first().map(|name| name.span);
+    hook_ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            crate::owners::containing_ast_function(hook_ast, returned.span)
+                .is_some_and(|function| function.span == hook.span)
+        })
+        .filter_map(|returned| returned.argument)
+        .map(|argument| hook_ast.peel_ts_sugar_span(argument))
+        .any(|object| {
+            closed_literal_slot_value(hook_file, object, key).is_some_and(|value| {
+                let value = hook_ast.peel_ts_sugar_span(value);
+                // A shorthand property's value is the binder's own span.
+                Some(value) == source_name || hook_ast.reference_declaration(value) == source_name
+            })
+        })
+}
+
 /// ADR 0511: the member a call's callee names through closed local forms,
 /// a named non-computed, non-optional member `X.N` with `X` an identifier:
 /// the callee itself (`props.k()`), or an identifier bound by an immutable,
@@ -996,22 +1276,5 @@ fn read_through_hook_call(
     let Some(key) = key else {
         return false;
     };
-    let hook_ast = &hook_file.ast;
-    let memo_name = binding.names.first().map(|name| name.span);
-    hook_ast
-        .returns
-        .iter()
-        .filter(|returned| {
-            crate::owners::containing_ast_function(hook_ast, returned.span)
-                .is_some_and(|function| function.span == hook.span)
-        })
-        .filter_map(|returned| returned.argument)
-        .map(|argument| hook_ast.peel_ts_sugar_span(argument))
-        .any(|object| {
-            closed_literal_slot_value(hook_file, object, &key).is_some_and(|value| {
-                let value = hook_ast.peel_ts_sugar_span(value);
-                // A shorthand property's value is the binder's own span.
-                Some(value) == memo_name || hook_ast.reference_declaration(value) == memo_name
-            })
-        })
+    hook_returned_slot_holds(hook_file, hook, binding, &key)
 }

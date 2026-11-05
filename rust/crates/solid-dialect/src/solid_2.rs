@@ -168,7 +168,11 @@ pub struct Solid2 {
     /// `dispatchAsInteraction`'s dev build calls signals' `withInteraction`,
     /// `solid-js`'s client `createDeferred` is signals', and the hydration drain
     /// `onHydrationEnd` waits for is reached from web's `hydrate`.
-    rc17_callback_exports: bool,
+    ///
+    /// [`releases::TripleExports::Rc21`] adds what rc.21's whole triple answers:
+    /// `onFlush` is an export, and `untrack` keeps the pending throw for a
+    /// source its strict window's own owner made.
+    triple_exports: releases::TripleExports,
 }
 
 impl Solid2 {
@@ -202,7 +206,7 @@ impl Solid2 {
         use crate::OptionLiteral;
         // Unreachable through `primitive`, which names it only where it is
         // exported; the bare name answers nothing.
-        if !self.rc17_callback_exports {
+        if !self.rc17_callback_exports() {
             return Primitive::DynamicComponent;
         }
         if option(2, "") != OptionLiteral::Absent {
@@ -280,6 +284,10 @@ const TABLE: &[(&str, Primitive)] = &[
     ("Errored", Primitive::Errored),
     ("flush", Primitive::Flush),
     ("For", Primitive::For),
+    // New in `solid-js@2.0.0-rc.21`: `@solidjs/signals`' `from`, wrapped for
+    // hydration (`dist/server.js`'s `from` and `brandFrom`). Its gate is
+    // `Solid2::exports`.
+    ("from", Primitive::From),
     ("getOwner", Primitive::GetOwner),
     ("httpHeader", Primitive::HttpHeader),
     ("httpStatus", Primitive::HttpStatus),
@@ -300,6 +308,10 @@ const TABLE: &[(&str, Primitive)] = &[
     // Exported from `solid-js@2.0.0-rc.17` (`dist/solid.dev.js:385`,
     // `solid.js:345`, `solid.observe.js:362`, `server.js:2731`,
     // `server.dev.js:3065`, `server.observe.js:2904`); gated like `until`.
+    // New in `solid-js@2.0.0-rc.21`, re-exported from `@solidjs/signals`
+    // (`dist/dev.js:3958-3980`): `schedule(); queueMicrotask(callback);`. Its
+    // gate is `Solid2::exports`.
+    ("onFlush", Primitive::OnFlush),
     ("onHydrationEnd", Primitive::OnHydrationEnd),
     ("onSettled", Primitive::OnSettled),
     ("reconcile", Primitive::Reconcile),
@@ -342,6 +354,8 @@ pub(crate) const RELEASE_GATED_NAMES: &[&str] = &[
     "createDeferred",
     "lazyModule",
     "onHydrationEnd",
+    "onFlush",
+    "from",
 ];
 
 impl Dialect for Solid2 {
@@ -409,6 +423,14 @@ impl Dialect for Solid2 {
                 server: true,
                 runtime_targets: TARGETS,
             },
+            crate::HostBooleanExport {
+                module: "@solidjs/web",
+                export: "isServer",
+                version: "2.0.0-rc.21",
+                client: false,
+                server: true,
+                runtime_targets: TARGETS,
+            },
         ]
     }
 
@@ -433,6 +455,41 @@ impl Dialect for Solid2 {
         index == 0
             && (primitive == Primitive::IsPending
                 || (primitive == Primitive::Latest && !self.latest_rejects_pending_read))
+    }
+
+    // rc.21 `untrack` (`@solidjs/signals` `dist/dev-shared.js`, #4630): no label
+    // in an active strict window sets `strictPending = strictRead`, and `read()`
+    // throws `PENDING_ASYNC_UNTRACKED_READ` when `strictPending &&
+    // owner._parent === context`, so for a node the reader's own owner made.
+    // Measured on the dev build from a component body: `createMemo(async …)`
+    // read through `untrack(() => m())` throws; a labelled `untrack` throws by
+    // its own window. rc.17 has no `strictPending`.
+    fn untrack_keeps_own_pending_throw(&self) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
+    }
+
+    // rc.21: `resolve` and `until` from `createTrackedEffect` throw "Cannot call
+    // resolve inside a reactive scope", the observer guard, with no leaf-owner
+    // mechanism (Chrome, ADR 0641). rc.17 is measured otherwise (ADR 0614).
+    fn leaf_call_throws_observer_guard(&self, primitive: Primitive) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
+            && matches!(primitive, Primitive::Resolve | Primitive::Until)
+    }
+
+    // rc.21 records the queue's event in an effect's window (`strictReadEvent`)
+    // and compares `globalThis.event`. Measured in Chrome (ADR 0639): a handler
+    // an apply dispatches reads silently. A body's window takes any event.
+    fn effect_window_takes_only_its_event(&self) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
+    }
+
+    // rc.21 `devGuardOptimisticBeforeLoad` (`@solidjs/signals` `dist/dev-shared.js`):
+    // `STATUS_UNINITIALIZED` throws `OPTIMISTIC_WRITE_BEFORE_LOAD`, ahead of
+    // `storeSetter`'s guard. Measured on the dev build: `createOptimistic(async …)`
+    // and `createOptimisticStore(async …, seed)` throw, a plain value form and a
+    // written-after-load setter do not.
+    fn refuses_optimistic_write_before_load(&self) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
     }
 
     fn version(&self) -> Version {
@@ -579,6 +636,8 @@ impl Dialect for Solid2 {
             // rc.17: `lazyModule(fn, moduleUrl?)`, `onHydrationEnd(callback)`.
             | Primitive::LazyModule
             | Primitive::OnHydrationEnd
+            | Primitive::OnFlush
+            | Primitive::From
             // Both `dynamic` call forms keep the source at 0; the form
             // changes how it runs, not where it sits.
             | Primitive::DynamicStatic
@@ -660,6 +719,10 @@ impl Dialect for Solid2 {
                 // (`callback_executions`).
                 | Primitive::LazyModule
                 | Primitive::OnHydrationEnd
+                // `onFlush` only from a microtask, `from` only in a computation
+                // that returns its result.
+                | Primitive::OnFlush
+                | Primitive::From
                 // dynamic(source, { static: true }) is
                 // `staticDynamic(untrack(source))`: the signals `untrack`,
                 // which clears the listener around the call.
@@ -847,6 +910,18 @@ impl Dialect for Solid2 {
             && (primitive == Primitive::CreateRoot
                 || (self.render_creates_root
                     && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
+    }
+
+    /// ADR 0644: `flush`, and `render`, which calls it after `createRoot`
+    /// (`@solidjs/web@2.0.0-rc.21` `dist/web.dev.js:551`; Chrome: an apply queued
+    /// before a nested `render` runs under the caller's owner). `hydrate` reaches
+    /// `render` once hydration is done (`:1630`), and flushes in its own path;
+    /// read, since a page with no server output cannot run it.
+    fn drains_queue_on_caller_stack(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::Flush | Primitive::Render | Primitive::Hydrate
+        )
     }
 
     /// ADR 0613: `createEffect`'s apply (every run), `createRenderEffect`'s
@@ -1336,6 +1411,23 @@ impl Dialect for Solid2 {
             // the enclosing root as owner (a write threw) when it was called
             // in a `createRoot` body. The server builds: `null` everywhere.
             Primitive::OnHydrationEnd => &[(0, CallbackOwner::Conditional)],
+            // `onFlush(callback)` ends in `queueMicrotask(callback)` on every
+            // path (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:3958-3980`).
+            // Probed on the dev client build from a root body, a memo compute,
+            // an effect compute and apply, `onSettled`, a tracked effect and a
+            // bare call: `getOwner()` in the callback is `null`, a write is
+            // legal, and `createEffect` raises `NO_OWNER_EFFECT`. The server
+            // builds define it as a no-op, so the callback never runs there.
+            Primitive::OnFlush => &[(0, CallbackOwner::None)],
+            // `from(subscribe)` calls nothing; the iterator a computation asks
+            // for does (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js`'s `from`).
+            // Probed on the dev client build: not run at the call, nor ever when
+            // no computation returns the result; returned from a memo compute
+            // it runs in that pass, with `getOwner()` and `getObserver()` set, a
+            // read re-runs it and a write raises
+            // `REACTIVE_WRITE_IN_OWNED_SCOPE`. Whether a computation consumes it
+            // is not known at the call, so the owner is conditional.
+            Primitive::From => &[(0, CallbackOwner::Conditional)],
             // Both boundaries own the scope their body runs in, and render
             // their fallback under it.
             Primitive::CreateErrorBoundary | Primitive::CreateLoadingBoundary => {
@@ -1830,6 +1922,8 @@ impl Dialect for Solid2 {
             // callback from a microtask or the hydration drain.
             | Primitive::LazyModule
             | Primitive::OnHydrationEnd
+            | Primitive::OnFlush
+            | Primitive::From
             | Primitive::Action
             | Primitive::ClientOnly => &[(0, Execution::Deferred)],
             Primitive::CreateRoot
@@ -1961,7 +2055,9 @@ impl Dialect for Solid2 {
                 | Primitive::Action
                 | Primitive::CreateReaction
                 | Primitive::OnCleanup
-                | Primitive::OnHydrationEnd,
+                | Primitive::OnHydrationEnd
+                | Primitive::OnFlush
+                | Primitive::From,
                 0,
             ) => Some(Execution::Deferred),
             // The static `dynamic` form is `untrack(source)` at the call
@@ -2060,7 +2156,6 @@ impl Dialect for Solid2 {
         argument: usize,
         argument_count: usize,
     ) -> bool {
-        let _ = argument_count;
         // `createReaction`'s invalidation callback runs untracked and
         // one-shot; the RC.0 runtime emits `STRICT_READ_UNTRACKED` for a
         // reactive read inside it, so the checker reports the same.
@@ -2072,6 +2167,9 @@ impl Dialect for Solid2 {
             // ADR 0443: the map function of `mapArray` and `repeat` runs with
             // tracking off (`callback_runs_untracked_without_window`).
             || (matches!(primitive, Primitive::MapArray | Primitive::RepeatMap) && argument == 1)
+            // ADR 0628: `untrack(fn, "label")` opens a strict-read window of
+            // its own wherever it runs.
+            || (primitive == Primitive::Untrack && argument == 0 && argument_count >= 2)
     }
 
     /// `mapArray(list, map, { name })` and `repeat(count, map, { name })` wrap
@@ -2108,11 +2206,11 @@ impl Dialect for Solid2 {
     // tracking or strictRead, before draining the queue.
     fn callback_preserves_read_window(&self, primitive: Primitive, argument: usize) -> bool {
         self.callback_inherits_calling_window(primitive, argument)
-            || (self.rc17_callback_exports && primitive == Primitive::Flush && argument == 0)
+            || (self.rc17_callback_exports() && primitive == Primitive::Flush && argument == 0)
     }
 
     fn dynamic_mount_is_unwindowed(&self, primitive: Primitive) -> bool {
-        self.rc17_callback_exports
+        self.rc17_callback_exports()
             && matches!(primitive, Primitive::Dynamic | Primitive::DynamicComponent)
     }
 
@@ -2221,6 +2319,8 @@ impl Dialect for Solid2 {
             | Primitive::CreateTrackedEffect
             | Primitive::CreateProjection
             | Primitive::CreateRoot
+            // ADR 0644: `render` is `createRoot` first (Chrome, rc.21).
+            | Primitive::Render
             | Primitive::CreateOwner
             | Primitive::MapArray
             | Primitive::RepeatMap
@@ -2724,6 +2824,8 @@ impl Dialect for Solid2 {
                 | Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
                 | Primitive::CreateRoot
+                // ADR 0644, measured in Chrome on rc.21.
+                | Primitive::Render
                 | Primitive::CreateProjection
                 // ADR 0614: `Errored`/`Loading` called as a function create
                 // their boundary's computation in the call (`solid.dev.js`
@@ -2794,7 +2896,9 @@ impl Dialect for Solid2 {
                     | "createDeferred"
                     | "lazyModule"
                     | "onHydrationEnd"
-            ) && !self.rc17_callback_exports)
+            ) && !self.rc17_callback_exports())
+            || (matches!(name, "onFlush" | "from")
+                && self.triple_exports != releases::TripleExports::Rc21)
         {
             return Vec::new();
         }
@@ -2839,6 +2943,7 @@ impl Dialect for Solid2 {
 /// boundary primitives `solid-js@2.0.0-rc.13` declares there and no longer at
 /// the root (ADR 0194).
 const NAMESPACE_SOLID_JS_INTERNAL: &[&str] = &[
+    "createOwner",
     "createErrorBoundary",
     "createLoadingBoundary",
     "createRevealOrder",
@@ -2897,6 +3002,8 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "omit",
     "onCleanup",
     "onHydrationEnd",
+    "onFlush",
+    "from",
     "onSettled",
     "reconcile",
     "refresh",

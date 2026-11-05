@@ -48,11 +48,22 @@ fn invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
 /// field, JSX the compiler wraps in a getter) is left out, as the census's own
 /// call placement leaves it out, and so is a file whose compiler facts were
 /// withheld (ADR 0360). The census reads no dispatch veto.
-pub(crate) fn dispatch_in_event_only_function(
-    file: &solid_facts::FileFacts,
+pub(crate) fn dispatch_in_event_only_function<'a>(
+    file: &'a solid_facts::FileFacts,
     call: Span,
-    lookup: &SemanticLookup<'_>,
+    lookup: &SemanticLookup<'a>,
 ) -> bool {
+    if lookup.program_has_eval() {
+        return false;
+    }
+    // An open program has no census, and needs none for this one literal: an
+    // export refuses, and unseen code cannot name what a module keeps (ADR 0640).
+    if !lookup.program_closed {
+        let world = LookupFlow { lookup };
+        return dispatch_in_census_function(file, call, |function| {
+            literal_event_invoked(&world, file, function)
+        });
+    }
     let census = lookup.event_invoked_literals();
     dispatch_in_census_function(file, call, |function| {
         census.contains(&(file.path.to_string(), function.span))
@@ -78,7 +89,9 @@ pub(crate) fn dispatch_in_test_only_function<'a>(
     call: Span,
     lookup: &SemanticLookup<'a>,
 ) -> bool {
-    if !lookup.program_closed || lookup.program_has_eval() {
+    // An open program too: an export refuses (`exported_call_sites_in`), and
+    // unseen code cannot name a literal this module keeps to itself (ADR 0640).
+    if lookup.program_has_eval() {
         return false;
     }
     let world = LookupFlow { lookup };

@@ -57,6 +57,7 @@ pub(super) fn check_file(
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
     no_store_mutator_call(file, context, defects);
+    no_store_method_write(file, context, defects);
     no_store_standard_library_write(file, context, defects);
     no_store_delete(file, context, defects);
     expected_function_got_expression(file, context, defects);
@@ -1628,6 +1629,21 @@ fn store_write_standing(
     {
         return WriteStanding::Exempt;
     }
+    // ADR 0630: a write through a `merge` of several sources meets the view's
+    // own trap, or the last source itself: no store claims it.
+    if merge_view_root(file, context, site.root) {
+        return WriteStanding::Unproven;
+    }
+    // ADR 0634: a raw value's write lands: no proxy drops it.
+    if context
+        .lookup
+        .binding_at_reference(file.path.as_str(), site.root)
+        .is_some_and(|(binding_file, binding, _)| {
+            context.lookup.store_value_may_be_raw(binding_file, binding)
+        })
+    {
+        return WriteStanding::Unproven;
+    }
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
@@ -2241,6 +2257,9 @@ fn chain_links_verdict(
     if links.is_empty() {
         return Some(false);
     }
+    if shallow_store_root(file, context, root) {
+        return None;
+    }
     if context.strict_null_checks != Some(true) || !tsc_reports_in(file) {
         return Some(true);
     }
@@ -2267,6 +2286,72 @@ fn chain_links_verdict(
         !(optional_free(ast, member, &links)
             && links_proven_wrappable(file, context, member, root)),
     )
+}
+
+/// ADR 0626: `root` is exactly slot 0 of a `const` array pattern initialized by
+/// `createStore(value, { shallow: true })`. A shallow store serves every value
+/// raw (rc.21 `core-store` R38, R39, measured): a write below the root lands on
+/// the raw object, with no guard and no warning. Inert for the store, and
+/// nothing this rule claims.
+fn shallow_store_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
+    let Some((binding_file, binding, _)) = context
+        .lookup
+        .binding_at_reference(file.path.as_str(), root)
+    else {
+        return false;
+    };
+    // A projection's binding is the store itself.
+    let named = binding
+        .array_slots
+        .first()
+        .and_then(Option::as_ref)
+        .or(binding.names.first())
+        .is_some_and(|slot| binding_file.source_text(slot.span) == file.source_text(root));
+    if !binding.immutable || !named {
+        return false;
+    }
+    binding
+        .call_initializer
+        .and_then(|initializer| binding_file.ast.call_at(initializer))
+        .is_some_and(|call| {
+            use solid_dialect::Primitive;
+            // A derive takes a seed before its options; the value form does not.
+            let derived = call.arguments.first().is_some_and(|first| {
+                matches!(
+                    first.value,
+                    solid_facts::ast::ArgumentValueKind::Function
+                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                )
+            });
+            let options = match context.lookup.primitive_at_call(binding_file, call.span) {
+                Some(Primitive::CreateStore | Primitive::CreateOptimisticStore) => {
+                    Some(if derived { 2 } else { 1 })
+                }
+                Some(Primitive::CreateProjection) => Some(2),
+                _ => None,
+            };
+            options.is_some_and(|options| {
+                crate::call_option_literal(binding_file, call, options, "shallow")
+                    == solid_dialect::OptionLiteral::True
+            })
+        })
+}
+
+/// ADR 0630: `root` is a `const` holding a `merge` call of several sources.
+fn merge_view_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
+    context
+        .lookup
+        .binding_at_reference(file.path.as_str(), root)
+        .is_some_and(|(binding_file, binding, _)| {
+            binding
+                .call_initializer
+                .and_then(|initializer| binding_file.ast.call_at(initializer))
+                .is_some_and(|call| {
+                    call.arguments.len() > 1
+                        && context.lookup.primitive_at_call(binding_file, call.span)
+                            == Some(solid_dialect::Primitive::Merge)
+                })
+        })
 }
 
 /// No link of the chain, nor the written member, is an optional access.
@@ -2993,15 +3078,208 @@ fn no_store_mutator_call(
     }
 }
 
+/// ADR 0638: a method a store path holds, called on the read proxy, runs with
+/// the proxy as `this`, so a write of `this.x` in its body is dropped with
+/// `STORE_WRITE_OUTSIDE_SETTER` (rc.21 `core-store` R48, measured in Chrome). The
+/// member's value is what the store holds now, so this is an obligation.
+fn no_store_method_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    for call in &file.ast.calls {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if call.construct || file.ast.member_at(callee).is_none() {
+            continue;
+        }
+        // A method no declaration resolves (a class expression, a value the
+        // store was handed) may write `this` as well.
+        let writes_this =
+            match crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup)
+            {
+                Some((method_file, method, _)) => {
+                    method_file.ast.write_targets.iter().any(|target| {
+                        method.body.contains(*target)
+                            && method_file
+                                .source_text(*target)
+                                .is_some_and(|written| written.starts_with("this."))
+                    })
+                }
+                None => context
+                    .lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_none(),
+            };
+        let Some(root) = member_root(file, callee).filter(|_| writes_this) else {
+            continue;
+        };
+        let Some(symbol) = source_symbol_at(context, file, root) else {
+            continue;
+        };
+        let Some((name, _)) = context
+            .accessors
+            .get(symbol)
+            .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+        else {
+            continue;
+        };
+        if !bare_root(file, root) {
+            continue;
+        }
+        let standing = store_write_standing(
+            file,
+            context,
+            StoreWriteSite {
+                span: call.span,
+                member: callee,
+                root,
+            },
+            symbol,
+        );
+        if standing != WriteStanding::Exempt {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::DirectMutation {
+                    name: name.as_str().to_owned(),
+                    target: store_target(context, symbol),
+                },
+                location: location(file.path.shared(), call.span),
+                analysis_context: String::new(),
+                fixes: vec![],
+                uncertain: standing != WriteStanding::Dropped
+                    || !store_path_holds_writing_method(file, context, symbol, callee),
+            });
+        }
+    }
+}
+
+/// ADR 0640: the path `s.c` of `s.c.m` is, for the life of the store, the instance
+/// of a class written in the store's literal: `createStore({ c: new C() })`, its
+/// setter never named, in a function body so no other module can name it. `C`
+/// has no `extends` and no computed member, so nothing gives it a `toStringTag`
+/// that would keep rc.21 from wrapping it, and its own method `m` writes `this`.
+fn store_path_holds_writing_method(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+    callee: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(method) = ast.member_at(callee) else {
+        return false;
+    };
+    let Some(method_name) = file.source_text(method.property) else {
+        return false;
+    };
+    let mut keys = Vec::new();
+    let mut object = ast.peel_ts_sugar_span(method.object);
+    while let Some(member) = ast.member_at(object) {
+        if ast.computed_members.contains(&member.span)
+            || ast.optional_members.binary_search(&member.span).is_ok()
+        {
+            return false;
+        }
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        keys.push(key);
+        object = ast.peel_ts_sugar_span(member.object);
+    }
+    keys.reverse();
+    let Some((_, declaration)) = context.accessors.get(symbol) else {
+        return false;
+    };
+    if declaration.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Array
+            && binding.immutable
+            && binding.names.iter().any(|name| {
+                u64::from(name.span.start) == declaration.start_byte
+                    && u64::from(name.span.end) == declaration.end_byte
+            })
+    }) else {
+        return false;
+    };
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).unwrap_or(u32::MAX),
+        u32::try_from(declaration.end_byte).unwrap_or(u32::MAX),
+    );
+    if crate::indexes::at_module_scope(ast, declared) {
+        return false;
+    }
+    let setter_named = binding.array_slots.iter().skip(1).flatten().any(|setter| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.span != setter.span
+                && ast.reference_declaration(identifier.span) == Some(setter.span)
+        })
+    });
+    let Some(mut value) = binding
+        .call_initializer
+        .and_then(|initializer| ast.call_at(initializer))
+        .filter(|call| {
+            context.lookup.primitive_at_call(file, call.span)
+                == Some(solid_dialect::Primitive::CreateStore)
+        })
+        .and_then(|call| call.arguments.first())
+        .filter(|argument| !argument.spread)
+        .map(|argument| ast.peel_ts_sugar_span(argument.span))
+    else {
+        return false;
+    };
+    if setter_named {
+        return false;
+    }
+    for key in keys {
+        let Some(next) = crate::execution_role::closed_literal_slot_value(file, value, key) else {
+            return false;
+        };
+        value = ast.peel_ts_sugar_span(next);
+    }
+    let Some(built) = ast.call_at(value).filter(|call| call.construct) else {
+        return false;
+    };
+    let class_at = ast.peel_ts_sugar_span(built.callee);
+    let named = ast.reference_declaration(class_at);
+    let Some(class) = ast.classes.iter().find(|class| {
+        class.span == class_at
+            || class
+                .name
+                .as_ref()
+                .is_some_and(|name| Some(name.span) == named)
+    }) else {
+        return false;
+    };
+    class.heritage.is_none()
+        && !class.elements.iter().any(|element| element.computed)
+        && class.elements.iter().any(|element| {
+            !element.r#static
+                && element.key.and_then(|key| file.source_text(key)) == Some(method_name)
+                && element
+                    .value
+                    .and_then(|value| ast.function_at(ast.peel_ts_sugar_span(value)))
+                    .is_some_and(|function| {
+                        ast.write_targets.iter().any(|target| {
+                            function.body.contains(*target)
+                                && file
+                                    .source_text(*target)
+                                    .is_some_and(|written| written.starts_with("this."))
+                        })
+                    })
+        })
+}
+
 /// The standard-library calls that write properties of their first argument,
 /// by the exact declaration Type Facts resolved the callee to (a project
 /// function named `assign`, a shadowed `Object` and an unresolved callee are
 /// silent): `Object.assign(target, …)`, `Reflect.set(target, key, value)` and
-/// `Object.defineProperty(target, key, descriptor)`.
-const STANDARD_LIBRARY_WRITES: [(&str, &str); 3] = [
+/// `Object.defineProperty(target, key, descriptor)`, or `Reflect`'s.
+const STANDARD_LIBRARY_WRITES: [(&str, &str); 5] = [
     ("assign", "ObjectConstructor.assign"),
     ("set", "Reflect.set"),
     ("defineProperty", "ObjectConstructor.defineProperty"),
+    ("defineProperty", "Reflect.defineProperty"),
+    ("deleteProperty", "Reflect.deleteProperty"),
 ];
 
 /// A standard-library write whose target is a proven store's read proxy (ADR

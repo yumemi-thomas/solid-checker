@@ -1106,6 +1106,11 @@ pub struct AsyncFunctionFact {
     pub target: Arc<str>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub can_return_async: bool,
+    /// ADR 0631: a call may also answer without a pending flight: a return
+    /// type with a constituent that is no `Promise`, or a custom thenable or
+    /// async iterable, which may settle on the call's stack.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub may_answer_sync: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls_after_await: Vec<Location>,
 }

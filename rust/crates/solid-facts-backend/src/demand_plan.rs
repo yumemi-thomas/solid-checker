@@ -330,6 +330,13 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
             {
                 add_symbol(expression, false);
             }
+            // ADR 0624: a component's `on` is judged by its resolved type:
+            // `loading-on-accessor` asks whether `<Loading on>` got a function.
+            if name == "on" && !native && attribute.namespace.is_none() {
+                let runtime_expression = file.ast.peel_ts_sugar_span(expression);
+                add_symbol(runtime_expression, false);
+                type_descriptor_spans.insert(runtime_expression);
+            }
             // A native event-handler value is judged by its resolved type:
             // `reactive-handler-frozen` (both catalogs) proves the
             // value non-callable. The
@@ -665,6 +672,20 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
+    // ADR 0629: a value `untrack` returns is a store proxy only if it may be an
+    // object, so a member of a primitive one reads nothing.
+    for binding in &file.ast.bindings {
+        let Some(initializer) = binding.call_initializer else {
+            continue;
+        };
+        if file.ast.call_at(initializer).is_some_and(|call| {
+            file.source_text(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|callee| callee == "untrack" || callee.ends_with(".untrack"))
+        }) {
+            add_symbol(initializer, false);
+            primitive_value_domain_spans.insert(initializer);
+        }
+    }
     for call in &file.ast.calls {
         for argument in &call.arguments {
             match argument.value {
@@ -1200,6 +1221,37 @@ fn plan_call_demands(
                         )
                     )
                 });
+        // ADRs 0639, 0642: these deliver listeners on the caller's stack, and
+        // only the resolved call says the callee is `lib.dom`'s. Matched by
+        // spelling: the demand states no decision.
+        let argumentless_dispatch = call.arguments.is_empty()
+            && !call.construct
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(
+                        file.source_text(member.property),
+                        Some(
+                            "click"
+                                | "focus"
+                                | "blur"
+                                | "remove"
+                                | "select"
+                                | "checkValidity"
+                                | "reportValidity"
+                                | "requestSubmit"
+                                | "reset"
+                                | "show"
+                                | "showModal"
+                                | "close"
+                                | "requestClose"
+                                | "showPopover"
+                                | "hidePopover"
+                                | "togglePopover"
+                        )
+                    )
+                });
         // The owner walk asks whether the operand of an action body's `yield`
         // is a native promise, which only an exactly resolved standard-library
         // declaration answers (`yield Promise.resolve()`; the action's next
@@ -1213,6 +1265,7 @@ fn plan_call_demands(
             });
         planned.resolved_call = !call.arguments.is_empty()
             || argumentless_array_mutator
+            || argumentless_dispatch
             || argumentless_before_suspension
             || argumentless_yield_operand
             || returned_callees.contains(&call.callee)

@@ -58,8 +58,10 @@ mod execution_role;
 mod findings;
 mod identity;
 mod indexes;
+mod installed_members;
 mod interproc;
 mod late_chunks;
+mod listener_reach;
 mod literal_member_slots;
 mod loading_hold;
 pub(crate) mod local_access;
@@ -748,6 +750,17 @@ pub struct LeafOwnerOperation {
     pub via: Option<String>,
 }
 
+impl LeafOwnerOperation {
+    /// ADR 0641: the call throws the observer guard's code here. Only
+    /// `createTrackedEffect` has an observer: `onSettled` runs its callback under
+    /// `untrack`, so the same call there throws the leaf owner's.
+    #[must_use]
+    pub fn observer_guarded(&self) -> bool {
+        matches!(self.kind, LeafOwnerOperationKind::ObserverGuarded(_))
+            && self.owner == "createTrackedEffect"
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind", content = "primitive")]
 pub enum LeafOwnerOperationKind {
@@ -758,6 +771,8 @@ pub enum LeafOwnerOperationKind {
     Cleanup,
     Flush,
     Primitive(String),
+    /// A call whose throw here is the observer guard's (`resolve`, `until`).
+    ObserverGuarded(String),
     /// The leaf owner receives a callback whose exact synchronous body is not
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
@@ -829,6 +844,12 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// …)`): the calls it reaches are not followed. Its `callee` is the
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
+/// ADR 0645: a listener whose code a dispatch may run under an owner or in a
+/// strict-read window, and which calls what no rule follows from it.
+pub const LISTENER_REACH: &str = "listener-reach";
+/// ADR 0643: a prototype or an accessor installed where no Get or write of the
+/// object is followed to it.
+pub const INSTALLED_MEMBER: &str = "installed-member";
 /// ADR 0368 review: a project call the dependency-source program answers as
 /// a call error and the project's own program does not
 /// (`ProjectFacts::dependency_source_call_errors`).
@@ -1383,6 +1404,15 @@ pub struct AsyncRead {
     /// refuted; SC5001 downgrades from proven violation to uncertifiable.
     #[serde(default)]
     pub options_opaque: bool,
+    /// The read sits in a `try`. rc.21 emits the untracked-read diagnostic before
+    /// it throws, so SC5001 stands (ADR 0640); a boundary warning needs the throw
+    /// to reach it, which a `catch` may stop.
+    #[serde(default)]
+    pub caught: bool,
+    /// The read is the value of a component's prop or children: a getter, which
+    /// runs where the child reads it, if it does (ADR 0641).
+    #[serde(default)]
+    pub component_prop: bool,
     /// The source provably declares `ssrSource: "client"` with no
     /// `loadingValue`/`seedLoadingValue`, and the project server-renders:
     /// reading it during SSR outside a `Loading` boundary throws

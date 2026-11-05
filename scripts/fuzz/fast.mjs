@@ -4,7 +4,7 @@
 //
 // The work directory sits inside the install because the Solid plugin, the dev runtime
 // and the diagnostics harness resolve from its node_modules. The install is the one
-// scripts/fuzz/install/package.json describes (the pinned 2.0.0-rc.17 Solid packages,
+// scripts/fuzz/install/package.json describes (the pinned 2.0.0-rc.21 Solid packages,
 // the same pins and overrides as scripts/runtime-oracle-install, plus vitest, happy-dom
 // and @solidjs/diagnostics); `--install` takes another directory that has the same.
 import { spawn } from "node:child_process";
@@ -17,7 +17,7 @@ import { NODE } from "../lib/node-runtime.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_FAST_INSTALL = join(here, "install");
 /** Invariant 7: the Solid prerelease under test. Never a newer one. */
-export const PINNED_SOLID = "2.0.0-rc.17";
+export const PINNED_SOLID = "2.0.0-rc.21";
 
 /** Problems with a name -> version table of the Solid packages (empty when the install is the pinned one). */
 export function pinnedProblems(versions, pinned = PINNED_SOLID) {
@@ -47,10 +47,13 @@ export function installedVersions(install) {
   return versions;
 }
 
+/** A case's entry: renders in the task that evaluates App.tsx, as a page does; a dynamic import's continuation is a microtask later. */
+export const ENTRY_SOURCE = `import * as mod from "./App.tsx";\n(globalThis as { __scMount?: (mod: unknown) => void }).__scMount?.(mod);\n`;
+
 /** One Vitest test file for a case; `up` is the path from the test file's directory to the work directory. */
 const testSource = (id, caseDir, { up = "..", sub = "", out } = {}) => `import { test } from 'vitest';
 import { runCase } from '${up}/runner';
-test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('${up}/cases/${sub}${id}/App.tsx')${out ? `, ${JSON.stringify(out)}` : ""}), 60000);
+test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('${up}/cases/${sub}${id}/sc-entry.ts')${out ? `, ${JSON.stringify(out)}` : ""}), 60000);
 `;
 
 /** The Vitest work directory inside the install: the config, the runner and what they import. */
@@ -69,6 +72,7 @@ export function stageCases(work, cases, { sub = "", out } = {}) {
     const target = join(work, "cases", sub, id);
     mkdirSync(target, { recursive: true });
     for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) cpSync(join(dir, file), join(target, file));
+    writeFileSync(join(target, "sc-entry.ts"), ENTRY_SOURCE);
     // The project's other modules (`helpers.ts`), which App.tsx imports by a relative path.
     for (const file of readdirSync(dir).filter((name) => /\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx")) cpSync(join(dir, file), join(target, file));
     // A generated package sits in the case's own node_modules, where Vite resolves it from App.tsx.

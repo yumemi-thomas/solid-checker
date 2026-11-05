@@ -39,7 +39,7 @@
 // ships, as a project's dependency; it imports solid-js from the install, as a peer).
 //
 // The install is committed: scripts/runtime-oracle-install holds the manifest and
-// lockfile of the pinned Solid 2.0.0-rc.17 install (solid-js, @solidjs/web,
+// lockfile of the pinned Solid 2.0.0-rc.21 install (solid-js, @solidjs/web,
 // @solidjs/signals, and the rc.17 @solidjs/compiler and @solidjs/babel-plugin that
 // the plugin's `^2.0.0-rc.16` ranges would otherwise resolve to rc.18; ADR 0453).
 // `make runtime-oracle-install` runs `npm ci` there. The default `--install` is that
@@ -286,6 +286,10 @@ const codeRules = {
   FLUSH_IN_ACTION: ["flush-in-action"],
   FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
   LOADING_ON_OUTSIDE_HOLD: ["loading-on-outside-hold"],
+  LOADING_ON_ACCESSOR: ["loading-on-accessor"],
+  ON_FLUSH_IN_OWNED_SCOPE: ["on-flush-in-owned-scope"],
+  OPTIMISTIC_WRITE_BEFORE_LOAD: ["optimistic-write-before-load"],
+  CAUGHT_REACTIVE_READ: ["caught-reactive-read"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };
@@ -408,9 +412,14 @@ function batchProcess() {
       const dead = Boolean(exited) && !this.retired;
       child.stdin.end();
       const answer = await next(60000);
+      // A process can print its closing line and never exit (a final run sat here 8 minutes at 0% CPU): the line answers for
+      // its cases, and only the exit is lost.
+      let lingered = false;
+      const linger = setTimeout(() => { lingered = true; child.kill("SIGKILL"); }, 30000);
       await exit;
+      clearTimeout(linger);
       const closing = (() => { try { return JSON.parse(answer.line ?? "null"); } catch { return null; } })();
-      this.clean = dead || (closing?.closed === true && exited.status === 0);
+      this.clean = dead || (closing?.closed === true && (exited.status === 0 || lingered));
       if (!this.clean) this.closeError = failure("the batch process did not close cleanly").error;
       return this.clean;
     },

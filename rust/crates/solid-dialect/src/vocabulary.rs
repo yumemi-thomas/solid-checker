@@ -37,6 +37,9 @@ pub enum Primitive {
     CreateResource,
     Batch,
     CreateDynamic,
+    /// `from(source)`, a 1.x name exported again from `solid-js@2.0.0-rc.21`: a
+    /// subscribe function runs in the pass of a computation that returns the
+    /// result, never during the call.
     From,
     On,
     StartTransition,
@@ -125,6 +128,9 @@ pub enum Primitive {
     /// `onHydrationEnd(callback)`, exported from `solid-js@2.0.0-rc.17`: the
     /// callback runs from a microtask, or from the drain at hydration's end.
     OnHydrationEnd,
+    /// `onFlush(callback)`, exported from `solid-js@2.0.0-rc.21`: the callback
+    /// runs from a microtask, with no owner, after the pending flush.
+    OnFlush,
 
     // Control flow — component tags
     For,

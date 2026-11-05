@@ -336,7 +336,10 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
-        LeafOwnerOperationKind::Primitive(primitive) => (
+        LeafOwnerOperationKind::Primitive(primitive)
+        | LeafOwnerOperationKind::ObserverGuarded(primitive)
+            if !operation.observer_guarded() =>
+        (
             Rule::LeafOwnerForbiddenCall,
             format!(
                 "reactive primitive {primitive} is created inside {}; {} is a leaf owner with no children, so nested primitives are never tracked or disposed, and Solid throws in dev",
@@ -344,6 +347,22 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
             format!(
                 "Create the primitive in the component body (or another owning scope) and read its accessor inside {}.",
+                operation.owner
+            ),
+        ),
+        LeafOwnerOperationKind::Primitive(primitive)
+        | LeafOwnerOperationKind::ObserverGuarded(primitive) => (
+            if primitive == "until" {
+                Rule::UntilInTrackedScope
+            } else {
+                Rule::ResolveInTrackedScope
+            },
+            format!(
+                "{primitive}() runs inside {}, under an active observer; Solid throws \"Cannot call {primitive} inside a reactive scope\"",
+                operation.owner
+            ),
+            format!(
+                "Call {primitive}() from imperative code, such as an event handler, not from {}.",
                 operation.owner
             ),
         ),
@@ -642,6 +661,18 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::FlushInEffectCallback => {
             "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
         }
+        Rule::LoadingOnAccessor => {
+            "the value passed to `on` is proven to be a function, which the boundary never calls"
+        }
+        Rule::OnFlushInOwnedScope => {
+            "the onFlush() call runs under a children-capable owner, a component body or a computation"
+        }
+        Rule::OptimisticWriteBeforeLoad => {
+            "the setter runs in the pass that creates its async source, or where nothing proves the source has answered"
+        }
+        Rule::CaughtReactiveRead => {
+            "the read sits in a try with a catch in a computation that completes with a value"
+        }
         Rule::LoadingOnOutsideHold => {
             "a Loading boundary with `on` holds an async source the analysis cannot prove only it reads, so whether the frame waits on an outside read of the same flight is not decided"
         }
@@ -901,7 +932,6 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
         "produce",
         "draft-first mutation is now the default store setter behavior; drop the wrapper",
     ),
-    ("from", "use async iterators as computation results"),
     (
         "observable",
         "push signal changes to external subscribers with createEffect",

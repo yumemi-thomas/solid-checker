@@ -1,6 +1,6 @@
 # Differential fuzzer
 
-Finds checker violations that the real Solid 2.0.0-rc.17 runtime contradicts (false positives) and defects Solid reports where the checker is silent (false cleans), automatically. For each generated program it compares what the checker says at each site (violation, uncertifiable, none) with what the runtime says (dev diagnostics and thrown errors after driving the program). Only disagreements go to Chrome, the authority. It is operator tooling: its sweeps are not part of `make verify`, and the checker and the gates do not read it. Its own unit tests are (The tests, below).
+Finds checker violations that the real Solid 2.0.0-rc.21 runtime contradicts (false positives) and defects Solid reports where the checker is silent (false cleans), automatically. For each generated program it compares what the checker says at each site (violation, uncertifiable, none) with what the runtime says (dev diagnostics and thrown errors after driving the program). Only disagreements go to Chrome, the authority. It is operator tooling: its sweeps are not part of `make verify`, and the checker and the gates do not read it. Its own unit tests are (The tests, below).
 
 ## What a finding means
 
@@ -115,7 +115,7 @@ from every shard's candidates (per stratum the smallest `fnv(id)` with a fast re
 the sample is a local full run's), one runner per grid and part runs the differential on it (`--ids`, picked by id before generation;
 `oracleParts` gives every grid one job, then one more part at a time to the grid whose part is largest, up to `ORACLE_RUNNERS` (20, the
 account's concurrent runners: GitHub starts a matrix in no fixed order, so a queued job may be any part) while that part is over
-`ORACLE_PART_FLOOR` (200) programs; every N-th id; ADR 0617), and
+`ORACLE_PART_FLOOR` (200) programs; every N-th id; ADR 0620), and
 `audit.mjs report` judges the run: every shard present and whole, PROBLEMS rows, oracle behaviour differences and inconclusive or
 missing programs, outcomes a shard and its oracle grid disagree on, and the moves from the last audit of the same mode (its `audit-report-lean` or `audit-report-full` artifact; a lean night is compared with the latest lean audit, the weekly full run with the latest full one, and `report` skips a recall grid whose earlier audit was the other mode, so the lean-versus-full refusal never fails a night; the six base grids hold the same programs in both). `audit.mjs shard --recall lean|full` picks the mode, `pick` writes it into each oracle manifest, `oracle` runs the manifest's mode, and `report` records it in audit.json.
 The report fails the workflow when something needs a look and is the run's step summary. Each shard carries its warm state to the

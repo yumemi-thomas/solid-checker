@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, cpSync, write
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_FAST_INSTALL, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
+import { DEFAULT_FAST_INSTALL, ENTRY_SOURCE, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
 import { EXECUTOR_SOURCES } from "./exec.mjs";
 import { pinnedBrowser } from "../playwright-browser.mjs";
 
@@ -301,6 +301,7 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
       for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (files[file] !== undefined) served.set(file, files[file]);
       for (const file of Object.keys(files).filter((name) => /^[^/]+\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx")) served.set(file, files[file]);
       if (variant !== "clean" && files["App.run.txt"] !== undefined) served.set("App.tsx", files["App.run.txt"]);
+      served.set("sc-entry.ts", ENTRY_SOURCE);
       staged.set(id, served);
     }
   };

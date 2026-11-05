@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "propEl", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -147,6 +147,7 @@ function render(program, instrument) {
     }
   }
   const used = new Set(["createSignal"]);
+  const parentWeb = new Set();
   const signals = signalTable(program);
   const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg && !helper.module).map((helper) => [helper.name, helper]));
   const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
@@ -280,6 +281,8 @@ function render(program, instrument) {
   function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
+      case "dom": for (const name of e.webNames ?? []) parentWeb.add(name); for (const name of e.solidNames ?? []) used.add(name); return e.text;
+      case "listen": return `${e.target}.addEventListener(${JSON.stringify(e.type)}, ${expr(e.fn, depth)})`;
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
@@ -401,6 +404,8 @@ function render(program, instrument) {
     const fnBody = (tail = []) => block(c.body, inner, null, [], tail);
     const lines = {
       "handoff-foreach": [`const hf = () => ${fnBody()};`, "[1].forEach(hf);"],
+      "handoff-foreach-empty": [`const hf = () => ${fnBody()};`, "([] as number[]).forEach(hf);"],
+      "handoff-foreach-var": [`const hf = () => ${fnBody()};`, 'const xs = JSON.parse("[]") as number[];', "xs.forEach(hf);"],
       "handoff-map": [`const hf = () => ${fnBody()};`, "[1].map(hf);"],
       "handoff-from": [`const hf = () => ${fnBody()};`, "Array.from([1], hf);"],
       "handoff-sort": [`const hf = (_a: number, _b: number) => ${fnBody(["return 0;"])};`, "[2, 1].sort(hf);"],
@@ -496,13 +501,14 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-array", "store-empty", "store-shallow", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
       }
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}" onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
+      case "propEl": return [`${ind(depth)}<${item.tag} a={${expr(item.e, depth)}} />`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
       case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
       case "flow": {
@@ -543,7 +549,7 @@ function render(program, instrument) {
       }
       case "loading": {
         used.add("Loading");
-        return [`${ind(depth)}<Loading fallback={0}${item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
+        return [`${ind(depth)}<Loading fallback={0}${item.onExpr ? ` on={${item.onExpr}}` : item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
       }
       default: throw new Error(`cannot print view ${item.k}`);
     }
@@ -595,9 +601,15 @@ function render(program, instrument) {
     // A component the mount axis renders as a child is the parent's, not the entry's: not exported (misuse.mjs MOUNTS).
     const hosted = new Set(component.sourced ?? []);
     const parameter = usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : sourceParameter(component, signals);
+    // `hoisted`: the component's signals and these statements at module scope (the program's own `const`, ADR 0645).
+    if (component.hoisted) {
+      for (const sig of component.signals) out.push(signalLine(sig));
+      within({ entry: null, inDefault: false }, () => { for (const stmt of component.hoisted) out.push(stmtText(stmt, 0)); });
+      out.push("");
+    }
     out.push(`${component.mount ? "" : "export "}function ${component.name}(${parameter}) {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
-      for (const sig of component.signals) if (!hosted.has(sig.name)) out.push(`${INDENT}${signalLine(sig)}`);
+      for (const sig of component.signals) if (!hosted.has(sig.name) && !component.hoisted) out.push(`${INDENT}${signalLine(sig)}`);
       for (const line of sourcePrelude(component, signals, used)) out.push(`${INDENT}${line}`);
       for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
@@ -609,13 +621,14 @@ function render(program, instrument) {
   out.push(...kids);
   // The parents of the mount axis: each renders its child component in its own JSX.
   // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
-  const parentWeb = new Set();
   for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
     // A module source keeps its values in helpers.ts: a parent of the mount axis then renders the component bare.
     const source = component.source && parentSource(component.source) ? component.source : undefined;
     const keys = source ? sourceKeys(component, signals) : [];
     const attrs = keys.map(([key]) => ` ${key}={${key}${sourcedRead(source) === "value" ? "()" : ""}}`).join("") + (source === "prop-omit" ? " extra={1}" : "");
-    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />` : `<${component.name}${attrs} />`;
+    // ADR 0641: a member tag is a component whatever its head's case, so a lowercase one passes a getter as a capitalized one does.
+    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />`
+      : source === "async-value-member" ? `<ui${index + 1}.${component.name}${attrs} />` : `<${component.name}${attrs} />`;
     const tag = source?.includes("context") ? `<ValCtx value={{ ${keys.map(([key]) => key).join(", ")} }}>`
       : source === "async-loading" ? (used.add("Loading"), "<Loading fallback={0}>") : null;
     const wrapped = tag ? [tag, `${INDENT}${passed}`, tag.startsWith("<ValCtx") ? "</ValCtx>" : "</Loading>"] : [passed];
@@ -626,6 +639,7 @@ function render(program, instrument) {
       : wrapped);
     if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
     const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
+    if (source === "async-value-member") out.push(`const ui${index + 1} = { ${component.name} };`, "");
     out.push(`export function P${index + 1}() {`, ...created, ...(parts?.prelude ?? []).map((line) => `${INDENT}${line}`), `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The source's types and its context, above the components that name them.
@@ -644,7 +658,9 @@ function render(program, instrument) {
   for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
   packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
+  // rc.21 declares `createOwner` only in `solid-js/internal`.
+  const owner = importNames.includes("createOwner") ? `import { createOwner } from "solid-js/internal";\n` : "";
+  const header = `import { ${importNames.filter((name) => name !== "createOwner").join(", ")} } from "solid-js";\n${owner}${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");
@@ -698,6 +714,7 @@ export function moduleFiles(program) {
     const hook = (head) => [`${head} {`, ...created.map((line) => `${INDENT}${line}`), `${INDENT}return { ${keys.join(", ")} };`, "}"].join("\n");
     if (component.source === "module" || component.source === "module-barrel") sourced.push(created.map((line) => `export ${line}`).join("\n"));
     else if (component.source === "module-default-hook") sourced.push(hook("export default function useVals()"));
+    else if (component.source === "module-hook-direct") sourced.push(["export function useVals() {", `${INDENT}return ${created[0].replace(/^const \w+ = /, "")}`, "}"].join("\n"));
     else sourced.push(hook("export function useVals()"));
     if (component.source === "module-barrel") barrel.push(`export { ${keys.join(", ")} } from "./helpers";`);
   }
@@ -734,8 +751,22 @@ function signalText(sig, signals, used) {
     case "optimistic": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(${sig.init});`;
     case "writable-memo": used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(() => ${sig.init});`;
     case "optimistic-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore({ v: ${sig.init} });`;
+    case "store-async": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
+    case "store-class": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ c: new (class { n = 0; inc() { this.n++; } })() });`;
+    case "store-raw": used.add("createStore"); return `const raw = { v: ${sig.init} }; createStore({ r: raw }, { shallow: true }); const [${sig.name}, ${sig.setter}] = createStore(raw);`;
+    case "async-declared": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1, { loadingValue: 0 });`;
+    case "async-maybe": used.add("createMemo"); return `const ${sig.name} = createMemo((): number | Promise<number> => ((globalThis as { late?: boolean }).late ? Promise.resolve(1) : 1));`;
+    case "optimistic-async": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init});`;
+    // ADR 0640: a hook's tuple whose first slot is plain: only the setter's slot reaches the setter.
+    case "optimistic-tuple-hook": used.add("createOptimistic"); return `const ${sig.name}h = () => {\n    const [o, setO] = createOptimistic(async () => ${sig.init});\n    return [() => ${sig.init}, setO, o] as const;\n  };\n  const [${sig.name}, ${sig.setter}] = ${sig.name}h();`;
+    case "optimistic-declared": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init}, { loadingValue: ${sig.init} });`;
+    case "optimistic-async-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;
     case "deferred": used.add("createDeferred"); return `const ${sig.name} = createDeferred(async () => 1);`;
+    case "over-async": used.add("createMemo"); return `const ${sig.name}i = createMemo(async () => 1);\n  const ${sig.name} = createMemo(() => ${sig.name}i());`;
+    case "store-array": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<number[]>([${sig.init}]);`;
+    case "store-empty": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({});`;
+    case "store-shallow": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] }, { shallow: true });`;
     case "store-link": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { v: number } }>({ v: ${sig.init} });`;
     case "store-link-leaf": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v: number; a?: { b?: number } }>({ v: ${sig.init} });`;
     default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
@@ -747,13 +778,13 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-async": "{ v: number }", "store-raw": "{ v: number }", "store-opt": "{ v?: number }", "store-array": "number[]", "store-empty": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-shallow": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "projection": return [[sig.name, "{ v: number }"]];
-    case "deferred": return [[sig.name, "Accessor<number>"]];
+    case "deferred": case "over-async": return [[sig.name, "Accessor<number>"]];
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
-    case "async": case "async-dep": return [[sig.name, "Accessor<number>"]];
+    case "async": case "async-dep": case "async-declared": case "async-maybe": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];
     case "reaction": return [[sig.name, "(tracking: () => void) => void"]];
     default: return [[sig.name, "Accessor<number>"], [sig.setter, "Setter<number>"]];
@@ -794,6 +825,7 @@ function sourcePrelude(component, signals, used) {
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
     case "module-hook": case "module-default-hook": return [`const { ${keys()} } = useVals();`];
     case "module-hook-member": return ["const vals = useVals();"];
+    case "module-hook-direct": return [`const ${keys()} = useVals();`];
     // Another instance, never read: the read goes through the module-scope result (`sourceDeclarations`).
     case "module-hook-shared": return ["const mine = useVals();"];
     default: return [];

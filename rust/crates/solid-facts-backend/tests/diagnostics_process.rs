@@ -1749,8 +1749,10 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
         return;
     };
     // Fail-honest policy: SC5001 stays a proven violation when the options
-    // argument is absent or readable, and downgrades to a proof obligation
-    // when an unreadable options argument could declare a loadingValue.
+    // argument is absent, and downgrades to a proof obligation when an
+    // unreadable options argument could declare a loadingValue, or a readable
+    // one does (ADR 0632): a declared source's first flight serves the value,
+    // and only a re-ask nothing here proves throws.
     let untracked = findings_for_rule(&findings, "pending-async-unsuspendable-read")
         .into_iter()
         .filter(|finding| finding["severity"] == "error")
@@ -1761,7 +1763,7 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
         .collect::<Vec<_>>();
     assert_eq!(
         kinds.iter().filter(|kind| **kind == "violation").count(),
-        3,
+        2,
         "{untracked:#?}"
     );
     assert_eq!(
@@ -1769,11 +1771,11 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
             .iter()
             .filter(|kind| **kind == "uncertifiable")
             .count(),
-        1,
+        2,
         "{untracked:#?}"
     );
-    // The declared source keeps SC5001/SC5001 with conditional wording: the
-    // first flight cannot throw, later re-asks can (probed against rc.0).
+    // The declared source keeps SC5001 with conditional wording: the first
+    // flight cannot throw, later re-asks can (probed against rc.0 and rc.21).
     assert!(
         untracked.iter().any(|finding| {
             finding["message"].as_str().is_some_and(|message| {
@@ -2071,14 +2073,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // untrack, component body, event handler, apply, and module scope
         // are observer-free and stay silent (probed, rc.0).
         assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
-        // ADR 0614: `resolve` creates a computation, so the tracked effect's
-        // leaf refuses it too.
-        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 1);
+        // ADR 0641: on rc.21 the tracked effect's throw is the observer guard's,
+        // so the claim is this rule's alone, not the leaf owner's.
+        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 0);
         assert!(
-            findings.iter().all(|finding| {
-                finding["rule"] == "no-await-primitive-in-tracked-scope"
-                    || finding["rule"] == "leaf-owner-forbidden-call"
-            }),
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "no-await-primitive-in-tracked-scope"),
             "{findings:#?}"
         );
     }

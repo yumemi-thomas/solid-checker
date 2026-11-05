@@ -189,6 +189,7 @@ pub(crate) fn collect_project<'facts>(
         strict_read_obligations,
         write_action_obligations,
         dispatch_obligations,
+        static_violations,
     } = local_access.result;
     draft.reads = reads
         .into_iter()
@@ -199,6 +200,7 @@ pub(crate) fn collect_project<'facts>(
         .into_iter()
         .map(|action| (*action).clone())
         .collect();
+    draft.static_violations.extend(static_violations);
     draft.async_reads = async_reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -229,11 +231,6 @@ pub(crate) fn collect_project<'facts>(
         .collect::<HashSet<_>>();
     // A handed-member obligation is the last resort at its site: pushed after
     // every other producer's, it yields to a cause already recorded there.
-    if std::env::var_os("SC_DBG").is_some() {
-        for (k, v) in interprocedural.source_call_targets.iter() {
-            eprintln!("DBG target {}:{} {:?}", k.path, k.start_byte, v);
-        }
-    }
     let mut handed = Vec::new();
     for obligation in dispatch_obligations {
         if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER
@@ -402,6 +399,29 @@ pub(crate) fn collect_project<'facts>(
                     .entities
                     .get(&read.declaration)
                     .is_some_and(|symbol| source.async_sources.contains(symbol))
+                // ADR 0632: a declared source's creating pass reads the served
+                // value through a local function too: no row, the strict read
+                // stands.
+                && !ctx
+                    .semantic_lookup
+                    .file_by_path(read.location.path.as_ref())
+                    .is_some_and(|file| {
+                        let span = solid_facts::core::Span::new(
+                            u32::try_from(read.location.start_byte).unwrap_or(0),
+                            u32::try_from(read.location.end_byte).unwrap_or(0),
+                        );
+                        ctx.entities.get(&read.declaration).is_some_and(|symbol| {
+                            source
+                                .source_async_options
+                                .get(symbol)
+                                .is_some_and(|options| options.declared_loading)
+                        }) && crate::execution_role::served_in_creating_pass(
+                            file,
+                            span,
+                            &read.declaration,
+                            ctx.semantic_lookup,
+                        )
+                    })
                 // A read inside a pending probe (`isPending(() => read())`)
                 // is the legal way to meet the source pending.
                 && !ctx
@@ -430,6 +450,8 @@ pub(crate) fn collect_project<'facts>(
             async_provenance: true,
             declared_loading: false,
             options_opaque: true,
+            caught: false,
+            component_prop: false,
             ssr_client_hole: false,
             server_rendering_unresolved: false,
             host_callback_timing: read.host_callback_timing,
@@ -446,6 +468,18 @@ pub(crate) fn collect_project<'facts>(
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(synthesized);
+    // ADR 0634: whichever layer reports it, a read of a store that may be its
+    // raw value is no proven proxy read.
+    for read in &mut draft.reads {
+        if !read.uncertain
+            && &*read.kind == "store-path"
+            && ctx
+                .semantic_lookup
+                .store_declared_may_be_raw(&read.declaration)
+        {
+            read.uncertain = true;
+        }
+    }
     // ADR 0570: a read not proven to run in the pass that created its source
     // (a later mount of a handed or module-scope memo) may meet it settled.
     for read in &mut draft.async_reads {

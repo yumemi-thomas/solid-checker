@@ -5,8 +5,8 @@ use super::EncodeError;
 use super::plan::{PathOpRef, Slot, SymbolBody, SymbolOpRef};
 use super::writer::{LocationState, RowWriter};
 use crate::v3::{
-    ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC, BINDING_FLAG_ARRAY, FUNCTION_FLAG_ARROW,
-    FUNCTION_FLAG_ASYNC, FUNCTION_FLAG_EXPORTED, TYPE_FACTS_TABLE_SCHEMA_V5,
+    ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC, ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC, BINDING_FLAG_ARRAY,
+    FUNCTION_FLAG_ARROW, FUNCTION_FLAG_ASYNC, FUNCTION_FLAG_EXPORTED, TYPE_FACTS_TABLE_SCHEMA_V5,
     TYPE_FACTS_TABLE_SCHEMA_V6, TYPE_FACTS_TABLE_SCHEMA_V7, TYPE_FACTS_TABLE_SCHEMA_V8,
     TYPE_FACTS_TABLE_SCHEMA_V9, TYPE_FACTS_TABLE_SCHEMA_V11, TYPE_FACTS_TABLE_SCHEMA_V12,
     TYPE_FACTS_TABLE_SCHEMA_V13, TYPE_FACTS_TABLE_SCHEMA_V14, TYPE_FACTS_TABLE_SCHEMA_V15,
@@ -588,11 +588,17 @@ fn write_file_body(w: &mut RowWriter<'_>, file: &FileFact) -> Result<(), EncodeE
         w.location(&function.expression, &mut state)?;
         w.text_arc(&function.symbol);
         w.text_arc(&function.target);
-        w.u64(if function.can_return_async {
-            ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC
-        } else {
-            0
-        });
+        w.u64(
+            if function.can_return_async {
+                ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC
+            } else {
+                0
+            } | if function.may_answer_sync {
+                ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC
+            } else {
+                0
+            },
+        );
         w.locations(&function.calls_after_await)?;
     }
     Ok(())

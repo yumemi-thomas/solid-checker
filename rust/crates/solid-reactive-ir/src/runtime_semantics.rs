@@ -770,6 +770,32 @@ pub(super) fn is_timer_call(call: &ResolvedCall) -> bool {
 /// The qualified name of the exact standard-library declaration a valid
 /// resolved call selected (`Promise.then`, `PromiseConstructor.all`, ...), or
 /// `None` for a project, package, unresolved or invalid call.
+/// ADR 0642: an exact `lib.dom` declaration that delivers a project's listeners
+/// on its caller's stack, as measured in Chrome: activation and dispatch,
+/// focus moves, whatever loses focus, `invalid`, a form's `reset` and `submit`,
+/// and `beforetoggle`. Whether focus moves is a runtime fact, so each is taken
+/// to deliver. Named by declaration: a project method called `focus` is none.
+pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
+    let Some((owner, member)) = qualified_name.rsplit_once('.') else {
+        return false;
+    };
+    match member {
+        "dispatchEvent" => owner == "EventTarget",
+        "click" => owner == "HTMLElement",
+        "focus" | "blur" => matches!(owner, "HTMLOrSVGOrMathMLElement" | "HTMLOrSVGElement"),
+        "remove" => owner == "ChildNode",
+        "removeChild" => owner == "Node",
+        "select" => matches!(owner, "HTMLInputElement" | "HTMLTextAreaElement"),
+        "checkValidity" | "reportValidity" => {
+            owner.starts_with("HTML") && owner.ends_with("Element")
+        }
+        "reset" | "requestSubmit" => owner == "HTMLFormElement",
+        "show" | "showModal" | "close" | "requestClose" => owner == "HTMLDialogElement",
+        "showPopover" | "hidePopover" | "togglePopover" => owner == "HTMLElement",
+        _ => false,
+    }
+}
+
 pub(super) fn standard_call_name(call: &ResolvedCall) -> Option<&str> {
     if call.validity != ResolvedCallValidity::Valid {
         return None;

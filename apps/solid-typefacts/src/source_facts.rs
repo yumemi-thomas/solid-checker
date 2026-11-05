@@ -237,6 +237,21 @@ fn is_async_function_node(node: P<Node>) -> bool {
 }
 
 /// Go: `asyncReturnType`.
+/// ADR 0631: every value of `return_type` is a native `Promise` or async
+/// generator: pending on the call's stack. A union with a plain value, a custom
+/// thenable and a custom async iterable may answer there.
+fn every_answer_is_a_flight(return_type: P<Type>) -> bool {
+    if return_type.is_union() {
+        return return_type
+            .types()
+            .iter()
+            .all(|constituent| every_answer_is_a_flight(*constituent));
+    }
+    return_type
+        .symbol()
+        .is_some_and(|symbol| matches!(symbol.name(), "Promise" | "AsyncGenerator"))
+}
+
 fn async_return_type(checker: &mut Checker, return_type: P<Type>) -> bool {
     if return_type.is_union() || return_type.is_intersection() {
         return return_type
@@ -555,6 +570,7 @@ fn async_function_fact(
         symbol,
         target: "".into(),
         can_return_async: has_syntactic_modifier(node, ModifierFlags::Async),
+        may_answer_sync: false,
         calls_after_await: Vec::new(),
     };
     if !fact.can_return_async {
@@ -568,6 +584,7 @@ fn async_function_fact(
                 .get_return_type_of_signature_exported(*signature);
             if async_return_type(env.checker, return_type) {
                 fact.can_return_async = true;
+                fact.may_answer_sync = !every_answer_is_a_flight(return_type);
                 break;
             }
         }
@@ -613,6 +630,7 @@ fn async_alias_fact(
         symbol,
         target,
         can_return_async: false,
+        may_answer_sync: false,
         calls_after_await: Vec::new(),
     })
 }

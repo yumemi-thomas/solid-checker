@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { partlySilentRules, besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -35,8 +35,7 @@ import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
-  gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption,
-} from "./misuse.mjs";
+  gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS } from "./mounts.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
@@ -89,9 +88,10 @@ export function judge(input) {
   if (!judged.length) return verdict;
   const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.why ? `(${row.why})` : ""}`) };
   const wrong = judged.filter((row) => row.verdict === "false-positive");
-  // A false clean or a wrong rule at the site is already a problem: the off-site false positive is listed beside it.
-  if (!wrong.length || !["agree", "recall-gap", "not-fired"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
-  return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
+  // A false clean at the site is already a problem: the off-site false positive is listed beside it. A wrong rule is not above a false
+  // positive: a violation the runtime contradicts is one whatever else the row found, and `beside` is an `agree` with that violation in it.
+  if (!wrong.length || !["agree", "recall-gap", "not-fired", "wrong-rule"].includes(verdict.outcome)) return { outcome: verdict.outcome, detail };
+  return { outcome: "false-positive", detail: { ...detail, primary: verdict.detail?.beside ? "agree" : verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
 }
 
 function judgeSite({ code, site, typecheck: typed, checker, runtime, others = [] }) {
@@ -152,12 +152,15 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
-  if (claimingViolation) return { outcome: "agree", detail };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
   const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
-  const wrong = violations.filter((finding) => !corroborated(finding) && !besideCode[code]?.includes(finding.rule));
+  const wrong = violations.filter((finding) => !corroborated(finding) && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
+  // A claiming violation does not excuse another rule's on these lines: on the `agree` path the second finding is judged the same way
+  // (`leaf-owner-forbidden-call` beside `no-await-primitive-in-tracked-scope`, ADR 0641).
+  const beside = wrong.filter((finding) => !rules.includes(finding.rule));
+  if (claimingViolation) return beside.length ? { outcome: "wrong-rule", detail: { ...detail, beside: true, rules: [...new Set(beside.map((finding) => finding.rule))] } } : { outcome: "agree", detail };
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
@@ -242,7 +245,8 @@ export const LEAN_DEMOTED = {
   callbacks: ["function", "let"],
 };
 export function recallAxes(code, context, base, variants, { legal = false, lean = true } = {}) {
-  const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context);
+  // A recall-only code has no base grid: its `legal` contexts are recall cells too.
+  const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context) || (legal && SPEC[code].recallOnly && SPEC[code].legal?.includes(context));
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
   // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
   const only = legal ? SPEC[code].variantOnlyLegal?.[context] : null;
@@ -260,7 +264,8 @@ export function recallAxes(code, context, base, variants, { legal = false, lean 
     const known = new Set(gridBindingsOf(code, variant));
     for (const binding of recallBindingsOf(code, variant).filter((b) => !known.has(b))) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
     // A `catch` swallows a code the runtime only throws (codes.mjs thrownCodes): the try-catch layer never shows it.
-    const layers = THROWN.has(code) ? RECALL_LAYERS.filter((layer) => layer !== "try-catch") : RECALL_LAYERS;
+    // A legal template of CAUGHT_REACTIVE_READ (`noCatchLayer`): a `catch` around the read is the code's own misuse.
+    const layers = THROWN.has(code) || (legal && SPEC[code].noCatchLayer) ? RECALL_LAYERS.filter((layer) => layer !== "try-catch") : RECALL_LAYERS;
     for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
   }
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
@@ -301,6 +306,8 @@ export function pairShapes(code, context, { legal = false, sets = PAIR_SETS } = 
       const takes = sourcesOf(code, variant, binding, context);
       for (const source of PAIR_SOURCES.filter((one) => takes.includes(one))) for (const mount of PAIR_MOUNTS) {
         if (mount === "dynamic" && (source !== "module-hook" || bodyLabelled)) continue;
+        // A mount this context's code cannot take (`recallMountsNotIn`: a body re-run onto a fresh pending memo never ends, and reports nothing).
+        if (spec.recallMountsNotIn?.[context]?.includes(mount)) continue;
         // A settled pair is no misuse: the legal grid takes it, in the code's misuse contexts (`onlySettled`).
         if (!legal && settled(mount, source)) continue;
         if (onlySettled && !settled(mount, source)) continue;
@@ -324,7 +331,7 @@ const variantFits = (code, context) => (variant) => context === undefined || !SP
 /** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
 export const recallLeanOf = (options) => Boolean(options.recall) && !options.recallFull;
 /** The misuse grid's recall shapes of a cell (`--recall`); `lean: false` is `--recall-full`. */
-export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean });
+export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean }).filter(fireShape(context));
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -500,6 +507,8 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
     // The violations away from the site, by verdict (`judge`, classify.mjs `offSiteVerdicts`): `unconnected` ones are the next lead.
     offSite: Object.fromEntries(["false-positive", "unconnected", "unexecuted", "unjudged"].map((verdict) => [verdict, rows.flatMap((row) => row.detail?.offSite ?? []).filter((label) => label.split(":")[1].startsWith(verdict)).length])),
+    // Per (rule, verdict, reason), what `gate` holds down (ADR 0641): a rise in violations nothing judged is a blind spot growing.
+    offSiteByReason: offSiteByReason(rows),
     byFeature: featureTable(rows), typedAway, cells: out,
   };
 }
@@ -601,6 +610,22 @@ export function codeStatuses(matrix) {
 // ---------------------------------------------------------------------------------------------------------------------
 // The gate
 
+/** Counts of a run's off-site violations by `rule|verdict|why`. */
+export function offSiteByReason(rows) {
+  const counts = {};
+  for (const row of rows) for (const entry of row.detail?.offSite ?? []) {
+    const key = `${String(entry.finding).replace(/@\d+$/, "")}|${entry.verdict}|${entry.why ?? ""}`;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The keys of `current` that rose above `baseline`; a baseline without the table holds nothing. */
+export function offSiteRises(baseline, current) {
+  if (!baseline || !current) return [];
+  return Object.entries(current).filter(([key, count]) => count > (baseline[key] ?? 0)).map(([key, count]) => ({ key, baseline: baseline[key] ?? 0, count }));
+}
+
 /** Outcomes that judge nothing about the checker: the type check rejected the program, or the run failed (the machine, not the program). */
 const UNJUDGED = new Set(["typed-away", "harness"]);
 
@@ -666,7 +691,10 @@ export function gate(baseline, current) {
     if (cell.agree > base.agree) improvements.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}` });
     if (cell["false-clean"] < base["false-clean"]) improvements.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}` });
   }
-  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure, retired, newPrograms };
+  const rises = offSiteRises(baseline.offSiteByReason, current.offSiteByReason);
+  // A code missed in a file with no uncertifiable finding is a certified false clean whatever the row's own outcome, and no baseline excuses it.
+  const certified = Object.entries(current.secondary ?? {}).filter(([, verdicts]) => verdicts["false-clean-certified"]).map(([code, verdicts]) => ({ code, ...verdicts["false-clean-certified"] }));
+  return { ok: regressions.length === 0 && rises.length === 0 && certified.length === 0, regressions, improvements, baselineUnjudged, infrastructure, retired, newPrograms, offSiteRises: rises, certifiedSecondary: certified };
 }
 
 function reportGate(result) {

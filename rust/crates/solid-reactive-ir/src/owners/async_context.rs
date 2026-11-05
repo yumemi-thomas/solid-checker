@@ -1015,9 +1015,12 @@ pub(crate) fn ref_application_on_intrinsic(file: &solid_facts::FileFacts, span: 
     })
 }
 
-/// Whether a JSX element is a component: a capitalized or dotted tag. Its
-/// children and spreads are not the intrinsic element's own, so a ref written
-/// inside them is not placed by the intrinsic element's owner.
+/// Whether a JSX element is a component, by the tag's form as the JSX transform
+/// reads it: a member tag whatever its head's case (`<props.Comp>`), or any name
+/// that does not start with a lowercase letter (`<Comp>`, `<_Comp>`). A plain
+/// lowercase name and a namespaced or hyphenated one are intrinsic. Its children
+/// and spreads are not the intrinsic element's own, so a ref written inside them
+/// is not placed by the intrinsic element's owner.
 pub(crate) fn is_component_element(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
@@ -1026,7 +1029,9 @@ pub(crate) fn is_component_element(
         .source
         .get(element.name.span.start as usize..element.name.span.end as usize)
         .unwrap_or_default();
-    tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase())
+    !tag.is_empty()
+        && (tag.contains('.')
+            || (!tag.contains([':', '-']) && !tag.starts_with(|c: char| c.is_ascii_lowercase())))
 }
 
 /// Whether `span` lies inside a component element, in its children, spreads
@@ -1077,8 +1082,91 @@ pub(crate) fn async_read_role(
     }) {
         return crate::ExecutionRole::Unknown;
     }
+    if tracked_computation_read(file, span, entities, symbol_names, lookup)
+        || handed_computation_read(file, span, lookup)
+    {
+        crate::ExecutionRole::Unknown
+    } else {
+        role
+    }
+}
+
+/// ADR 0637: a read in a function a computation runs by a name or a member
+/// (`createMemo(cb)`, `createEffect(bag.compute, …)`), through `const` aliases:
+/// no render, as a literal compute's is not. Nothing here proves which of its
+/// other uses runs it, so its async row is unproven. A leaf's callback keeps its
+/// own proof.
+fn handed_computation_read(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    let holds = |value: Span| {
+        let mut at = ast.peel_ts_sugar_span(value);
+        for _ in 0..4 {
+            while let Some(member) = ast.member_at(at) {
+                at = ast.peel_ts_sugar_span(member.object);
+            }
+            let Some(declaration) = ast.reference_declaration(at) else {
+                return false;
+            };
+            if ast.functions.iter().any(|function| {
+                function.span.contains(span)
+                    && function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| name.span == declaration)
+            }) {
+                return true;
+            }
+            let Some(initializer) = ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+                .and_then(|binding| binding.initializer)
+            else {
+                return false;
+            };
+            if initializer.contains(span) {
+                return true;
+            }
+            at = ast.peel_ts_sugar_span(initializer);
+        }
+        false
+    };
+    !ast.any_jsx_containing(span)
+        && ast.calls.iter().any(|call| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    !matches!(
+                        primitive,
+                        Primitive::CreateTrackedEffect | Primitive::OnSettled
+                    ) && !lookup.dialect.computation_read_is_render(primitive)
+                })
+                && call.arguments.iter().any(|argument| {
+                    ast.function_at(ast.peel_ts_sugar_span(argument.span))
+                        .is_none()
+                        && holds(argument.span)
+                })
+        })
+}
+
+/// ADR 0623: a read in the tracked callback of a computation that is no render
+/// (a memo's compute, a user effect's compute, a derived signal, an effect's
+/// apply, or a cleanup it returns, when its role is tracked). A pending source
+/// suspends such a read: it is no render, and no unsuspendable read either.
+pub(crate) fn tracked_computation_read(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
     let dialect = lookup.dialect;
-    let in_computation = file.ast.arguments_containing(span).any(|(call, index)| {
+    file.ast.arguments_containing(span).any(|(call, index)| {
         let argument = &call.arguments[index];
         matches!(
             argument.value,
@@ -1100,12 +1188,7 @@ pub(crate) fn async_read_role(
                 .tracked_regions
                 .iter()
                 .any(|region| argument.span.contains(region.span) && region.span.contains(span))
-    });
-    if in_computation {
-        crate::ExecutionRole::Unknown
-    } else {
-        role
-    }
+    })
 }
 
 pub(crate) fn jsx_element_is_loading(
@@ -1156,6 +1239,26 @@ pub(crate) fn computation_is_async(
     file.ast
         .function_at(argument)
         .is_some_and(|function| function.r#async)
+}
+
+/// ADR 0631: the computation may return without a pending flight
+/// (`cache.get(k) ?? load()`, a conditional, a custom thenable): nothing proves
+/// its source is pending at a first read, or that it ever is.
+pub(crate) fn computation_may_answer_sync(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    argument: Span,
+) -> bool {
+    let argument = file.ast.peel_ts_sugar_span(argument);
+    lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|typescript_file| {
+            typescript_file.async_functions.iter().any(|function| {
+                function.may_answer_sync
+                    && u64::from(argument.start) == function.expression.start_byte
+                    && function.expression.end_byte == u64::from(argument.end)
+            })
+        })
 }
 
 pub(crate) fn inside_non_component_function(

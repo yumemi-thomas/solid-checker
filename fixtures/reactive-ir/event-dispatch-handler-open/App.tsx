@@ -1,7 +1,7 @@
 import { createRenderEffect, createSignal } from "solid-js";
 
 const [count, setCount] = createSignal(0);
-const input = document.createElement("input");
+const input = document.querySelector("input")!;
 
 export function Card() {
   return (
