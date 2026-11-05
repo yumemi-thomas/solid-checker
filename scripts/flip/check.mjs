@@ -31,6 +31,8 @@ const tsc = resolveTsc(opt("--tsc"));
 requireTypeChecker(tsc);
 if (!existsSync(bin) || !existsSync(typefacts)) throw new Error(`no checker at ${bin} or no producer at ${typefacts}: make build-checker-release`);
 const install = process.env.FLIP_INSTALL ?? join(repo, "scripts/runtime-oracle-install");
+/** A blocker is kebab-case words and an optional `:detail`; a function's name says where, not what is missing (ADR 0680). */
+export const isNamedBlocker = (context) => /^[a-z0-9]+(-[a-z0-9]+)+(:.*)?$/s.test(context ?? "") && !String(context).startsWith("proof-step-unnamed");
 const W = { ...JSON.parse(readFileSync(join(here, "witnesses.json"), "utf8")), ...JSON.parse(readFileSync(join(here, "host-witnesses.json"), "utf8")) };
 const jobs = Number(opt("--jobs", Math.max(1, Math.floor(availableParallelism() / 2))));
 // Real path: tsrs prints resolved paths, and the batch answer matches them against these directories.
@@ -67,6 +69,9 @@ async function judge(id) {
   const own = (out.findings ?? []).filter((f) => f.id === w.rule || (w.rule === "SC2004" && f.id === "SC2005"));
   const now = (out.findings ?? []).map((f) => `${f.id}/${f.kind[0]}@${f.primaryLocation?.line}`);
   const was = w.before?.findings ?? [];
+  // ADR 0680: an uncertifiable with no named blocker is a silent gap in the row itself, whatever the witness asks of it.
+  const unnamed = (out.findings ?? []).filter((f) => f.kind === "uncertifiable" && !isNamedBlocker(f.analysisContext));
+  if (unnamed.length) { fail++; rows.push(`FAIL blocker ${id}: ${unnamed.map((f) => `${f.id}@${f.analysisContext ?? ""}`).join(" ")}`); return; }
   let ok;
   if (w.host) {
     const seen = [...(w.runtime.client ?? []), ...(w.runtime.server ?? [])];

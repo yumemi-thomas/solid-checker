@@ -795,6 +795,15 @@ pub fn project_findings(
         program.execution_paths.apply_deferred_mount(finding);
         !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
     });
+    // ADR 0680: after every step that may make a row uncertifiable.
+    for finding in &mut findings {
+        if finding.kind == "uncertifiable" && !crate::blockers::named(&finding.analysis_context) {
+            finding.analysis_context = crate::blockers::with_detail(
+                crate::blockers::for_rule(&finding.id),
+                &finding.analysis_context,
+            );
+        }
+    }
     finish_findings(findings, total_started, construction_started)
 }
 
@@ -1377,6 +1386,27 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
     if let Some((family, subject)) = coverage_group(seed) {
         finding.coverage_family = family.into();
         finding.coverage_subject = subject;
+    }
+    if finding.kind == "uncertifiable" && !crate::blockers::named(&finding.analysis_context) {
+        let blocker = match seed {
+            FindingSeed::StrictRead { read, .. } => Some(crate::blockers::for_read(read)),
+            FindingSeed::OwnedWrite(write) => Some(crate::blockers::for_write(write)),
+            FindingSeed::Action(_) => Some(crate::blockers::FUNCTION_RUN_UNPLACED),
+            FindingSeed::LeafOperation(_) if finding.id == "SC9012" => {
+                Some(crate::blockers::LEAF_CALLBACK_OPAQUE)
+            }
+            FindingSeed::LeafOperation(_) => Some(crate::blockers::LEAF_OWNER_UNPROVEN),
+            FindingSeed::DirectiveCreation(_) => Some(crate::blockers::DIRECTIVE_OWNER_UNPROVEN),
+            FindingSeed::OwnerRequirement(requirement) => {
+                Some(crate::blockers::for_owner(requirement))
+            }
+            FindingSeed::AsyncRead(read) => Some(crate::blockers::for_async_read(read)),
+            FindingSeed::StaticViolation(_) | FindingSeed::StaticDefect(_) => None,
+        };
+        if let Some(blocker) = blocker {
+            finding.analysis_context =
+                crate::blockers::with_detail(blocker, &finding.analysis_context);
+        }
     }
     finding
 }

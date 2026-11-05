@@ -1542,6 +1542,7 @@ fn default_async_provenance() -> bool {
     true
 }
 
+pub use blockers::with_detail as blocked_context;
 pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 

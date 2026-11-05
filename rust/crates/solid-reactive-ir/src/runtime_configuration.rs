@@ -30,6 +30,7 @@ impl RuntimeConfigurationPremise {
             return;
         };
         finding.kind = "uncertifiable".into();
+        crate::blockers::RUNTIME_CONFIGURATION_PREMISE.clone_into(&mut finding.analysis_context);
         finding.message = format!(
             "Cannot certify this finding under the standard runtime configuration premise: a configuration export is used at {}:{}-{}.",
             location.path, location.start_byte, location.end_byte

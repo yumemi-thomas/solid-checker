@@ -95,10 +95,24 @@ export function messageFamily(message) {
  * `parameter-use-unmodeled`); one that names the enclosing function or
  * component (`TeamSettingsRoute`, `owned scope`) is a place, and drops out.
  */
+/**
+ * ADR 0680: blockers the projection derives from a row's flags, `blocker:<what the context said>`. The cases key on what the row said,
+ * so these read as a function name did.
+ */
+const ROW_BLOCKERS = new Set(["function-run-unplaced", "host-callback-timing", "callee-callback-timing", "callback-invocation-unproven", "jsx-census-missing",
+  "summary-read-unplaced", "source-pending-unproven", "read-backing-unproven", "owned-write-option-unread", "leaf-owner-unproven", "leaf-callback-opaque",
+  "directive-owner-unproven", "owner-nullable", "owner-callers-unenumerated", "owner-later-run-unowned", "component-identity-unproven", "owner-allocation-unproven",
+  "owner-unproven", "async-options-opaque", "async-read-caught", "async-component-prop", "declared-loading-value", "invocation-context-unproven",
+  "server-rendering-unresolved", "call-attributed-read", "carrier-run-unproven", "mount-unresolved", "creation-pass-unproven", "handler-dispatch-unproven",
+  "conditional-return-unproven", "props-callers-unenumerated", "loading-hold-unproven", "effect-owner-unproven", "package-source-unavailable",
+  "runtime-configuration-premise", "instance-field-run-unplaced", "binding-before-initialization", "compiler-refused-file", "site-reach-undecided",
+  "lazy-compute-unread", "refused-creation-unrun", "unreached-dead-code", "function-unentered"]);
+
 export const contextKind = (context) => {
   if (context == null) return "";
   if (/while evaluating a condition/.test(context)) return "condition";
   const head = context.split(":")[0];
+  if (ROW_BLOCKERS.has(head)) return "";
   return /^[a-z]+(-[a-z]+)+$/.test(head) ? head : "";
 };
 

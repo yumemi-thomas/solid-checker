@@ -19,6 +19,7 @@ node scripts/flip/check.mjs SC5007 --chrome     # also real Chrome, against the 
 node scripts/flip/check.mjs HOST          # hydrate and server hosts, host-witnesses.json: a row marked `open` fails until its rule's commit
 node scripts/flip/run.mjs <casesDir> out.json [--jobs N]   # real Chrome: <casesDir>/<id>/App.tsx, optional `export async function after()`
 node scripts/flip/tsc.mjs <dir>...        # tsrs on every App.tsx below <dir>; a program tsc rejects is no defect (invariant 1)
+node scripts/flip/blockers.mjs <sweep.json> [--all]   # every uncertifiable row of a sweep names its blocker; exits 1 on one that does not
 ```
 
 One rule with Chrome takes seconds; `check.mjs` and `run.mjs` default to half the cores (`--jobs N`, `--jobs 1` sequential). Each Chrome

@@ -37,9 +37,15 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 
 | SC1001 steps 0, 4, 6, 7 | `e918518de`, ADRs 0675, 0676 | -4 U, -1 V (`CloudStorageContext:238`, V to U, no Chrome truth: the file does not load on rc.21), `sweep-s4.json`: 18,502 U, 376 V | proved V: `r11 r18 r19 z01 n14`, other store, signal's own. Proved silent: `n06 r15 z03 z05 z08`, tracked effect, after every await. Now uncertifiable: `r13 r14`, `storePath`. Step 5 skipped: `n13 n22 n23` hold. Step 8: done by step 0's hint. Left: D1, D3, D6, D15, ADR 0664's limit, arm-only helper, Q4/Q5/C-D4 (step 9), `r-dyn` check. `outside`: a tuple destructure is not in the model. Patterns 319 open (44 FP, 272 FC, 3 no run). Note `z02 r12` stay U: SC2001 and the read both say a handler's setter call is unplaced, which is W's write role |
 
+| Merge 4 | `5da64f0a3`, W to `dbc66107a` (SC4001) | coverage 0 moved | `rediscovery.json` by union; `check.mjs all` 218 of 336 |
+| 12 inconclusive | `b3130c6af`, `undriven`; then `evt-*-fire-modal` closes its modal | n/a | All 12 at `a92553232`: a `dny-*` program's own timer disables or removes the driven button, Playwright's click waits out 12 s. 3 of 3 reruns, so no race, and those contexts had no oracle at all. Now 725 of 725 identical, 0 inconclusive |
+| D3, arm-only helper, 0664's limit, D6, D15 | `32fb19025`, ADRs 0677, 0678 | 0 moved, `sweep-d6.json` | proved silent: a helper or tag only `isServer` reaches, `render(Local, el)`; proved V: a pending read there; now uncertifiable: a deferred helper, `<NoHydration>` with a hydrating pass, a server-only exported function. HOST 25 of 25 |
+| C-D2 | `c84106c8b`, ADR 0679 | 0 moved, `sweep-cd2.json` | proved silent: a function only handed to a scheduler, or only called from handlers; now uncertifiable: object host, returned closure, helper argument. 13 false positives left, 306 open |
+| Blockers | ADR 0680, `scripts/flip/blockers.mjs` | 0 moved, `sweep-bl.json`, 18,502 U, 376 V | 9,216 rows had no blocker. Rows are `blocker:<old context>`; `contextKind` reads a row-derived head as it read a function name. `check.mjs` fails an unnamed row. A new escalation needs a blocker, and a row-derived one goes in `ROW_BLOCKERS` |
+
 Grid at `a92553232`, `mx-recall` whole set, STRICT_READ_UNTRACKED: 62,480 programs, 0 false positive, 152 false cleans, the two known `ref-*` groups; 12 oracle runs inconclusive, not read.
 
-Next agent: `sc1001.md` D1 and D3 (arm fact, `NoHydration` blocker), the arm-only helper, D6, D15, ADR 0664's limit, step 9, `r-dyn`; then H-D5, F0, the census. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
+Next agent: step 9 (`T-mount-from-cleanup`, T-D3, H-D4 with F0, subclass: no track, tell the owner), then H-D5, F0, F-C, F-D, the census, the bounds audit. Scratch `gates.sh <tag>` builds and runs coverage; `verify-seq.sh` is `make verify` with `typefacts-test` after the lanes. Build `rs4/`, sweep `sweep-s4.json`.
 
 Correction: `e918518de`'s message says 24 entries and 343; the run shows 25 left, 342 open. `a92553232`'s says 24 false positives left the list; it was 23 (67 to 44, 342 to 319 open).
 
@@ -60,6 +66,7 @@ Next: SC8014, SC8015, then SC1001, H-D5, F0, SC9012. Latest sweep `sweep-7.json`
 Handoff at ADR 0664: helpers `chk.sh` (scratch, oracle path fixed), `rd.py <cmp> <sweep> x` (each added site with its source line), `rm/` (merge build), `r9012/`, `rco/`. Do first: step 6 (`computation_provenance`, four discovery sites, wording flag, C-D4), then 7 (`lazy` tag row), 8 (`j06`), the fuzz contexts. Step 6 reaches W: an `any`-computed `createOptimistic` starts to hold, tell W in the commit.
 
 Surprises:
+- `rm -rf *` after a `cd` is refused by the harness: use a fresh probe directory. zsh does not word-split `$ids`: `redisc.py` then gets one id. `patterns.mjs` takes `--checker`, not `--checker-bin`, and silently uses the default build with the wrong flag.
 - Read a grid's whole outcome line, and diff by id against the previous build, before committing: 596 false cleans sat unlisted past ADR 0668 because the run printed them under "more". A background `timeout` is the background limit: pass a long one.
 - A recall-only code's own cells go in `recallContexts`, with `contexts: []`, or `recall.test.mjs` counts them as base cells.
 - `MISUSE_CODES` left out advisory codes, so SC5003 never had a grid until ADR 0668.

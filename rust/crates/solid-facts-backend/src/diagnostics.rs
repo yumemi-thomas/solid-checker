@@ -464,6 +464,10 @@ impl DiagnosticSession {
                         )
                     })
             {
+                finding.analysis_context = solid_reactive_ir::blocked_context(
+                    "instance-field-run-unplaced",
+                    &finding.analysis_context,
+                );
                 finding.kind = "uncertifiable".into();
                 finding.message.push_str(
                     "; this code is in an instance field initializer, which runs when an instance is constructed, so where it runs is not proven",
@@ -484,6 +488,10 @@ impl DiagnosticSession {
                     finding.primary_location.end_byte,
                 )
             {
+                finding.analysis_context = solid_reactive_ir::blocked_context(
+                    "component-identity-unproven",
+                    &finding.analysis_context,
+                );
                 finding.kind = "uncertifiable".into();
                 finding.message.push_str(
                     "; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
@@ -505,6 +513,19 @@ impl DiagnosticSession {
                 )
             {
                 finding.kind = "uncertifiable".into();
+                let blocker = if site.undecided {
+                    "site-reach-undecided"
+                } else if site.lazy_unread {
+                    "lazy-compute-unread"
+                } else if site.refused_creation {
+                    "refused-creation-unrun"
+                } else if site.dead_code {
+                    "unreached-dead-code"
+                } else {
+                    "function-unentered"
+                };
+                finding.analysis_context =
+                    solid_reactive_ir::blocked_context(blocker, &finding.analysis_context);
                 finding.message.push_str(if site.undecided {
                     "; whether any execution reaches this code was not decided within the site-reach query's depth and work bounds, so this is not proven"
                 } else if site.lazy_unread {
@@ -532,6 +553,10 @@ impl DiagnosticSession {
                     finding.primary_location.end_byte,
                 )
             {
+                finding.analysis_context = solid_reactive_ir::blocked_context(
+                    "binding-before-initialization",
+                    &finding.analysis_context,
+                );
                 finding.kind = "uncertifiable".into();
                 finding.message.push_str(
                     "; this code names a binding before its declaration is proven to have run, so it may throw a ReferenceError instead, and this is not proven",
@@ -568,6 +593,10 @@ impl DiagnosticSession {
                             .filter_map(|step| step.location.as_ref())
                             .any(in_refused))
                 {
+                    finding.analysis_context = solid_reactive_ir::blocked_context(
+                        "compiler-refused-file",
+                        &finding.analysis_context,
+                    );
                     finding.kind = "uncertifiable".into();
                     finding.message.push_str(
                         "; this depends on a file the Solid compiler refused, which has no compiler facts, so it is not proven",
