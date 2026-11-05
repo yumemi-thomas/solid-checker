@@ -98,7 +98,26 @@ const MIXED_OWNERS = {
   },
 };
 
+/**
+ * ADR 0715, SC2002: the site in a module-scope helper only an object getter calls, the getter read in the component body: no call edge reaches the
+ * helper, and the body's owner runs it (Chrome, rc.21: ACTION_CALLED_IN_OWNED_SCOPE). The build before certified it.
+ */
+const UNREACHED_WRITES = {
+  "flw-getter-helper": (stmts, kit) => {
+    const h = kit.name("getterRun");
+    const o = kit.name("getterHost");
+    return {
+      // At module scope with the action (`hoisted`), as measured: a helper in the component already had a row. Raw text: the
+      // model writes no getter, and the validator reads names declared in the component.
+      hoisted: [decl(h, fn(stmts)), decl(o, domExpr(`{ get v() { ${h}(); return 1; } }`))],
+      body: [expr(domExpr(`${o}.v`))],
+      view: [],
+    };
+  },
+};
+
 export const FLIP_WRITE_CONTEXTS = {
+  ACTION_CALLED_IN_OWNED_SCOPE: Object.keys(UNREACHED_WRITES),
   NO_OWNER_CLEANUP: Object.keys(MIXED_OWNERS),
   NO_OWNER_EFFECT: Object.keys(MIXED_OWNERS),
   CONTEXT_NOT_FOUND: Object.keys(OPEN_CONTEXTS),
@@ -112,5 +131,5 @@ export const FLIP_WRITE_CONTEXTS = {
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context])?.(stmts, kit);
+  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }

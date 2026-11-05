@@ -3779,5 +3779,17 @@
    "mx-no-owner-cleanup-flw-mixed-dead-x-direct-none"
   ],
   "rediscovered": "the checker at 9de5c2bd3 on `focus.mjs --grids mx-recall` (codes NO_OWNER_CLEANUP, NO_OWNER_EFFECT; flip-write.mjs context flw-mixed-dead): 384 false-positive of 1152; the fix: 0 false-positive, 756 not-fired, 396 typed-away"
+ },
+ {
+  "finding": "SC2002: an action call in a module-scope helper only an object getter calls, the getter read in a component body, had no row and certified; Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE (flip witnesses SC2002 d05, d06, e03, e06, research probe a-u11-getter; ADR 0715)",
+  "found": "flip plan SC2002 row, research probes",
+  "fixed": "ADR 0715",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-flw-getter-helper-x-direct-none",
+   "mx-action-called-in-owned-scope-flw-getter-helper-x-direct-closure"
+  ],
+  "rediscovered": "the checker at dbc66107a on `focus.mjs --grids mx-recall` (flip-write.mjs context flw-getter-helper): 78 false-clean of the 78 that type-check (552 typed-away: binding variants the component declares, out of reach of the hoisted helper); the fix: 0 false-clean, 78 recall-gap. The full grid for the code (28,098 programs) needs no look"
  }
 ]
