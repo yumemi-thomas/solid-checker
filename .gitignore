@@ -1003,3 +1003,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-root-pass/node_modules/**
 !fixtures/reactive-ir/rc21-dynamic-mount/node_modules/
 !fixtures/reactive-ir/rc21-dynamic-mount/node_modules/**
+!fixtures/reactive-ir/rc21-sibling-member-type/node_modules/
+!fixtures/reactive-ir/rc21-sibling-member-type/node_modules/**

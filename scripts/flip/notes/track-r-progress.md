@@ -22,12 +22,13 @@ Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <n
 | `<Dynamic>` | ADR 0662, `async.md` steps 3, 5 | 0 | `p-dyn` holds; `m1` matrix: 0 false positives on the note's mounts; 8 patterns left the open list, 381 open |
 
 | Merge | `059beb67a` from Track W, the first merge | 0 moved by the merge | `make verify` green, `check.mjs all` 181 of 335 (no keep, regress or warn fails), HOST 20 of 24, patterns 381 open |
-
-Open, first: why `<ViewerMenu {...props} />` (`ViewerToolbar.tsx:99`) counts as an escape of the props root only when a descriptor is demanded. `exact_props_callee` is `None` through `props_root_is_current` there, so `handed-member-dispatch` appears. Suspect: `names_root` reads `entities.at`, which is demand-dependent, so a missing entity reads as "no escape". Check the normal build.
+| Member types | ADR 0663 | +17 U, all SC9012, 0 V moved | ViewerToolbar explained: a member's type answered for its receiver. `outside`, program in `patterns/values/sibling-type-go` |
 
 Next, owner's order: (1) done, ADR 0659, `ExecutionPaths`, `--rendering hydrated`; (2) done, `scripts/flip/host-witnesses.json`, `check.mjs HOST` 20 of 24, the other 4 marked `open`; `judgeSsr` reads every client rule; (3) SC5003+SC5001 by `async.md`, steps 0-3, 5 done, next step 4 `clientOnly` and `lazy` with SSR (`D7`), then 6, 7, 8, plus `lazy` with SSR in `mount-form-window`; (4) SC1002, SC8014, SC8015, SC1001 (add the arm fact and a `NoHydration` blocker: `unplaced_run` misses D1, D3, because both are `MayRun`), SC9012. Latest sweep: `sweep-dynsw.json`, 16,610 U, 383 V.
 
 `sc1001.md`, `f0.md`, `sc9012-census.md` beat the plan: reread the row's section before each rule. They add to rules in between: SC5003+SC5001 owns `dynamic_component_entry`, the `<Dynamic>` hint, check `cases3-p03` there, and maybe C-D4 (`n01 n03 n06`); SC1001 has 10 steps and needs `patterns.mjs:130`; H-D5 lands before the census; `check.mjs` needs SC9012 for 9 ids (W's 8 and `o12`) in the census commit.
+
+Open for the census: `const hook = c ? useThing : useThing; const t = hook(); createMemo(() => { t.go(1); ... })` is certified and Chrome throws (`research/probes/v1/a`, `v2/a-nosib`). A hook picked by a conditional reaches no `handed_value` arm. Not a sibling-type case. Close it with F0 or the census, and add it to the fuzzer there.
 
 Surprises:
 - ADR 0659 limits to carry: a site in a helper only an arm calls keeps its finding; dependency source is the client graph on both paths; the sweep still runs `csr`.

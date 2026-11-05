@@ -3729,5 +3729,11 @@
   "found": "the type and API audits",
   "fixed": "ADR 0662",
   "outside": "as the `<Dynamic>` entry above: not a mount in mounts.mjs. The 8 programs stay in scripts/fuzz/patterns/ and pass there"
+ },
+ {
+  "finding": "a member's type answered for its receiver's symbol, so `api.go` beside `api.state()` read as read-only and a setter called in a memo certified (ADR 0663)",
+  "found": "the corpus move ADR 0652 left open, ViewerToolbar `props.onOpen`",
+  "fixed": "ADR 0663",
+  "outside": "the defect needs the member to be the setter itself, and a context's statements can only be wrapped: `go: () => { stmts }` is opened on its own, so old and new agree on all 1,758 programs of a `sibling-type` context, tried and removed. The program is scripts/fuzz/patterns/values/sibling-type-go: `node scripts/fuzz/patterns.mjs` fails it on the old build and passes it on this one. Fixture rc21-sibling-member-type holds each branch"
  }
 ]
