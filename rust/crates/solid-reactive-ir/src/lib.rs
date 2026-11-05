@@ -771,6 +771,10 @@ pub struct LeafOwnerOperation {
     /// helper body may have other, legal callers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
+    /// The attribution rests on the primitive's identity, and the binder does
+    /// not confirm the callee is that primitive (ADR 0711): a named blocker.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub identity_unproven: bool,
 }
 
 impl LeafOwnerOperation {

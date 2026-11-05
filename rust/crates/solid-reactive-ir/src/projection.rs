@@ -1198,6 +1198,11 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
             }
+            if operation.identity_unproven {
+                finding.fixes.clear();
+                finding.analysis_context =
+                    crate::blockers::LEAF_OPERATION_IDENTITY_UNPROVEN.to_owned();
+            }
         }
         FindingSeed::DirectiveCreation(creation) if creation.uncertain => {
             finding.kind = "uncertifiable".into();

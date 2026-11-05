@@ -1019,3 +1019,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-flush-in-effect-unplaced/node_modules/**
 !fixtures/reactive-ir/rc21-create-in-effect-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-create-in-effect-unplaced/node_modules/**
+!fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/
+!fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/**

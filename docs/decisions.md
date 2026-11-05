@@ -1749,3 +1749,12 @@ A `createMemo` in a module-level object or class method, or a getter, reached fr
 <a id="adr-0711"></a>
 ## ADR 0711 — SC3001 proves the primitive it names
 Two corpus violations named a `createOwner` no source holds: solid-three's `storePath('internal', …)` (an export rc.21's `solid-js` does not have) and inferay's `recordUiTimings` (its imports come from a build directory the corpus lacks). Only with `--runtime-target browser` does the producer put `createOwner`'s symbol at those callees; it was not traced further (the producer is Track R's). `cleanup.rs` now asks the binder before a leaf operation is a violation: the callee is a named import binding whose imported name the dialect maps to the attributed primitive, or a non-computed member of a namespace import of a dialect-owned module whose property does. Otherwise the operation is uncertain (lexical) or possible only (through a helper). Aliases were already obligations; the one fixture that moved is a renamed re-export through a project barrel. Corpus: both violations become uncertifiable. A named blocker (`leaf-operation-identity-unproven`) needs a field on `LeafOwnerOperation` (`lib.rs`, R's): left to the merge. Owners: `cleanup.rs`.
+
+<a id="adr-0672"></a>
+## ADR 0672 — An unconfirmed leaf primitive carries its blocker
+
+ADR 0711 made an attribution the binder does not confirm uncertain when written in the callback and `possible` through a helper, with the
+owner-context wording and no blocker, and the helper's text said the operation runs "on some calls", which is not the reason.
+`LeafOwnerOperation::identity_unproven` carries it through the walk (`Reached` has a third field), projects blocker
+`leaf-operation-identity-unproven`, clears any fix, and gets its own wording. No kind moved. The renamed barrel in the fixture could be proved
+by following the re-export; it stays open, since the callee's symbol is not what the rule's binder test reads.

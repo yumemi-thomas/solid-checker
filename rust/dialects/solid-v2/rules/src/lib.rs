@@ -388,7 +388,9 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
     if let Some(via) = &operation.via
         && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
     {
-        message.push_str(&if operation.possible {
+        message.push_str(&if operation.identity_unproven {
+            format!(" — reached through {via}()")
+        } else if operation.possible {
             // ADR 0275: behind a branch, an early return or a loop in the
             // helper, on a path this call's arguments may or may not take.
             format!(
@@ -405,7 +407,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
         } else {
             match &operation.via {
-                Some(via) if operation.possible => format!(
+                Some(via) if operation.possible && !operation.identity_unproven => format!(
                     "the exactly resolved helper {via}() runs the operation synchronously on some completions only, and this call site is inside the {} callback",
                     operation.owner
                 ),
@@ -421,7 +423,15 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
         },
         location: Some(operation.location.clone()),
     }];
-    if operation.uncertain
+    if operation.identity_unproven {
+        message.push_str(
+            "; the binder does not confirm this callee is that primitive, so the finding is a proof obligation",
+        );
+        evidence.push(EvidenceStep {
+            message: "the callee is not bound to the Solid export the attribution names".into(),
+            location: Some(operation.location.clone()),
+        });
+    } else if operation.uncertain
         && (!matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
             || operation.call_site_gate.is_some())
     {
