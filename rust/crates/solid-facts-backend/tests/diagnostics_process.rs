@@ -2072,20 +2072,37 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // and every one is pinned: a broad `number` may be non-finite; a
         // getter's body runs on access, so no written value proves what the
         // property yields; a binding referenced twice could be mutated before
-        // the call; and a spread could overwrite the witness.
-        assert_rule_findings(&findings, "server-function-rich-argument", 19);
+        // the call; and a spread could overwrite the witness. ADR 0707 adds a
+        // fifth: `SafeScalar` holds the literal `0`, which may be `-0`, and
+        // rc.21's transport rejects negative zero.
+        assert_rule_findings(&findings, "server-function-rich-argument", 20);
         assert_eq!(
             findings_for_rule(&findings, "server-function-rich-argument")
                 .iter()
                 .filter(|finding| finding["kind"] == "uncertifiable")
                 .count(),
-            4,
+            5,
             "{findings:#?}"
         );
-        if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
+        // ADR 0707: the opt-in is the call. Called first in the client entry,
+        // before its render: the codec is installed, silent everywhere.
+        if let Some(entry) = diagnostic_fixture("server-function-rich-args-entry") {
             assert!(
-                enabled.is_empty(),
-                "enableRichArguments installs the codec and removes the throw everywhere: {enabled:#?}"
+                entry.is_empty(),
+                "enableRichArguments() before the render installs the codec everywhere: {entry:#?}"
+            );
+        }
+        // Called at module scope in a component file with no render: nothing
+        // proves it ran first, so the rich arguments are obligations, never
+        // violations.
+        if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
+            let open = findings_for_rule(&enabled, "server-function-rich-argument");
+            assert!(
+                !open.is_empty()
+                    && open
+                        .iter()
+                        .all(|finding| finding["kind"] == "uncertifiable"),
+                "{enabled:#?}"
             );
         }
     }

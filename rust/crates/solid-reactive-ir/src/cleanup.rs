@@ -398,6 +398,10 @@ pub(super) fn leaf_owner_operations_for_file(
             else {
                 continue;
             };
+            // ADR 0711: the attribution must name the primitive the callee
+            // is bound to; otherwise the operation is an obligation.
+            let identity_proven =
+                primitive_identity_proven(dialect, callback_file, call, &primitive);
             // Only `onCleanup` has a rewrite -- return the cleanup
             // instead of registering it -- and only where the owner reads
             // a returned function as cleanup. That is a 2.0 idea: 1.x's
@@ -415,7 +419,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 location: location(callback_file.path.shared(), call.callee),
                 fix,
                 call_site_gate: call_site_gate.clone(),
-                uncertain: false,
+                uncertain: !identity_proven,
                 possible: false,
                 via: None,
             });
@@ -649,6 +653,52 @@ fn forbidden_operation_kind(
         }
         _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
     })
+}
+
+/// ADR 0711: whether the binder confirms the primitive attributed to `call`:
+/// the callee is a named import binding whose imported name is that
+/// primitive's, or a non-computed member of a namespace import of a module the
+/// dialect owns whose property is. Anything else (a local alias, a wrapper's
+/// value, an import whose target the producer could not read) proves no
+/// identity, whatever symbol the producer put at the callee.
+fn primitive_identity_proven(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: &PrimitiveName,
+) -> bool {
+    use solid_facts::ast::ImportKind;
+    let Some(kind) = primitive.primitive() else {
+        return false;
+    };
+    let ast = &file.ast;
+    let names = |name: &str| dialect.primitive(name) == Some(kind);
+    let binding_at = |declaration: Span| {
+        ast.imports.iter().find_map(|import| {
+            import
+                .bindings
+                .iter()
+                .find(|binding| binding.local.span == declaration)
+                .map(|binding| (import, binding))
+        })
+    };
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    if let Some(member) = ast.member_at(callee) {
+        let object = ast.peel_ts_sugar_span(member.object);
+        return ast
+            .reference_declaration(object)
+            .and_then(binding_at)
+            .is_some_and(|(import, binding)| {
+                binding.kind == ImportKind::Namespace
+                    && dialect.owns_module(import.module.as_str())
+                    && file.source_text(member.property).is_some_and(names)
+            });
+    }
+    ast.reference_declaration(callee)
+        .and_then(binding_at)
+        .is_some_and(|(_, binding)| {
+            binding.kind != ImportKind::Namespace && binding.imported.as_deref().is_some_and(names)
+        })
 }
 
 /// Whether the dialect forbids this primitive call under a leaf owner.
@@ -1762,7 +1812,10 @@ fn function_forbidden_operations(
         // adjacent-only `dedup` would leave byte-identical operations in the
         // serialized IR — reject at the push instead.
         if let Some(kind) = forbidden_operation_kind(dialect, helper_file, inner, &primitive) {
-            record(kinds, kind, guaranteed);
+            // ADR 0711: an attribution the binder does not confirm is
+            // possible only.
+            let proven = primitive_identity_proven(dialect, helper_file, inner, &primitive);
+            record(kinds, kind, guaranteed && proven);
         }
     }
     // ADR 0537: a tagged template written in the body calls its tag there.

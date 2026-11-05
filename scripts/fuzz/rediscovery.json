@@ -3819,6 +3819,49 @@
   "finding": "SC8014 and SC8015 certified a governing expression that may read, or a receiver typed any (ADR 0671)",
   "found": "scripts/flip/witnesses.json, i03 i05 d04 d05 i08 d02 d03",
   "fixed": "ADR 0671",
-  "outside": "a preference has no runtime truth, so no grid judges it; the cases are in fixtures/ownership-cases/cases.json"
+  "outside": "a preference has no runtime truth, so no grid judges it; the cases are in fixtures/ownership-cases/cases.json",
+  "finding": "valid-use-server (SC7006) certified a function-level server function that captures a binding an enclosing function declares, a compile error on both builds (SSR audit D12, scripts/flip/notes/ssr/report.md; ADR 0706)",
+  "found": "the SSR premise audit (d01, d02, d24, d25), rerun here with @solidjs/compiler@2.0.0-rc.21 transformDirectives on twelve shapes",
+  "fixed": "ADR 0706",
+  "outside": "SC7006's oracle is the compiler's directive pass, not a runtime: no grid compiles \"use server\" (scripts/fuzz/README.md, the SSR host section, already says so). Fixture valid-use-server-capture holds the seven errors and four compiling shapes"
+ },
+ {
+  "finding": "server-function-rich-argument (SC7007) at rc.21's transport: a namespace member call api.save(new Date()) and zero(-0) certified, an enableRichArguments import counted as the opt-in, and f(undefined, new Uint8Array(2)) was a violation though rc.21 sends it (SSR audit D9, D10, D11, D4; ADR 0707)",
+  "found": "the SSR premise audit (scripts/flip/notes/ssr/report.md, h/sf.mjs at the real /_server boundary on the other machine)",
+  "fixed": "ADR 0707",
+  "outside": "no grid compiles \"use server\"; the audit's h/sf.mjs host is not in this repository. Fixtures server-function-transport-audit and server-function-rich-args-entry hold the shapes, and the report's witnesses r01-r08, r17, f16 are the runtime record"
+ },
+ {
+  "finding": "SC2006: a flush() in a function no call edge places (an object slot here; object and class methods, getters, Map slots, toString and a function handed to a helper in the flip witnesses a02-a10), reached from an action's body, threw FLUSH_IN_ACTION in Chrome and certified: action_step_body never crosses a module-level member (ADR 0708). Not generated: the class, getter, Map, toString and handed-by-name shapes (fixture rc21-flush-in-action-unplaced and the witnesses hold them).",
+  "found": "flip plan's SC2006 row, witnesses SC2006 a02 a03 a05 a06 a08 a09 a10",
+  "fixed": "ADR 0708",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-flw-action-slot-x-direct-none",
+   "mx-flush-in-action-flw-action-slot-x-namespace-none",
+   "mx-flush-in-action-flw-action-slot-x-alias-none",
+   "mx-flush-in-action-flw-action-slot-x-destructured-none",
+   "mx-flush-in-action-flw-action-slot-x-wrapper-none"
+  ],
+  "rediscovered": "70bc53c26: 209 false-clean of 379 on flw-action-slot; fix: 0 false-clean (each an SC2006 obligation)"
+ },
+ {
+  "finding": "SC2008: a flush() in a module-level object method an effect's apply calls warned FLUSH_IN_EFFECT_CALLBACK in Chrome and certified (flip witness SC2008 b05; ADR 0709)",
+  "found": "flip plan's SC2008 row, witness SC2008 b05",
+  "fixed": "ADR 0709",
+  "outside": "the mx-recall harness program is withheld on the old build by a remote reactive-dispatch-unresolved obligation, so the flw-apply-slot-module context (module-level slot, apply calls it) cannot fail that build; the fix claims the site on all 252 judged programs (flush-in-effect-callback uncertifiable at the site). Witness b05 and fixture rc21-flush-in-effect-unplaced hold the certified shape"
+ },
+ {
+  "finding": "SC6002: a computation created in a function no call edge places (a module-level object or class method, a getter) on an effect apply's stack threw PRIMITIVE_IN_EFFECT_CALLBACK in Chrome and certified (flip witnesses SC6002 e05, f04, f07; census h11, a custom element's connectedCallback; ADR 0710)",
+  "found": "flip plan's SC6002 row; census h11 (section-4 census:h)",
+  "fixed": "ADR 0710",
+  "outside": "the mx-recall harness program is withheld on the old build by a remote obligation, so flip-write.mjs flw-apply-slot-module (PRIMITIVE_IN_EFFECT_CALLBACK) cannot fail that build; the fix claims the site on 702 of 756 judged programs. fuzz-patterns: census/h11-custom-element-connected left open-defects.json at ADR 0710"
+ },
+ {
+  "finding": "SC3001 named a createOwner no source holds at two corpus sites (solid-three storePath, an export rc.21 solid-js lacks; inferay recordUiTimings, imports from a missing build directory): the producer's symbol at the callee was taken as the primitive's identity (ADR 0711)",
+  "found": "flip plan's SC3001 row (corpus, rc.21, --runtime-target browser)",
+  "fixed": "ADR 0711",
+  "outside": "the generator imports every primitive by its own name from solid-js and never writes a missing export or module, and the producer misattribution was not reproduced outside those two projects; the corpus sweep shows both sites uncertifiable"
  }
 ]

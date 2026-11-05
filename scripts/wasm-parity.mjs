@@ -897,7 +897,12 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     const tree = trees["dotdot-fixture"];
     const source = readFileSync(join(tree.root, "App.tsx"), "utf8");
     const start = source.indexOf("useLabel(name)");
-    const expectedRows = [{ id: "SC1001", rule: "strict-read-untracked", kind: "violation", path: join(tree.root, "App.tsx"), startByte: start, endByte: start + "useLabel(name)".length }];
+    // ADR 0665: the package's memo is typed `any` here, so its read's provenance is open.
+    const later = source.indexOf("label()");
+    const expectedRows = [
+      { id: "SC1001", rule: "strict-read-untracked", kind: "violation", path: join(tree.root, "App.tsx"), startByte: start, endByte: start + "useLabel(name)".length },
+      { id: "SC5003", rule: "async-outside-loading-boundary", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: later, endByte: later + "label()".length },
+    ];
     equalToNative(label("dotdot-fixture"), at("dotdot-fixture"), native["dotdot-fixture"]);
     check(native["dotdot-fixture"].snapshot?.status === "violation" && same(findingRows(native["dotdot-fixture"].snapshot), expectedRows),
       `dotdot-fixture: native ${JSON.stringify(findingRows(native["dotdot-fixture"].snapshot))}`);

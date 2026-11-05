@@ -38,6 +38,14 @@ module is server code. Unlike upstream, a stray string statement in the
 extracted function's own block is silent too (it "changes nothing"; ownership
 case `stray-in-extracted-function/001`).
 
+A function-level server function that **captures a binding an enclosing
+function declares** (an enclosing `const` or parameter, a default parameter
+reading one, an enclosing helper, a sibling server function, its own name) is
+a compile error on both builds: the directive pass hoists it to module scope
+("server functions cannot capture non-top-level variables", measured with
+`@solidjs/compiler@2.0.0-rc.21`, ADR 0706). Module-scope bindings, its own
+locals and type-only references compile. `tsc` accepts every one.
+
 In a module whose prologue contains `"use server"`:
 
 - **A re-export** (`export { x } from`, `export * from`) is a compile error

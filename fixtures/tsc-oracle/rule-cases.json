@@ -800,8 +800,8 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "silent",
-      "why": "The compiler proves the alias contains only strings, booleans, null, and finite numeric literals. Those values are all faithfully JSON-serializable, so no transport obligation remains.",
-      "code": "type Safe = string | boolean | null | 0 | 1.5;\ndeclare const safe: Safe;\nexport async function save(value: Safe) {\n  \"use server\";\n  return value;\n}\nvoid save(safe);\n"
+      "why": "The compiler proves the alias contains only strings, booleans, and null. Those values are all faithfully JSON-serializable, so no transport obligation remains. A numeric domain stays open: it does not say whether it holds `0`, and TypeScript types `-0` as `0` (ADR 0707).",
+      "code": "type Safe = string | boolean | null;\ndeclare const safe: Safe;\nexport async function save(value: Safe) {\n  \"use server\";\n  return value;\n}\nvoid save(safe);\n"
     },
     {
       "rule": "server-function-rich-argument",

@@ -240,6 +240,57 @@ fn placement(file: &FileFacts, module_level: bool, draft: &mut ProgramDraft) {
             false,
         ));
     }
+    captured_bindings(file, draft);
+}
+
+/// ADR 0706 (SSR audit D12): the directive pass hoists an extracted server
+/// function to module scope, so a reference in it (body or parameter
+/// default) to a binding declared in an enclosing function is a compile error
+/// on both builds ("server functions cannot capture non-top-level variables",
+/// `@solidjs/compiler@2.0.0-rc.21` `transformDirectives`): an enclosing
+/// `const`, parameter or function, a sibling server function, and the
+/// function's own name when an enclosing function declares it. Module-scope
+/// bindings, the function's own locals and type-only references compile.
+/// Proven from the binder; the first capture of each function is reported.
+fn captured_bindings(file: &FileFacts, draft: &mut ProgramDraft) {
+    let ast = &file.ast;
+    for function in &ast.functions {
+        if !function.has_directive(USE_SERVER)
+            || inside_server_function(file, function)
+            || ineligible_position(file, function).is_some()
+            || enclosing_function(file, function.span).is_none()
+        {
+            continue;
+        }
+        let own_name = function.name.as_ref().map(|name| name.span);
+        let capture = ast.identifiers.iter().find_map(|identifier| {
+            let span = identifier.span;
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || !function.span.contains(span)
+                || ast.type_names.iter().any(|name| name.contains(span))
+                || ast.type_queries.iter().any(|query| query.contains(span))
+            {
+                return None;
+            }
+            let declaration = ast.reference_declaration(span)?;
+            let captured = Some(declaration) == own_name
+                || (!function.span.contains(declaration)
+                    && ast.innermost_function_containing(declaration).is_some());
+            captured.then_some(span)
+        });
+        if let Some(span) = capture {
+            let name = file.source_text(span).unwrap_or("a binding");
+            draft.static_violations.push(violation(
+                file,
+                span,
+                format!(
+                    "a \"use server\" function is hoisted to module scope when it is extracted, so it cannot capture `{name}`, which an enclosing function declares: the compiler rejects it with \"server functions cannot capture non-top-level variables\" on both the client and the server build"
+                ),
+                "Move the binding to module scope, or pass the value as an argument.",
+                false,
+            ));
+        }
+    }
 }
 
 /// How a module-level directive file's export fares at server boot.

@@ -1011,3 +1011,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-open-provenance/node_modules/**
 !fixtures/reactive-ir/rc21-after-await-handed/node_modules/
 !fixtures/reactive-ir/rc21-after-await-handed/node_modules/**
+!fixtures/reactive-ir/rc21-flush-in-action-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-flush-in-action-unplaced/node_modules/**
+!fixtures/reactive-ir/rc21-flush-unplaced-no-action/node_modules/
+!fixtures/reactive-ir/rc21-flush-unplaced-no-action/node_modules/**
+!fixtures/reactive-ir/rc21-flush-in-effect-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-flush-in-effect-unplaced/node_modules/**
+!fixtures/reactive-ir/rc21-create-in-effect-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-create-in-effect-unplaced/node_modules/**

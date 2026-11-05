@@ -14,8 +14,8 @@ TypeScript type is (or contains at top level) one of the types the default
 transport cannot carry: `Date`, `Map`/`ReadonlyMap`, `Set`/`ReadonlySet`,
 `RegExp`, or a typed array. Identifier and inline-expression arguments receive
 the same compiler library-identity facts. The rule goes silent project-wide once
-`enableRichArguments` is imported (from
-`@solidjs/web/server-functions/rich-args`) or a `serializeArgs` is configured
+`enableRichArguments()` is proven called on the client first (from
+`@solidjs/web/server-functions/rich-args`; ADR 0707) or a `serializeArgs` is configured
 through the exact resolved `configureServerFunctionsClient` API. A dynamic
 options value that may or may not contain `serializeArgs` makes SC7007
 uncertifiable instead of silently suppressing the transport check. Arguments
@@ -111,8 +111,11 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
 
 ## When it does not fire
 
-- **`enableRichArguments` imported anywhere** (a value import of the
-  `rich-args` entry — importing the entry is the opt-in), or
+- **`enableRichArguments()` proven called first**: an unconditional
+  module-scope call in the client entry, before its `render` or `hydrate`
+  (ADR 0707; rc.21 installs the codec inside the call, so an import alone, a
+  call in a function, under a condition, after the render or in another file
+  is uncertifiable), or
   **`configureServerFunctionsClient({ serializeArgs })`** configured: both
   install a serializer and remove the throw project-wide (probed), so the
   rule is silent for the whole project.
@@ -124,10 +127,15 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
   hole: `{ when: Date }` is no longer silently missed even though the available
   library identity is top-level only.
 - **The proven primitive set is structural, not textual:** `null`, strings,
-  booleans, finite numeric constants, and aliases/unions composed only from
-  those categories certify. A numeric type certifies only when every numeric
-  constituent is a finite literal. Bigint, symbol, and undefined-only domains
-  are violations because plain JSON cannot encode them faithfully. Object
+  booleans, nonzero finite numeric constants, an unsigned decimal literal
+  written as the argument or leaf, and aliases/unions of the non-numeric
+  categories certify. TypeScript types `-0` as `0` and rc.21 rejects negative
+  zero, so a zero constant or a numeric literal domain is uncertifiable
+  (ADR 0707). Bigint, symbol, and undefined-only domains are violations
+  because plain JSON cannot encode them faithfully, except an `undefined`
+  before another argument, which rc.21 may send as `null`: uncertifiable. A
+  static member of a namespace import (`api.save(…)`) is the exported
+  function. Object
   graphs still need a recursive compiler JSON-safety fact before the checker
   can certify them without guessing.
 - **Type assertions do not change runtime transport.** The proof uses the

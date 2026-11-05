@@ -768,7 +768,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 5,
+        "proofObligations": 7,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },

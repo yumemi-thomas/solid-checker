@@ -1412,6 +1412,35 @@ impl<'a> SemanticLookup<'a> {
         self.project_primitives().contains(&primitive)
     }
 
+    /// ADR 0708: whether a primitive the project names runs one of its
+    /// callbacks as an action's steps
+    /// ([`solid_dialect::Dialect::callback_runs_as_action_steps`]).
+    pub(crate) fn project_steps_action_callbacks(&self) -> bool {
+        let primitives = self.project_primitives();
+        primitives.iter().any(|primitive| {
+            (0..PROBED_ARGUMENTS).any(|argument| {
+                self.dialect
+                    .callback_runs_as_action_steps(*primitive, argument)
+            })
+        })
+    }
+
+    /// ADR 0709: whether a primitive the project names defers one of its
+    /// callbacks to a later flush (an effect's apply among them).
+    pub(crate) fn project_defers_callbacks(&self) -> bool {
+        let primitives = self.project_primitives();
+        primitives.iter().any(|primitive| {
+            (1..=PROBED_ARGUMENTS).any(|count| {
+                (0..count).any(|argument| {
+                    self.dialect
+                        .callback_semantics_at(*primitive, argument, count)
+                        .execution
+                        == Some(solid_dialect::Execution::Deferred)
+                })
+            })
+        })
+    }
+
     pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
         crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         *self.callback_capabilities.get_or_init(|| {

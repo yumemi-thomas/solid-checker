@@ -73,6 +73,11 @@ also reported as `missing-owner` (SC4001), which claims only a cleanup that neve
 runs: one in an `onSettled` callback queued with no owner, or with an owner that
 may be absent (ADR 0347).
 
+The operation's identity is proven from the binder (ADR 0711): a named import
+whose imported name is the primitive's, or a member of a namespace import of a
+Solid module. Any other attribution (a renamed re-export through a project
+barrel, an import whose target the producer could not read) is uncertifiable.
+
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where
 the creation itself throws first (`docs/open-work.md`).
