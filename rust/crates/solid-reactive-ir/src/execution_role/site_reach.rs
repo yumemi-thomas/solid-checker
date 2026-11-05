@@ -696,7 +696,6 @@ pub(crate) fn inside_class_member(
 /// element, or a function handed where the analysis does not follow. Many of
 /// these have no call node at all (a getter, `toString`, an iterator, a tag),
 /// so the answer comes from what holds the function, not from its calls.
-#[allow(dead_code)]
 pub(crate) fn unplaced_run(
     file: &solid_facts::FileFacts,
     span: Span,

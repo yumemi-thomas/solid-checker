@@ -74,6 +74,16 @@ SC2001.
 - **Post-merge baseline sweep**: `~/EDF/tmp/flipw/sweep-merge.json` (059beb67a, binaries `bins/wmerge`): 16,835 (16,452 U,
   383 V). Diff later rules against it.
 
+- **SC2006** (ADR 0708): `static_api.rs`, an `else` after the step proof: `kind` throws in a step, the project names a stepping
+  primitive (`indexes.rs` `project_steps_action_callbacks`, by name: `project_primitives` holds every named symbol, so real
+  typings always pass), and `runs_unplaced_through_callers` (`unplaced_run` at the call, or at an exact call of the named helper
+  around it, through 4 helpers and the in-place climb's call): uncertain, blocker `function-run-unplaced`. First cut used
+  `unplaced_run` alone: the fuzzer's `wrapper` binding (`wrapUse` at module scope, called from the slot) stayed 37 false clean;
+  the caller walk closes them. Witnesses a02-a10 hold (185 of 335; b05 moved from certified to an SC2006 obligation, still
+  failing for SC2008). Fuzzer `flw-action-slot` (FLUSH_IN_ACTION): old 209 false clean of 379, new 0. Fixtures
+  `rc21-flush-in-action-unplaced`, `rc21-flush-unplaced-no-action`; 4 snapshots gained obligations (SC2008 fixtures whose
+  handlers and members now ask). Corpus +21 U SC2006 (`sweep-w2006.json`), 0 removed. fuzz-patterns 747 fine (was 744).
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -99,10 +109,8 @@ SC2001.
 
 ## Next (a fresh agent starts here)
 
-Head 70bc53c26, pushed. Order left, per PLAN.md "Track W" and the research:
-1. **SC2006** (research `~/EDF/tmp/flipw/research/track-w-next.md` does not cover it; PLAN row: after `:293` in
-   `action_step_body`, `unplaced_run(call.span)` plus a stepped callback -> uncertain, blocker `function-run-unplaced`;
-   witnesses a02 a03 a05 a06 a08 a09 a10). `client_build` is already fixed by R (no prerequisite left).
+Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs_unplaced_through_callers` in
+`static_api.rs` is the helper-aware form of `unplaced_run`, reuse it for SC2008/SC6002):
 2. **SC2008**, **SC6002** (PLAN rows; `unplaced_run` in `execution_role/site_reach.rs` has no caller yet).
 3. **SC3001** (trace `Primitive::CreateOwner` at solid-three `core/index.tsx:118`, inferay `PerformanceRecorder:199`).
 4. **SC2009**, then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
@@ -112,7 +120,7 @@ Head 70bc53c26, pushed. Order left, per PLAN.md "Track W" and the research:
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-7007ssr.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2006.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 

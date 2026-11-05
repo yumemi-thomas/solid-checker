@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 855,
+      "end": 860,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -52,6 +62,16 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1122,
+      "end": 1133,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -69,6 +89,16 @@
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1361,
       "end": 1367,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1380,
+      "end": 1385,
       "fixes": 0
     },
     {
@@ -109,6 +139,16 @@
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1631,
       "end": 1637,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1650,
+      "end": 1655,
       "fixes": 0
     },
     {

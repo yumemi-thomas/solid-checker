@@ -2,7 +2,7 @@
 // commit adds its shapes here, so neither track edits misuse.mjs or the other's file.
 //   FLIP_WRITE_CONTEXTS  { [code]: [context, ...] }, appended to that code's recallContexts
 //   flipWriteContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
-import { decl, domExpr, expr, fn, listenExpr, prim } from "./model.mjs";
+import { button, call, decl, domExpr, expr, fn, listenExpr, member, obj, prim, ref } from "./model.mjs";
 
 /**
  * ADR 0705, the DOM dispatch list: a member that dispatches on its caller's stack, fired from `onSettled` (a leaf owner), with a
@@ -33,11 +33,28 @@ const DISPATCH_FIRES = {
   ],
 };
 
+/**
+ * ADR 0708, SC2006: the site in a function no call edge places (an object slot), called from an action's body, so a step is
+ * on the stack when it runs (Chrome, rc.21: FLUSH_IN_ACTION). The build before certified it.
+ */
+const UNPLACED_STEPS = {
+  "flw-action-slot": (stmts, kit) => {
+    const holder = kit.name("h");
+    const a = kit.name("a");
+    return {
+      body: [decl(holder, obj([["go", fn(stmts)]])), decl(a, prim("action", fn([expr(call(member(ref(holder), "go")))])))],
+      view: [button(kit.name("b"), [expr(call(ref(a)))])],
+    };
+  },
+};
+
 export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_FORBIDDEN_SCOPE: Object.keys(DISPATCH_FIRES),
+  FLUSH_IN_ACTION: Object.keys(UNPLACED_STEPS),
 };
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
-  return fire ? { body: fire(stmts, kit), view: [] } : undefined;
+  if (fire) return { body: fire(stmts, kit), view: [] };
+  return UNPLACED_STEPS[context]?.(stmts, kit);
 }

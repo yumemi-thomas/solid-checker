@@ -3717,5 +3717,20 @@
   "found": "the SSR premise audit (scripts/flip/notes/ssr/report.md, h/sf.mjs at the real /_server boundary on the other machine)",
   "fixed": "ADR 0707",
   "outside": "no grid compiles \"use server\"; the audit's h/sf.mjs host is not in this repository. Fixtures server-function-transport-audit and server-function-rich-args-entry hold the shapes, and the report's witnesses r01-r08, r17, f16 are the runtime record"
+ },
+ {
+  "finding": "SC2006: a flush() in a function no call edge places (an object slot here; object and class methods, getters, Map slots, toString and a function handed to a helper in the flip witnesses a02-a10), reached from an action's body, threw FLUSH_IN_ACTION in Chrome and certified: action_step_body never crosses a module-level member (ADR 0708). Not generated: the class, getter, Map, toString and handed-by-name shapes (fixture rc21-flush-in-action-unplaced and the witnesses hold them).",
+  "found": "flip plan's SC2006 row, witnesses SC2006 a02 a03 a05 a06 a08 a09 a10",
+  "fixed": "ADR 0708",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-flw-action-slot-x-direct-none",
+   "mx-flush-in-action-flw-action-slot-x-namespace-none",
+   "mx-flush-in-action-flw-action-slot-x-alias-none",
+   "mx-flush-in-action-flw-action-slot-x-destructured-none",
+   "mx-flush-in-action-flw-action-slot-x-wrapper-none"
+  ],
+  "rediscovered": "70bc53c26: 209 false-clean of 379 on flw-action-slot; fix: 0 false-clean (each an SC2006 obligation)"
  }
 ]

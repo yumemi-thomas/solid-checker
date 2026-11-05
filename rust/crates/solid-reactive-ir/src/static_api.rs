@@ -380,6 +380,28 @@ impl StaticApiContext<'_> {
                     fixes: vec![],
                     uncertain: stepped,
                 });
+            } else if let Some(kind) = kind
+                && dialect.throws_inside_action_step(kind)
+                && self.lookup.project_steps_action_callbacks()
+                && runs_unplaced_through_callers(file, call.span, self.lookup, 4)
+            {
+                // ADR 0708: the call runs in a function no call edge places
+                // (an object or class member, a slot, a tag, a function
+                // handed where nothing follows it), and some callback in the
+                // program runs as an action's steps: whether a step is on the
+                // stack when it runs is unproven, an obligation (invariant 2).
+                result.violations.push(StaticViolation {
+                    id: "SC2006".into(),
+                    rule: "flush-in-action".into(),
+                    message: format!(
+                        "{primitive}() is called in a function that runs where no call edge places it, and this program steps an action's body; if a step is on the stack when it runs, the installed @solidjs/signals throws FLUSH_IN_ACTION in dev, and in production the call drains nothing"
+                    ),
+                    hint: "Call flush() only from code proven outside every action body (an event handler that starts no action, a timer), or remove it: an action's writes commit when the action settles.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: crate::blockers::FUNCTION_RUN_UNPLACED.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
             }
             // SC2008: a flush() that only ever runs on a user effect's apply
             // callback. The claim is universal: whenever the call runs, the
@@ -1390,6 +1412,54 @@ fn action_step_body_through(
             })
             .map(|body| (body, true))
     })
+}
+
+/// ADR 0708: [`crate::execution_role::unplaced_run`] at `site`, or at an
+/// exact call of the named function around it, through `depth` helpers: a
+/// helper whose callers include an object method or slot runs wherever that
+/// member does, which no call edge places either.
+fn runs_unplaced_through_callers(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if crate::execution_role::unplaced_run(file, site, lookup) {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
+        Some(climb) if climb.in_list || climb.suspended.is_some() => return false,
+        // The layers that run in place end at a call in other code: ask
+        // there.
+        Some(climb) if climb.at != site => {
+            return runs_unplaced_through_callers(file, climb.at, lookup, depth - 1);
+        }
+        Some(_) | None => site,
+    };
+    let Some(function) = crate::owners::owning_function(&file.ast, at)
+        .filter(|function| function.body.contains(at) && !function.generator)
+    else {
+        return false;
+    };
+    if crate::owners::function_binding_name(file, function).is_none() {
+        return false;
+    }
+    lookup
+        .function_call_sites(file.path.as_str(), function.span)
+        .into_iter()
+        .any(|(caller, callee)| {
+            caller
+                .ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+                })
+                .any(|call| runs_unplaced_through_callers(caller, call.span, lookup, depth - 1))
+        })
 }
 
 fn action_step_body_at(

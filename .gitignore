@@ -997,3 +997,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-server-arms/node_modules/**
 !fixtures/reactive-ir/rc21-server-entry-only/node_modules/
 !fixtures/reactive-ir/rc21-server-entry-only/node_modules/**
+!fixtures/reactive-ir/rc21-flush-in-action-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-flush-in-action-unplaced/node_modules/**
+!fixtures/reactive-ir/rc21-flush-unplaced-no-action/node_modules/
+!fixtures/reactive-ir/rc21-flush-unplaced-no-action/node_modules/**

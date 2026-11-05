@@ -1,0 +1,3 @@
+# rc21-flush-unplaced-no-action
+
+Claim (ADR 0708): the unplaced arm asks whether the project names a primitive that runs a callback as an action's steps (`Dialect::callback_runs_as_action_steps`). This stub declares only `flush`, so nothing here can step a body, and the unplaced layers of `rc21-flush-in-action-unplaced` (an object method, a class method, a `Map` slot, called from a click handler) stay silent for SC2006. The published `solid-js` typings always declare `action`, so in a real project the gate holds and every such layer is an obligation; this fixture pins the gate, not a project shape. Stubs as in `rc21-flush-in-action-unplaced`, without `action`.
