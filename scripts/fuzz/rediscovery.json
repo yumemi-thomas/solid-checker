@@ -3791,5 +3791,11 @@
    "mx-action-called-in-owned-scope-flw-getter-helper-x-direct-closure"
   ],
   "rediscovered": "the checker at dbc66107a on `focus.mjs --grids mx-recall` (flip-write.mjs context flw-getter-helper): 78 false-clean of the 78 that type-check (552 typed-away: binding variants the component declares, out of reach of the hoisted helper); the fix: 0 false-clean, 78 recall-gap. The full grid for the code (28,098 programs) needs no look"
+ },
+ {
+  "finding": "SC2003: a store member as a `for … of`/`for … in` head target (`for (s.a of [2])`) was never asked (no_direct_mutation walked assignments only) and certified; Chrome (rc.21) warns STORE_WRITE_OUTSIDE_SETTER when the loop iterates (flip witnesses SC2003 c02, c03, j01, j02; ADR 0716)",
+  "found": "flip plan SC2003 row; values/d6-for-of-target",
+  "fixed": "ADR 0716",
+  "outside": "a recall context places the site and cannot respell it as a loop head: the spelling of the write is a SPEC variant in misuse.mjs, outside this track's file. fuzz-patterns: values/d6-for-of-target left open-defects.json at ADR 0716; the witnesses and fixture store-for-head-write pin the rest"
  }
 ]

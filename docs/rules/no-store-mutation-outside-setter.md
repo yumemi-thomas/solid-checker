@@ -26,6 +26,9 @@ symbol:
 
 - an assignment, compound assignment or update (`store.a.b = x`,
   `store.n++`);
+- a `for (… of …)` or `for (… in …)` head (`for (store.a of [2])`), which
+  writes on each iteration: a violation over an array literal with an element,
+  uncertifiable (`store-operation-may-not-write`) over anything else (ADR 0716);
 - a `delete` of a bare or parenthesized static member path (`delete
   store.a.b`) whose property Type Facts proves optional and not readonly
   (ADR 0461), its links past the root judged as an assignment's (ADR 0465,

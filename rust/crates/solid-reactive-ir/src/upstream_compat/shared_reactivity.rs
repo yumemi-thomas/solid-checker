@@ -1389,13 +1389,25 @@ fn no_direct_mutation(
     defects: &mut Vec<StaticDefect>,
 ) {
     // Every leaf of a destructuring pattern is a written member of its own
-    // (ADR 0526).
+    // (ADR 0526). ADR 0716: so is every leaf of a `for (… of …)` or
+    // `for (… in …)` head, which writes only if the loop iterates: `Some`
+    // with whether a non-empty iterable is proven.
     let written_members = file
         .ast
         .assignments
         .iter()
-        .flat_map(|assignment| assignment_write_targets(file, assignment));
-    for written in written_members {
+        .flat_map(|assignment| assignment_write_targets(file, assignment))
+        .map(|written| (written, None))
+        .chain(file.ast.iteration_targets.iter().flat_map(|head| {
+            let iterates = iteration_head_proven_nonempty(file, *head);
+            file.ast
+                .write_targets
+                .iter()
+                .filter(move |target| head.contains(**target))
+                .map(move |target| (*target, Some(iterates)))
+        }))
+        .collect::<Vec<_>>();
+    for (written, head) in written_members {
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
         // the same reference-index fallback `uncalled-accessor` uses: an
@@ -1571,7 +1583,11 @@ fn no_direct_mutation(
                 target,
             },
             location: location(file.path.shared(), written),
-            analysis_context: String::new(),
+            analysis_context: if head == Some(false) {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            } else {
+                String::new()
+            },
             fixes: vec![],
             // A write through a 2.0 props object, or a `merge`/`omit` view of
             // it, is not dropped: on rc.13 the assigned value reads back
@@ -1582,9 +1598,30 @@ fn no_direct_mutation(
             uncertain: props
                 || typed_store.is_some()
                 || past_root
-                || standing == WriteStanding::Unproven,
+                || standing == WriteStanding::Unproven
+                || head == Some(false),
         });
     }
+}
+
+/// ADR 0716: whether the loop whose head is `head` is proven to iterate at
+/// least once: its iterable, separated from the head by exactly `of` or `in`,
+/// is an array literal with an element that is a value (an index for
+/// `for … in`, an element for `for … of`, whatever spreads beside it hold).
+/// Anything else (an empty literal, a binding, a call, an object, a comment
+/// between) proves nothing: rc.21 writes only when the loop iterates.
+fn iteration_head_proven_nonempty(file: &FileFacts, head: Span) -> bool {
+    file.ast.array_literal_elements.iter().any(|array| {
+        array.span.start >= head.end
+            && file
+                .source
+                .get(head.end as usize..array.span.start as usize)
+                .is_some_and(|between| matches!(between.trim(), "of" | "in"))
+            && array
+                .elements
+                .iter()
+                .any(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)
+    })
 }
 
 /// The members a plain assignment writes: its target, or, for a destructuring
