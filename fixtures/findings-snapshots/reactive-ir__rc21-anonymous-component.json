@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "components-return-once",
+      "code": "SC1004",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-anonymous-component/App.tsx",
+      "start": 133,
+      "end": 140,
+      "fixes": 0
+    },
+    {
+      "rule": "components-return-once",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-anonymous-component/App.tsx",
+      "start": 241,
+      "end": 248,
+      "fixes": 0
+    }
+  ]
+}

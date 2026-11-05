@@ -1624,3 +1624,7 @@ The rule needed a proven accessor and exempted every argument, so `String(c)`, `
 <a id="adr-0655"></a>
 ## ADR 0655 — SC7002 needs a computation that returns one
 `async_compute` was false for a return typed `any` or `unknown`, so those certified while dev threw, and true for a branch not taken, a false violation. It now reads the same three states as ADR 0654: Promise on every path is proven, a closed synchronous return is silent, and the rest is uncertifiable, `compute-return-unproven`. Owner: `static_api.rs`.
+
+<a id="adr-0656"></a>
+## ADR 0656 — SC1004 needs no name
+A function with no binding name was skipped, so `[function () { return s() ? <a /> : <b />; }][0]` went unjudged while Chrome warned. The name was only a label. A function that is possibly a component is uncertain as before, so handed callbacks such as a table's `render` move from SC1001 to SC1004 at the same site, uncertifiable both ways. Owner: `static_rules.rs`.

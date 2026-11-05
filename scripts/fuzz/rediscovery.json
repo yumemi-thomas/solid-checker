@@ -3602,5 +3602,11 @@
    "mx-sync-node-received-async-body-cmp-unknown-direct-none"
   ],
   "rediscovered": "076ad9a8b: 1,140 false cleans of cmp-any and cmp-unknown; ADR 0655: 0"
+ },
+ {
+  "finding": "SC1004 skipped a function with no name: an anonymous component's reactive return warned in Chrome and was only SC1001 uncertain (ADR 0656)",
+  "found": "the flip audit",
+  "fixed": "ADR 0656",
+  "outside": "the grid places a site statement inside a named `App`, and here the read is the returned test of an anonymous function: a context cannot make that test the site. scripts/flip/witnesses.json holds q02, fixture rc21-anonymous-component each branch"
  }
 ]

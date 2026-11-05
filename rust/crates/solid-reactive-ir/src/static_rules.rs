@@ -1423,10 +1423,22 @@ fn member_reads_after_await(
 pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
-            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
-            else {
+            // ADR 0656: a component need not have a name (`[function () {…}][0]`).
+            let name = function_binding_name(file, function).or(function.name.as_ref());
+            // A primitive's own callback is that primitive's: `dynamic(() => …)`
+            // re-runs its source, so its test selects nothing once.
+            if name.is_none()
+                && file.ast.calls.iter().any(|call| {
+                    ctx.semantic_lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some()
+                        && call.arguments.iter().any(|argument| {
+                            file.ast.peel_ts_sugar_span(argument.span) == function.span
+                        })
+                })
+            {
                 continue;
-            };
+            }
             let component_status = ctx
                 .semantic_lookup
                 .function_component_status(file, function);
@@ -1480,8 +1492,8 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                     draft.push_defect(StaticDefect {
                         kind: StaticDefectKind::ComponentReturnsConditionally,
                         location,
-                        analysis_context: file
-                            .source_text(name.span)
+                        analysis_context: name
+                            .and_then(|name| file.source_text(name.span))
                             .unwrap_or_default()
                             .to_owned(),
                         fixes: vec![],

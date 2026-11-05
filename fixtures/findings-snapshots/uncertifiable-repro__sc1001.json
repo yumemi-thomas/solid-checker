@@ -432,23 +432,23 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "components-return-once",
+      "code": "SC1004",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-not-in-component.tsx",
       "start": 457,
-      "end": 476,
+      "end": 485,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "components-return-once",
+      "code": "SC1004",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-render-prop.tsx",
       "start": 740,
-      "end": 753,
+      "end": 762,
       "fixes": 0
     },
     {
