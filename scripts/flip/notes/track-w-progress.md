@@ -168,8 +168,19 @@ SC2001.
   with a closed data-literal first source; sort/reverse/fill/copyWithin always U (no length fact). Witnesses SC2003 6/13, all 205.
   fuzz-patterns 765/372 (16 FIXED); lg-recall noop-*: old 540 FP, new 0; grids list now empty. Corpus 0 moved (`sweep-w2003c.json`).
   Fixture `store-operation-may-not-write`; ownership case `.../logical-assignment/001`. Probes `~/EDF/tmp/flipw/v-d1/cases`.
-  **SC2003 next:** step 4 sink-driven parameter/callback flow (c04 j05 j06, research section 2); step 5 element flows. c15 c16 j07
-  j08 stay failing (R's census).
+- **SC2003 step 4 of 5** (ADR 0719, 3f959a4d2): `shared_reactivity.rs` `push_parameter_store_flow` (called from
+  `push_unproven_container_write` when `handed_container` is false; each sink passes a `SinkWrite`): a plain parameter's callers
+  (`function_call_sites`; namespace members via `namespace_member_function`; a render only with a spread), a callback literal's
+  project callee's calls of its parameter (frame: the callee's params read the handing call's args), a non-project callee's
+  arguments/receiver (store there = open, step 5). V needs standing Dropped at the entering call, no link, every hop in place and
+  `SiteReach`-reached. Witnesses SC2003 9/13, all 208. Fixture `store-parameter-flow`; ownership case `parameter-flow/001`
+  (+ `positive/001` now expects U on `props.n`). fuzz-patterns 773/364 (8 FIXED). **Corpus +1,441 U** (`sweep-w2003d.json`,
+  binaries `bins/w2003d`; same under `--program-boundary closed`, `sweep-w2003*-closed.json`), 0 V moved; app-game math helpers,
+  methods, escaping namespaces, value uses. Reported to the owner as the open-function arm's cost.
+  **SC2003 next:** step 5 element flows (research section 2 last paragraph, section 3 row 5: `d2-identity-return`, `d2n-find*`,
+  `d2n-for-jsx-row-write`, `d2n-forof-write`, `d2n-memo-*`, `d2n-object-values-write`, `d2n-root-array-forof`, `t2-for-row-*`,
+  `t6-for-row-helper`). Step 4 already makes forEach/map callbacks over a store U (`d2n-foreach-write`, `d2n-map-write`,
+  `d2n-root-array-foreach` left open-defects): step 5 proves them V. c15 c16 j07 j08 stay failing (R's census).
 
 ## Owner notes (2026-11-05)
 
@@ -208,7 +219,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: steps 1-3 done (ADRs 0716-0718), next step 4** (see the SC2003 entry above),
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: steps 1-4 done (ADRs 0716-0719), next step 5** (see the SC2003 entry above),
    then SC2001 last. Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
@@ -231,7 +242,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w2003c.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2003d.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
@@ -267,3 +278,11 @@ Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writ
   `recallLegalVariants`: run `node scripts/fuzz/focus.mjs --codes … --grids lg-recall --checker-bin <bin> --typefacts <bin>` (~11 min).
 - `node scripts/verify-delta.mjs --help` is not a help flag: it starts a full run against the last green commit.
 - `make coverage`'s stub check needs a new fixture staged (`git add`) first, or it reports the stub untracked.
+- `fuzz-patterns ARGS=--update` also rewrites two unrelated `why` strings (`types--e807`, `e911`: `entry.tsx` -> `App.tsx`, the
+  SC4001 step-1 harness change); restore them by hand so the diff is the rule's own.
+- `make coverage` prints only each moved snapshot's first changed line: run `make coverage-update` and read
+  `node ~/EDF/tmp/flipw/snapdiff.mjs` (every added/removed finding with its source line) before committing.
+- Corpus SC2003 rows by app and source text: `node ~/EDF/tmp/flipw/sc2003-moved.mjs <before> <after> /`. A reason tally needs a
+  temporary debug build (append a tag per open arm to `$SC2003_FLOW_DEBUG`; write each line with one `write_all`, or lines interleave).
+- `function_call_site_references` gives a namespace member call at the whole member (`m4.scaling`), while the compiler's reference is
+  the property: a closedness test must accept the property too.
