@@ -130,6 +130,10 @@ SC2001.
   violations (27) and obligations (52) apart. Fuzzer `flw-ctx-sibling`, `flw-ctx-two-renders`: old 626 false clean, new 0.
   Corpus +48 U (`sweep-w4002.json`). Probe harness: `~/EDF/tmp/flipw/p4002/probe.mjs <name> <src.tsx>`.
 
+- **SC4001 step 1** (0beedb8a7, no ADR): `run.mjs` and `patterns.mjs` import App dynamically after the diagnostics
+  subscription (module-scope diagnostics were lost). patterns.mjs lets a load failure fail the entry (catching it turned two
+  no-run patterns "fine"). fuzz-patterns unchanged; SC4001/SC6001 `--chrome` 8 of 8.
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -167,7 +171,22 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). Next **SC4001** (`.../sc4001.md`: fix the run.mjs /
+   SC4002 done (ADR 0713). **SC4001 in progress (step 1 committed; step 2 is the next agent's start):**
+   The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
+   `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
+   quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
+   target with `owner_edge_context(kind, UNOWNED | PROVEN_UNOWNED)`; a call in a function passes its source's bits through
+   `Preserve`. So the fix is at edge creation in `owner_discovery.rs:~165-235` (the direct-call loop; also the IIFE, tagged
+   template and carrier edges): when the call is not proven to run on every run of its source, `Preserve` becomes `MayRun`
+   (strips PROVEN; `may_run()` there already does this for ADR 0468). Proof of "runs every time": `solid_facts::ast::
+   synchronously_unconditional_calls(path, source, function_span, &[])`, but it re-parses the file per call, too slow here:
+   add one helper in `solid-facts/src/ast/unconditional_calls.rs` that parses once and returns every function's and the
+   module's unconditional calls (`runs_on_every_completion` returns false at the Program today: accept a top-level
+   statement there), and use it per file in `discover_owner_file`. Module scope must count (kui `session.ts:749` stays V:
+   unconditional module-scope story calls, measured true). U wording: owner rows have no blocker; `findings.rs:268`'s
+   `conditional_owner` text says "runWithOwner receives a nullable owner", wrong for this cause; a reason field needs
+   `lib.rs` (R's): leave the wording to the merge and say so. Guards: research `~/EDF/tmp/flipw/research-sc4002/sc4001.md` § 2.
+   Then (`.../sc4001.md`: fix the run.mjs /
    patterns.mjs import-before-subscribe artifact first; the edit is the measured dead-branch false positive at
    `owner_context.rs:242`), **SC2002** then **SC2003** (`.../sc2003.md`, 5 commits) then **SC2001** last
    (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`: gate `unreached_write` on "site may run", exclude module initialization;
