@@ -42,7 +42,14 @@ describe("judgeSsr", () => {
   it("covers a dropped declaration with any SC7005 finding at its line, and calls silence there a false clean", () => {
     expect(judgeSsr(program, { runtime: { applied: false }, findings: at("uncertifiable"), typecheck: { ok: true } }).outcome).toBe("agree");
     expect(judgeSsr(program, { runtime: { applied: false }, findings: at("uncertifiable", 9), typecheck: { ok: true } }).outcome).toBe("false-clean");
-    expect(judgeSsr(program, { runtime: { applied: false }, findings: [{ id: "SC1001", kind: "violation", line: 7, endLine: 7 }], typecheck: { ok: true } }).outcome).toBe("false-clean");
+    expect(judgeSsr(program, { runtime: { applied: false }, findings: [{ id: "SC8003", kind: "violation", line: 7, endLine: 7 }], typecheck: { ok: true } }).outcome).toBe("false-clean");
+  });
+
+  it("calls any client rule's violation on a server-only program a false positive, whatever the head did", () => {
+    const client = [{ id: "SC5001", kind: "violation", line: 3, endLine: 3 }];
+    expect(judgeSsr({ site: 7, design: "applied" }, { runtime: { applied: true }, findings: client, typecheck: { ok: true } }).outcome).toBe("false-positive");
+    const open = [{ id: "SC5001", kind: "uncertifiable", line: 3, endLine: 3 }];
+    expect(judgeSsr({ site: 7, design: "applied" }, { runtime: { applied: true }, findings: open, typecheck: { ok: true } }).outcome).toBe("clean");
   });
 
   it("never counts an obligation on an applied declaration as a violation", () => {

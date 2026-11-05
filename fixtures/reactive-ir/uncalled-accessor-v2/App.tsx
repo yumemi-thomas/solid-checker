@@ -91,3 +91,39 @@ export function ChildrenAttributeAccessor() {
   const [count] = createSignal(0);
   return <div children={count} />;
 }
+
+// ADR 0652: positions with no proof either way.
+function Coerced(props: { c: () => number }) {
+  const [c] = createSignal(1);
+  const erased: unknown = c;
+  const fromHook = useAccessor();
+  return (
+    <i
+      title={c as any}
+      data-a={String(c)}
+      data-b={JSON.stringify({ c })}
+      data-c={erased == 1}
+      data-d={"n:" + props.c}
+      data-e={`${fromHook}`}
+      {...{ "data-f": c }}
+    />
+  );
+}
+function useAccessor() {
+  return createSignal(1)[0];
+}
+
+// A member write takes the proof of what stringifying gives.
+function Rewritten() {
+  const [c] = createSignal(1);
+  (c as any).toString = () => "1";
+  return <i>{"n:" + c}</i>;
+}
+
+// These keep the function, or test it: nothing is coerced.
+function Kept(props: { maybe?: () => number }) {
+  const [c] = createSignal(1);
+  const kept = Object.assign(c, { label: "x" });
+  const plain = () => 1;
+  return <i>{!props.maybe ? kept() : "n:" + plain}</i>;
+}

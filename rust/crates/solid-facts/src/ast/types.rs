@@ -1738,6 +1738,10 @@ pub enum CoerciveOperandKind {
     /// Unary `+`, `-`, or `~`: the operand is read through `ToNumber`, and
     /// TypeScript accepts a function there.
     NumericCoercion,
+    /// A side of `==` or `!=`, but for `null`: ToPrimitive, and TypeScript
+    /// rejects a function beside a value it cannot equal, so only an erased
+    /// type reaches here (ADR 0652).
+    LooseEquality,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

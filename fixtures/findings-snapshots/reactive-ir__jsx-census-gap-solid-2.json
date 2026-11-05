@@ -4,7 +4,7 @@
     {
       "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-census-gap-solid-2/App.tsx",
       "start": 629,

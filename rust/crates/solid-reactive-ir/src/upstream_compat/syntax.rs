@@ -7,6 +7,8 @@
 //! upstream corpus case exercises a behaviour difference for it, and an option
 //! nothing proves is a knob that can silently rot.
 
+use std::sync::Arc;
+
 use crate::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
@@ -16,9 +18,13 @@ use solid_facts::core::Span;
 use super::{is_lowercase_led, text, violation};
 use crate::StaticViolation;
 
-pub(super) fn check_file(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
+pub(super) fn check_file<'a>(
+    file: &FileFacts,
+    declared_keys: impl Fn(Span) -> Option<&'a [Arc<str>]>,
+    violations: &mut Vec<StaticViolation>,
+) {
     for element in &file.ast.jsx_elements {
-        jsx_no_duplicate_props(file, element, violations);
+        jsx_no_duplicate_props(file, element, &declared_keys, violations);
     }
 }
 
@@ -27,9 +33,10 @@ pub(super) fn check_file(file: &FileFacts, violations: &mut Vec<StaticViolation>
 /// "more than one content source" check (`children` prop, JSX children,
 /// `innerHTML`, `innerText`, and `textContent` all fighting over the same
 /// element).
-fn jsx_no_duplicate_props(
+fn jsx_no_duplicate_props<'a>(
     file: &FileFacts,
     element: &JsxElementFact,
+    declared_keys: &impl Fn(Span) -> Option<&'a [Arc<str>]>,
     violations: &mut Vec<StaticViolation>,
 ) {
     // Attributes and spread-carried object properties compete for the same
@@ -199,16 +206,216 @@ fn jsx_no_duplicate_props(
         && !has_inner_html
         && !has_inner_text
         && !has_text_content;
-    if intrinsic && used.len() > 1 && !only_the_children_pair {
-        violations.push(violation(
+    if !intrinsic {
+        return;
+    }
+    let values = content_values(file, element);
+    let child = child_content(file, element);
+    let certain = |name: &str| values.get(name).copied().unwrap_or(false);
+    let written = |name: &str| values.contains_key(name);
+    // ADR 0651, measured in Chrome on rc.21. A write of `innerHTML` or
+    // `innerText` replaces the children whatever its value, but a child with
+    // nothing to render loses nothing beside `innerHTML`. Beside `textContent`
+    // any child in the source, even a comment, drops the text; a nullish or
+    // empty text drops nothing. Two attributes compete only with values.
+    let attribute_pair = CONTENT_ATTRIBUTES
+        .iter()
+        .filter(|name| certain(name))
+        .count()
+        > 1;
+    let proven = !only_the_children_pair
+        && (attribute_pair
+            || (written("innerHTML") && child == ChildContent::Real)
+            || (written("innerText") && child == ChildContent::Real)
+            || (certain("textContent") && child != ChildContent::None));
+    // Only `innerHTML` beside a child with nothing to render: nothing is lost.
+    let no_loss =
+        child == ChildContent::Blank && used.len() == 2 && has_inner_html && !has_children_prop;
+    let mut open_sources = Vec::new();
+    let mut open_spread_at = None;
+    let mut any_key = false;
+    for spread in &element.spreads {
+        let keys = spread_content_keys(file, spread.argument, declared_keys);
+        match keys {
+            SpreadKeys::Closed => continue,
+            SpreadKeys::Declared(keys) => open_sources.extend(keys),
+            SpreadKeys::Any => any_key = true,
+        }
+        open_spread_at = Some(spread.span.start);
+    }
+    // A spread that may rewrite a source after it may take the value away.
+    let rewritten = open_spread_at.is_some_and(|at| {
+        element.attributes.iter().any(|attribute| {
+            attribute.span.start < at && CONTENT_ATTRIBUTES.contains(&text(file, attribute.name))
+        })
+    });
+    let verdict = if proven && !rewritten {
+        Some(None)
+    } else {
+        let spread_competes = any_key || {
+            let sources = CONTENT_ATTRIBUTES
+                .into_iter()
+                .filter(|name| written(name) || open_sources.contains(name))
+                .collect::<Vec<_>>();
+            !open_sources.is_empty()
+                && (sources.len() + usize::from(has_children) > 1)
+                && sources != ["children"]
+        };
+        if spread_competes {
+            Some(Some(crate::blockers::SPREAD_CONTENT_UNPROVEN))
+        } else if used.len() > 1 && !only_the_children_pair && !no_loss {
+            Some(Some(crate::blockers::CONTENT_SOURCE_VALUE_UNPROVEN))
+        } else {
+            None
+        }
+    };
+    if let Some(blocker) = verdict {
+        let message = if blocker == Some(crate::blockers::SPREAD_CONTENT_UNPROVEN) {
+            "A spread here may carry `children`, `innerHTML`, `innerText` or `textContent`, and \
+             nothing proves it does not compete with this element's other content."
+                .to_owned()
+        } else {
+            format!("Using {} at the same time is not allowed.", used.join(", "))
+        };
+        let mut finding = violation(
             file,
             "SC8003",
             "jsx-no-duplicate-props",
-            format!("Using {} at the same time is not allowed.", used.join(", ")),
+            message,
             "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order.",
             element.opening,
             vec![],
-        ));
+        );
+        if let Some(blocker) = blocker {
+            finding.uncertain = true;
+            blocker.clone_into(&mut finding.analysis_context);
+        }
+        violations.push(finding);
+    }
+}
+
+/// Every prop that competes for an intrinsic element's content.
+const CONTENT_ATTRIBUTES: [&str; 4] = ["children", "innerHTML", "innerText", "textContent"];
+
+/// What an element's written children render (ADR 0651).
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ChildContent {
+    None,
+    /// Children in the source that render nothing: whitespace, a comment,
+    /// `{null}`, `{undefined}`, `{false}`, `{""}`.
+    Blank,
+    /// An expression whose value decides.
+    Open,
+    Real,
+}
+
+fn child_content(file: &FileFacts, element: &JsxElementFact) -> ChildContent {
+    let mut content = ChildContent::None;
+    for child in &element.children {
+        let source = text(file, *child).trim();
+        let state = if source.is_empty() || element.empty_children.contains(child) {
+            ChildContent::Blank
+        } else if let Some(inner) = source
+            .strip_prefix('{')
+            .and_then(|inner| inner.strip_suffix('}'))
+        {
+            let inner = inner.trim();
+            if matches!(
+                inner,
+                "null" | "undefined" | "false" | "true" | "\"\"" | "''"
+            ) {
+                ChildContent::Blank
+            } else if expression_is_static_literal(file, *child) {
+                ChildContent::Real
+            } else {
+                ChildContent::Open
+            }
+        } else if source.starts_with("<>") {
+            ChildContent::Open
+        } else {
+            ChildContent::Real
+        };
+        content = match (content, state) {
+            (ChildContent::Real, _) | (_, ChildContent::Real) => ChildContent::Real,
+            (ChildContent::Open, _) | (_, ChildContent::Open) => ChildContent::Open,
+            _ => ChildContent::Blank,
+        };
+    }
+    content
+}
+
+/// Each content prop written on the element, and whether its value is proven
+/// to put content there: a non-empty literal, or JSX.
+fn content_values<'a>(file: &'a FileFacts, element: &JsxElementFact) -> HashMap<&'a str, bool> {
+    let mut values = HashMap::default();
+    let filled = |span: Option<Span>| {
+        span.is_some_and(|span| {
+            expression_is_static_literal(file, span)
+                && !matches!(text(file, span).trim(), "\"\"" | "''" | "{\"\"}" | "{''}")
+        })
+    };
+    for attribute in &element.attributes {
+        let name = text(file, attribute.name);
+        if CONTENT_ATTRIBUTES.contains(&name) {
+            let certain = match attribute.value_kind {
+                JsxAttributeValueKind::Boolean
+                | JsxAttributeValueKind::Element
+                | JsxAttributeValueKind::Fragment => true,
+                JsxAttributeValueKind::String => filled(attribute.value),
+                JsxAttributeValueKind::Expression => filled(attribute.expression),
+            };
+            values.insert(name, certain);
+        }
+    }
+    for spread in &element.spreads {
+        for property in super::direct_object_literal_properties(file, spread.argument)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|property| !property.computed)
+        {
+            let name = text(file, property.key).trim_matches(['\'', '"']);
+            if CONTENT_ATTRIBUTES.contains(&name) {
+                values.insert(name, property.data && filled(Some(property.value)));
+            }
+        }
+    }
+    values
+}
+
+/// What one spread may add to an element's content.
+enum SpreadKeys {
+    /// An object literal read whole, or declared keys with no content key.
+    Closed,
+    Declared(Vec<&'static str>),
+    Any,
+}
+
+fn spread_content_keys<'a>(
+    file: &FileFacts,
+    argument: Span,
+    declared_keys: &impl Fn(Span) -> Option<&'a [Arc<str>]>,
+) -> SpreadKeys {
+    if let Some(properties) = super::direct_object_literal_properties(file, argument)
+        && properties.iter().all(|property| !property.computed)
+        && !file
+            .ast
+            .spreads
+            .iter()
+            .any(|spread| argument.contains(spread.span))
+    {
+        return SpreadKeys::Closed;
+    }
+    let Some(keys) = declared_keys(argument) else {
+        return SpreadKeys::Any;
+    };
+    let keys = CONTENT_ATTRIBUTES
+        .into_iter()
+        .filter(|name| keys.iter().any(|key| key.as_ref() == *name))
+        .collect::<Vec<_>>();
+    if keys.is_empty() {
+        SpreadKeys::Closed
+    } else {
+        SpreadKeys::Declared(keys)
     }
 }
 

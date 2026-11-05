@@ -72,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
+      "start": 1803,
+      "end": 1832,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

@@ -100,3 +100,11 @@ eslint-plugin-solid's `reactivity` rule also reports destructured props
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the general untracked-read rule
+
+## Uncertifiable
+
+A destructure no exact root reaches, blocker `destructure-root-unproven` (ADR 0657): an
+assignment, a `for…of`, a wrapped initializer such as `merge(…, props)`, a default, a rest
+pattern, and a hook's result, unless every return of a project hook is a closed object
+literal. A read of one member (`createSignal(props.a)`) is `strict-read-untracked`'s, not
+this rule's. A first parameter is a props pattern whatever follows it.

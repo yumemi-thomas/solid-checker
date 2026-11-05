@@ -50,6 +50,86 @@
       "start": 2229,
       "end": 2234,
       "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 3990,
+      "end": 3991,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4021,
+      "end": 4022,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4056,
+      "end": 4057,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4076,
+      "end": 4082,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4110,
+      "end": 4117,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4136,
+      "end": 4144,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4170,
+      "end": 4171,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4417,
+      "end": 4418,
+      "fixes": 0
     }
   ]
 }

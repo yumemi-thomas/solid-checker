@@ -1,0 +1,363 @@
+{
+ "a01-arm-store-write": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">2</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "sw 2"
+   ],
+   "console": [],
+   "html": "<p _hk=0>2</p>"
+  }
+ },
+ "a02-arm-store-read": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">1</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "sr 1"
+   ],
+   "console": [],
+   "html": "<p _hk=0>1</p>"
+  }
+ },
+ "a03-arm-pending": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0001\">5</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "v 5"
+   ],
+   "console": [],
+   "html": "<template id=\"pl-0\"></template>f<template id=\"0\"><p _hk=0001>5</p></template>"
+  }
+ },
+ "a05-arm-action": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">0</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "ac"
+   ],
+   "console": [],
+   "html": "<p _hk=0>0</p>"
+  }
+ },
+ "a06-arm-write": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">1</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [
+    "SERVER_WRITE"
+   ],
+   "errors": [],
+   "logs": [
+    "w"
+   ],
+   "console": [
+    "warn: [SERVER_WRITE] Writing a signal on the server is deprecated and will become an error. Server render is pure: state changes flow from async sources (promises, async iterables), never setters — this wri"
+   ],
+   "html": "<p _hk=0>1</p>"
+  }
+ },
+ "b01-apply-flush": {
+  "diagnostics": [
+   {
+    "phase": "hydrate",
+    "code": "FLUSH_IN_EFFECT_CALLBACK",
+    "message": "[FLUSH_IN_EFFECT_CALLBACK] flush() called from inside an effect callback is a no-op: the flush that runs effects is already in progress. Writes made here are pr"
+   }
+  ],
+  "errors": [],
+  "logs": [
+   "hydrate: fl"
+  ],
+  "dom": "<p _hk=\"1\">0</p>",
+  "console": [
+   "warning: [FLUSH_IN_EFFECT_CALLBACK] flush() called from inside an effect callback is a no-op: the flush that runs effects is already in progress. Writes made here are processed in the same flush's continuation; to force a drain a"
+  ],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [],
+   "console": [],
+   "html": "<p _hk=1>0</p>"
+  }
+ },
+ "b02-apply-root": {
+  "diagnostics": [
+   {
+    "phase": "hydrate",
+    "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+    "message": "[PRIMITIVE_IN_EFFECT_CALLBACK] Cannot create a memo, effect or root with no owner inside an effect callback. The effect phase runs with no ambient owner, so a c"
+   },
+   {
+    "phase": "hydrate",
+    "code": "REACTIVITY_HALTED",
+    "message": "[REACTIVITY_HALTED] An uncaught error halted the reactive system. No further updates will be processed. Handle errors with <Errored> or treat this as a crash."
+   }
+  ],
+  "errors": [
+   "hydrate: [PRIMITIVE_IN_EFFECT_CALLBACK] Cannot create a memo, effect or root with no owner inside an effect callback. The effect phase runs with no ambient owner, so a computation created here belongs to nobody: it is never disposed and never held. Create it in the compute (a flow component owns its children), or parent it explicitly with runWithOwner.",
+   "hydrate: [PRIMITIVE_IN_EFFECT_CALLBACK] Cannot create a memo, effect or root with no owner inside an effect callback. The effect phase runs with no ambient owner, so a computation created here belongs to nobody: it is never disposed and never held. Create it in the compute (a flow component owns its children), or parent it explicitly with runWithOwner."
+  ],
+  "logs": [],
+  "dom": "<p _hk=\"1\">0</p>",
+  "console": [
+   "error: [REACTIVITY_HALTED] An uncaught error halted the reactive system. No further updates will be processed. Handle errors with <Errored> or treat this as a crash.\n  in <App> › effect",
+   "error: [REACTIVITY_HALTED] Update ignored: the reactive system was halted by an earlier uncaught error.\n  in <App> › effect",
+   "warning: [PRIMITIVE_IN_EFFECT_CALLBACK] what it means and how to fix it: https://v2.solidjs.com/reference/solid-js/diagnostics/primitive-in-effect-callback\n[PRIMITIVE_IN_EFFECT_CALLBACK] agent repair guide: node_modules/solid-js/",
+   "warning: [REACTIVITY_HALTED] what it means and how to fix it: https://v2.solidjs.com/reference/solid-js/diagnostics/reactivity-halted\n[REACTIVITY_HALTED] agent repair guide: node_modules/solid-js/skills/reactivity-diagnostics/SKI"
+  ],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [],
+   "console": [],
+   "html": "<p _hk=1>0</p>"
+  }
+ },
+ "c01-async-jsx": {
+  "diagnostics": [
+   {
+    "phase": "post-hydrate-sync",
+    "code": "REACTIVITY_HALTED",
+    "message": "[REACTIVITY_HALTED] An uncaught error halted the reactive system. No further updates will be processed. Handle errors with <Errored> or treat this as a crash."
+   }
+  ],
+  "errors": [
+   "post-hydrate-sync: [ASYNC_MEMO_ELEMENT] An async memo resolved to rendered output (JSX, or a component's result), which cannot be serialized for hydration: the client would wait on a value that never arrives, and the boundary around it would never hydrate. Return data from the async memo and render the JSX from it in the component (`const user = createMemo(async () => fetchUser(id)); return <Profile user={user()} />`).",
+   "post-hydrate-sync: rejection [ASYNC_MEMO_ELEMENT] An async memo resolved to rendered output (JSX, or a component's result), which cannot be serialized for hydration: the client would wait on a value that never arrives, and the boundary around it would never hydrate. Return data from the async memo and render the JSX from it in the component (`const user = createMemo(async () => fetchUser(id)); return <Profile user={user()} />`)."
+  ],
+  "logs": [],
+  "dom": "<script>(self.$R=self.$R||{})[\"\"]=[];_$HY.r[\"0\"]=$R[0]=($R[1]=($R[2]=() => {\n\tconst resolver = {\n\t\tp: 0,\n\t\ts: 0,\n\t\tf: 0\n\t};\n\tresolver.p = new Promise((resolve, reject) => {\n\t\tresolver.s = resolve;\n\t\tresolver.f = reject;\n\t});\n\treturn resolver;\n})()).p;_$HY.r[\"1_fr\"]=$R[3]=($R[4]=$R[2]()).p;($R[6]=(re",
+  "console": [
+   "warning: Hydration key miss for \"00\": no server-rendered element carries this key (template: <b>x). A detached element was created instead; its subtree will not appear in the document or become interactive. This usually means the",
+   "error: [REACTIVITY_HALTED] An uncaught error halted the reactive system. No further updates will be processed. Handle errors with <Errored> or treat this as a crash.\n  in <App> › m\n  at http://127.0.0.1:5173/cases/c01-async-jsx",
+   "error: [REACTIVITY_HALTED] Update ignored: the reactive system was halted by an earlier uncaught error.\n  in <App> › m\n  at http://127.0.0.1:5173/cases/c01-async-jsx/App.tsx:5:31",
+   "warning: [REACTIVITY_HALTED] what it means and how to fix it: https://v2.solidjs.com/reference/solid-js/diagnostics/reactivity-halted\n[REACTIVITY_HALTED] agent repair guide: node_modules/solid-js/skills/reactivity-diagnostics/SKI"
+  ],
+  "server": {
+   "diagnostics": [
+    "ASYNC_MEMO_ELEMENT",
+    "SSR_RENDER_ERROR_CONTAINED"
+   ],
+   "errors": [],
+   "logs": [],
+   "console": [
+    "warn: [ASYNC_MEMO_ELEMENT] what it means and how to fix it: https://v2.solidjs.com/reference/solid-js/diagnostics/async-memo-element\n[ASYNC_MEMO_ELEMENT] agent repair guide: node_modules/solid-js/skills/rea",
+    "error: [SSR_RENDER_ERROR_CONTAINED] Render error in a <Loading> boundary — the fragment rejected and the client re-renders it: Error: [ASYNC_MEMO_ELEMENT] An async memo resolved to rendered output (JSX, or a"
+   ],
+   "html": ""
+  }
+ },
+ "c03-resolve-body": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [
+   "hydrate: r"
+  ],
+  "dom": "",
+  "console": [
+   "warning: Hydration key miss for \"2\": no server-rendered element carries this key (template: <p>). A detached element was created instead; its subtree will not appear in the document or become interactive. This usually means the s"
+  ],
+  "server": {
+   "diagnostics": [],
+   "errors": [
+    "render: resolve is not implemented on the server"
+   ],
+   "logs": [],
+   "console": [],
+   "html": "undefined"
+  }
+ },
+ "co-read": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [
+   "post-hydrate-sync: x 0"
+  ],
+  "dom": "<b>0</b>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [],
+   "console": [],
+   "html": "<i _hk=00>f</i>"
+  }
+ },
+ "co-write": {
+  "diagnostics": [
+   {
+    "phase": "post-hydrate-sync",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "message": "[REACTIVE_WRITE_IN_OWNED_SCOPE] Writing to reactive state inside an owned scope (component, computation) is not allowed. Move the write outside or set the `owne"
+   },
+   {
+    "phase": "post-hydrate-sync",
+    "code": "REACTIVITY_HALTED",
+    "message": "[REACTIVITY_HALTED] An uncaught error halted the reactive system. No further updates will be processed. Handle errors with <Errored> or treat this as a crash."
+   }
+  ],
+  "errors": [
+   "post-hydrate-sync: [REACTIVE_WRITE_IN_OWNED_SCOPE] Writing to reactive state inside an owned scope (component, computation) is not allowed. Move the write outside or set the `ownedWrite` option if this is intentional. (in computed)",
+   "post-hydrate-sync: [REACTIVE_WRITE_IN_OWNED_SCOPE] Writing to reactive state inside an owned scope (component, computation) is not allowed. Move the write outside or set the `ownedWrite` option if this is intentional. (in computed)"
+  ],
+  "logs": [],
+  "dom": "<i>f</i>",
+  "console": [
+   "error: [REACTIVITY_HALTED] An uncaught error halted the reactive system. No further updates will be processed. Handle errors with <Errored> or treat this as a crash.\n  in <App> › <X> › computed\n  at http://127.0.0.1:5173/cases/",
+   "warning: [REACTIVE_WRITE_IN_OWNED_SCOPE] what it means and how to fix it: https://v2.solidjs.com/reference/solid-js/diagnostics/reactive-write-in-owned-scope\n[REACTIVE_WRITE_IN_OWNED_SCOPE] agent repair guide: node_modules/solid-",
+   "warning: [REACTIVITY_HALTED] what it means and how to fix it: https://v2.solidjs.com/reference/solid-js/diagnostics/reactivity-halted\n[REACTIVITY_HALTED] agent repair guide: node_modules/solid-js/skills/reactivity-diagnostics/SKI"
+  ],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [],
+   "console": [],
+   "html": "<i _hk=00>f</i>"
+  }
+ },
+ "g01-isserver": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">0</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "ran 0"
+   ],
+   "console": [],
+   "html": "<p _hk=0>0</p>"
+  }
+ },
+ "g06-typeof-window": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">0</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "ran 0"
+   ],
+   "console": [],
+   "html": "<p _hk=0>0</p>"
+  }
+ },
+ "g14-ternary": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [
+   "hydrate: ran 0"
+  ],
+  "dom": "<p _hk=\"0\">0</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "ran 0"
+   ],
+   "console": [],
+   "html": "<p _hk=0>0</p>"
+  }
+ },
+ "g16-early-return": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<p _hk=\"0\">0</p>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "ran 0"
+   ],
+   "console": [],
+   "html": "<p _hk=0>0</p>"
+  }
+ },
+ "h10-nohydr-read": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<main _hk=\"0\"><i>0</i></main>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "v 0"
+   ],
+   "console": [],
+   "html": "<main _hk=0><i>0</i></main>"
+  }
+ },
+ "h11-nohydr-write": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<main _hk=\"0\"><i>1</i></main>",
+  "console": [],
+  "server": {
+   "diagnostics": [
+    "SERVER_WRITE"
+   ],
+   "errors": [],
+   "logs": [
+    "w"
+   ],
+   "console": [
+    "warn: [SERVER_WRITE] Writing a signal on the server is deprecated and will become an error. Server render is pure: state changes flow from async sources (promises, async iterables), never setters — this wri"
+   ],
+   "html": "<main _hk=0><i>1</i></main>"
+  }
+ },
+ "h12-nohydr-then-hydration": {
+  "diagnostics": [],
+  "errors": [],
+  "logs": [],
+  "dom": "<main _hk=\"0\"><div><i _hk=\"0\">0</i></div></main>",
+  "console": [],
+  "server": {
+   "diagnostics": [],
+   "errors": [],
+   "logs": [
+    "v 0"
+   ],
+   "console": [],
+   "html": "<main _hk=0><div><i _hk=0>0</i></div></main>"
+  }
+ }
+}

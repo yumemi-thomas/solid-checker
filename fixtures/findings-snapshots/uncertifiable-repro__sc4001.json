@@ -182,6 +182,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
+      "start": 814,
+      "end": 833,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -222,6 +232,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-any-call-result.tsx",
+      "start": 507,
+      "end": 522,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -229,6 +249,16 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-any-call-result.tsx",
       "start": 554,
       "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-any-call-result.tsx",
+      "start": 581,
+      "end": 606,
       "fixes": 0
     },
     {
@@ -252,6 +282,16 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
+      "start": 205,
+      "end": 240,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -259,6 +299,16 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
       "start": 231,
       "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-rest.tsx",
+      "start": 413,
+      "end": 524,
       "fixes": 0
     },
     {

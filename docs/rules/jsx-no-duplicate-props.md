@@ -68,3 +68,13 @@ checker cannot decide which source is authoritative.
 
 - [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) — the 1.x rule,
   including compiler-slot folding
+
+What is reported needs both sources to lose something, measured in Chrome on rc.21
+(ADR 0651). `innerHTML` and `innerText` replace a real child whatever their value;
+a child that renders nothing beside `innerHTML` loses nothing and is silent. A
+filled `textContent` loses to any child in the source, even a comment; a nullish or
+empty one drops nothing. A source whose value is not proven is uncertifiable,
+blocker `content-source-value-unproven`. A spread whose keys are not closed against
+the content props is uncertifiable too, blocker `spread-content-unproven`; a complete
+declared key set closes it, under ADR 0436's premise. Upstream reads neither: both
+divergences are pinned in `fixtures/ownership-cases/cases.json`.

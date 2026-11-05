@@ -16,6 +16,7 @@ Files here: `PLAN.md`, `witnesses.json` (source, Chrome result, checker result b
 node scripts/flip/check.mjs SC5007        # judges one rule's witnesses against a fresh release checker
 node scripts/flip/check.mjs all           # at the base: 213 fail by design (201 clean, 5 warn, 7 pref); every keep and regress holds
 node scripts/flip/check.mjs SC5007 --chrome     # also real Chrome, against the recorded runtime codes
+node scripts/flip/check.mjs HOST          # hydrate and server hosts, host-witnesses.json: a row marked `open` fails until its rule's commit
 node scripts/flip/run.mjs <casesDir> out.json [--jobs N]   # real Chrome: <casesDir>/<id>/App.tsx, optional `export async function after()`
 node scripts/flip/tsc.mjs <dir>...        # tsrs on every App.tsx below <dir>; a program tsc rejects is no defect (invariant 1)
 ```

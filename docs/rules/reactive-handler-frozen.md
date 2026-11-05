@@ -77,3 +77,7 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 ## Related
 
 - [uncalled-accessor](uncalled-accessor.md) — the inverse defect
+
+A member whose root a hook, a call or a caller handed over is not proven to be a plain
+object, and may be a store's: it is uncertifiable, blocker `handler-root-unproven`
+(ADR 0653). A `<Dynamic>` handler stays live and is not reported.

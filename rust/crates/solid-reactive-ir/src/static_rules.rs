@@ -261,14 +261,14 @@ fn component_props_destructure(
     tables: &crate::late_chunks::DiscoveryTables<'_>,
     file: &solid_facts::FileFacts,
 ) -> Vec<StaticDefect> {
-    let mut defects = Vec::new();
+    let mut defects = open_destructures(ctx, tables, file);
     {
         for function in &file.ast.functions {
-            // Solid invokes components with one props object. Reject the
-            // overwhelmingly common non-destructured functions before the
-            // whole-project component-identity lookup.
-            if function.parameters.len() <= 1
-                && let Some(parameter) = function
+            // Solid invokes components with one props object, whatever else
+            // the signature declares. Reject the overwhelmingly common
+            // non-destructured functions before the whole-project
+            // component-identity lookup.
+            if let Some(parameter) = function
                     .parameters
                     .first()
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
@@ -439,6 +439,207 @@ fn component_props_destructure(
         }
     }
     defects
+}
+
+/// ADR 0657: a destructure no exact root reaches. An assignment, a `for…of`, a
+/// default, a rest pattern, a wrapped initializer holding a prop or store root,
+/// and a hook whose result is not a closed literal may all snapshot a reactive
+/// object at setup: uncertifiable, never a silent clean.
+fn open_destructures(
+    ctx: &AnalysisContext<'_>,
+    tables: &crate::late_chunks::DiscoveryTables<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let ast = &file.ast;
+    let holds_root = |value: Span| {
+        ast.identifiers_within(value).any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && !ast
+                    .functions_containing(identifier.span)
+                    .any(|function| value.contains(function.span))
+                // `createSignal(props.x)` reads one value, SC1001's; the
+                // pattern takes the primitive's tuple, not the root.
+                && !ast.members.iter().any(|member| {
+                    value.contains(member.span)
+                        && ast.peel_ts_sugar_span(member.object) == identifier.span
+                })
+                && [Some(identifier.span), ast.reference_declaration(identifier.span)]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|span| ctx.entities.at(file.path.as_str(), span))
+                    .any(|symbol| {
+                        tables.prop_source(symbol).is_some()
+                            || tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store)
+                    })
+        })
+    };
+    let exact_root = |pattern: Span| {
+        ast.bindings.iter().any(|binding| {
+            binding.pattern == pattern
+                && binding.shape == solid_facts::ast::BindingShape::Object
+                && binding.initializer_identifier.is_some()
+        })
+    };
+    let mut sites = Vec::new();
+    for (pattern, value) in &ast.pattern_values {
+        if !exact_root(*pattern) && holds_root(*value) {
+            sites.push(*pattern);
+        }
+    }
+    for (statement, left) in &ast.loop_repeats {
+        let iterated = ast
+            .iterated_operands
+            .iter()
+            .find(|operand| statement.contains(**operand) && operand.start >= left.end);
+        if iterated.is_some_and(|operand| holds_root(*operand)) {
+            sites.extend(
+                ast.bindings
+                    .iter()
+                    .filter(|binding| {
+                        left.contains(binding.pattern)
+                            && binding.shape != solid_facts::ast::BindingShape::Identifier
+                    })
+                    .map(|binding| binding.pattern),
+            );
+        }
+    }
+    for function in &ast.functions {
+        for parameter in function.parameters.iter().skip(1) {
+            if parameter.shape != solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_some_and(holds_root)
+            {
+                sites.push(parameter.pattern);
+            }
+        }
+        let rest_pattern = function.rest_parameter
+            && function.parameters.is_empty()
+            && function.rest_parameter_names.iter().any(|name| {
+                file.source_text(Span::new(
+                    name.span.start.saturating_sub(3),
+                    name.span.start,
+                )) != Some("...")
+            });
+        if rest_pattern
+            && ctx
+                .semantic_lookup
+                .function_may_be_component(file, function)
+        {
+            sites.extend(function.rest_parameter_names.first().map(|name| name.span));
+        }
+    }
+    for binding in &ast.bindings {
+        if binding.shape == solid_facts::ast::BindingShape::Object
+            && hook_result_open(ctx, file, binding)
+        {
+            sites.push(binding.pattern);
+        }
+    }
+    if sites.is_empty() {
+        return Vec::new();
+    }
+    sites.sort_unstable();
+    sites.dedup();
+    let allowed = allowed_callback_spans(file, ctx.semantic_lookup);
+    sites
+        .into_iter()
+        .filter(|pattern| {
+            !crate::execution_role::discarded_region_contains(file, *pattern)
+                && may_snapshot_at_setup(ctx, file, *pattern, &allowed)
+        })
+        .map(|pattern| StaticDefect {
+            kind: StaticDefectKind::ReactiveObjectDestructure {
+                source: "a reactive object".into(),
+                component_props: false,
+            },
+            location: location(file.path.shared(), pattern),
+            analysis_context: crate::blockers::DESTRUCTURE_ROOT_UNPROVEN.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        })
+        .collect()
+}
+
+/// Whether a destructure may run at setup. A proven fresh role reads current
+/// values when it runs; a helper's role is not proven either way, so unlike the
+/// exact-root arm a helper stays a site: this is uncertifiable, not a claim.
+fn may_snapshot_at_setup(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: Span,
+    allowed: &[Span],
+) -> bool {
+    !matches!(
+        semantic_execution_role(
+            file,
+            pattern,
+            allowed,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.semantic_lookup,
+        ),
+        crate::ExecutionRole::TrackedJsx
+            | crate::ExecutionRole::EventCallback
+            | crate::ExecutionRole::DeferredCallback
+            | crate::ExecutionRole::UntrackedCallback
+            | crate::ExecutionRole::UntrackedUnwindowed
+            | crate::ExecutionRole::EffectApply
+            | crate::ExecutionRole::DirectiveApply
+    )
+}
+
+/// `const { a } = useThing()`: a call of no primitive whose result may be a
+/// store. A project function whose every return is a closed object literal
+/// hands a plain object; the standard library hands no store.
+fn hook_result_open(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> bool {
+    let Some(call) = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))
+    else {
+        return false;
+    };
+    let lookup = ctx.semantic_lookup;
+    if call.construct
+        || lookup.primitive_at_call(file, call.span).is_some()
+        || lookup
+            .standard_library_declaration(file, call, typefacts::CallKind::Call)
+            .is_some()
+    {
+        return false;
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some((target_file, target)) = lookup.function_called_at(file.path.as_str(), callee) else {
+        return true;
+    };
+    let closed_literal = |span: Span| {
+        let span = target_file.ast.peel_ts_sugar_span(span);
+        target_file.ast.object_get_shapes.iter().any(|shape| {
+            shape.span == span
+                && shape.closed
+                && shape
+                    .properties
+                    .iter()
+                    .all(|property| property.getter.is_none())
+        })
+    };
+    let returns = target_file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            target.body.contains(returned.span)
+                && crate::owners::containing_ast_function(&target_file.ast, returned.span)
+                    .is_some_and(|owner| owner.span == target.span)
+        })
+        .chain(target.expression_return.as_ref())
+        .collect::<Vec<_>>();
+    returns.is_empty()
+        || !returns
+            .iter()
+            .all(|returned| returned.argument.is_some_and(closed_literal))
 }
 
 /// The caller classification of the props a destructuring pattern binds: the
@@ -1423,10 +1624,22 @@ fn member_reads_after_await(
 pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
-            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
-            else {
+            // ADR 0656: a component need not have a name (`[function () {…}][0]`).
+            let name = function_binding_name(file, function).or(function.name.as_ref());
+            // A primitive's own callback is that primitive's: `dynamic(() => …)`
+            // re-runs its source, so its test selects nothing once.
+            if name.is_none()
+                && file.ast.calls.iter().any(|call| {
+                    ctx.semantic_lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some()
+                        && call.arguments.iter().any(|argument| {
+                            file.ast.peel_ts_sugar_span(argument.span) == function.span
+                        })
+                })
+            {
                 continue;
-            };
+            }
             let component_status = ctx
                 .semantic_lookup
                 .function_component_status(file, function);
@@ -1480,8 +1693,8 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                     draft.push_defect(StaticDefect {
                         kind: StaticDefectKind::ComponentReturnsConditionally,
                         location,
-                        analysis_context: file
-                            .source_text(name.span)
+                        analysis_context: name
+                            .and_then(|name| file.source_text(name.span))
                             .unwrap_or_default()
                             .to_owned(),
                         fixes: vec![],

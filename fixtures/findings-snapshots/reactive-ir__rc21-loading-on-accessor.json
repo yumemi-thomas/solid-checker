@@ -112,6 +112,16 @@
       "fixes": 0
     },
     {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1383,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -119,6 +129,116 @@
       "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
       "start": 1651,
       "end": 1665,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1957,
+      "end": 1966,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2016,
+      "end": 2026,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2076,
+      "end": 2087,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2137,
+      "end": 2143,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2205,
+      "end": 2224,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2804,
+      "end": 2811,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2818,
+      "end": 2823,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2862,
+      "end": 2869,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2922,
+      "end": 2929,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2969,
+      "end": 2976,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2977,
+      "end": 2986,
       "fixes": 0
     }
   ]

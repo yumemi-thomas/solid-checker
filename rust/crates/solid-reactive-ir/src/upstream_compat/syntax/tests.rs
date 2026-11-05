@@ -216,6 +216,6 @@ fn violations_for(source: &str) -> Vec<crate::StaticViolation> {
     };
     let file = FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap();
     let mut violations = Vec::new();
-    check_file(&file, &mut violations);
+    check_file(&file, |_| None, &mut violations);
     violations
 }

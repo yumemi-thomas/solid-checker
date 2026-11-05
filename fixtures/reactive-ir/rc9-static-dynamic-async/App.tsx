@@ -91,3 +91,20 @@ export function replaceLoader() {
 export const BlockBodiedResolve = dynamic(() => {
   return Promise.resolve(Plain);
 }, { static: true });
+
+// ADR 0654: a source not proven synchronous is open; a closed return type is not.
+const Comp = () => <i />;
+declare const options: { static: boolean };
+const untyped: any = () => Comp;
+export function SourceStates(props: { source: () => any }) {
+  const proven = dynamic(() => {
+    return Promise.resolve(Comp);
+  }, { static: true });
+  const open = dynamic(props.source, { static: true });
+  const openReturn = dynamic(() => untyped(), { static: true });
+  const maybe = dynamic(() => (Math.random() > 0 ? Promise.resolve(Comp) : Comp), { static: true });
+  const unknownForm = dynamic(async () => Comp, options);
+  const sync = dynamic(() => Comp, { static: true });
+  const syncUnknownForm = dynamic(() => Comp, options);
+  return [proven, open, openReturn, maybe, unknownForm, sync, syncUnknownForm];
+}

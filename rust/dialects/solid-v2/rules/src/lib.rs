@@ -82,6 +82,15 @@ impl CatalogWording for Catalog {
         CATALOG_CAPABILITIES
     }
 
+    /// ADR 0659: each of these claims a client window or guard, which the
+    /// server build lacks (`docs/open-work.md`, the server build table).
+    fn claims_client_runtime(&self, code: &str) -> bool {
+        matches!(
+            code,
+            "SC1001" | "SC2001" | "SC2002" | "SC2003" | "SC2008" | "SC5001" | "SC6002"
+        )
+    }
+
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
             FindingSeed::StrictRead {

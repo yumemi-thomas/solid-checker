@@ -930,6 +930,31 @@ fn expected_function_got_expression(
                     continue;
                 }
             }
+            // ADR 0653: a member of a value a caller, a hook or a container
+            // handed over may be a store's, so "installed once" may freeze it.
+            if let Some(member) = file.ast.member_at(expression) {
+                let object = file.ast.peel_ts_sugar_span(member.object);
+                if file.ast.call_at(object).is_some()
+                    || crate::local_access::handed_value(
+                        &handed_tables(context),
+                        file,
+                        object,
+                        crate::local_access::HANDED_DEPTH,
+                    )
+                {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveHandlerRead {
+                            attribute: name.to_owned(),
+                            expression: text(file, expression).to_owned(),
+                        },
+                        location: location(file.path.shared(), expression),
+                        analysis_context: crate::blockers::HANDLER_ROOT_UNPROVEN.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                    continue;
+                }
+            }
             // The call-result arm was removed on 2026-08-17 under AGENTS.md's
             // absolute rule. It fired for a handler expression that is itself a
             // call, on either of two triggers, and neither survives:
@@ -1082,16 +1107,29 @@ fn uncalled_accessor(
             continue;
         }
         // A call of the accessor is the correct use; so is passing it on,
-        // which hands the callee something it can call later. The exemption
-        // is deliberately unconditional: TypeFacts' resolved-call parameter
-        // callability could in principle prove a callee's slot non-callable,
-        // but a non-callable parameter receiving an accessor is already a
-        // type error TypeScript reports itself, and recovery-signature
-        // resolutions would make the "proof" wrong exactly where it fired.
-        if is_called(file, identifier.span) || is_argument(file, identifier.span) {
+        // which hands the callee something it can call later. A parameter the
+        // compiler proves value-only cannot call it, so that argument is
+        // unproven (ADR 0652); a non-callable parameter receiving an accessor
+        // is a type error TypeScript reports itself.
+        if is_called(file, identifier.span) {
             continue;
         }
-        let Some(position) = value_position(file, identifier.span) else {
+        let (position, proven) = if is_argument(file, identifier.span) {
+            if !standard_value_argument(file, context, identifier.span) {
+                continue;
+            }
+            ("a standard-library value parameter", false)
+        } else if let Some(position) = value_position(file, identifier.span) {
+            // `(c as any).toString = …`: stringifying no longer gives the
+            // source, so the position proves nothing.
+            (position, !member_written(file, context, symbol))
+        } else if let Some(position) = open_position(file, identifier.span) {
+            (position, false)
+        } else if standard_value_argument(file, context, identifier.span) {
+            ("a standard-library value parameter", false)
+        } else if erased_loose_equality(file, context, identifier.span) {
+            ("a loose equality", false)
+        } else {
             continue;
         };
         defects.push(StaticDefect {
@@ -1100,11 +1138,244 @@ fn uncalled_accessor(
                 position: position.to_owned(),
             },
             location: location(file.path.shared(), identifier.span),
-            analysis_context: String::new(),
+            analysis_context: if proven {
+                String::new()
+            } else {
+                crate::blockers::ACCESSOR_VALUE_COERCED.to_owned()
+            },
             fixes: vec![],
-            uncertain: false,
+            uncertain: !proven,
         });
     }
+    handed_values_coerced(file, context, defects);
+}
+
+/// Standard-library calls that keep a value as it is: a function stays a
+/// function on the object, so nothing is coerced.
+const VALUE_KEEPERS: [&str; 6] = [
+    "ObjectConstructor.assign",
+    "Object.assign",
+    "ObjectConstructor.defineProperty",
+    "Object.defineProperty",
+    "Reflect.defineProperty",
+    "Reflect.apply",
+];
+
+/// A side of `==` whose type is erased: an alias typed `any` or `unknown`.
+/// With the accessor's own type this is TS2367, so it is TypeScript's.
+fn erased_loose_equality(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    span: Span,
+) -> bool {
+    file.ast.coercive_operands.iter().any(|operand| {
+        operand.kind == solid_facts::ast::CoerciveOperandKind::LooseEquality
+            && file.ast.peel_ts_sugar_span(operand.span) == span
+    }) && context
+        .lookup
+        .entity_at(file.path.as_str(), span)
+        .and_then(|entity| entity.callability)
+        == Some(Callability::Unknown)
+}
+
+/// Whether `span` is an argument, or a value of an object literal argument, of
+/// a standard-library parameter that cannot call it (`String(c)`,
+/// `JSON.stringify({ c })`).
+fn standard_value_argument(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    span: Span,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        call.arguments.iter().enumerate().any(|(index, argument)| {
+            (argument.span == span || literal_value_of(file, argument.span, span))
+                && context
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| {
+                        resolved.validity == ResolvedCallValidity::Valid
+                            && resolved.declaration.as_ref().is_some_and(|declaration| {
+                                declaration.standard_library
+                                    && !VALUE_KEEPERS.contains(&declaration.qualified_name.as_ref())
+                            })
+                            && !may_invoke_argument(resolved, index)
+                    })
+        })
+    })
+}
+
+/// Whether `value` is a direct value of the object literal written at `literal`.
+fn literal_value_of(file: &FileFacts, literal: Span, value: Span) -> bool {
+    super::direct_object_literal_properties(file, literal).is_some_and(|properties| {
+        properties.iter().any(|property| {
+            file.ast.peel_ts_sugar_span(property.value) == value || property.key == value
+        })
+    })
+}
+
+/// A write to a member of the accessor, anywhere in this file.
+fn member_written(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+) -> bool {
+    file.ast.assignments.iter().any(|assignment| {
+        file.ast
+            .member_at(file.ast.peel_ts_sugar_span(assignment.target))
+            .is_some_and(|member| {
+                source_symbol_at(context, file, file.ast.peel_ts_sugar_span(member.object))
+                    == Some(symbol)
+            })
+    })
+}
+
+/// A position TypeScript accepts only because the accessor's type was erased or
+/// was never checked against the attribute: unproven, never a violation.
+fn open_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+    let native = |element: &&solid_facts::ast::JsxElementFact| {
+        is_lowercase_led(text(file, element.name.span))
+    };
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(native)
+        .find_map(|element| {
+            if element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute.expression.is_some_and(|value| {
+                        value != span && file.ast.peel_ts_sugar_span(value) == span
+                    })
+            }) {
+                return Some("an attribute behind a type assertion");
+            }
+            element
+                .spreads
+                .iter()
+                .any(|spread| literal_value_of(file, spread.argument, span))
+                .then_some("a spread onto a native element")
+        })
+}
+
+fn handed_tables<'a, 'l>(
+    context: &'a UpstreamCompatContext<'l>,
+) -> crate::local_access::HandedTables<'a, 'l> {
+    crate::local_access::HandedTables {
+        lookup: context.lookup,
+        entities: context.entities,
+        prop_sources: context.prop_sources,
+        source_kinds: context.source_kinds,
+        accessors: context.accessors,
+        setters: context.setters,
+        actions: context.actions,
+        props_reactivity: context.props_reactivity,
+    }
+}
+
+/// ADR 0652: a coerced value no accessor proof reaches: `Callable` beside a
+/// string or in a template, from a caller or a parameter. Uncertain only: a
+/// plain function of the same shape is not this rule's. A shorthand property
+/// (`{ c }`) has the property's symbol at its span, so the walk over references
+/// misses it: its binding names the accessor.
+fn handed_values_coerced(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let tables = handed_tables(context);
+    for property in &file.ast.object_properties {
+        let Some(binding) = property.shorthand_binding else {
+            continue;
+        };
+        let accessor = context
+            .entities
+            .at(file.path.as_str(), binding)
+            .filter(|symbol| {
+                context.accessors.contains_key(*symbol)
+                    && context.source_kinds.get(*symbol) != Some(&ReactiveSourceKind::Store)
+            });
+        let position = if standard_value_argument(file, context, property.value) {
+            Some("a standard-library value parameter")
+        } else {
+            open_position(file, property.value)
+        };
+        if let (Some(_), Some(position)) = (accessor, position) {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::UncalledAccessor {
+                    name: text(file, property.value).to_owned(),
+                    position: position.to_owned(),
+                },
+                location: location(file.path.shared(), property.value),
+                analysis_context: crate::blockers::ACCESSOR_VALUE_COERCED.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+    let coerced_values = file
+        .ast
+        .coercive_operands
+        .iter()
+        .map(|operand| (operand.span, operand.kind))
+        .map(|(span, kind)| (span, Some(kind)))
+        .chain(
+            file.ast
+                .template_literals
+                .iter()
+                .flat_map(|template| template.expressions.iter().map(|span| (*span, None))),
+        );
+    for (span, kind) in coerced_values {
+        let value = file.ast.peel_ts_sugar_span(span);
+        if source_symbol_at(context, file, value).is_some_and(|symbol| {
+            context.accessors.contains_key(symbol)
+                && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+        }) {
+            continue;
+        }
+        let entity = context.lookup.entity_at(file.path.as_str(), value);
+        let callability = entity.and_then(|entity| entity.callability);
+        // `!user` on `Accessor<T> | undefined` is a guard: callability skips
+        // the nullish constituent, the value domain does not.
+        if kind == Some(solid_facts::ast::CoerciveOperandKind::LogicalNot)
+            && entity
+                .and_then(|entity| entity.runtime_value_domain)
+                .is_none_or(|domain| domain.may_be_undefined() || domain.unknown())
+        {
+            continue;
+        }
+        let coerced = kind != Some(solid_facts::ast::CoerciveOperandKind::LooseEquality)
+            && callability == Some(Callability::Callable)
+            && (crate::local_access::handed_value(
+                &tables,
+                file,
+                value,
+                crate::local_access::HANDED_DEPTH,
+            ) || is_parameter(file, value));
+        if coerced {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::UncalledAccessor {
+                    name: text(file, value).to_owned(),
+                    position: "a value that may be an accessor".to_owned(),
+                },
+                location: location(file.path.shared(), value),
+                analysis_context: crate::blockers::ACCESSOR_VALUE_COERCED.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+}
+
+fn is_parameter(file: &FileFacts, value: Span) -> bool {
+    file.ast
+        .reference_declaration(value)
+        .is_some_and(|declaration| {
+            file.ast.functions_containing(value).any(|function| {
+                function
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+            })
+        })
 }
 
 /// `v1/no-direct-mutation` — upstream's `noWrite`.
@@ -3583,16 +3854,14 @@ fn is_argument(file: &FileFacts, span: Span) -> bool {
 /// property value — passing the accessor on is idiomatic, and reporting it
 /// would be the false positive upstream's issue #193 describes.
 fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
-    if let Some(operand) = file
-        .ast
-        .coercive_operands
-        .iter()
-        .find(|operand| operand.span == span)
-    {
+    if let Some(operand) = file.ast.coercive_operands.iter().find(|operand| {
+        operand.span == span && operand.kind != solid_facts::ast::CoerciveOperandKind::LooseEquality
+    }) {
         return Some(match operand.kind {
             solid_facts::ast::CoerciveOperandKind::StringConcatenation => "a string concatenation",
             solid_facts::ast::CoerciveOperandKind::LogicalNot => "a logical-not operator",
             solid_facts::ast::CoerciveOperandKind::NumericCoercion => "a numeric coercion",
+            solid_facts::ast::CoerciveOperandKind::LooseEquality => unreachable!("filtered above"),
         });
     }
 

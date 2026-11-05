@@ -1111,6 +1111,10 @@ pub struct AsyncFunctionFact {
     /// async iterable, which may settle on the call's stack.
     #[serde(default, skip_serializing_if = "is_false")]
     pub may_answer_sync: bool,
+    /// ADR 0654: a call signature returns `any`, `unknown`, an error type or a
+    /// type parameter, so the type states nothing about what comes back.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub return_open: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls_after_await: Vec<Location>,
 }

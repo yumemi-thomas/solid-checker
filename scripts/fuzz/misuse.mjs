@@ -19,7 +19,7 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, flipReadContext } from "./flip-read.mjs";
+import { FLIP_READ_CONTEXTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, flipReadContext } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
@@ -365,6 +365,7 @@ const WHOLE_STORE_READS = {
   "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
   "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
   "store-for-of": { reads: true, array: true, text: (o) => `for (const x of ${o}) { void x; }` },
+  ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },
   "store-has": { text: (o) => `"v" in ${o}` },
   "store-has-own": { text: (o) => `Object.hasOwn(${o}, "v")` },
@@ -568,8 +569,8 @@ export const SPEC = {
     call: (node, sigs) => (node.variant === "store-keys" ? member(sigs[0].name, (o) => `Object.keys(${o})`) : node.variant === "store-in" ? member(sigs[0].name, (o) => `"v" in ${o}`) : node.variant === "store-has-own" ? member(sigs[0].name, (o) => `Object.hasOwn(${o}, "v")`) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : pendingRead(node, sigs)),
   },
   SYNC_NODE_RECEIVED_ASYNC: {
-    variants: ["memo", "effect"], contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
-    call: (node) => (node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
+    variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
+    call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant]) : node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -602,13 +603,16 @@ export const SPEC = {
   // rc.21 (ADR 0637): a compute catches a pending read's throw and completes. `rethrow` lets it continue; a signal never throws.
   // Per pass (ADR 0637): `store-get`, `store-keys` and `latest` read too; `prior-read` and `later-read` leave a read outside the `try`,
   // so the throw leaves the pass and nothing reports.
-  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], recallVariants: ["store-get", "store-keys", "latest"], legalVariants: ["rethrow", "signal", "prior-read", "later-read", "owned-setter"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
+  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], recallVariants: ["store-get", "store-keys", "latest", "hook-call", "get-literal"], legalVariants: ["rethrow", "signal", "prior-read", "later-read", "owned-setter"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
     contexts: [], recallContexts: ["memo", "effect-compute"], bindings: ["direct"],
     setup: (variant, name) => [variant === "owned-setter" ? apiSignal(name("w"), 0, "owned") : variant === "signal" ? signal(name("r"), 1, "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
     // ADR 0640: a setter in a `try` is no read: `ownedWrite` is the one compute a setter call is legal in.
     call: (node, [sig]) => (node.variant === "owned-setter" ? member(sig.setter, (o) => `try { ${o}(1); } catch { }`) : node.variant === "latest" ? member(sig.name, (o) => `try { latest(${o}); } catch { }`, ["latest"]) : member(sig.name, (o) => ({
       rethrow: `try { ${o}(); } catch (error) { throw error; }`, "prior-read": `${o}(); try { ${o}(); } catch { }`, "later-read": `try { ${o}(); } catch { } ${o}()`,
-      "store-get": `try { ${o}.v; } catch { }`, "store-keys": `try { Object.keys(${o}); } catch { }` }[node.variant] ?? `try { ${o}(); } catch { }`))),
+      "store-get": `try { ${o}.v; } catch { }`, "store-keys": `try { Object.keys(${o}); } catch { }`,
+      // ADR 0658: no accessor call the block shows: a value a hook handed over, and a literal's getter.
+      "hook-call": `const useRead = () => ${o}; const read = useRead(); try { read(); } catch { }`,
+      "get-literal": `const held = { get v() { return ${o}(); } }; try { held.v; } catch { }` }[node.variant] ?? `try { ${o}(); } catch { }`))),
   },
   // rc.21 (ADR 0624): `<Loading on={fn}>` warns on the boundary's first run. The site is a read under the boundary; the `on` value is
   // the variant. Judged by file (the diagnostic is raised from the boundary). `on` is typed `any`. Recall grids only.
@@ -647,8 +651,8 @@ export const SPEC = {
   FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener", ...ANCHOR_MISSES, ...DENIED_FLUSH], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
-    contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
-    call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
+    contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [], recallVariants: Object.keys(STATIC_SOURCES),
+    call: (node) => api("dynamic", STATIC_SOURCES[node.variant] ?? '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
   },
 };
 // The flip's shapes (flip-read.mjs, flip-write.mjs): one file per track, so neither edits this table.

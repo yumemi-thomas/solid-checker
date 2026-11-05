@@ -257,3 +257,25 @@ Known false-positive shapes left open (fire today, wanted gone):
 - ADR 0549/0551 trades: a `createReaction` tracker reached through a `let` is an obligation at `track()`; one that escapes (exported, handed whole to a call, a JSX attribute's value, returned, assigned, no binding) is an obligation at its creation, not at its `track()` calls, even when every use is followed; through a `function`-declared hook, a hook with several returns, two nested hooks or a hook called in another module, only that creation obligation speaks.
 - ADR 0550 trade: an SC3001 operation in an action's step called from a leaf is an obligation, not a violation, after a plain `yield`, behind a helper, a control-flow layer or a hand-off inside the step, or in an action another module holds (fuzzer action-from-settled/-tracked: 707 of 1,316 at a 0.2 sample).
 - ADR 0541 trade: a primitive or `flush` in a render effect's apply, or in the cleanup an apply returns, is an obligation, never a violation (the first run, or a disposal, is outside the effect phase); a reaction bundle's `effect` member is not walked.
+
+## What the server build does (ADR 0659)
+
+Measured on rc.21; the input to `claims_client_runtime` and `ExecutionPaths`.
+
+| API | Server build |
+|---|---|
+| `createEffect` | compute once, apply never |
+| `createRenderEffect` | compute and apply both run |
+| `createTrackedEffect`, `onSettled` | never run |
+| `createReaction` | tracking callback runs, reaction never |
+| signal, store setter | `SERVER_WRITE` warns, lands, no throw |
+| direct store write | silent, lands |
+| `flush`, `refresh` | no-ops |
+| `resolve`, `until` | throw "not implemented on the server" |
+| `isPending` | rethrows a pending read |
+| `action` | returns `fn` unchanged |
+| `render`, `hydrate`, `insert`, `ref` | throw "Client-only API" |
+| strict window, write guard | absent |
+| a pending read in a body | retried by the boundary; the body runs twice |
+
+ADR 0659 limits: `--rendering hydrated` resolves packages as the client, so dependency source is the client graph on both paths. A site in a helper only an arm calls keeps its finding. `typeof window` is uncertifiable even under a browser selection that could decide it. `claims_client_runtime` lists the rules the audit measured: SC1001, SC2001, SC2002, SC2003, SC2008, SC5001, SC6002. The corpus sweep still runs every project as `csr`.

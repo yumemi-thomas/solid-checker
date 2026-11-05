@@ -5,8 +5,8 @@ export interface SolidCheckerRuntimeSettings {
   target?: "browser" | "node" | (string & {});
   /** Explicit development or production build mode. */
   build?: "development" | "production" | (string & {});
-  /** Explicit CSR, string SSR, or streaming SSR rendering mode. */
-  rendering?: "csr" | "string-ssr" | "streaming-ssr" | (string & {});
+  /** Explicit CSR, string SSR, streaming SSR, or hydrated rendering mode. Hydrated runs a server and a client pass. */
+  rendering?: "csr" | "string-ssr" | "streaming-ssr" | "hydrated" | (string & {});
   /**
    * Whether code outside this project may import from it. `"closed"` asserts
    * the analyzed files are the whole program, which lets an exported symbol's

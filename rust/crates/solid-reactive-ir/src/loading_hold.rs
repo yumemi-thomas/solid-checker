@@ -75,64 +75,163 @@ pub(crate) fn loading_on_outside_hold_obligations(
 /// ADR 0624: `LOADING_ON_ACCESSOR`. rc.21 warns once, on the boundary's first
 /// run, when `on` evaluates to a function: it is the dependency's value, and an
 /// accessor handed instead is never called, so the boundary never re-arms. `on`
-/// is typed `any`, so `tsc` is silent. Proven for a function literal and for a
-/// value Type Facts call a function; a mixed union is an obligation, and any
-/// other value states nothing.
+/// is typed `any`, so `tsc` is silent.
+///
+/// ADR 0650: every form that hands `on` is read, and only a proven non-function
+/// states nothing. A value proven to be a function is a violation; anything
+/// else (`any`, `unknown`, a union, a possibly undefined function, a spread not
+/// closed against `on`, an options object that is no exact literal) is an
+/// uncertifiable with [`crate::blockers::LOADING_ON_VALUE_UNPROVEN`].
 fn loading_on_accessor_violations(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     let primitives = lookup.primitives(file);
-    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
-        if !super::known_primitive(&primitives.jsx[index])
+    let on_boundary = |primitive| {
+        super::known_primitive(primitive)
             .is_some_and(|primitive| lookup.dialect.boundary_on_may_hold_outside(primitive))
-        {
+    };
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if !on_boundary(&primitives.jsx[index]) {
             continue;
         }
-        let Some(value) = element
-            .attributes
-            .iter()
-            .find(|attribute| {
-                attribute.namespace.is_none()
-                    && file.source_text(attribute.local_name) == Some("on")
+        if let Some((at, value)) = jsx_on_value(file, lookup, element) {
+            push_on_verdict(file, at, value, violations);
+        }
+    }
+    // `Loading({ on, … })`: the component called by hand. Its one argument is
+    // the props object, so the same question is asked of that object.
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        if !on_boundary(&primitives.calls[index]) {
+            continue;
+        }
+        let Some(argument) = call.arguments.first() else {
+            continue;
+        };
+        if !argument.exact_object_literal {
+            push_on_verdict(file, argument.span, OnValue::Open, violations);
+            continue;
+        }
+        let Some(property) = file
+            .ast
+            .object_properties_within(argument.span)
+            .find(|property| {
+                argument.property_names.contains(&property.key)
+                    && file.source_text(property.key) == Some("on")
             })
-            .and_then(|attribute| attribute.expression)
-            .map(|value| file.ast.peel_ts_sugar_span(value))
         else {
             continue;
         };
-        let literal = file
-            .ast
-            .functions
-            .iter()
-            .any(|function| function.span == value);
-        let callability = lookup
-            .entity_at(file.path.as_str(), value)
-            .and_then(|entity| entity.callability);
-        let proven = literal
-            || matches!(
-                callability,
-                Some(typefacts::Callability::Callable | typefacts::Callability::UntypedCallable)
-            );
-        if !proven && callability != Some(typefacts::Callability::Mixed) {
-            continue;
-        }
-        violations.push(StaticViolation {
-            id: "SC5007".into(),
-            rule: "loading-on-accessor".into(),
-            message: "`on` received a function; the boundary never calls it, so nothing is read \
-                      and the boundary never re-arms"
-                .into(),
-            hint: "Pass the dependency's value: `on={route()}`, or `on={[query(), page()]}` for \
-                   several."
-                .into(),
-            location: location(file.path.shared(), value),
-            analysis_context: String::new(),
-            fixes: vec![],
-            uncertain: !proven,
-        });
+        let value = file.ast.peel_ts_sugar_span(property.value);
+        let verdict = on_value(file, lookup, value);
+        push_on_verdict(file, value, verdict, violations);
     }
+}
+
+/// What the runtime's `typeof deps === "function"` answers for one value.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum OnValue {
+    /// Never a function: `on` states nothing about this rule.
+    NotFunction,
+    Function,
+    Open,
+}
+
+fn on_value(file: &solid_facts::FileFacts, lookup: &SemanticLookup<'_>, value: Span) -> OnValue {
+    if file
+        .ast
+        .functions
+        .iter()
+        .any(|function| function.span == value)
+    {
+        return OnValue::Function;
+    }
+    let entity = lookup.entity_at(file.path.as_str(), value);
+    match entity.and_then(|entity| entity.callability) {
+        Some(typefacts::Callability::NonCallable) => OnValue::NotFunction,
+        // Callability skips a nullish constituent, and the warning needs the
+        // function on the first run: an optional accessor proves nothing yet.
+        Some(typefacts::Callability::Callable | typefacts::Callability::UntypedCallable)
+            if entity
+                .and_then(|entity| entity.runtime_value_domain)
+                .is_some_and(|domain| {
+                    domain.may_be_callable()
+                        && !domain.may_be_undefined()
+                        && !domain.may_be_other()
+                        && !domain.unknown()
+                }) =>
+        {
+            OnValue::Function
+        }
+        _ => OnValue::Open,
+    }
+}
+
+/// The value `on` takes on `element`: the last attribute or spread that can set
+/// it decides, as the compiled props merge does. `None` when nothing sets it.
+fn jsx_on_value(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<(Span, OnValue)> {
+    let attribute = element.attributes.iter().rfind(|attribute| {
+        attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("on")
+    });
+    let settled_after = attribute.map_or(0, |attribute| attribute.span.end);
+    for spread in element.spreads.iter().rev() {
+        if spread.span.start < settled_after {
+            break;
+        }
+        let closed = lookup
+            .entity_at(file.path.as_str(), spread.argument)
+            .and_then(|entity| entity.declared_keys.as_deref())
+            .is_some_and(|keys| keys.iter().all(|key| key.as_ref() != "on"));
+        if !closed {
+            return Some((spread.argument, OnValue::Open));
+        }
+    }
+    let attribute = attribute?;
+    // `on` alone or `on="a"`: a literal, never a function.
+    let expression = attribute.expression?;
+    let value = file.ast.peel_ts_sugar_span(expression);
+    Some((value, on_value(file, lookup, value)))
+}
+
+fn push_on_verdict(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    value: OnValue,
+    violations: &mut Vec<StaticViolation>,
+) {
+    if value == OnValue::NotFunction {
+        return;
+    }
+    let uncertain = value == OnValue::Open;
+    violations.push(StaticViolation {
+        id: "SC5007".into(),
+        rule: "loading-on-accessor".into(),
+        message: if uncertain {
+            "`on` may be a function here, and nothing proves it is not; the boundary never calls \
+             a function, so nothing would be read and the boundary would never re-arm"
+                .into()
+        } else {
+            "`on` received a function; the boundary never calls it, so nothing is read and the \
+             boundary never re-arms"
+                .into()
+        },
+        hint: "Pass the dependency's value: `on={route()}`, or `on={[query(), page()]}` for \
+               several."
+            .into(),
+        location: location(file.path.shared(), at),
+        analysis_context: if uncertain {
+            crate::blockers::LOADING_ON_VALUE_UNPROVEN.to_owned()
+        } else {
+            String::new()
+        },
+        fixes: vec![],
+        uncertain,
+    });
 }
 
 /// Why the boundary's hold is not proven to be its own, or `None` when no

@@ -1600,6 +1600,47 @@ Three shipped false cleans, reproduced in Chrome. `program_listens_for_click` re
 ## ADR 0646 — A hook's function slot, and a named function a carrier may not run
 `returned_slot_is_literal_function` dropped the handed-member net for a slot written as a function literal, on the claim that the call graph follows it. With an unrelated member of that name written anywhere, the name veto stops the resolver, so nothing followed it: `const { read } = useThing(); read()` certified while Chrome warned `STRICT_READ_UNTRACKED`. The shortcut is gone: where the transport resolves, ADR 0509's drop removes the net and the read is proved; where it does not, it is now uncertifiable, with the name veto as its blocker. A read in `const hf = …; [].forEach(hf)` was a proven SC1001 where Chrome runs nothing: ADR 0563's rule held for a literal and an async read, not a named sync read. It now holds at the end of a file's read rows, on every path. The predicate does not know that `JSON.parse("{}", reviver)` runs the reviver, so that read is uncertifiable, not proved. Owners: `local_access.rs` (`named_carrier_may_not_run`).
 
+<a id="adr-0650"></a>
+## ADR 0650 — SC5007 reads every form of `on`, and only a non-function is silent
+
+The flip's first rule. `LOADING_ON_ACCESSOR` fires on what `on` evaluates to, so the only silent answer is a proven non-function. `Callable` needs a value domain with no undefined, since callability skips a nullish constituent and the warning needs the function on the first run. A spread after the last `on` is closed only by a complete declared key set without `on`, under ADR 0436's premise; `Loading(...)` needs an exact literal argument. Everything else is an obligation, blocker `loading-on-value-unproven`. A primitive handed as a value (`<Dynamic component={Loading}>`) is already SC9012's. Owner: `loading_hold.rs`; the demands are in `demand_plan.rs`.
+
+<a id="adr-0651"></a>
+## ADR 0651 — SC8003 reports a lost source, and reads open spreads
+`has_children` and "the attribute is written" assumed both sources put content there. Chrome says otherwise: `textContent={undefined}` keeps the child, `innerHTML` beside `{null}` or whitespace keeps the HTML, while `innerHTML` and `innerText` wipe a real child whatever their value, and a filled `textContent` loses to any child in the source. A violation now needs a pair proven to lose something; a value not proven filled is uncertifiable, `content-source-value-unproven`. The `.unwrap_or_default()` over a non-literal spread read nothing, so `{...p}` holding `innerHTML` certified: any spread not closed by an object literal or a complete declared key set without a content key is uncertifiable, `spread-content-unproven`, alone too, since one object can hold two sources. The `children` pair alone stays TS2710's. Owner: `upstream_compat/syntax.rs`.
+
+<a id="adr-0652"></a>
+## ADR 0652 — SC1005's coerced positions without a proof
+The rule needed a proven accessor and exempted every argument, so `String(c)`, `JSON.stringify({ c })`, `{...{ "data-c": c }}`, `title={c as any}`, an erased `==` and a hook's or prop's accessor in a template certified. Each is now uncertifiable, `accessor-value-coerced`. A parameter the compiler proves value-only cannot call the argument, unless the call keeps the value (`Object.assign`, `Object.defineProperty`, by declaration). A shorthand property carries the property's symbol, so its binding names the accessor. The `!x` guard needs a value domain with no undefined, since callability skips a nullish constituent. On the warning side, a member write on the accessor refuses the proof. These operands demand callability without a type descriptor: a descriptor is evidence other consumers read, and asking one moved an unrelated SC9012 (ViewerToolbar). Owners: `upstream_compat/shared_reactivity.rs`, `demand_plan.rs`.
+
+<a id="adr-0653"></a>
+## ADR 0653 — SC1007 opens a handler member with no proven root
+`member_symbol` needs a source at the root, so `onClick={s.f}` with `s` from a hook and `onClick={mp.get("s")!.f}` fell through, certified, while Chrome warned `STRICT_READ_UNTRACKED`. A member whose object is a call or a `handed_value` is uncertifiable, `handler-root-unproven`. A plain object's member stays silent. Owner: `upstream_compat/shared_reactivity.rs`.
+
+<a id="adr-0654"></a>
+## ADR 0654 — SC2007 reads a static source three ways, and `returnOpen`
+`static_source_promise` answered for two shapes and `DynamicUnknownForm` was unread, so a block body, a `.then` chain, a parameter, a `let`, a conditional and an options variable certified while dev threw. The source is now Promise, Sync or Open. A return type that is a Promise on every path proves Promise (`computation_is_async`, not `computation_may_answer_sync`). Sync needs the producer's fact with `returnOpen` false: a new async function flag, protocol 89, set when a call signature returns `any`, `unknown`, an error type or a type parameter. SC7002 and SC5003 read it too. Open and an unproven option are uncertifiable, `static-source-unproven`. Owners: `static_api.rs`, `apps/solid-typefacts/src/source_facts.rs`.
+
+<a id="adr-0655"></a>
+## ADR 0655 — SC7002 needs a computation that returns one
+`async_compute` was false for a return typed `any` or `unknown`, so those certified while dev threw, and true for a branch not taken, a false violation. It now reads the same three states as ADR 0654: Promise on every path is proven, a closed synchronous return is silent, and the rest is uncertifiable, `compute-return-unproven`. Owner: `static_api.rs`.
+
+<a id="adr-0656"></a>
+## ADR 0656 — SC1004 needs no name
+A function with no binding name was skipped, so `[function () { return s() ? <a /> : <b />; }][0]` went unjudged while Chrome warned. The name was only a label. A function that is possibly a component is uncertain as before, so handed callbacks such as a table's `render` move from SC1001 to SC1004 at the same site, uncertifiable both ways. Owner: `static_rules.rs`.
+
+<a id="adr-0657"></a>
+## ADR 0657 — SC1003 opens every destructure no exact root reaches
+The rule read a one-parameter pattern and `const {a} = root`. A second parameter, an assignment, a `for…of`, `const [{a}] = [props]`, a rest pattern, `merge(…, props)`, a default and a hook's store certified while Chrome warned. The first parameter is now read whatever follows, and every other form is uncertifiable, `destructure-root-unproven`. A member read is not a root, so `createSignal(props.x)` stays out. A hook whose returns are all closed literals is proved plain. A helper stays a site: unlike the exact-root arm, this claims nothing about its run, and the fuzzer found 56 false cleans behind that gate. `o12`, a helper's parameter, waits for the census. Owner: `static_rules.rs`.
+
+<a id="adr-0658"></a>
+## ADR 0658 — SC5008 reads what no call shows
+The block's reads were its calls of proven sources, and a handed callee was skipped, so `try { props.v() }`, `try { props.v }` and a literal's getter certified while rc.21 warned `CAUGHT_REACTIVE_READ`. A call of a handed value stays a site, and a Get of a handed root or of a literal with an accessor is one. Both are uncertifiable, `caught-read-unproven`. `member_get_may_read` is shared with SC5006. Owner: `local_access.rs`.
+
+<a id="adr-0659"></a>
+## ADR 0659 — Which build runs a site, and `--rendering hydrated`
+No selection could describe a hydrated app: `csr` is false for it, node hid client rules, and SSR with browser is refused. `--rendering hydrated` selects both: it is not a server build for client rules, and it proves server rendering for server rules. Packages resolve as the client, so `browser` joins its conditions and node is refused. `ExecutionPaths` holds two facts. `client_root_present` is any `render` or `hydrate` import, by name, since only its absence proves anything: under a server selection with no root a client claim is silent, and with a root it stands (D13), while only server entries and no selection make it uncertifiable, `client-root-unproven`. A build arm is a region under a proven `isServer`, silent for a client claim, or under a constant nothing decides, uncertifiable, `build-constant-arm`. Both apply once over final findings, for the rules `claims_client_runtime` names, so no rule's code changes. Owners: `execution_paths.rs`, the rules catalog. Limits are in `docs/open-work.md`.
+
 <a id="adr-0700"></a>
 ## ADR 0700 — A `solid-js` version naming no release is a notice, not a clean
 A resolved `node_modules/solid-js/package.json` whose version names no release (`nightly`, `workspace:*`) was `Detection::Defaulted`, read like an absence: analyzed under the default dialect and certified. It is not an absence: the project runs some `solid-js` and nothing says which, so no answer of the vocabulary was audited on it. `release_notice` now gives the SC9014 notice for it, with blocker `solid-version-unclassified` as its context, under the dialect the default selects only (an explicit `--dialect` is a decision). No `solid-js` at all keeps the default without a notice. Owners: `solid-facts-backend/src/dialect.rs` (`unclassified_release_notice`).

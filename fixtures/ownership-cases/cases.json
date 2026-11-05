@@ -2937,6 +2937,192 @@
     ]
    },
    "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut."
+  },
+  {
+   "id": "jsx-no-duplicate-props/solid-v2/open-spread/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "const o: Record<string, string> = { title: \"t\" };\nexport const App = () => <div {...o}>child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "<div {...o}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0651): eslint-plugin-solid 0.14.5 reads a spread only when its argument is an object expression (`jsxGetAllProps`), so an open spread is silent there. In rc.21 a spread beside children can carry innerHTML and wipe them (flip witnesses SC8003 h02-h08). Unproven, so uncertifiable, blocker spread-content-unproven."
+  },
+  {
+   "id": "jsx-no-duplicate-props/solid-v2/nullish-text/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const App = (props: { text?: string }) => <div textContent={props.text}>child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "<div textContent={props.text}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0651): upstream reports any textContent beside children. In rc.21 Chrome, a nullish or empty textContent drops nothing and the children render, so a value not proven filled is uncertifiable, blocker content-source-value-unproven."
+  },
+  {
+   "id": "uncalled-accessor/solid-v2/standard-value/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\nexport const App = () => { const [c] = createSignal(1); return <i>{String(c)}</i>; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [115, 116]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0652): eslint-plugin-solid 0.14.5 exempts every call argument. In rc.21 a standard-library parameter the compiler proves value-only cannot call the accessor, and `String(c)` renders its source, so the argument is an uncertifiable, blocker accessor-value-coerced."
+  },
+  {
+   "id": "reactive-handler-frozen/solid-v2/handed-root/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "const plain = { f: () => {} };\nconst useHandlers = () => plain;\nexport const App = () => { const fromHook = useHandlers(); return <button onClick={fromHook.f} />; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "fromHook.f"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "fromHook.f"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0653): eslint-plugin-solid 0.14.5 reads only a tracked root. A member of a value a hook returned may be a store member in rc.21, where Chrome warns STRICT_READ_UNTRACKED and the handler freezes, so with no proven root it is an uncertifiable, blocker handler-root-unproven."
+  },
+  {
+   "id": "no-destructure/solid-v2/open-root/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const C = (props: { a: number }) => { const [{ a }] = [props]; return <i>{a}</i>; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "[{ a }]"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0657): eslint-plugin-solid 0.14.5 reads the parameter pattern only. In rc.21 a destructure through a wrapper Gets the prop at setup and Chrome warns STRICT_READ_UNTRACKED, so a pattern whose value holds a prop or store root is an uncertifiable, blocker destructure-root-unproven."
   }
  ]
 }

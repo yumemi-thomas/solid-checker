@@ -70,3 +70,6 @@ anything before the `return` does not.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — reads in the component body generally
+
+A component needs no name: an anonymous function that may be a component is judged the
+same way (ADR 0656). A callback that may be one (`render: (row) => …`) is uncertifiable.

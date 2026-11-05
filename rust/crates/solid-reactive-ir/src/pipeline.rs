@@ -131,6 +131,7 @@ impl ProgramDraft {
             apply_compute_reads: self.apply_compute_reads,
             runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
             development_feedback: self.development_feedback,
+            execution_paths: crate::ExecutionPaths::default(),
             reads: self.reads,
             writes: self.writes,
             actions: self.action_invocations,
@@ -670,6 +671,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.static_defects,
     );
     let mut program = draft.into_program(factory_instances);
+    program.execution_paths =
+        crate::execution_paths::execution_paths(facts, &rule_options.runtime, dialect);
     // ADR 0517: a `<Loading on>` whose hold is not proven its own; ADR 0624: one
     // handed a function.
     let holds =

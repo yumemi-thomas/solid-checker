@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 692,
+      "end": 702,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -72,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx",
+      "start": 768,
+      "end": 780,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -79,6 +99,16 @@
       "path": "fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx",
       "start": 813,
       "end": 828,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx",
+      "start": 901,
+      "end": 922,
       "fixes": 0
     },
     {
@@ -92,6 +122,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx",
+      "start": 1040,
+      "end": 1052,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -99,6 +139,16 @@
       "path": "fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx",
       "start": 1085,
       "end": 1100,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx",
+      "start": 1173,
+      "end": 1185,
       "fixes": 0
     }
   ]

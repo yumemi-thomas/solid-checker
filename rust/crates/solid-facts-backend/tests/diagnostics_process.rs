@@ -2124,17 +2124,22 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     }
     if let Some(findings) = diagnostic_fixture("rc9-static-dynamic-async") {
         // rc.9's static dynamic() form throws in dev on a thenable source and
-        // renders nothing in production. Four inline async sources, the
+        // renders nothing in production. Ten proven sources: inline async, the
         // standard library's Promise.resolve and Promise construct signature,
-        // and two identifiers resolved to same-file async functions; the
-        // synchronous, default-form, unknown-form, shadowed, parameter, `let`
-        // and block-bodied sources stay silent.
-        assert_rule_findings(&findings, "static-dynamic-async-source", 8);
+        // same-file async functions, and block bodies typed as a Promise. ADR
+        // 0654: seven open sources or forms are uncertifiable; a synchronous
+        // source and the default form stay silent.
+        let selected = assert_rule_findings(&findings, "static-dynamic-async-source", 17);
+        let proven = selected
+            .iter()
+            .filter(|finding| finding["kind"] == "violation")
+            .count();
+        assert_eq!(proven, 10, "{findings:#?}");
         assert!(
-            findings.iter().all(|finding| {
-                (finding["rule"] == "static-dynamic-async-source" && finding["kind"] == "violation")
-                    || finding["rule"] == "unaudited-solid-release"
-            }),
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "static-dynamic-async-source"
+                    || finding["rule"] == "unaudited-solid-release"),
             "{findings:#?}"
         );
         // rc.3 has no static form: the same calls are the memo's async
@@ -2200,7 +2205,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // attribute and the called and passed-on accessors were already
         // silent. Binary arithmetic and bitwise operands stay silent because
         // TypeScript rejects a function there (TS2365/TS2362).
-        assert_rule_findings(&findings, "uncalled-accessor", 5);
+        assert_rule_findings(&findings, "uncalled-accessor", 13);
         for position in [
             "string concatenation",
             "logical-not operator",

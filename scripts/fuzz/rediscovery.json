@@ -3588,5 +3588,122 @@
    "mx-primitive-in-forbidden-scope-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "41875549b: 1998 false-clean, 306 recall-gap of 2304 on the two contexts; fix: 0 false-clean, 2304 recall-gap"
+ },
+ {
+  "finding": "SC5007 read only an attribute with a function type: `any`, `unknown`, a prop, a spread and `Loading({ on })` warn in Chrome, certified (ADR 0650)",
+  "found": "the flip audit",
+  "fixed": "ADR 0650",
+  "grid": "mx-recall",
+  "code": "LOADING_ON_ACCESSOR",
+  "ids": [
+   "mx-loading-on-accessor-on-any-accessor-direct-none",
+   "mx-loading-on-accessor-on-unknown-accessor-direct-none",
+   "mx-loading-on-accessor-on-spread-accessor-direct-none",
+   "mx-loading-on-accessor-on-json-accessor-direct-none",
+   "mx-loading-on-accessor-on-prop-accessor-direct-none",
+   "mx-loading-on-accessor-on-call-accessor-direct-none"
+  ],
+  "rediscovered": "895fbf806: 9,540 false cleans; ADR 0650: 0"
+ },
+ {
+  "finding": "SC8003 read only literal spreads and assumed an attribute has a value: `{...p}` holding `innerHTML` certified, `textContent={undefined}` beside a child warned (ADR 0651)",
+  "found": "the flip audit",
+  "fixed": "ADR 0651",
+  "outside": "SC8003 has no runtime diagnostic: its claim is the DOM a program ends with, and the grids judge diagnostics. scripts/flip/witnesses.json holds the programs with the DOM measured, and fixture rc21-content-competition each branch"
+ },
+ {
+  "finding": "SC1005 exempted every argument and needed a proven accessor: `String(c)`, `JSON.stringify({ c })`, a spread value, `as any`, an erased `==`, a hook's accessor in a template certified; a written `toString` kept the violation (ADR 0652)",
+  "found": "the flip audit",
+  "fixed": "ADR 0652",
+  "outside": "SC1005 has no runtime diagnostic: its claim is the value a program renders, and the grids judge diagnostics. scripts/flip/witnesses.json holds the programs, and fixture uncalled-accessor-v2 each branch"
+ },
+ {
+  "finding": "SC1007 read only a member whose root is a proven source: a store handed through a hook or a `Map` to a native listener warned in Chrome with no SC1007 (ADR 0653)",
+  "found": "the flip audit",
+  "fixed": "ADR 0653",
+  "outside": "the grid judges STRICT_READ_UNTRACKED at the site statement, and here the read is the listener attribute: a context can place the attribute but not make it the site (3,036 programs came out not-fired, while Chrome warned on the same shape). scripts/flip/witnesses.json holds i01 and i06, fixture reactive-handler-frozen-roots each branch"
+ },
+ {
+  "finding": "SC2007 proved two source shapes and read nothing else: a block body, a `.then` chain, a return typed `any`, a conditional and an options variable threw in dev, certified (ADR 0654)",
+  "found": "the flip audit",
+  "fixed": "ADR 0654",
+  "grid": "mx-recall",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "mx-dynamic-static-promise-body-src-block-direct-none",
+   "mx-dynamic-static-promise-body-src-then-direct-none",
+   "mx-dynamic-static-promise-body-src-any-direct-none",
+   "mx-dynamic-static-promise-body-src-cond-direct-none",
+   "mx-dynamic-static-promise-body-src-options-direct-none"
+  ],
+  "rediscovered": "ec76609d7: 1,500 false cleans of the five src-* variants; ADR 0654: 0"
+ },
+ {
+  "finding": "SC7002 read `can_return_async` alone: a compute returning `any` or `unknown` threw in dev, certified; a branch not taken was a violation Chrome did not report (ADR 0655)",
+  "found": "the flip audit",
+  "fixed": "ADR 0655",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-body-cmp-any-direct-none",
+   "mx-sync-node-received-async-body-cmp-unknown-direct-none"
+  ],
+  "rediscovered": "076ad9a8b: 1,140 false cleans of cmp-any and cmp-unknown; ADR 0655: 0"
+ },
+ {
+  "finding": "SC1004 skipped a function with no name: an anonymous component's reactive return warned in Chrome and was only SC1001 uncertain (ADR 0656)",
+  "found": "the flip audit",
+  "fixed": "ADR 0656",
+  "outside": "the grid places a site statement inside a named `App`, and here the read is the returned test of an anonymous function: a context cannot make that test the site. scripts/flip/witnesses.json holds q02, fixture rc21-anonymous-component each branch"
+ },
+ {
+  "finding": "SC1003 read a one-parameter pattern and `const {a} = root`: an assignment, `const [{a}] = [props]`, a `for…of`, `merge(…, props)` and a helper's destructure warned in Chrome, certified (ADR 0657)",
+  "found": "the flip audit; the helper arm found by these shapes",
+  "fixed": "ADR 0657",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-dstr-assign-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-array-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-for-of-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none",
+   "mx-strict-read-untracked-body-store-dstr-assign-direct-closure"
+  ],
+  "rediscovered": "cda383b34: 144 false cleans; first cut: 56 in helpers; ADR 0657: 0"
+ },
+ {
+  "finding": "V-D5: `omit`, `merge` and a default destructured over props warned in Chrome, certified: d5-defaults-destructure, d5-omit-destructure, d5-report-merge (ADR 0657)",
+  "found": "the values audit",
+  "fixed": "ADR 0657",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none"
+  ],
+  "rediscovered": "patterns: 3 left open-defects.json at ADR 0657; the generator shape is a wrapped initializer, store-dstr-merge"
+ },
+ {
+  "finding": "SC5008 read proven calls only: `try { props.v() }`, `try { props.v }` and a literal's getter warned CAUGHT_REACTIVE_READ, certified (ADR 0658)",
+  "found": "the flip audit",
+  "fixed": "ADR 0658",
+  "grid": "mx-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-memo-get-literal-direct-none",
+   "mx-caught-reactive-read-memo-hook-call-direct-none"
+  ],
+  "rediscovered": "e8b8c7ce7: 12 false cleans of get-literal; ADR 0658: 0"
+ },
+ {
+  "finding": "A client rule's violation on a server-only program: `SC5001:v` on the fuzzer's own legal template `l-settled-first`, unseen because `judgeSsr` read only SC7005 (audit D2, ADR 0659)",
+  "found": "the SSR and hydration audit",
+  "fixed": "ADR 0659, and judgeSsr",
+  "outside": "the SSR host is its own run, not a grid: `node scripts/fuzz/ssr.mjs` on 91eeaa1c3 fails ssr-l-settled-first-* and ssr-m-body-after-read-*, and on ADR 0659 passes 22 of 22"
+ },
+ {
+  "finding": "Code in a server-only arm analysed as live, and client rules hidden under node selection (audit D1, D13, ADR 0659)",
+  "found": "the SSR and hydration audit",
+  "fixed": "ADR 0659",
+  "outside": "the grids run one client host and need a two-host judge: scripts/flip/host-witnesses.json holds them on the measured hosts, `check.mjs HOST` 1 of 24 before, 20 after, the rest marked `open` for their rule; fixture rc21-server-arms each branch"
  }
 ]

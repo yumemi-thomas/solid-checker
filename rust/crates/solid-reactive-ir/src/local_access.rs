@@ -3576,7 +3576,9 @@ impl LocalAccessContext<'_, '_> {
                                 .is_none()
                                     || !self.span_may_make_computation(file, hook.span, 4)
                             })
-                        && !self.value_reaches_async_source(file, call.callee, 4))
+                        && !self.value_reaches_async_source(file, call.callee, 4)
+                        // ADR 0658: a value a caller handed over may read.
+                        && !self.handed_member_callee(file, call.callee))
                 {
                     continue;
                 }
@@ -3608,6 +3610,27 @@ impl LocalAccessContext<'_, '_> {
                     sites.push((identifier.span, identifier.span, Some(symbol)));
                 }
             }
+            // ADR 0658: a Get runs code a call list never shows: a prop's getter
+            // reads, and so may a handed root's member or a literal's accessor.
+            for member in &file.ast.members {
+                if !caught.block.contains(member.span)
+                    || sites.iter().any(|(site, _, _)| site.contains(member.span))
+                    || file
+                        .ast
+                        .assignments
+                        .iter()
+                        .any(|assignment| assignment.target.contains(member.span))
+                    || file
+                        .ast
+                        .functions_containing(member.span)
+                        .any(|nested| caught.block.contains(nested.span))
+                {
+                    continue;
+                }
+                if self.member_get_may_read(file, member) {
+                    sites.push((member.span, member.span, None));
+                }
+            }
             for (site, read, source) in sites {
                 let proven = !rethrows
                     && source.as_ref().is_some_and(|symbol| {
@@ -3636,12 +3659,49 @@ impl LocalAccessContext<'_, '_> {
                            the read suspend; handle errors with <Errored>."
                         .into(),
                     location: location(file.path.shared(), site),
-                    analysis_context: String::new(),
+                    analysis_context: if proven {
+                        String::new()
+                    } else {
+                        crate::blockers::CAUGHT_READ_UNPROVEN.to_owned()
+                    },
                     fixes: vec![],
                     uncertain: !proven,
                 });
             }
         }
+    }
+
+    /// ADR 0658: whether a member Get may run a read no call shows: a member of
+    /// a value a caller handed over (a prop is a getter), or of a local literal
+    /// that declares an accessor.
+    pub(crate) fn member_get_may_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        member: &solid_facts::ast::MemberFact,
+    ) -> bool {
+        let object = file.ast.peel_ts_sugar_span(member.object);
+        if self.handed_member_callee(file, member.span) {
+            return true;
+        }
+        file.ast
+            .reference_declaration(object)
+            .and_then(|declaration| {
+                file.ast
+                    .bindings
+                    .iter()
+                    .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+            })
+            .and_then(|binding| binding.initializer)
+            .is_some_and(|initializer| {
+                let initializer = file.ast.peel_ts_sugar_span(initializer);
+                file.ast.object_get_shapes.iter().any(|shape| {
+                    shape.span == initializer
+                        && shape
+                            .properties
+                            .iter()
+                            .any(|property| property.getter.is_some())
+                })
+            })
     }
 
     /// A read that cannot throw into a pass: a plain signal, a source served

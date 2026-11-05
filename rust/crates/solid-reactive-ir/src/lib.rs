@@ -49,6 +49,7 @@ mod carrier_runs;
 mod cleanup;
 mod development_feedback;
 mod directives;
+mod execution_paths;
 pub use development_feedback::{
     DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
 };
@@ -286,10 +287,11 @@ impl RuntimeEnvironment {
     }
 
     /// Whether the selection names a server build of the Solid packages: a
-    /// Node-family target, or server rendering. There an effect's apply never
-    /// runs and `flush` is empty, so a rule about what the *client* runtime
-    /// does with them claims nothing. No selection is the client default, as
-    /// everywhere else the audited release is assumed.
+    /// Node-family target, or server rendering. `flush` is empty there, and an
+    /// apply does not run but for `createRenderEffect`'s. What that says about a
+    /// client rule depends on whether a client root exists too (ADR 0659,
+    /// [`ExecutionPaths`]). No selection is the client default, as everywhere
+    /// else the audited release is assumed.
     #[must_use]
     pub fn selects_server_build(&self) -> bool {
         matches!(
@@ -322,6 +324,9 @@ pub enum RuntimeRendering {
     Csr,
     StringSsr,
     StreamingSsr,
+    /// ADR 0659: a server pass and a client pass of one app. Packages resolve as
+    /// the client's.
+    Hydrated,
 }
 
 /// The export-map conditions that name a host runtime. At most one of them
@@ -352,13 +357,22 @@ impl RuntimeEnvironment {
         {
             return Err("SSR cannot be selected with the browser runtime".into());
         }
+        if matches!(self.rendering, Some(RuntimeRendering::Hydrated))
+            && self.target == Some(RuntimeTarget::Node)
+        {
+            return Err(
+                "hydrated selects the server and the client, and resolves packages as the \
+                 client: it cannot be selected with the node runtime"
+                    .into(),
+            );
+        }
         let selected = self.selected_conditions();
         for (label, alternatives) in [
             ("runtime target", HOST_TARGET_CONDITIONS),
             ("build mode", &["development", "production"][..]),
             (
                 "rendering mode",
-                &["csr", "string-ssr", "streaming-ssr"][..],
+                &["csr", "string-ssr", "streaming-ssr", "hydrated"][..],
             ),
         ] {
             let present = alternatives
@@ -405,9 +419,13 @@ impl RuntimeEnvironment {
                     RuntimeRendering::Csr => "csr",
                     RuntimeRendering::StringSsr => "string-ssr",
                     RuntimeRendering::StreamingSsr => "streaming-ssr",
+                    RuntimeRendering::Hydrated => "hydrated",
                 }
                 .into(),
             );
+            if rendering == RuntimeRendering::Hydrated {
+                conditions.insert("browser".into());
+            }
         }
         conditions.extend(self.framework_transforms.iter().cloned());
         conditions
@@ -1505,6 +1523,7 @@ fn default_async_provenance() -> bool {
     true
 }
 
+pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -1521,6 +1540,9 @@ pub struct Program {
     pub runtime_configuration: RuntimeConfigurationPremise,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub development_feedback: Vec<development_feedback::DevelopmentFile>,
+    /// ADR 0659: which build runs what.
+    #[serde(default)]
+    pub execution_paths: ExecutionPaths,
     pub reads: Vec<ReactiveRead>,
     pub writes: Vec<ReactiveWrite>,
     pub actions: Vec<ActionInvocation>,
