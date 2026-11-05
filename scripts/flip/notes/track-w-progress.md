@@ -158,9 +158,11 @@ SC2001.
   `no-store-mutation-outside-setter/loop-head/001` (upstream has no such rule; insert cases.json entries as text: re-serializing
   rewrites `\u00ef` escapes; a case needs `expect.absent`). fuzz-patterns `values/d6-for-of-target` FIXED (moved to rediscovery).
   Witnesses SC2003 5/13, all 204. Corpus 0 moved (`sweep-w2003a.json`). Fixture `store-for-head-write`.
-  **SC2003 next (from `~/EDF/tmp/flipw/research-sc4002/sc2003.md` section 3):** step 2 std-lib alias by declaration
-  (`no_store_standard_library_write` `shared_reactivity.rs` ~:3300, drop the member-callee prefilter, keep the qualified-name test;
-  plus `.call` on a prototype method, `values/d1n-array-proto-call`) -> j04; step 3 V-D1 fold (`scripts/flip/notes/v-d1-checker.patch`,
+- **SC2003 step 2 of 5** (ADR 0717, 523597ec8): `no_store_standard_library_write` lets an identifier callee through (judged by
+  declaration). `.call` on a prototype method NOT built (resolves to `Function.call`; the member's declaration is no recorded
+  query): stays open defect `values/d1n-array-proto-call`. j04 holds (SC2003 6/13, all 205). Corpus 0 moved (`sweep-w2003b.json`).
+  Fixture `store-standard-library-alias`.
+  **SC2003 next (from `~/EDF/tmp/flipw/research-sc4002/sc2003.md` section 3):** step 3 V-D1 fold (`scripts/flip/notes/v-d1-checker.patch`,
   replace its text search by a new `AssignmentFact.logical`, bump `AST_FACTS_SCHEMA`) ; step 4 sink-driven parameter/callback flow
   (c04 j05 j06); step 5 element flows. c15 c16 j07 j08 stay failing (R's census).
 
@@ -201,7 +203,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: step 1 done (ADR 0716), next step 2** (see the SC2003 entry above),
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: steps 1-2 done (ADRs 0716, 0717), next step 3** (see the SC2003 entry above),
    then SC2001 last. Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
@@ -224,7 +226,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w2003a.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2003b.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
@@ -248,6 +250,9 @@ Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writ
 
 - Load-timing tests fail under a full verify and pass alone: `scripts/fuzz/exec.test.mjs` (deadlines), packages/cli
   `development-feedback.test.mjs` (1 s timeout), `invocation_flow_process` file-stamp tests. Rerun alone, never change limits.
+- Doc budget is at its limit (docs/ 1,140,000; fixture READMEs 484,000; open-work 82,000): every rule so far trimmed W's own
+  ADRs/READMEs to fit. Keep new text short; compress older W text (ADRs 0700-0717) rather than raise a budget.
+- `exec.test.mjs` deadlines fail under verify-delta's load about half the time; rerun alone, then rerun verify-delta.
 - `verify-delta` stops at the first failing check: run the ones after it by hand (usually only `wasm-compile`).
 - rustfmt reflows edited code: a later scripted edit that matches the old text silently fails; match by function name.
 - `scripts/flip/tsc.mjs` needs an `App` export; to type-check a fixture, copy its source to a temp dir and append one.
