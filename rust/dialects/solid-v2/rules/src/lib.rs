@@ -841,7 +841,7 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
     solid_reactive_ir::StaticDefectTerms {
         props_destructure_hint: "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use omit(props, ...keys) and merge(defaults, props) instead of destructuring.",
         reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
-        missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+        missing_effect_message: "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,

@@ -915,6 +915,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-denied-events-flush/node_modules/**
 !fixtures/reactive-ir/rc21-apply-owned-flush/node_modules/
 !fixtures/reactive-ir/rc21-apply-owned-flush/node_modules/**
+!fixtures/reactive-ir/rc21-effect-function-slots/node_modules/
+!fixtures/reactive-ir/rc21-effect-function-slots/node_modules/**
 !fixtures/reactive-ir/rc21-apply-unowned-flush/node_modules/
 !fixtures/reactive-ir/rc21-apply-unowned-flush/node_modules/**
 !fixtures/reactive-ir/rc21-installed-prototype/node_modules/

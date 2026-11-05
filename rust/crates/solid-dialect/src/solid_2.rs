@@ -1681,6 +1681,38 @@ impl Dialect for Solid2 {
     /// `createStore(value, options?)` puts options at 1 and the derived
     /// `createStore(fn, initial, options?)` at 2; only the derived form takes a
     /// compute, and the rule that asks this is about computes.
+    /// `@solidjs/signals@2.0.0-rc.21` `dist/dev.js`: `createEffect` throws
+    /// `MISSING_EFFECT_FN` on `undefined` and reads `effectFn.effect ||
+    /// effectFn`; `createRenderEffect` hands `effectFn` to `effect()` as is,
+    /// so a bundle or any non-callable fails at the first run
+    /// (`node._effectFn is not a function`); `createReaction` reads
+    /// `effectFn.error` and calls `effectFn.effect || effectFn` only inside
+    /// the tracker it returns.
+    fn effect_function_slot(&self, primitive: Primitive) -> Option<crate::EffectFunctionSlot> {
+        use crate::{EffectFunctionFailure, EffectFunctionSlot};
+        match primitive {
+            Primitive::CreateEffect => Some(EffectFunctionSlot {
+                index: 1,
+                accepts_bundle: true,
+                guards_undefined: true,
+                fails: EffectFunctionFailure::Creation,
+            }),
+            Primitive::CreateRenderEffect => Some(EffectFunctionSlot {
+                index: 1,
+                accepts_bundle: false,
+                guards_undefined: false,
+                fails: EffectFunctionFailure::Creation,
+            }),
+            Primitive::CreateReaction => Some(EffectFunctionSlot {
+                index: 0,
+                accepts_bundle: true,
+                guards_undefined: false,
+                fails: EffectFunctionFailure::ReturnedFunctionRun,
+            }),
+            _ => None,
+        }
+    }
+
     fn options_argument(&self, primitive: Primitive) -> Option<usize> {
         match primitive {
             Primitive::CreateMemo

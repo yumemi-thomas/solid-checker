@@ -3547,5 +3547,11 @@
   "found": "the flip plan's SC9013 row (scripts/flip/PLAN.md), measured with \"version\":\"nightly\"",
   "fixed": "ADR 0700",
   "outside": "the generator writes programs against one oracle install; it never writes a project's own node_modules/solid-js manifest. The process test an_unclassified_release_is_analyzed_with_a_named_blocker (fixture unclassified-release-nightly) holds it"
+ },
+ {
+  "finding": "missing-effect-function (SC7001) asked only createEffect: createRenderEffect(() => 1, undefined as any), (…, 3 as any), (…, { effect } as any) and createReaction(undefined as any) certified while Chrome threw (flip SC7001 witnesses f01, f02, f03; ADR 0701)",
+  "found": "the flip plan's SC7001 row (scripts/flip/PLAN.md), witnesses measured in Chrome",
+  "fixed": "ADR 0701",
+  "outside": "the grids judge SC7001 by the runtime code MISSING_EFFECT_FN, which only createEffect emits; createRenderEffect and createReaction fail with a plain TypeError (node._effectFn is not a function; reading 'error' of undefined in the tracker) and no code, so no generated program of theirs can be judged. scripts/flip/witnesses.json (f01-f03, check.mjs SC7001) and fixture rc21-effect-function-slots hold it"
  }
 ]

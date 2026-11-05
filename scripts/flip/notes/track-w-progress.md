@@ -11,18 +11,22 @@ SC2001.
   fixture `rust/crates/solid-facts-backend/tests/fixtures/unclassified-release-nightly`. No witnesses (0 of 0). The blocker string is
   defined in the backend (`dialect::SOLID_VERSION_UNCLASSIFIED`): `solid-reactive-ir`'s `blockers` module is private and `lib.rs` is R's.
 
-## In progress: SC7001 (ADR 0701), uncommitted in the tree
+- **SC7001** (ADR 0701): Dialect question `effect_function_slot` (`solid-dialect` `semantics.rs` `EffectFunctionSlot`,
+  `dialect.rs`, `solid_2.rs`); `effect_api.rs` `classify_effect_call` reads the slot; `static_api.rs` asks every primitive with a
+  slot. createRenderEffect: index 1, no bundle, no `undefined` guard: a proven non-callable (an object literal included) is a
+  violation. createReaction: index 0, fails only when its tracker runs: uncertain, blocker `effect-returned-function-run-unproven`.
+  Owner pass unchanged. Witnesses f01-f03 now hold (all: 101 of 311, only these moved). Coverage: dialect-solid-2's message, and
+  createReaction call-valued or `as`/`!` arguments in four identity fixtures became SC7001 uncertain; that is the same limit
+  `createEffect(count, makeApply(count))` already had (no Type Facts domain for a call result or an asserted value). Corpus: 0
+  moved (SC9013 + SC7001, sweep `~/EDF/tmp/flipw/sweep-w7001.json`). fuzz-patterns unchanged. Fuzzer: outside (the judge keys on
+  `MISSING_EFFECT_FN`, which only createEffect emits).
 
-Built, not yet committed: Dialect question `effect_function_slot` (`solid-dialect` `semantics.rs` `EffectFunctionSlot`,
-`dialect.rs`, `solid_2.rs`), `effect_api.rs` `classify_effect_call` reads the slot, `static_api.rs:96` asks every primitive with a
-slot. createRenderEffect: index 1, no bundle (an `{ effect }` literal is a violation), no `undefined` guard. createReaction: index 0,
-fails only when its tracker runs, so a proven non-callable is uncertain, blocker `effect-returned-function-run-unproven` (new
-`EffectFunctionUncertainty::ReturnedFunctionRun`). Owner pass unchanged (unguarded slots keep `Proven`). `check.mjs SC7001`: 4 of 4.
-Fixture `fixtures/reactive-ir/rc21-effect-function-slots` (type-checks against the real rc.21 package, `.gitignore` lines added).
-Chrome measured: render bundle throws `node._effectFn is not a function`; reaction bundle and render callable quiet.
-Left: rule page `docs/rules/missing-effect-function.md`, the message in `rules/src/lib.rs` (`missing_effect_message` names only
-createEffect), ADR 0701, rediscovery entry (outside: the judge keys on `MISSING_EFFECT_FN`, which only `createEffect` emits; the
-others fail with a TypeError), `make coverage` (static-api fixture may move), coverage-update, ownership-gate, verify.
+- **SC2004/5, SC3002, SC6001**: no flip needed (plan). check.mjs on the SC7001 build: 6 of 6, 9 of 9, 8 of 8. No commit.
+
+## Next
+
+SC7006, SC7005, SC7007, DOM dispatch list. A research agent prepared these:
+`~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)
 
@@ -31,10 +35,12 @@ others fail with a TypeError), `make coverage` (static-api fixture may move), co
   packages moved (163 in 73 files); the repos' own rc.3/rc.4/rc.6 metadata pins were left (kui's comment block, app-game's
   peer allowance, error-menu-web's compiler hold). Installs: rc.17 build's original commands, all 23 OK; all 34 projects resolve
   the exact rc.21 triple. Script `~/EDF/tmp/flipw/install-rc21.mjs`.
-- **Baseline sweep differs, corpus not in use**: flip-base build gives 16,237 (15,854 U, 383 V) against the other machine's
-  16,419 (16,036 U, 383 V). Violations match rule by rule; 182 uncertifiable short. Per-project table:
-  `~/EDF/tmp/flipw/sweep-base-per-project.md`, report `~/EDF/tmp/flipw/sweep-base.json`. Waiting on the owner (needs the other
-  machine's per-project report to explain).
+- **Baseline**: flip-base build gives 16,237 (15,854 U, 383 V) here; the other machine 16,419 (16,036 U). The gap is
+  jandibat-web 342 vs 509 (167) and app-game 5,172 vs 5,187 (15); the other 32 projects match exactly. Deterministic on rerun.
+  jandibat's installed tree, yarn.lock (patch records included) and Solid copy layout match its rc.17 install except the
+  expected rc.21 entries; seroval 1.7.0 is nested under `@solidjs/web` with 1.6.7 at the root, the one layout point a
+  machine could hoist differently. Not fully explained; the owner said to use this machine's sweep as the baseline and never
+  rebuild or edit the corpus again. Baseline report `~/EDF/tmp/flipw/sweep-base.json` (also the `--order-from`).
 - Base build for comparisons: worktree `~/EDF/tmp/flipw/base-wt` (895fbf806, own target), binaries `~/EDF/tmp/flipw/bins/base/`.
 
 ## Surprises
