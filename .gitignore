@@ -1037,9 +1037,15 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/**
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/**
+!fixtures/reactive-ir/rc21-setter-unplaced/node_modules/
+!fixtures/reactive-ir/rc21-setter-unplaced/node_modules/**
 !fixtures/reactive-ir/store-for-head-write/node_modules/
 !fixtures/reactive-ir/store-for-head-write/node_modules/**
 !fixtures/reactive-ir/store-standard-library-alias/node_modules/
 !fixtures/reactive-ir/store-standard-library-alias/node_modules/**
 !fixtures/reactive-ir/store-operation-may-not-write/node_modules/
 !fixtures/reactive-ir/store-operation-may-not-write/node_modules/**
+!fixtures/reactive-ir/store-parameter-flow/node_modules/
+!fixtures/reactive-ir/store-parameter-flow/node_modules/**
+!fixtures/reactive-ir/store-element-flow/node_modules/
+!fixtures/reactive-ir/store-element-flow/node_modules/**

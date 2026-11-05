@@ -168,8 +168,53 @@ SC2001.
   with a closed data-literal first source; sort/reverse/fill/copyWithin always U (no length fact). Witnesses SC2003 6/13, all 205.
   fuzz-patterns 765/372 (16 FIXED); lg-recall noop-*: old 540 FP, new 0; grids list now empty. Corpus 0 moved (`sweep-w2003c.json`).
   Fixture `store-operation-may-not-write`; ownership case `.../logical-assignment/001`. Probes `~/EDF/tmp/flipw/v-d1/cases`.
-  **SC2003 next:** step 4 sink-driven parameter/callback flow (c04 j05 j06, research section 2); step 5 element flows. c15 c16 j07
-  j08 stay failing (R's census).
+- **SC2003 step 4 of 5** (ADR 0719, 3f959a4d2): `shared_reactivity.rs` `push_parameter_store_flow` (called from
+  `push_unproven_container_write` when `handed_container` is false; each sink passes a `SinkWrite`): a plain parameter's callers
+  (`function_call_sites`; namespace members via `namespace_member_function`; a render only with a spread), a callback literal's
+  project callee's calls of its parameter (frame: the callee's params read the handing call's args), a non-project callee's
+  arguments/receiver (store there = open, step 5). V needs standing Dropped at the entering call, no link, every hop in place and
+  `SiteReach`-reached. Witnesses SC2003 9/13, all 208. Fixture `store-parameter-flow`; ownership case `parameter-flow/001`
+  (+ `positive/001` now expects U on `props.n`). fuzz-patterns 773/364 (8 FIXED). **Corpus +1,441 U** (`sweep-w2003d.json`,
+  binaries `bins/w2003d`; same under `--program-boundary closed`, `sweep-w2003*-closed.json`), 0 V moved; app-game math helpers,
+  methods, escaping namespaces, value uses. Reported to the owner as the open-function arm's cost.
+- **SC2003 step 5 of 5** (ADR 0720, 66b7f19f3): element flows. `ParameterFlow::value` takes `at: Span` (where the store is
+  judged: the handing call or the sink); `push_parameter_store_flow` runs `value` at the sink for a non-parameter root, and
+  `push_unproven_container_write`, `no_direct_mutation`, the mutator and std-lib sinks hand a call-rooted chain to it (a call
+  span resolves to its leading symbol through `source_reference_index`, so the old "rooted at a call" `continue` swallowed
+  `find(…)!.v` and `m().n`). Rows: `call_value` (std-lib by declaration: find/findLast/at element; filter/slice/toSorted/
+  toReversed/concat/Object.values/Array.from copies when linked; map/flatMap open unless fresh literal; identity function
+  `returned_parameter`; `memo_compute_return`; `For` accessor call under `keyed={false}`), `for_of_operand`, `for_row`. Element =
+  link = U `unproven-container-root`; V only for identity/memo of the root. Witnesses unchanged (SC2003 9/13, all 208).
+  fuzz-patterns 785/352 (12 FIXED, `outside`). Corpus +108 U (`sweep-w2003e2.json`, binaries `bins/w2003e`), 0 removed, 0 V
+  moved; step 4's 1,441 unchanged. Fixture `store-element-flow`; ownership case `element-flow/001`. Probes
+  `~/EDF/tmp/flipw/p2003e/{cases,mine}` (+ `mine-chrome.json`).
+  **SC2003 is complete on W**; c15 c16 j07 j08 wait for R's census.
+- **SC2001** (ADR 0721, b929b7d2b): `unreached_write` and `transported_writes`' no-row branch also `push_setter_write`
+  (alias_withheld, multiplicity 1) under `unreached_write_may_run` (now `pub(crate)`); `static_api.rs`'s exact-target and
+  unresolved-branded `refresh` arms take the same gate (role `Unknown`, multiplicity 1). The setter row keeps
+  `handed_write_execution`'s answer: a write directly in a module tag the body runs is V (5 probes + e10, all throw in Chrome).
+  u11 closed (research probes `u11-*`, `r-u11-*` all U or V). Witnesses SC2001 18/18, all 220 of 335 (only the 12 moved).
+  Fixture `rc21-setter-unplaced`; 4 snapshots +U (TDZ/eval negatives, destructured helper, listener reach, handler-only
+  `notARootBody`). Fuzzer `flw-getter-helper` (now both codes) + `flw-module-method`: old 468 false-clean, new 0; sampled whole
+  grid (11,250) valid, nothing. fuzz-patterns 788/349 (h02, e905, e907 FIXED). Corpus +28 U, 0 V moved (`sweep-w2001.json`,
+  binaries `bins/w2001`): 23 solidjs-patterns demo components handed by value to a markdown `components` object (writes in
+  their handlers/applies: the inner carrier's role is withheld by `alias_withheld`; a refinement could keep a role a carrier
+  inside the function proves), 4 navigation-popup returned-object methods, TypeGPU.tsx:30.
+
+**Track W's rule list is complete** (SC9013 ... SC2001).
+
+## What remains for the merge
+
+- Expected-failing W witnesses (PLAN.md "Two tracks"): SC2003 `c04 c15 c16 j05 j07 j08` (c04/j05 now pass via ADR 0719;
+  c15 c16 j07 j08 wait for R's census), SC2009 `a02 a03`. HOST rows marked `open` (co-read, h10, h11, h12) are R's.
+- `rules/src/lib.rs` (R's) blocker fields / wording: SC3001 `leaf-operation-identity-unproven` (`LeafOwnerOperation`), SC4001
+  `owner-varies-by-caller` (`OwnerRequirement`), SC2002 and SC2001 `function-run-unplaced` (write/action rows keep their
+  context and the "no compiler or semantic fact places where this code runs" wording). SC4002's evidence arm already landed there.
+- SC2003 step 3: the ADR 0491 module-store question (an unexported module `const` store allowed for V-D1 only); the facts
+  schema bump (89) merges with R's as one bump.
+- SC2003 step 4's 1,441 corpus obligations (open-function arm) are reported to the owner as a cost, unchanged since.
+- Union `rediscovery.json`, regenerate snapshots after reading, take the larger doc budgets.
+
 
 ## Owner notes (2026-11-05)
 
@@ -208,8 +253,8 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    `~/EDF/tmp/flipw/sc2009-transported.patch`, untested on witnesses. a04 needs the prop flow: a `props.<k>(…)` call in a
    component whose JSX call sites pass an async optimistic setter as `k` (look at `component_prop_invocations`,
    `tag_passes_prop`, `prop_source`). a02/a03 are the census's (R). Corpus: only 2 files use createOptimistic.
-   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). **SC2003 in progress: steps 1-3 done (ADRs 0716-0718), next step 4** (see the SC2003 entry above),
-   then SC2001 last. Old SC4001 notes kept for reference:
+   SC4002 done (ADR 0713). SC4001 done (ADR 0714). SC2002 done (ADR 0715). SC2003 done (ADRs 0716-0720).
+   SC2001 done (ADR 0721). **Track W's rules are done; next is the merge** (see "What remains for the merge"). Was: **Next: SC2001, the last rule** (`~/EDF/tmp/flipw/research-sc2001/sc2001.md`; R's u11 note above). Old SC4001 notes kept for reference:
    The clean half is already ADR 0534 (`unplaced_callback`); no clean edit. Step 2, the warn half, the measured false positive
    `k-module-dead-branch` (`if (Math.random() > 2) useS();` at module scope + an owned call in App: context 19 -> V, Chrome
    quiet). Found while reading (not built): a module-scope call's edge has `source: None`, and `owner_state.rs:~450` seeds its
@@ -231,7 +276,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w2003c.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w2003e2.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 
@@ -267,3 +312,17 @@ Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writ
   `recallLegalVariants`: run `node scripts/fuzz/focus.mjs --codes … --grids lg-recall --checker-bin <bin> --typefacts <bin>` (~11 min).
 - `node scripts/verify-delta.mjs --help` is not a help flag: it starts a full run against the last green commit.
 - `make coverage`'s stub check needs a new fixture staged (`git add`) first, or it reports the stub untracked.
+- `fuzz-patterns ARGS=--update` also rewrites two unrelated `why` strings (`types--e807`, `e911`: `entry.tsx` -> `App.tsx`, the
+  SC4001 step-1 harness change); restore them by hand so the diff is the rule's own.
+- `make coverage` prints only each moved snapshot's first changed line: run `make coverage-update` and read
+  `node ~/EDF/tmp/flipw/snapdiff.mjs` (every added/removed finding with its source line) before committing.
+- Corpus SC2003 rows by app and source text: `node ~/EDF/tmp/flipw/sc2003-moved.mjs <before> <after> /`. A reason tally needs a
+  temporary debug build (append a tag per open arm to `$SC2003_FLOW_DEBUG`; write each line with one `write_all`, or lines interleave).
+- `function_call_site_references` gives a namespace member call at the whole member (`m4.scaling`), while the compiler's reference is
+  the property: a closedness test must accept the property too.
+- A dead-branch write is V for the direct spelling (`if (Math.random() > 2) st.n = 5;`, base and every W build) though Chrome
+  is quiet; ADR 0720's identity form inherits it (`id(st).n`). Reported to the owner, not changed.
+- `make ir-read-lint`'s hashmap-iteration count is textual by name: `function.parameters.iter()` on one line matched a `HashMap`
+  named `parameters` elsewhere in the file; reuse a helper (`plain_parameter_at`) rather than add the scan.
+- A function declaration callee is never `exact` in `project_callee_at_parameter` when the sink is `id(st).n = 5`: the member
+  write rooted at the call counts as a write of the `id` binding (`binding_written`).

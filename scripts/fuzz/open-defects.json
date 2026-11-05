@@ -1370,24 +1370,6 @@
    "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e807-map-name-empty/App.tsx"
   },
   {
-   "id": "types/e905-custom-connected",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/e907-custom-attr",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
    "id": "types/e911-on-colon",
    "item": "T-other",
    "outcome": "no-run",
@@ -1454,15 +1436,6 @@
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/h02-tagged-write",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
   },
@@ -1665,128 +1638,11 @@
    "certified": true
   },
   {
-   "id": "values/d2-handler-link",
-   "item": "V-D2",
+   "id": "values/d3-curried-var",
+   "item": "V-D3",
    "outcome": "false-clean",
    "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2-handler-root",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2-identity-return",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-find-var-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-find-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-for-jsx-row-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-foreach-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-forof-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-map-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-memo-filter-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-memo-of-store-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-object-values-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-root-array-foreach",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d2n-root-array-forof",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
+    "STRICT_READ_UNTRACKED"
    ],
    "certified": true
   },
@@ -2070,24 +1926,6 @@
    "certified": true
   },
   {
-   "id": "values/t2-for-row-root-array",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t2-for-row-write",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/t3-bind-cast-arg",
    "item": "V-D3",
    "outcome": "false-clean",
@@ -2205,47 +2043,11 @@
    "certified": true
   },
   {
-   "id": "values/t6-context-store-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/t6-eager-hook-props",
    "item": "V-D2",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t6-for-row-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t6-hook-store-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t6-prop-store-helper",
-   "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
    ],
    "certified": true
   },

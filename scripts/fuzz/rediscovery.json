@@ -4024,6 +4024,19 @@
   ],
   "rediscovered": "the checker at dbc66107a on `focus.mjs --grids mx-recall` (flip-write.mjs context flw-getter-helper): 78 false-clean of the 78 that type-check (552 typed-away: binding variants the component declares, out of reach of the hoisted helper); the fix: 0 false-clean, 78 recall-gap. The full grid for the code (28,098 programs) needs no look"
  },
+  {
+  "finding": "SC2001: a setter or refresh call in a module-scope helper only an object getter calls, the getter read in a component body, had no row and certified; Chrome (rc.21) throws REACTIVE_WRITE_IN_OWNED_SCOPE (flip witnesses SC2001 d02-d04, e01-e03, e07-e11, e13, research probes u11-*; ADR 0721)",
+  "found": "flip plan SC2001 row, Track R's u11 probe, research probes",
+  "fixed": "ADR 0721",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-flw-getter-helper-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-flw-getter-helper-store-direct-none",
+   "mx-reactive-write-in-owned-scope-flw-getter-helper-refresh-direct-none"
+  ],
+  "rediscovered": "the checker at f14f1fbff on `focus.mjs --grids mx-recall` (flip-write.mjs contexts flw-getter-helper, flw-module-method): 468 false-clean (signal, store, refresh variants; 1,272 typed-away per context: binding variants the component declares); flw-module-method was withheld there by a remote reactive-dispatch-unresolved. The fix: 0 false-clean, 0 false-positive, 1,044 recall-gap; the sampled whole grid for the code (11,250 of 80,694, every stratum) is valid and needs no look. fuzz-patterns: types/h02-tagged-write (a write directly in a module tag: a printer form the generator lacks), types/e905-custom-connected, types/e907-custom-attr (custom element lifecycle methods, the flw-module-method arm) left open-defects.json at ADR 0721"
+ },
  {
   "finding": "SC2003: a store member as a `for … of`/`for … in` head target (`for (s.a of [2])`) was never asked (no_direct_mutation walked assignments only) and certified; Chrome (rc.21) warns STORE_WRITE_OUTSIDE_SETTER when the loop iterates (flip witnesses SC2003 c02, c03, j01, j02; ADR 0716)",
   "found": "flip plan SC2003 row; values/d6-for-of-target",
@@ -4066,6 +4079,16 @@
    "mx-store-write-outside-setter-pos-flush-fn-nested-assign-direct-none-m-dynamic",
    "mx-store-write-outside-setter-pos-flush-fn-nested-push-wrapper-none-m-dynamic"
   ],
-  "rediscovered": "same 607,719 ids before and after, on rm5: exactly these 72 moved, to agree, nothing else; the 12 went false-positive to wrong-rule on the counter alone, then all 72 to agree on the matrix line, and base gives the same rows. A judge artifact, so no old checker build fails: the old judge does, on any build"
+  "rediscovered": "same 607,719 ids before and after, on rm5: exactly these 72 moved, to agree, nothing else; the 12 went false-positive to wrong-rule on the counter alone, then all 72 to agree on the matrix line, and base gives the same rows. A judge artifact, so no old checker build fails: the old judge does, on any build",
+  "finding": "SC2003: a store handed to a project function's parameter (`bump(st)`, `w(s.o)`) or to a callback's parameter by a project higher-order function (`each = (f) => f(s.l)`) and written there certified: a write through a parameter asked nothing of its callers (flip witnesses SC2003 c04, j05, j06; ADR 0719)",
+  "found": "flip plan SC2003 row; fuzz-patterns values/d2-handler-link, d2-handler-root, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper",
+  "fixed": "ADR 0719",
+  "outside": "model.mjs names a function's parameters positionally (`p0`) and STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name, so no flip-write.mjs context can hand the store to a parameter the site writes through (a parameter named like the store needs model.mjs, outside this track's file). fuzz-patterns: values/d2-handler-link, d2-handler-root, d2n-foreach-write, d2n-map-write, d2n-root-array-foreach, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper left open-defects.json at ADR 0719; the witnesses and fixture store-parameter-flow pin the rest"
+ },
+ {
+  "finding": "SC2003: a store value reached the write through a call's result or a loop's element and certified: an identity function (`id(st).n = 5`), a `createMemo` compute, `find`, `for…of`, `filter`/`Object.values` copies, `For` rows (ADR 0720)",
+  "found": "fuzz-patterns values/d2-identity-return, d2n-find-var-write, d2n-find-write, d2n-for-jsx-row-write, d2n-forof-write, d2n-memo-filter-write, d2n-memo-of-store-write, d2n-object-values-write, d2n-root-array-forof, t2-for-row-root-array, t2-for-row-write, t6-for-row-helper",
+  "fixed": "ADR 0720",
+  "outside": "STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name (`st.x = …`), and a flip-write.mjs context places the site without respelling it, so no context can root the write at a call's result or a loop element. The 12 fuzz-patterns entries left open-defects.json at ADR 0720; fixture store-element-flow pins the rest"
  }
 ]

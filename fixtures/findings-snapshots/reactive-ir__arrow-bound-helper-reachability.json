@@ -184,11 +184,71 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalCaught.tsx",
+      "start": 208,
+      "end": 219,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalReassigned.tsx",
+      "start": 205,
+      "end": 216,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalReassignedComponent.tsx",
+      "start": 328,
+      "end": 339,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalReassignedComponent.tsx",
+      "start": 435,
+      "end": 446,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalRoot.tsx",
+      "start": 216,
+      "end": 227,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/ExportedComponentControl.tsx",
       "start": 258,
       "end": 269,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/ModuleSwitch.tsx",
+      "start": 463,
+      "end": 474,
       "fixes": 0
     },
     {
@@ -249,6 +309,16 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
       "start": 873,
       "end": 884,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 476,
+      "end": 487,
       "fixes": 0
     },
     {
@@ -357,6 +427,16 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 3274,
+      "end": 3285,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
       "start": 3568,
       "end": 3579,
       "fixes": 0
@@ -409,6 +489,46 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/VarSkipped.tsx",
       "start": 1033,
       "end": 1044,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Wrapped.tsx",
+      "start": 492,
+      "end": 503,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Wrapped.tsx",
+      "start": 594,
+      "end": 605,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Wrapped.tsx",
+      "start": 711,
+      "end": 722,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Wrapped.tsx",
+      "start": 835,
+      "end": 846,
       "fixes": 0
     }
   ]

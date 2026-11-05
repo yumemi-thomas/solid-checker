@@ -312,6 +312,10 @@ only dead code calls: ADR 0578) is uncertifiable (ADR 0458,
 `fixtures/reactive-ir/dead-code-sites`). So is a write in a lazy memo
 (`createMemo(fn, { lazy: true })`) no proven read of its accessor computes
 (ADR 0576, `fixtures/reactive-ir/lazy-memo-unread`).
+So is a write or `refresh` in a function no call edge reaches but that may
+run (a method, constructor, instance field, getter, `toString`, iterator, `Map`
+slot, or a helper one of those calls; ADR 0721); directly in a tag the body
+runs it is a violation. Module initialization is silent.
 So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,

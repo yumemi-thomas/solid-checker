@@ -49,6 +49,20 @@ symbol:
 `holder.state.v = 1` is reported like `state.v = 1`, and a write inside the
 store's own setter called as `holder.setState(…)` is exempt.
 
+**Through a parameter (ADR 0719).** A write through a plain parameter
+(`const bump = (o) => { o.n = 5; }`) asks its callers, or, for a callback
+literal handed to a project function, that function's calls of it. A proven
+store from a call outside every setter window, every hop in place, is a
+violation; a link, a nested closure, callers not all enumerated or an
+unresolved callee is uncertifiable (`unproven-container-root`); plain values
+and a setter's draft are silent.
+
+**Through a call or a loop (ADR 0720).** An identity function (`id(store).n =
+1`) or a `createMemo(() => store)` accessor returns the store: a violation. An
+element (`find`, `at`, `for…of`, a `For` row, an element of a `filter`,
+`slice` or `Object.values` copy, a `map` whose callback is not a fresh
+literal) is a link: uncertifiable. A copy written itself is a plain array.
+
 **Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
 violation: `createStore` wraps its initial value whatever it is

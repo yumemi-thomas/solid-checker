@@ -99,8 +99,9 @@ const MIXED_OWNERS = {
 };
 
 /**
- * ADR 0715, SC2002: the site in a module-scope helper only an object getter calls, the getter read in the component body: no call edge reaches the
- * helper, and the body's owner runs it (Chrome, rc.21: ACTION_CALLED_IN_OWNED_SCOPE). The build before certified it.
+ * ADRs 0715 (SC2002), 0721 (SC2001): the site in a module-scope helper only an object getter calls, the getter read in the component body, or
+ * in a module object's method: no call edge reaches it, and the body's owner runs it (Chrome, rc.21: ACTION_CALLED_IN_OWNED_SCOPE,
+ * REACTIVE_WRITE_IN_OWNED_SCOPE). The build before certified both.
  */
 const UNREACHED_WRITES = {
   "flw-getter-helper": (stmts, kit) => {
@@ -114,10 +115,18 @@ const UNREACHED_WRITES = {
       view: [],
     };
   },
+  // ADR 0721: the site directly in a method of a module-scope object the component body calls (raw text: the validator refuses a
+  // component reference to a hoisted name).
+  "flw-module-method": (stmts, kit) => {
+    const o = kit.name("methodHost");
+    return { hoisted: [decl(o, obj([["go", fn(stmts, { form: "method" })]]))], body: [expr(domExpr(`${o}.go()`))], view: [] };
+  },
 };
 
 export const FLIP_WRITE_CONTEXTS = {
   ACTION_CALLED_IN_OWNED_SCOPE: Object.keys(UNREACHED_WRITES),
+  // ADR 0721: the same layers for a setter or refresh (SC2001).
+  REACTIVE_WRITE_IN_OWNED_SCOPE: Object.keys(UNREACHED_WRITES),
   NO_OWNER_CLEANUP: Object.keys(MIXED_OWNERS),
   NO_OWNER_EFFECT: Object.keys(MIXED_OWNERS),
   CONTEXT_NOT_FOUND: Object.keys(OPEN_CONTEXTS),

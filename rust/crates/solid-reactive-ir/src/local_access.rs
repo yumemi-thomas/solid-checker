@@ -2417,12 +2417,13 @@ impl LocalAccessContext<'_, '_> {
             .get(self.lookup.callee_symbol(file, call.callee)?)
     }
 
-    /// The write half of "no row is not never runs" (ADR 0715): no call edge
-    /// reaches the function holding the call, yet it may run (a getter,
-    /// `toString`, an iterator, a tag, a slot, a method, a constructor), so an
-    /// action call there is uncertain, never certified. Module initialization
-    /// (outside every function, a static field or block) has no owner and is
-    /// silent; a non-static field initializer runs at `new` and asks.
+    /// The write half of "no row is not never runs" (ADRs 0715, 0721): no
+    /// call edge reaches the function holding the call, yet it may run (a
+    /// getter, `toString`, an iterator, a tag, a slot, a method, a
+    /// constructor), so a setter or action call there is uncertain, never
+    /// certified. Module initialization (outside every function, a static
+    /// field or block) has no owner and is silent; a non-static field
+    /// initializer runs at `new` and asks.
     fn unreached_write(
         &self,
         file: &solid_facts::FileFacts,
@@ -2430,12 +2431,13 @@ impl LocalAccessContext<'_, '_> {
         symbol: &str,
         result: &mut LocalAccessResult,
     ) {
-        if !self.actions.contains_key(symbol)
+        if !(self.setters.contains_key(symbol) || self.actions.contains_key(symbol))
             || !unreached_write_may_run(file, call.span, self.lookup)
         {
             return;
         }
         let allowed = allowed_callback_spans(file, self.lookup);
+        self.push_setter_write(file, call, symbol, &allowed, true, 1, result);
         self.push_action_invocation(file, call, symbol, &allowed, true, 1, result);
     }
 
@@ -4477,10 +4479,20 @@ impl LocalAccessContext<'_, '_> {
                 ));
             }
             let Some(multiplicity) = self.reachable_calls.get(callee).copied() else {
-                // ADR 0715: an action a hook or context carries, called where
-                // no edge reaches, as [`Self::unreached_write`].
+                // ADRs 0715, 0721: a setter or action a hook or context
+                // carries, called where no edge reaches, as
+                // [`Self::unreached_write`].
                 if unreached_write_may_run(file, call.span, self.lookup) {
                     let allowed = allowed_callback_spans(file, self.lookup);
+                    self.push_setter_write(
+                        file,
+                        call,
+                        symbol.as_str(),
+                        &allowed,
+                        true,
+                        1,
+                        &mut result,
+                    );
                     self.push_action_invocation(
                         file,
                         call,
@@ -9184,11 +9196,11 @@ pub(crate) fn read_as_part_of_longer_path(
     })
 }
 
-/// ADR 0715: whether a setter or action call no reachable row places may run:
-/// written in a function, or in a non-static field initializer (it runs at
-/// `new`), and not proven unreached (ADR 0458). Outside both it is module
-/// initialization: no owner, proven silent.
-fn unreached_write_may_run(
+/// ADRs 0715, 0721: whether a setter, action or refresh call no reachable
+/// row places may run: written in a function, or in a non-static field
+/// initializer (it runs at `new`), and not proven unreached (ADR 0458).
+/// Outside both it is module initialization: no owner, proven silent.
+pub(crate) fn unreached_write_may_run(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,

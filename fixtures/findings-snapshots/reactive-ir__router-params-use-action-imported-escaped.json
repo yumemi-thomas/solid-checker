@@ -30,6 +30,16 @@
       "start": 305,
       "end": 320,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-escaped/register.ts",
+      "start": 269,
+      "end": 283,
+      "fixes": 0
     }
   ]
 }

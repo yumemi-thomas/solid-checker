@@ -2,13 +2,13 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-listener-reach/App.tsx",
-      "start": 119,
-      "end": 126,
+      "start": 110,
+      "end": 131,
       "fixes": 0
     },
     {

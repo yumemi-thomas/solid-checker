@@ -782,6 +782,13 @@ impl StaticApiContext<'_> {
                         .reachable_calls
                         .get(&location(file.path.shared(), call.callee))
                         .copied()
+                        // ADR 0721: no edge reaches the call, yet it may run.
+                        .or_else(|| {
+                            crate::local_access::unreached_write_may_run(
+                                file, call.span, self.lookup,
+                            )
+                            .then_some(1)
+                        })
                 {
                     let role = crate::local_access::handed_write_execution(
                         file,
@@ -877,7 +884,12 @@ impl StaticApiContext<'_> {
                 ));
             }
             let callee = location(file.path.shared(), call.callee);
-            let Some(multiplicity) = self.reachable_calls.get(&callee).copied() else {
+            let reached = self.reachable_calls.get(&callee).copied();
+            // ADR 0721: no edge reaches the call, yet it may run (a method, a
+            // getter, a tag): one write whose place nothing proves.
+            let unreached = reached.is_none()
+                && crate::local_access::unreached_write_may_run(file, call.span, self.lookup);
+            let Some(multiplicity) = reached.or(unreached.then_some(1)) else {
                 continue;
             };
             let Some((name, declaration)) = self.accessors.get(symbol) else {
@@ -904,15 +916,10 @@ impl StaticApiContext<'_> {
                 declaration: declaration.clone(),
                 // `refresh`'s guard has no root exemption on any release
                 // (probed rc.0-rc.9, dev).
-                execution: crate::local_access::handed_write_execution(
-                    file,
-                    call.callee,
-                    &allowed,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                    RootBodyGuard::RejectsOutsideDisposal,
-                    semantic_write_execution_role(
+                execution: if unreached {
+                    crate::ExecutionRole::Unknown
+                } else {
+                    crate::local_access::handed_write_execution(
                         file,
                         call.callee,
                         &allowed,
@@ -920,8 +927,17 @@ impl StaticApiContext<'_> {
                         self.symbol_names,
                         self.lookup,
                         RootBodyGuard::RejectsOutsideDisposal,
-                    ),
-                ),
+                        semantic_write_execution_role(
+                            file,
+                            call.callee,
+                            &allowed,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                            RootBodyGuard::RejectsOutsideDisposal,
+                        ),
+                    )
+                },
                 owned_write: self
                     .source_owned_write
                     .get(symbol)
