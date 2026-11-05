@@ -104,6 +104,15 @@ SC2001.
   11 fixture snapshots gain obligations (handlers held by value, named applies, static initializers). Corpus +271 U
   (`sweep-w6002c.json`), mostly exported hooks.
 
+- **SC3001** (ADR 0711): `cleanup.rs` `primitive_identity_proven`: a leaf operation is a violation only if the callee is a
+  named import whose imported name the dialect maps to the attributed primitive, or a namespace member of a dialect-owned
+  module; else uncertain (lexical) or possible (helper). The two corpus `createOwner` violations (solid-three `storePath`,
+  inferay `recordUiTimings`) appear only with `--runtime-target browser` (the producer puts `createOwner`'s symbol there; not
+  reproduced in small programs, producer is R's). Now uncertifiable; violations 383 -> 381 (`sweep-w3001.json`). Fixture move:
+  engine/eslint-reactivity-v2 `leaf-reexport-cleanup` (renamed barrel re-export) violation -> uncertain. **Owner / merge:** the
+  named blocker `leaf-operation-identity-unproven` needs a field on `LeafOwnerOperation` (lib.rs, R's) and its wording
+  (rules lib.rs); today it reuses the uncertain/possible wording. Witnesses 13 of 13 keep.
+
 ## Owner notes (2026-11-05)
 
 - From Track R's research: a setter in a helper reached only from a getter, `toString`, tag, iterator, field or `Map` slot is a
@@ -132,7 +141,7 @@ SC2001.
 Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs_unplaced_through_callers` in
 `static_api.rs` is the helper-aware form of `unplaced_run`, reuse it for SC2008/SC6002):
 2. SC2006, SC2008, SC6002 done (ADRs 0708-0710). SC6001 needs no flip (plan).
-3. **SC3001** (trace `Primitive::CreateOwner` at solid-three `core/index.tsx:118`, inferay `PerformanceRecorder:199`).
+3. SC3001 done (ADR 0711).
 4. **SC2009**, then **SC4002** (`~/EDF/tmp/flipw/research-sc4002/sc4002.md`), **SC4001** (`.../sc4001.md`: fix the run.mjs /
    patterns.mjs import-before-subscribe artifact first; the edit is the measured dead-branch false positive at
    `owner_context.rs:242`), **SC2002** then **SC2003** (`.../sc2003.md`, 5 commits) then **SC2001** last
@@ -140,7 +149,7 @@ Order left, per PLAN.md "Track W" and the research (SC2006 done, ADR 0708; `runs
    u11 closes there).
 Per rule: `node scripts/flip/check.mjs <code>`, fixture both directions, `make coverage` (read) / `coverage-update`,
 `make ownership-gate`, `check.mjs all` diff, corpus sweep against `~/EDF/tmp/flipw/sweep-merge.json` (post-merge baseline;
-latest `sweep-w6002c.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
+latest `sweep-w3001.json`), `make fuzz-patterns`, `make verify-delta BASE=HEAD`, and by hand
 `cargo +1.99.1 test -p solid-facts-backend --test diagnostics_process` after any server or backend-visible change.
 Push after every 2-3 rules: `git push origin claude/flip-writes:claude/flip-writes` (upstream is now origin/claude/flip-writes).
 

@@ -3744,5 +3744,11 @@
   "found": "flip plan's SC6002 row; census h11 (section-4 census:h)",
   "fixed": "ADR 0710",
   "outside": "the mx-recall harness program is withheld on the old build by a remote obligation, so flip-write.mjs flw-apply-slot-module (PRIMITIVE_IN_EFFECT_CALLBACK) cannot fail that build; the fix claims the site on 702 of 756 judged programs. fuzz-patterns: census/h11-custom-element-connected left open-defects.json at ADR 0710"
+ },
+ {
+  "finding": "SC3001 named a createOwner no source holds at two corpus sites (solid-three storePath, an export rc.21 solid-js lacks; inferay recordUiTimings, imports from a missing build directory): the producer's symbol at the callee was taken as the primitive's identity (ADR 0711)",
+  "found": "flip plan's SC3001 row (corpus, rc.21, --runtime-target browser)",
+  "fixed": "ADR 0711",
+  "outside": "the generator imports every primitive by its own name from solid-js and never writes a missing export or module, and the producer misattribution was not reproduced outside those two projects; the corpus sweep shows both sites uncertifiable"
  }
 ]
