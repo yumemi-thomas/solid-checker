@@ -96,7 +96,8 @@ impl ExecutionPaths {
 
 /// Whether any file reaches a client root: `render` or `hydrate`, from Solid or
 /// a testing library. By imported name on purpose: this keeps findings, so it
-/// over-approximates, and only its absence proves anything.
+/// over-approximates, and only its absence proves anything. An import no
+/// value reference uses roots nothing.
 pub(crate) fn client_root_present(
     facts: &solid_facts::ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
@@ -107,6 +108,7 @@ pub(crate) fn client_root_present(
             !import.type_only
                 && import.bindings.iter().any(|binding| {
                     !binding.type_only
+                        && binding.runtime_referenced
                         && (binding
                             .imported
                             .as_deref()

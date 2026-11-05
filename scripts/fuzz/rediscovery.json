@@ -3646,5 +3646,17 @@
    "mx-caught-reactive-read-memo-hook-call-direct-none"
   ],
   "rediscovered": "e8b8c7ce7: 12 false cleans of get-literal; ADR 0658: 0"
+ },
+ {
+  "finding": "A client rule's violation on a server-only program: `SC5001:v` on the fuzzer's own legal template `l-settled-first`, unseen because `judgeSsr` read only SC7005 (audit D2, ADR 0659)",
+  "found": "the SSR and hydration audit",
+  "fixed": "ADR 0659, and judgeSsr",
+  "outside": "the SSR host is its own run, not a grid: `node scripts/fuzz/ssr.mjs` on 91eeaa1c3 fails ssr-l-settled-first-* and ssr-m-body-after-read-*, and on ADR 0659 passes 22 of 22"
+ },
+ {
+  "finding": "Code in a server-only arm analysed as live, and client rules hidden under node selection (audit D1, D13, ADR 0659)",
+  "found": "the SSR and hydration audit",
+  "fixed": "ADR 0659",
+  "outside": "the grids run one client host and need a two-host judge: scripts/flip/host-witnesses.json holds them on the measured hosts, `check.mjs HOST` 1 of 24 before, 20 after, the rest marked `open` for their rule; fixture rc21-server-arms each branch"
  }
 ]

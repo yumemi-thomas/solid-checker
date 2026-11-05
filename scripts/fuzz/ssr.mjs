@@ -186,6 +186,9 @@ export const SERVER_ENTRY = `import { renderToStream } from "@solidjs/web";\nimp
 /** The checker's arguments: a streaming-SSR project on Node, development build (the runtime the host renders with). */
 export const SSR_CHECKER_ARGS = ["--format", "json", "--runtime-target", "node", "--runtime-build", "development", "--rendering", "streaming-ssr"];
 
+/** The rules that claim the client runtime (the rules catalog's `claims_client_runtime`): each is silent on a server-only program. */
+export const CLIENT_RULES = ["SC1001", "SC2001", "SC2002", "SC2003", "SC2008", "SC5001", "SC6002"];
+
 /**
  * The head's answer against the checker's at the declaration's line. `runtime`: `{ applied }` or `{ failure }`; `findings`: the
  * parsed App.tsx findings (checker.mjs), or null when the checker failed; `typecheck`: `{ ok }`.
@@ -194,6 +197,9 @@ export function judgeSsr(program, { runtime, findings, typecheck: checked }) {
   if (checked && !checked.ok) return { outcome: "typed-away", detail: { error: checked.errors?.[0] ?? null } };
   if (!runtime || runtime.failure) return { outcome: "harness", detail: { why: runtime?.failure ?? "no record" } };
   if (!findings) return { outcome: "harness", detail: { why: "the checker failed" } };
+  // ADR 0659: the server build has no strict window and no write guard, so a client rule's violation on a server-only program is false.
+  const clientClaims = findings.filter((finding) => finding.kind === "violation" && CLIENT_RULES.includes(finding.id));
+  if (clientClaims.length) return { outcome: "false-positive", detail: { clientClaims: clientClaims.map((finding) => `${finding.id}@${finding.line}`) } };
   const observed = runtime.applied ? "applied" : "dropped";
   const atSite = findings.filter((finding) => finding.id === "SC7005" && finding.line <= program.site && program.site <= finding.endLine);
   const verdict = atSite.some((finding) => finding.kind === "violation") ? "violation" : atSite.length ? "uncertifiable" : "none";
