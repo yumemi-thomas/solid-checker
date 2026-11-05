@@ -930,6 +930,31 @@ fn expected_function_got_expression(
                     continue;
                 }
             }
+            // ADR 0653: a member of a value a caller, a hook or a container
+            // handed over may be a store's, so "installed once" may freeze it.
+            if let Some(member) = file.ast.member_at(expression) {
+                let object = file.ast.peel_ts_sugar_span(member.object);
+                if file.ast.call_at(object).is_some()
+                    || crate::local_access::handed_value(
+                        &handed_tables(context),
+                        file,
+                        object,
+                        crate::local_access::HANDED_DEPTH,
+                    )
+                {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveHandlerRead {
+                            attribute: name.to_owned(),
+                            expression: text(file, expression).to_owned(),
+                        },
+                        location: location(file.path.shared(), expression),
+                        analysis_context: crate::blockers::HANDLER_ROOT_UNPROVEN.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                    continue;
+                }
+            }
             // The call-result arm was removed on 2026-08-17 under AGENTS.md's
             // absolute rule. It fired for a handler expression that is itself a
             // call, on either of two triggers, and neither survives:
@@ -1231,6 +1256,21 @@ fn open_position(file: &FileFacts, span: Span) -> Option<&'static str> {
         })
 }
 
+fn handed_tables<'a, 'l>(
+    context: &'a UpstreamCompatContext<'l>,
+) -> crate::local_access::HandedTables<'a, 'l> {
+    crate::local_access::HandedTables {
+        lookup: context.lookup,
+        entities: context.entities,
+        prop_sources: context.prop_sources,
+        source_kinds: context.source_kinds,
+        accessors: context.accessors,
+        setters: context.setters,
+        actions: context.actions,
+        props_reactivity: context.props_reactivity,
+    }
+}
+
 /// ADR 0652: a coerced value no accessor proof reaches: `Callable` beside a
 /// string or in a template, from a caller or a parameter. Uncertain only: a
 /// plain function of the same shape is not this rule's. A shorthand property
@@ -1241,16 +1281,7 @@ fn handed_values_coerced(
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
-    let tables = crate::local_access::HandedTables {
-        lookup: context.lookup,
-        entities: context.entities,
-        prop_sources: context.prop_sources,
-        source_kinds: context.source_kinds,
-        accessors: context.accessors,
-        setters: context.setters,
-        actions: context.actions,
-        props_reactivity: context.props_reactivity,
-    };
+    let tables = handed_tables(context);
     for property in &file.ast.object_properties {
         let Some(binding) = property.shorthand_binding else {
             continue;

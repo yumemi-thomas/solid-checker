@@ -1612,3 +1612,7 @@ The flip's first rule. `LOADING_ON_ACCESSOR` fires on what `on` evaluates to, so
 <a id="adr-0652"></a>
 ## ADR 0652 — SC1005's coerced positions without a proof
 The rule needed a proven accessor and exempted every argument, so `String(c)`, `JSON.stringify({ c })`, `{...{ "data-c": c }}`, `title={c as any}`, an erased `==` and a hook's or prop's accessor in a template certified. Each is now uncertifiable, `accessor-value-coerced`. A parameter the compiler proves value-only cannot call the argument, unless the call keeps the value (`Object.assign`, `Object.defineProperty`, by declaration). A shorthand property carries the property's symbol, so its binding names the accessor. The `!x` guard needs a value domain with no undefined, since callability skips a nullish constituent. On the warning side, a member write on the accessor refuses the proof. These operands demand callability without a type descriptor: a descriptor is evidence other consumers read, and asking one moved an unrelated SC9012 (ViewerToolbar). Owners: `upstream_compat/shared_reactivity.rs`, `demand_plan.rs`.
+
+<a id="adr-0653"></a>
+## ADR 0653 — SC1007 opens a handler member with no proven root
+`member_symbol` needs a source at the root, so `onClick={s.f}` with `s` from a hook and `onClick={mp.get("s")!.f}` fell through, certified, while Chrome warned `STRICT_READ_UNTRACKED`. A member whose object is a call or a `handed_value` is uncertifiable, `handler-root-unproven`. A plain object's member stays silent. Owner: `upstream_compat/shared_reactivity.rs`.

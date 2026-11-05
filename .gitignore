@@ -979,3 +979,5 @@ packages/wasm/owned/
 !scripts/fuzz/patterns/**/node_modules/**
 !fixtures/reactive-ir/rc21-content-competition/node_modules/
 !fixtures/reactive-ir/rc21-content-competition/node_modules/**
+!fixtures/reactive-ir/reactive-handler-frozen-roots/node_modules/
+!fixtures/reactive-ir/reactive-handler-frozen-roots/node_modules/**

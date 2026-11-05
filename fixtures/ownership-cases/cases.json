@@ -3039,6 +3039,56 @@
     "absent": []
    },
    "note": "Kept divergence (ADR 0652): eslint-plugin-solid 0.14.5 exempts every call argument. In rc.21 a standard-library parameter the compiler proves value-only cannot call the accessor, and `String(c)` renders its source, so the argument is an uncertifiable, blocker accessor-value-coerced."
+  },
+  {
+   "id": "reactive-handler-frozen/solid-v2/handed-root/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "const plain = { f: () => {} };\nconst useHandlers = () => plain;\nexport const App = () => { const fromHook = useHandlers(); return <button onClick={fromHook.f} />; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "fromHook.f"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "fromHook.f"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0653): eslint-plugin-solid 0.14.5 reads only a tracked root. A member of a value a hook returned may be a store member in rc.21, where Chrome warns STRICT_READ_UNTRACKED and the handler freezes, so with no proven root it is an uncertifiable, blocker handler-root-unproven."
   }
  ]
 }
