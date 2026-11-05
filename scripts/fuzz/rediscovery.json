@@ -3553,5 +3553,22 @@
   "found": "the flip plan's SC7001 row (scripts/flip/PLAN.md), witnesses measured in Chrome",
   "fixed": "ADR 0701",
   "outside": "the grids judge SC7001 by the runtime code MISSING_EFFECT_FN, which only createEffect emits; createRenderEffect and createReaction fail with a plain TypeError (node._effectFn is not a function; reading 'error' of undefined in the tracker) and no code, so no generated program of theirs can be judged. scripts/flip/witnesses.json (f01-f03, check.mjs SC7001) and fixture rc21-effect-function-slots hold it"
+ },
+ {
+  "finding": "http-response-after-flush (SC7005) certified a header or status declared in a helper or object method the boundary's content calls, in a compute in that content, or in content a wrapper renders through props.children below its own <Loading>: the role gate dropped Unknown and the dominance miss was a continue (flip SC7005, ADR 0703)",
+  "found": "the flip plan's SC7005 row (scripts/flip/PLAN.md), witnesses on the SSR host",
+  "fixed": "ADR 0703",
+  "outside": "the SSR host (ssr.mjs) is its own run, not a grid: its programs rediscover it (ssrIds, pinned by ssr.test.mjs)",
+  "ssrIds": [
+   "ssr-m-helper-header",
+   "ssr-m-helper-status",
+   "ssr-m-method-header",
+   "ssr-m-method-status",
+   "ssr-m-memo-header",
+   "ssr-m-memo-status",
+   "ssr-m-wrapper-header",
+   "ssr-m-wrapper-status"
+  ],
+  "rediscovered": "locally: the build before ADR 0703 gives all 8 false-clean, the fix agree (ssr run 2026-11-05: 18 agree, 0 false clean, 12 uncertifiable)"
  }
 ]

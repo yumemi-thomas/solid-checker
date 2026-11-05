@@ -162,6 +162,56 @@ export default function App() {
   const v = createMemo(async () => await wait(), { deferStream: true });
   return <main><Loading fallback={<p>loading</p>}><Inner v={v} /></Loading></main>;
 }` },
+  // ADR 0703 (flip SC7005): the declaration reached through a helper, an object method, a compute, or a wrapper's
+  // `props.children` below its `<Loading>`. The rule once dropped each as an unplaced role or an undominated function.
+  { id: "m-helper", kind: "misuse", design: "dropped", text: `
+${LATE}
+function h() { $CALL; }
+function Inner() {
+  const v = createMemo(async () => await wait());
+  const n = v();
+  h();
+  return <b>{n}</b>;
+}
+export default function App() {
+  return <main><Loading fallback={<p>loading</p>}><Inner /></Loading></main>;
+}` },
+  { id: "m-method", kind: "misuse", design: "dropped", text: `
+${LATE}
+const o = { h() { $CALL; } };
+function Inner() {
+  const v = createMemo(async () => await wait());
+  const n = v();
+  o.h();
+  return <b>{n}</b>;
+}
+export default function App() {
+  return <main><Loading fallback={<p>loading</p>}><Inner /></Loading></main>;
+}` },
+  { id: "m-memo", kind: "misuse", design: "dropped", text: `
+${LATE}
+function Inner() {
+  const v = createMemo(async () => await wait());
+  const m = createMemo(() => { const n = v(); $CALL; return n; });
+  return <b>{m()}</b>;
+}
+export default function App() {
+  return <main><Loading fallback={<p>loading</p>}><Inner /></Loading></main>;
+}` },
+  { id: "m-wrapper", kind: "misuse", design: "dropped", text: `
+${LATE}
+function Inner() {
+  const v = createMemo(async () => await wait());
+  const n = v();
+  $CALL;
+  return <b>{n}</b>;
+}
+function W(props: { children: any }) {
+  return <Loading fallback={<p>loading</p>}>{props.children}</Loading>;
+}
+export default function App() {
+  return <main><W><Inner /></W></main>;
+}` },
 ];
 
 /** Every program: each template with each declaration. `site` is the declaration's 1-based line in App.tsx. */

@@ -2,7 +2,8 @@
 // its retraction on `!response.committed` (@solidjs/web@2.0.0-rc.0
 // dist/server.js — code-read), and the head commits at the shell flush. A
 // call by content below a Loading boundary is a committed no-op whenever the
-// boundary settles post-flush; fallbacks are shell content and stay silent.
+// boundary settles post-flush. Shell and fallback calls are obligations until
+// a shell-root proof exists (ADR 0703).
 import { Loading, createMemo } from "solid-js";
 import { httpHeader, httpStatus, renderToStream } from "@solidjs/web";
 
@@ -16,7 +17,7 @@ export function ProductDetails() {
   return <div>{product().name}</div>;
 }
 
-// Shell content: rendered outside every Loading boundary — silent.
+// Shell content: rendered outside every Loading boundary — an obligation until a shell-root proof exists (ADR 0703).
 export function ShellStatus() {
   httpStatus(404);
   httpHeader("cache-control", "no-store");
@@ -24,7 +25,7 @@ export function ShellStatus() {
 }
 
 // Fallback position: the fallback flushes with the shell, so its write
-// applies (and retracts pre-flush if the boundary settles early) — silent.
+// applies (and retracts pre-flush if the boundary settles early) — an obligation until a shell-root proof exists (ADR 0703).
 export function FallbackNote() {
   httpHeader("x-fallback", "1");
   return <div>loading…</div>;

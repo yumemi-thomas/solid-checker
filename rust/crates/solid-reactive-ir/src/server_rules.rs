@@ -98,10 +98,13 @@ fn http_response_in_file<'a>(
         if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly {
             continue;
         }
-        // Render-time scopes only. An event handler or deferred callback
-        // is a client-time (or post-render) call and is a no-op for a
-        // different reason than the post-flush drop; unknown scopes stay
-        // silent.
+        // ADR 0703: only a role proven to run outside the response's render
+        // is skipped. An event handler, deferred callback, effect or
+        // directive apply is a client-time (or post-render) call, a no-op
+        // for a different reason than the post-flush drop; code the
+        // compiler discarded never runs; a module-scope call runs at import,
+        // in no request. Every other role, `Unknown` and `Unreported`
+        // included, may run in a boundary's content and goes on.
         let allowed = allowed.get_or_insert_with(|| {
             crate::execution_role::allowed_callback_spans(file, ctx.semantic_lookup)
         });
@@ -113,9 +116,14 @@ fn http_response_in_file<'a>(
             ctx.symbol_names,
             ctx.semantic_lookup,
         );
-        if !matches!(
+        if matches!(
             role,
-            ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
+            ExecutionRole::EventCallback
+                | ExecutionRole::DeferredCallback
+                | ExecutionRole::EffectApply
+                | ExecutionRole::DirectiveApply
+                | ExecutionRole::DiscardedRendering
+                | ExecutionRole::ModuleInitialization
         ) {
             continue;
         }
@@ -130,9 +138,6 @@ fn http_response_in_file<'a>(
                         .contains(&(file.path.as_str(), function.span))
                 },
             );
-        if !dominated {
-            continue;
-        }
         // Both spellings come from the dialect rather than from this
         // module. `static_api.rs` already asks `boundary_name` for the
         // same boundary two rules away; this one had `<Loading>` written
@@ -144,6 +149,33 @@ fn http_response_in_file<'a>(
             continue;
         };
         let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
+        let what = if kind == Primitive::HttpStatus {
+            "status"
+        } else {
+            "header"
+        };
+        // ADR 0703: a call no boundary is proven to dominate is not proven
+        // shell content either: a call edge, a method, a compute or a
+        // wrapper's `props.children` may place it below a boundary (the SSR
+        // host drops each). Silence would certify the head; it is an
+        // obligation with the position as its blocker.
+        if !dominated {
+            violations.push(StaticViolation {
+                id: "SC7005".into(),
+                rule: "http-response-after-flush".into(),
+                message: format!(
+                    "{name}() is called where no proof places it in shell content above every <{boundary}> boundary; under streaming SSR the response head commits at the shell flush, so if this call runs in a boundary's content after that flush, the {what} is silently dropped"
+                ),
+                hint: format!(
+                    "Decide the response head in the component the render entry renders, outside every <{boundary}> boundary and not in a helper, method, compute or child the boundary may wrap, or mark the async source this {name}() depends on with deferStream: true."
+                ),
+                location: location(file.path.shared(), call.callee),
+                analysis_context: crate::blockers::RESPONSE_HEAD_POSITION_UNPROVEN.into(),
+                fixes: vec![],
+                uncertain: true,
+            });
+            continue;
+        }
         violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),

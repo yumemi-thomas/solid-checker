@@ -40,6 +40,26 @@
       "start": 1186,
       "end": 1197,
       "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1413,
+      "end": 1423,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1705,
+      "end": 1715,
+      "fixes": 0
     }
   ]
 }

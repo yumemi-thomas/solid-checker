@@ -28,8 +28,14 @@ SC2001.
   never reaches registration; today's `export_shape` answers are right (rebound function clean, rebound literal a violation). I
   built the plan's edit first, then measured the compiler (research agent's finding, confirmed) and reverted it. Fixture
   `valid-use-server-rebound` pins both. Witnesses 8 of 8 keep.
+- **SC7005** (ADR 0703): `server_rules.rs` `http_response_in_file`: the role gate skips only EventCallback, DeferredCallback,
+  EffectApply, DirectiveApply, DiscardedRendering, ModuleInitialization; an undominated call is uncertain, blocker
+  `response-head-position-unproven`. Witnesses helper/method/memo/wrapper hold (105 of 311). SSR host: 4 templates added to
+  `ssr.mjs` (`m-helper`, `m-method`, `m-memo`, `m-wrapper`); old build 8 false clean, new 18 agree, 0 false clean, 12
+  uncertifiable. Cost: shell content (`l-*`, fixture negatives `ShellStatus`, `FallbackNote`, `ShellDeep`, `FallbackDeep`) is
+  now an obligation; the shell-root proof (render-entry identity, every caller, cross-file) is open work. Corpus 0 moved (CSR).
 - Picked from claude/flip-reads: `ce6a831b2`, `ae2327986` (stale tests; R's progress-file hunk dropped), `ef46d0ac6`
-  (verify-delta maps rule pages and `.gitignore`).
+  (verify-delta maps rule pages and `.gitignore`), `aaaf31cad` (maps `scripts/flip/`).
 
 ## Owner notes (2026-11-05)
 
@@ -43,7 +49,7 @@ SC2001.
 
 ## Next
 
-SC7005, SC7007, DOM dispatch list, then SC2006. A research agent prepared these:
+SC7007, DOM dispatch list, then SC2006. SC2001/unreached-write research: `~/EDF/tmp/flipw/research-sc2001/sc2001.md`. A research agent prepared these:
 `~/EDF/tmp/flipw/research/track-w-next.md` (machine-local; re-derive if absent).
 
 ## Machine state (this Mac)
