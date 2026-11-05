@@ -292,3 +292,48 @@ function notGenerator(cb) {\n  createMemo(cb);\n}\n";
     assert_eq!(first_step("operand"), Some(Vec::new()));
     assert_eq!(first_step("notGenerator"), None);
 }
+
+fn every(source: &str) -> Vec<String> {
+    let mut calls = every_unconditional_call(Path::new("test.tsx"), source)
+        .expect("parses")
+        .into_iter()
+        .collect::<Vec<_>>();
+    calls.sort_by_key(|span| span.start);
+    calls
+        .into_iter()
+        .map(|span| source[span.start as usize..span.end as usize].to_owned())
+        .collect()
+}
+
+/// ADR 0714: module scope is a scope of its own; a branch, a `&&` operand
+/// or a call after an earlier `throw` is not admitted there.
+#[test]
+fn every_unconditional_call_admits_module_scope_statements() {
+    let source = "const x = a();\nexport const s = { args: { v: b() } };\nexport default c();\n\
+                  if (Math.random() > 2) d();\nq && e();\n(() => f())();\n";
+    assert_eq!(
+        every(source),
+        ["a()", "b()", "c()", "Math.random()", "(() => f())()", "f()"]
+    );
+    assert_eq!(every("g();\nthrow 1;\nh();\n"), ["g()"]);
+    assert_eq!(
+        every("a();\nawait p;\nb(await c());\n"),
+        ["a()", "b(await c())", "c()"]
+    );
+    assert_eq!(
+        every(
+            "class K { static s = a(); t = b(); static [c()] = 1; }\nif (q) { class L { static u = d(); } }\n"
+        ),
+        ["a()"]
+    );
+}
+
+/// ADR 0714: a function's calls are its own scope's: a nested function's
+/// calls answer for that function, not the call around it.
+#[test]
+fn every_unconditional_call_answers_per_function() {
+    let source = "function k(x) {\n  a();\n  if (x) b();\n  return () => c();\n}\n\
+                  async function l() { d(); await p; e(); }\n\
+                  function* m() { f(); yield 1; g(); }\n";
+    assert_eq!(every(source), ["a()", "c()", "d()", "e()", "f()"]);
+}

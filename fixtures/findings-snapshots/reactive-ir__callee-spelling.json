@@ -134,8 +134,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 2145,
       "end": 2154,

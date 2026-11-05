@@ -2559,6 +2559,12 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// ADR 0284: whether the file at `path` belongs to a package analyzed as
+    /// source.
+    pub(super) fn in_dependency_source(&self, path: &str) -> bool {
+        self.facts.dependency_source_root(path).is_some()
+    }
+
     /// The compiler's attested resolution of the project's import specifiers,
     /// when the analysis carries it.
     pub(super) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {

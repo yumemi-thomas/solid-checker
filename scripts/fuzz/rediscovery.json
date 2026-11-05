@@ -3768,5 +3768,16 @@
    "mx-context-not-found-flw-ctx-two-renders-x-direct-none"
   ],
   "rediscovered": "the checker at 727507bda on `focus.mjs --grids mx-recall` (flip-write.mjs contexts flw-ctx-sibling, flw-ctx-two-renders): 626 false-clean of 758; the fix: 0 false-clean, 758 recall-gap"
+ },
+ {
+  "finding": "SC4001: a hook called under the component owner and in a module-scope branch nothing takes was a proven violation: the module edge carried the unowned proof whether or not its call runs; Chrome (rc.21) is quiet, the only run is owned (flip research probe k-module-dead-branch; ADR 0714)",
+  "found": "flip plan SC4001 row, research probe",
+  "fixed": "ADR 0714",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-mixed-dead-x-direct-none"
+  ],
+  "rediscovered": "the checker at 9de5c2bd3 on `focus.mjs --grids mx-recall` (codes NO_OWNER_CLEANUP, NO_OWNER_EFFECT; flip-write.mjs context flw-mixed-dead): 384 false-positive of 1152; the fix: 0 false-positive, 756 not-fired, 396 typed-away"
  }
 ]

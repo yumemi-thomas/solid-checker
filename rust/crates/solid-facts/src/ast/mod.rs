@@ -101,7 +101,8 @@ pub use module_requests::static_module_requests;
 pub use primitive_completion::primitive_completion_by_syntax;
 pub use proxy_get_forward::proxy_get_forward_target;
 pub use unconditional_calls::{
-    first_step_unconditional_calls, synchronously_unconditional_calls, unconditional_calls,
+    every_unconditional_call, first_step_unconditional_calls, synchronously_unconditional_calls,
+    unconditional_calls,
 };
 
 pub use emission::{
