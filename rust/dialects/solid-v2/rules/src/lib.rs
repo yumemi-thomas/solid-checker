@@ -569,7 +569,9 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                     "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
                 )
             },
-            ExecutionRole::TrackedJsx if !read.under_loading => (
+            ExecutionRole::TrackedJsx | ExecutionRole::UntrackedUnwindowed
+                if !read.under_loading =>
+            (
                 Rule::AsyncOutsideLoadingBoundary,
                 if read.options_opaque {
                     format!(

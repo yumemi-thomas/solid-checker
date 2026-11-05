@@ -872,6 +872,16 @@ fn async_read_reported(read: &crate::AsyncRead) -> bool {
     // the same read), or the informational boundary warning
     // (SC5003) — suppressed for declared-first-paint sources,
     // whose whole point is to not need a boundary.
+    // ADR 0662: a `<Dynamic>` body has no strict window, and still warns with no
+    // boundary above it.
+    if read.leaf_owner.is_none()
+        && read.execution == crate::ExecutionRole::UntrackedUnwindowed
+        && !read.under_loading
+        && read.async_provenance
+        && !read.declared_loading
+    {
+        return true;
+    }
     read.leaf_owner.is_none()
         && read.execution == crate::ExecutionRole::TrackedJsx
         && !read.under_loading
@@ -1300,6 +1310,12 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     "the component holding this read is not proven to run in the same pass that created the source (it may mount later, from a <Show> or a click), and a settled read neither throws nor needs a boundary; if it is still pending: {}",
                     finding.message
                 );
+            }
+            // ADR 0662: rendered by `<Dynamic>`, whose memo has no strict window.
+            if read.execution == crate::ExecutionRole::UntrackedUnwindowed && finding.id == "SC5003"
+            {
+                finding.kind = "uncertifiable".into();
+                crate::blockers::MOUNT_FORM_WINDOW.clone_into(&mut finding.analysis_context);
             }
             // ADR 0661: SC5003's warning fires only inside `render()`, so a read
             // whose first run is not proven there may be quiet though its source

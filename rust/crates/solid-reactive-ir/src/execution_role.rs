@@ -587,6 +587,78 @@ pub(crate) enum RootBodyGuard {
 #[cfg(test)]
 mod tests;
 
+/// Whether `at` is in the `component` attribute of an exact `<Dynamic>`, and
+/// whether it is that attribute's whole value.
+fn dynamic_component_attribute(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    lookup: &SemanticLookup<'_>,
+) -> (bool, bool) {
+    let ast = &file.ast;
+    let dialect = lookup.dialect;
+    let mut found = (false, false);
+    for (tag, prop) in dialect.component_prop_renderers() {
+        for element in ast.jsx_elements.iter().filter(|element| {
+            crate::execution_paths::named_import(file, dialect, element.name.span, tag)
+        }) {
+            for attribute in &element.attributes {
+                if file.source_text(attribute.name) == Some(*prop)
+                    && let Some(value) = attribute.expression
+                {
+                    found.0 |= value.contains(at);
+                    found.1 |= ast.peel_ts_sugar_span(value) == at;
+                }
+            }
+        }
+    }
+    found
+}
+
+/// `const Z = K` where `at` is `K`: the same answer through `Z`'s references.
+/// One step, on a binding never reassigned: past that the mount is open.
+fn dynamic_alias_mount(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    lookup: &SemanticLookup<'_>,
+) -> (bool, bool) {
+    let Some(alias) = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding
+                .initializer_identifier
+                .as_ref()
+                .is_some_and(|initializer| initializer.span == at)
+    }) else {
+        return (false, false);
+    };
+    let Some(references) = alias
+        .names
+        .first()
+        .and_then(|name| lookup.callee_symbol(file, name.span))
+        .and_then(|symbol| lookup.symbol_references_if_present(symbol))
+    else {
+        return (false, false);
+    };
+    let mut mounts = false;
+    let mut whole = true;
+    for reference in references {
+        let (Some(candidate), Ok(start), Ok(end)) = (
+            lookup.file_by_path(&reference.path),
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return (mounts, false);
+        };
+        let span = Span::new(start, end);
+        if candidate.path == file.path && alias.names.iter().any(|name| name.span == span) {
+            continue;
+        }
+        let (inside, exact) = dynamic_component_attribute(candidate, span, lookup);
+        mounts |= inside;
+        whole &= exact;
+    }
+    (mounts, mounts && whole)
+}
+
 /// A closed reference census for a component returned directly by the source
 /// literal of an exact dynamic factory. Other entries withhold the placement.
 pub(crate) fn dynamic_component_entry(
@@ -669,8 +741,12 @@ pub(crate) fn dynamic_component_entry(
                             })
                 })
         });
-        dynamic |= mounted;
-        exclusive &= mounted;
+        // ADR 0662: `<Dynamic component={K}>` mounts `K` the same way. A reference
+        // inside that attribute (`on() ? K : J`) mounts it, not exclusively.
+        let (attribute, whole) = dynamic_component_attribute(candidate, at, lookup);
+        let (alias_mounts, alias_whole) = dynamic_alias_mount(candidate, at, lookup);
+        dynamic |= mounted || attribute || alias_mounts;
+        exclusive &= mounted || whole || alias_whole;
     }
     dynamic.then_some(exclusive)
 }

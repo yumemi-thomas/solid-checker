@@ -97,7 +97,7 @@
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/execution_role.rs": {
-    "file_by_path": 1
+    "file_by_path": 2
   },
   "rust/crates/solid-reactive-ir/src/identity.rs": {
     "typescript-table": 1

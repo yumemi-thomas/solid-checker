@@ -508,6 +508,16 @@ pub(crate) fn collect_project<'facts>(
             solid_facts::core::Span::new(start, end),
             &read.declaration,
         );
+        // ADR 0662: a mixed mount is no proof either way: the row must stay.
+        if read.execution == crate::ExecutionRole::Unknown
+            && crate::execution_role::dynamic_component_entry(
+                file,
+                solid_facts::core::Span::new(start, end),
+                ctx.semantic_lookup,
+            ) == Some(false)
+        {
+            read.invocation_context_unproven = true;
+        }
         read.root_pass_unproven = !crate::owners::read_in_root_pass(
             ctx.semantic_lookup,
             file,

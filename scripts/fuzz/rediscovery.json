@@ -3670,5 +3670,17 @@
   "found": "the flip audit, async.md",
   "fixed": "ADR 0661",
   "outside": "ASYNC_OUTSIDE_LOADING_BOUNDARY is in SPEC but not MISUSE_CODES, so it has no cells. scripts/flip/witnesses.json holds e02, fixture rc21-root-pass each branch"
+ },
+ {
+  "finding": "`<Dynamic component={K}>` read as a windowed mount: SC5001 violation where Chrome retries and renders; an alias too; a mixed mount would go silent (ADR 0662)",
+  "found": "the flip audit, async.md",
+  "fixed": "ADR 0662",
+  "outside": "`<Dynamic>` is not a mount in mounts.mjs: the grids generate `dynamic()` only. scripts/flip/witnesses.json holds p-dyn, and the note's m1 matrix, 76 programs in Chrome, was run against this build; fixture rc21-dynamic-mount each branch"
+ },
+ {
+  "finding": "`<Dynamic>` false positives from the audits: api/d04, d17, s03, x01, census/g02, types/c05, e421, g03 (T-D3, C-D1, ADR 0662)",
+  "found": "the type and API audits",
+  "fixed": "ADR 0662",
+  "outside": "as the `<Dynamic>` entry above: not a mount in mounts.mjs. The 8 programs stay in scripts/fuzz/patterns/ and pass there"
  }
 ]

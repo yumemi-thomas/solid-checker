@@ -360,7 +360,7 @@ fn server_export(
 
 /// `span` is exactly an import of `name` from a module the dialect owns, or a
 /// member `name` of such a namespace.
-fn named_import(
+pub(crate) fn named_import(
     file: &solid_facts::FileFacts,
     dialect: &dyn solid_dialect::Dialect,
     span: Span,

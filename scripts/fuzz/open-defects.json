@@ -203,15 +203,6 @@
    ]
   },
   {
-   "id": "api/d04-mixed-plain-never-runs",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "api/d05-clientOnly-first",
    "item": "C-D1/T-D3",
    "outcome": "false-positive",
@@ -236,15 +227,6 @@
    "codes": [],
    "rules": [
     "strict-read-untracked"
-   ]
-  },
-  {
-   "id": "api/d17-pending-Dynamic",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "pending-async-unsuspendable-read"
    ]
   },
   {
@@ -544,17 +526,6 @@
    "certified": true
   },
   {
-   "id": "api/s03-pending-Dynamic-no-loading",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [
-    "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-   ],
-   "rules": [
-    "pending-async-unsuspendable-read"
-   ]
-  },
-  {
    "id": "api/v01-store-map-get",
    "item": "C-D3 value-use",
    "outcome": "false-clean",
@@ -823,15 +794,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "api/x01-exported-Dynamic",
-   "item": "C-D1/T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "census/a01-map-get",
@@ -1266,15 +1228,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "census/g02-Dynamic-cond-read",
-   "item": "section-4 census:g",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
   },
   {
    "id": "census/g04-Dynamic-write",
@@ -2171,15 +2124,6 @@
    ]
   },
   {
-   "id": "types/c05-dynamic-cond",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "strict-read-untracked"
-   ]
-  },
-  {
    "id": "types/c10-dynamic-helper",
    "item": "T-D3",
    "outcome": "false-positive",
@@ -2304,15 +2248,6 @@
     "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
-  },
-  {
-   "id": "types/e421-pending-body-dynamic",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "pending-async-unsuspendable-read"
-   ]
   },
   {
    "id": "types/e511-ref-dynamic",
@@ -2453,17 +2388,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "types/g03-sc5001-dynamic-noboundary",
-   "item": "T-D3",
-   "outcome": "false-positive",
-   "codes": [
-    "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-   ],
-   "rules": [
-    "pending-async-unsuspendable-read"
-   ]
   },
   {
    "id": "types/g04-sc5001-dynamic-helper",
