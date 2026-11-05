@@ -261,25 +261,43 @@ impl StaticApiContext<'_> {
             // `dist/server.js:3729-3733`). `DynamicOptions.static` is a plain
             // `boolean` beside a source typed `() => T | Promise<T> | ...`,
             // so `tsc` accepts every source proven here.
-            if kind == Some(Primitive::DynamicStatic)
-                && let Some(source) = call.arguments.first()
-                && let Some(proof) = static_source_promise(file, source, self)
+            // ADR 0654: a source not proven synchronous is open, and so is a
+            // form the options do not decide (`dynamic(source, options)`).
+            if matches!(
+                kind,
+                Some(Primitive::DynamicStatic | Primitive::DynamicUnknownForm)
+            ) && let Some(source) = call.arguments.first()
             {
-                result.violations.push(StaticViolation {
-                    id: "SC2007".into(),
-                    rule: "static-dynamic-async-source".into(),
-                    message: format!(
-                        "{primitive}() is called with {{ static: true }} and a source that {proof}; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing"
-                    ),
-                    hint: format!(
-                        "Drop static: true so {primitive}() settles the source in its memo (and render it under a <{}> boundary), or resolve the component before calling {primitive}() and pass a synchronous source.",
-                        dialect.boundary_name(solid_dialect::Boundary::Async)
-                    ),
-                    location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                    uncertain: false,
-                });
+                let state = static_source_state(file, source, self);
+                let unknown_form = kind == Some(Primitive::DynamicUnknownForm);
+                let reported = match state {
+                    StaticSource::Sync => None,
+                    StaticSource::Promise(proof) if !unknown_form => Some((proof, false)),
+                    StaticSource::Promise(proof) => Some((proof, true)),
+                    StaticSource::Open => Some(("is not proven to return synchronously", true)),
+                };
+                if let Some((proof, uncertain)) = reported {
+                    result.violations.push(StaticViolation {
+                        id: "SC2007".into(),
+                        rule: "static-dynamic-async-source".into(),
+                        message: format!(
+                            "{primitive}() is called with {} and a source that {proof}; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing",
+                            if unknown_form { "options that may hold static: true" } else { "{ static: true }" }
+                        ),
+                        hint: format!(
+                            "Drop static: true so {primitive}() settles the source in its memo (and render it under a <{}> boundary), or resolve the component before calling {primitive}() and pass a synchronous source.",
+                            dialect.boundary_name(solid_dialect::Boundary::Async)
+                        ),
+                        location: location(file.path.shared(), call.callee),
+                        analysis_context: if uncertain {
+                            crate::blockers::STATIC_SOURCE_UNPROVEN.to_owned()
+                        } else {
+                            String::new()
+                        },
+                        fixes: vec![],
+                        uncertain,
+                    });
+                }
             }
             // SC2006: flush() in an action step. `@solidjs/signals` from
             // 2.0.0-rc.8 opens `flush` with `if (actionStepDepth > 0) throw
@@ -1016,17 +1034,65 @@ fn resolve_scope_unplaced(
 /// initialized with a function literal. A block-bodied non-async function, a
 /// parameter, an import, a reassignable binding, and every other source stay
 /// silent: whether they return a Promise is not decided here.
-fn static_source_promise(
+fn static_source_state(
     file: &FileFacts,
     source: &solid_facts::ast::ArgumentFact,
     context: &StaticApiContext<'_>,
-) -> Option<&'static str> {
+) -> StaticSource {
+    let Some(function) = static_source_function(file, source, context) else {
+        return StaticSource::Open;
+    };
+    // A generator's iterator has no `then`.
+    if function.generator {
+        return StaticSource::Sync;
+    }
+    if let Some(proof) = static_source_promise(file, function, context) {
+        return StaticSource::Promise(proof);
+    }
+    let lookup = context.lookup;
+    if crate::owners::computation_is_async(lookup, file, function.span) {
+        return if crate::owners::computation_may_answer_sync(lookup, file, function.span) {
+            StaticSource::Open
+        } else {
+            StaticSource::Promise("returns a Promise, by its type")
+        };
+    }
+    // The producer's fact, or the absence of a proof: a closed return type
+    // with no constituent that is a thenable.
+    let closed = lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|typescript_file| {
+            typescript_file.async_functions.iter().any(|fact| {
+                !fact.return_open
+                    && u64::from(function.span.start) == fact.expression.start_byte
+                    && u64::from(function.span.end) == fact.expression.end_byte
+            })
+        });
+    if closed {
+        StaticSource::Sync
+    } else {
+        StaticSource::Open
+    }
+}
+
+/// What a static `dynamic()` source does on its one call (ADR 0654).
+enum StaticSource {
+    Promise(&'static str),
+    Sync,
+    Open,
+}
+
+fn static_source_function<'a>(
+    file: &'a FileFacts,
+    source: &solid_facts::ast::ArgumentFact,
+    context: &StaticApiContext<'_>,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
     if source.spread {
         return None;
     }
-    let function = match source.value {
+    match source.value {
         ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => {
-            crate::cleanup::callback_argument_literal(file, source.span)?
+            crate::cleanup::callback_argument_literal(file, source.span)
         }
         ArgumentValueKind::Identifier => {
             let declaration = source.binding_declaration?;
@@ -1037,16 +1103,17 @@ fn static_source_promise(
             let path = file.path.as_str();
             let referenced = context.entities.at(path, source.span)?;
             let declared = context.entities.at(path, declaration)?;
-            if referenced != declared {
-                return None;
-            }
-            function
+            (referenced == declared).then_some(function)
         }
-        _ => return None,
-    };
-    if function.generator {
-        return None;
+        _ => None,
     }
+}
+
+fn static_source_promise(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    context: &StaticApiContext<'_>,
+) -> Option<&'static str> {
     if function.r#async {
         return Some("is an async function, which always returns a Promise");
     }

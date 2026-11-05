@@ -4,6 +4,15 @@
 //   flipReadContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
 import { child, decl, domExpr, fn, iife, num, ret } from "./model.mjs";
 
+// ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
+export const STATIC_SOURCES = {
+  "src-block": '() => { return Promise.resolve("p" as const); }, { static: true }',
+  "src-then": '() => Promise.resolve(1).then(() => "p" as const), { static: true }',
+  "src-any": '(() => Promise.resolve("p" as const)) as () => any, { static: true }',
+  "src-cond": '() => (Math.random() >= 0 ? Promise.resolve("p" as const) : ("p" as const)), { static: true }',
+  "src-options": '() => Promise.resolve("p" as const), ({ static: true }) as { static: boolean }',
+};
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
 };

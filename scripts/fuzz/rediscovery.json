@@ -3575,5 +3575,20 @@
   "found": "the flip audit",
   "fixed": "ADR 0653",
   "outside": "the grid judges STRICT_READ_UNTRACKED at the site statement, and here the read is the listener attribute: a context can place the attribute but not make it the site (3,036 programs came out not-fired, while Chrome warned on the same shape). scripts/flip/witnesses.json holds i01 and i06, fixture reactive-handler-frozen-roots each branch"
+ },
+ {
+  "finding": "SC2007 proved two source shapes and read nothing else: a block body, a `.then` chain, a return typed `any`, a conditional and an options variable threw in dev, certified (ADR 0654)",
+  "found": "the flip audit",
+  "fixed": "ADR 0654",
+  "grid": "mx-recall",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "mx-dynamic-static-promise-body-src-block-direct-none",
+   "mx-dynamic-static-promise-body-src-then-direct-none",
+   "mx-dynamic-static-promise-body-src-any-direct-none",
+   "mx-dynamic-static-promise-body-src-cond-direct-none",
+   "mx-dynamic-static-promise-body-src-options-direct-none"
+  ],
+  "rediscovered": "ec76609d7: 1,500 false cleans of the five src-* variants; ADR 0654: 0"
  }
 ]

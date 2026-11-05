@@ -19,7 +19,7 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, flipReadContext } from "./flip-read.mjs";
+import { FLIP_READ_CONTEXTS, STATIC_SOURCES, flipReadContext } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
@@ -647,8 +647,8 @@ export const SPEC = {
   FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener", ...ANCHOR_MISSES, ...DENIED_FLUSH], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
-    contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
-    call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
+    contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [], recallVariants: Object.keys(STATIC_SOURCES),
+    call: (node) => api("dynamic", STATIC_SOURCES[node.variant] ?? '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
   },
 };
 // The flip's shapes (flip-read.mjs, flip-write.mjs): one file per track, so neither edits this table.

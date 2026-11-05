@@ -82,6 +82,96 @@
       "fixes": 0
     },
     {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 2753,
+      "end": 2760,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 3199,
+      "end": 3206,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 3371,
+      "end": 3378,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 3624,
+      "end": 3631,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 3960,
+      "end": 3967,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 4049,
+      "end": 4056,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 4111,
+      "end": 4118,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 4171,
+      "end": 4178,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx",
+      "start": 4278,
+      "end": 4285,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

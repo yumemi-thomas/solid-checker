@@ -95,13 +95,18 @@ change, resolve it before calling `dynamic()` and pass a synchronous source.
   `fixtures/reactive-ir/release-triple-static-dynamic-async-rc3` pins it
   silent. On a web release nobody compared, an option-bearing call is the form
   that states nothing.
-- **An unproven option.** `{ static: flag }`, a spread, or an options variable
-  may take either runtime, so no claim is made.
-- **An unproven source.** A block-bodied non-async function (even one whose
-  every `return` is `Promise.resolve(...)`), a parameter, an import, a `let`
-  binding, a call chained off a Promise (`Promise.resolve(x).then(f)`), and a
-  `Promise` that is not the standard library's all stay silent. This is an
-  approximation, not a claim that they are synchronous.
+- **A synchronous source.** A function whose closed return type holds no Promise
+  (ADR 0654). A source with no such proof is not silent, see below.
+
+## Uncertifiable
+
+A static source not proven synchronous, blocker `static-source-unproven` (ADR 0654): a
+parameter, an import, a `let`, a return typed `any`, `unknown` or a type parameter
+(Type Facts `returnOpen`), or a return that may be a Promise or not. An unproven option
+(`{ static: flag }`, a spread, an options variable) may take either runtime, so a source
+not proven synchronous is uncertifiable there too, and a proven Promise as well. A
+block body or a `.then` chain whose return type is a Promise on every path is a violation.
+
 - **A site that never runs.** A call in a function only a `defer: true` apply
   with no compute source calls is silent (ADR 0590).
 

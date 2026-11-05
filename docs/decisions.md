@@ -1616,3 +1616,7 @@ The rule needed a proven accessor and exempted every argument, so `String(c)`, `
 <a id="adr-0653"></a>
 ## ADR 0653 — SC1007 opens a handler member with no proven root
 `member_symbol` needs a source at the root, so `onClick={s.f}` with `s` from a hook and `onClick={mp.get("s")!.f}` fell through, certified, while Chrome warned `STRICT_READ_UNTRACKED`. A member whose object is a call or a `handed_value` is uncertifiable, `handler-root-unproven`. A plain object's member stays silent. Owner: `upstream_compat/shared_reactivity.rs`.
+
+<a id="adr-0654"></a>
+## ADR 0654 — SC2007 reads a static source three ways, and `returnOpen`
+`static_source_promise` answered for two shapes and `DynamicUnknownForm` was unread, so a block body, a `.then` chain, a parameter, a `let`, a conditional and an options variable certified while dev threw. The source is now Promise, Sync or Open. A return type that is a Promise on every path proves Promise (`computation_is_async`, not `computation_may_answer_sync`). Sync needs the producer's fact with `returnOpen` false: a new async function flag, protocol 89, set when a call signature returns `any`, `unknown`, an error type or a type parameter. SC7002 and SC5003 read it too. Open and an unproven option are uncertifiable, `static-source-unproven`. Owners: `static_api.rs`, `apps/solid-typefacts/src/source_facts.rs`.
