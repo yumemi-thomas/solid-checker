@@ -182,6 +182,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 3350,
+      "end": 3360,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -189,6 +199,16 @@
       "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
       "start": 3544,
       "end": 3558,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 3664,
+      "end": 3674,
       "fixes": 0
     },
     {

@@ -91,9 +91,16 @@ value is meant, create the context with a default, `createContext("light")`.
 ## Premises and limits
 
 The claim is about the closed program, so it needs no runtime premise beyond
-rc.13's `getContext`. What the rule does not decide is a provider that exists
-but is not above the reader: a closed component tree, with every render site
-known, would be needed for that. Package contexts (a kobalte dialog hook outside
+rc.13's `getContext`. A context that is provided somewhere, escapes, is
+written, or is read through a member or an alias is open (ADR 0713): its read
+under an owner is an uncertifiable obligation, blocker
+`provider-not-proven-above`, unless every render of the reading function sits
+under `<Ctx value>`: in its children with no function between, through an
+intrinsic element, a hook, a component nested inside, or a wrapper whose one
+`return` is `<Ctx value>{props.children}</Ctx>`, with every reference to each
+such function a call or render site (not exported in an open program). A
+sibling subtree, a second render outside, a conditional provider and a render
+prop callback (`<For>{() => <K />}</For>`) are not proven. Package contexts (a kobalte dialog hook outside
 its `<Dialog>`, a router hook outside its router) are provided by package code,
 which is not this program, so they are not decided here either. Both are in
 `docs/open-work.md`.

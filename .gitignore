@@ -867,6 +867,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-shallow-store-writes/node_modules/**
 !fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/
 !fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/**
+!fixtures/reactive-ir/rc21-optimistic-handed-prop/node_modules/
+!fixtures/reactive-ir/rc21-optimistic-handed-prop/node_modules/**
 !fixtures/reactive-ir/rc21-untrack-hook-pending/node_modules/
 !fixtures/reactive-ir/rc21-untrack-hook-pending/node_modules/**
 !fixtures/reactive-ir/rc21-untrack-escape/node_modules/

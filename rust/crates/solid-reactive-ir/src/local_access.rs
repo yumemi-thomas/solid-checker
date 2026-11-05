@@ -3154,6 +3154,68 @@ impl LocalAccessContext<'_, '_> {
                 uncertain: true,
             });
         }
+        // ADR 0712: a component's prop (or spread) handed such a setter as a
+        // value: the component's `props.k(…)` is a call no row places (prop
+        // value flow is not followed), so the hand-off is the obligation.
+        // An intrinsic element's handler is placed by the handler pass.
+        for element in &file.ast.jsx_elements {
+            if crate::execution_role::intrinsic_element(file, element) {
+                continue;
+            }
+            let values = element
+                .attributes
+                .iter()
+                .filter(|attribute| attribute.namespace.is_none())
+                .filter_map(|attribute| attribute.expression)
+                .chain(element.spreads.iter().map(|spread| spread.argument));
+            // The values the prop may hold: a branch of `?:`, `&&`, `||`,
+            // `??`, then a name, a member or a call. A function written here
+            // is walked where it calls, and any other form (`!x`, a literal,
+            // a template) holds no function.
+            let mut leaves = Vec::new();
+            let mut pending = values.collect::<Vec<_>>();
+            while let Some(value) = pending.pop() {
+                let value = file.ast.peel_ts_sugar_span(value);
+                if let Some(conditional) = file.ast.conditional_at(value) {
+                    pending.extend([conditional.consequent, conditional.alternate]);
+                } else if let Some(logical) = file.ast.logical_at(value) {
+                    pending.extend([logical.left, logical.right]);
+                } else if file.ast.member_at(value).is_some()
+                    || file.ast.call_at(value).is_some()
+                    || file.ast.reference_declaration(value).is_some()
+                {
+                    leaves.push(value);
+                }
+            }
+            for value in leaves {
+                let here = location(file.path.shared(), value);
+                if result
+                    .static_violations
+                    .iter()
+                    .any(|violation| violation.location == here && violation.id == "SC2009")
+                    || !self.callee_reaches(file, value, &|symbol| {
+                        self.optimistic_async_setter(symbol.as_str())
+                    })
+                {
+                    continue;
+                }
+                result.static_violations.push(crate::StaticViolation {
+                    id: "SC2009".into(),
+                    rule: "optimistic-write-before-load".into(),
+                    message: "this prop hands a component an optimistic setter; whether the \
+                              component runs it before its async source's first answer is not \
+                              proven, and Solid throws OPTIMISTIC_WRITE_BEFORE_LOAD if it does"
+                        .into(),
+                    hint: "Keep pending items in a separate list until the source loads, or \
+                           declare a loadingValue."
+                        .into(),
+                    location: here,
+                    analysis_context: crate::blockers::OPTIMISTIC_REACH_UNRESOLVED.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
     }
 
     /// ADR 0640: the reactive source `value` names through forms that hold one
@@ -4052,6 +4114,34 @@ impl LocalAccessContext<'_, '_> {
                     );
                 }
                 continue;
+            }
+            // ADR 0712: transport carried an async optimistic setter to this
+            // call (a prop, a hook's slot, a context value); whether it runs
+            // before the source's first answer is not placed here.
+            if self.optimistic_async_setter(symbol.as_str()) {
+                let here = location(file.path.shared(), call.span);
+                if !result
+                    .static_violations
+                    .iter()
+                    .any(|violation| violation.location == here && violation.id == "SC2009")
+                {
+                    result.static_violations.push(crate::StaticViolation {
+                        id: "SC2009".into(),
+                        rule: "optimistic-write-before-load".into(),
+                        message: "this call runs an optimistic setter transport carried here (a prop, a \
+                                  hook's result, a context value); whether it runs before its async \
+                                  source's first answer is not proven, and Solid throws \
+                                  OPTIMISTIC_WRITE_BEFORE_LOAD if it does"
+                            .into(),
+                        hint: "Keep pending items in a separate list until the source loads, or declare a \
+                               loadingValue."
+                            .into(),
+                        location: here,
+                        analysis_context: crate::blockers::OPTIMISTIC_REACH_UNRESOLVED.into(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
             }
             if file.ast.any_function_body_containing(call.span) {
                 let kind = if self.setters.contains_key(symbol.as_str()) {

@@ -10,6 +10,16 @@
       "start": 639,
       "end": 656,
       "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-identity/tabs.ts",
+      "start": 185,
+      "end": 195,
+      "fixes": 0
     }
   ]
 }

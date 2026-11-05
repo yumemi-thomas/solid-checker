@@ -1,0 +1,65 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 417,
+      "end": 425,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 536,
+      "end": 544,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1030,
+      "end": 1045,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1321,
+      "end": 1329,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1355,
+      "end": 1362,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1367,
+      "end": 1374,
+      "fixes": 0
+    }
+  ]
+}

@@ -102,6 +102,26 @@
       "fixes": 0
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/context.tsx",
+      "start": 345,
+      "end": 355,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/guards.tsx",
+      "start": 320,
+      "end": 330,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -109,6 +129,16 @@
       "path": "fixtures/reactive-ir/context-member-forwarding/guards.tsx",
       "start": 488,
       "end": 507,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/guards.tsx",
+      "start": 792,
+      "end": 802,
       "fixes": 0
     },
     {

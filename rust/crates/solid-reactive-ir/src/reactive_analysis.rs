@@ -284,6 +284,17 @@ pub(crate) fn collect_project<'facts>(
     draft
         .write_action_obligations
         .extend(transported.write_action_obligations);
+    // ADR 0712: SC2009's transported obligations, where the file's own pass
+    // said nothing at that call.
+    for violation in transported.static_violations {
+        if !draft
+            .static_violations
+            .iter()
+            .any(|known| known.id == violation.id && known.location == violation.location)
+        {
+            draft.static_violations.push(violation);
+        }
+    }
     handed.extend(transported.dispatch_obligations);
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.source_call_targets = interprocedural.source_call_targets.clone();
