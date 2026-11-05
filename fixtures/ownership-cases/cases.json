@@ -3005,6 +3005,40 @@
     "absent": []
    },
    "note": "Kept divergence (ADR 0651): upstream reports any textContent beside children. In rc.21 Chrome, a nullish or empty textContent drops nothing and the children render, so a value not proven filled is uncertifiable, blocker content-source-value-unproven."
+  },
+  {
+   "id": "uncalled-accessor/solid-v2/standard-value/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\nexport const App = () => { const [c] = createSignal(1); return <i>{String(c)}</i>; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [115, 116]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0652): eslint-plugin-solid 0.14.5 exempts every call argument. In rc.21 a standard-library parameter the compiler proves value-only cannot call the accessor, and `String(c)` renders its source, so the argument is an uncertifiable, blocker accessor-value-coerced."
   }
  ]
 }

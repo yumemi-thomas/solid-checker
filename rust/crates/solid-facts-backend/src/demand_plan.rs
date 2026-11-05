@@ -32,6 +32,9 @@ pub(crate) fn plan(
 /// `plan_file` and read back when the demands are emitted.
 #[derive(Default)]
 struct DemandSpans {
+    /// Callability with no type descriptor: a descriptor is evidence other
+    /// consumers read, and asking one here moves their answers (ADR 0652).
+    callability_only_spans: HashSet<Span>,
     symbol_spans: HashMap<Span, bool>,
     type_descriptor_spans: HashSet<Span>,
     runtime_value_domain_spans: HashSet<Span>,
@@ -189,6 +192,7 @@ fn collect_symbol_spans(
     let DemandSpans {
         symbol_spans,
         type_descriptor_spans,
+        runtime_value_domain_spans,
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
@@ -259,7 +263,7 @@ fn collect_symbol_spans(
                 let value = file.ast.peel_ts_sugar_span(property.value);
                 add_symbol(value, false);
                 type_descriptor_spans.insert(value);
-                spans.runtime_value_domain_spans.insert(value);
+                runtime_value_domain_spans.insert(value);
             }
         }
     }
@@ -916,7 +920,12 @@ fn collect_chain_link_spans(dialect: &'static Dialect, file: &FileFacts, spans: 
 }
 
 fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
-    let symbol_spans = &mut spans.symbol_spans;
+    let DemandSpans {
+        symbol_spans,
+        callability_only_spans,
+        runtime_value_domain_spans,
+        ..
+    } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     // Member objects are needed to connect reads such as `props.title` and
     // `state.value` to their declarations. Querying only the property token
@@ -948,6 +957,26 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
     }
+    // ADR 0652: whether a coerced value is a function (`uncalled-accessor`).
+    let coerced = file
+        .ast
+        .coercive_operands
+        .iter()
+        .map(|operand| operand.span)
+        .chain(
+            file.ast
+                .template_literals
+                .iter()
+                .flat_map(|template| template.expressions.iter().copied()),
+        );
+    for span in coerced {
+        let value = file.ast.peel_ts_sugar_span(span);
+        if file.ast.member_at(value).is_some() || file.ast.has_reference_identifier_at(value) {
+            add_symbol(value, false);
+            callability_only_spans.insert(value);
+            runtime_value_domain_spans.insert(value);
+        }
+    }
     // ADR 0317: an `extends` expression names the base class an exact
     // instance's chain resolves through (`class_instance_is_exact`). An
     // imported base has no local class declaration, so only its symbol says
@@ -974,6 +1003,7 @@ fn emit_span_demands(
 ) -> Result<(), BackendError> {
     let DemandSpans {
         symbol_spans,
+        callability_only_spans,
         type_descriptor_spans,
         runtime_value_domain_spans,
         primitive_value_domain_spans,
@@ -1000,7 +1030,8 @@ fn emit_span_demands(
         planned.structural_accessor = structural_accessors.contains(&span);
         planned.r#async = async_symbol_spans.contains(&span);
         planned.type_descriptor = type_descriptor_spans.contains(&span);
-        planned.callability = type_descriptor_spans.contains(&span);
+        planned.callability =
+            type_descriptor_spans.contains(&span) || callability_only_spans.contains(&span);
         // Constructability travels with callability, never alone: neither fact
         // answers "is this a runtime function" by itself. A class type carries
         // construct signatures and no call signature, so `callability` reports

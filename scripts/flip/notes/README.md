@@ -11,6 +11,25 @@ Verbatim, for the second machine. They describe the state before `claude/flip-ba
 | `missing.md` | Surface agent: what the fuzzer does not generate. Input to the DOM rows in the plan |
 | `redundancy.md` | Surface agent: which fuzz values are redundant, and the `<Portal>` gap |
 
+## Design notes, which beat `../PLAN.md` where they differ
+
+Read at `ef46d0ac6`. Their programs are in `/tmp/sc-scratch.noindex/flip-reads/research/probes/` on the read track's machine only.
+
+| File | What it is |
+|---|---|
+| `sc1001.md` | SC1001's steps 0-9, the `unplaced_run` hole at the call, setter callbacks, the 105 corpus sites |
+| `f0.md` | `function_summary_complete`: the predicate, order, D4 first |
+| `sc9012-census.md` | The census positions, H-D5, what owns what, the 8 W witnesses |
+
+Corrections to the plan, from the owner:
+
+- "`reconcile` takes 1 argument" is wrong: `setStore` does, so that part of C-D2 is live.
+- SC1001's `:2577` edit does nothing. Skip it.
+- Q4, Q5, C-D4 and H-D5 had no owner. `j08` was claimed by both tracks. These, and any item with no owner, are Track R's unless it is a write.
+- The file table lacks these: `reactive_analysis.rs` (both tracks edit it, in separate hunks: W after `transported_writes`, R at `:219` and `:327`), `result_reads.rs`, `props_reactivity.rs`, `value_use.rs` (new) are R's. `blockers.rs` is append-only for both.
+
+For Track W: `u11` is yours and needs the fix at the call, not only `unreached_write` (`sc1001.md` section 7). Do not put setter callbacks in `layer_run`. Does SC2003's forward flow reach `w(s.o)`? If not, `j05` has no owner (`sc9012-census.md` section 8).
+
 ## Paths that exist only on the first machine
 
 Nothing below can be opened here. Treat each as a label, not a location.

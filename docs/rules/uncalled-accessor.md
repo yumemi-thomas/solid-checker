@@ -135,3 +135,13 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 
 - [strict-read-untracked](strict-read-untracked.md) — reads that happen outside tracking
 - [reactive-handler-frozen](reactive-handler-frozen.md) — the inverse defect
+
+## Positions with no proof either way
+
+Uncertifiable, blocker `accessor-value-coerced` (ADR 0652): a standard-library value
+parameter (`String(c)`, `JSON.stringify({ c })`, but not `Object.assign`, which keeps the
+function); `c as any` on a native attribute; a spread onto a native element; `==` on a
+value whose type is erased; and a value `Callable` beside a string or in a template that
+came from a caller, a hook or a parameter, where no accessor proof reaches. A violation
+also yields here when a member of the accessor is written, because stringifying then
+need not give the source.

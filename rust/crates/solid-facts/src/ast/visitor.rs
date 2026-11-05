@@ -2793,6 +2793,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .extend([span(expression.left.span()), span(expression.right.span())]);
         }
 
+        if !null_comparison
+            && matches!(
+                expression.operator,
+                BinaryOperator::Equality | BinaryOperator::Inequality
+            )
+        {
+            self.coercive_operands
+                .extend(
+                    [&expression.left, &expression.right].map(|operand| CoerciveOperandFact {
+                        span: span(operand.span()),
+                        kind: CoerciveOperandKind::LooseEquality,
+                    }),
+                );
+        }
+
         // Most binary operators reject function operands themselves, so a
         // checker finding there would duplicate TypeScript. Keep only the
         // syntactically proven string-concatenation subset: `+` with a string

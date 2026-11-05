@@ -666,6 +666,17 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
     pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
+    /// What `handed_value` reads besides the above (ADR 0652).
+    pub(super) setters: &'a HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
+    pub(super) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// Local, interprocedural, alias-propagated, and dependency-source-derived reads,
     /// indexed once for exact governing-expression queries.
     pub(super) reactive_reads: ReactiveReadIndex,
@@ -754,6 +765,8 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         uncertain_prop_sources: ctx.uncertain_prop_sources,
         typed_sources: ctx.typed_sources,
         props_reactivity: ctx.props_reactivity,
+        setters: ctx.setters,
+        actions: ctx.actions,
         reactive_reads,
         source_reference_index: crate::symbols::source_reference_locations(
             &ctx.facts.typescript,

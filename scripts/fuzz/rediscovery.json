@@ -3563,5 +3563,11 @@
   "found": "the flip audit",
   "fixed": "ADR 0651",
   "outside": "SC8003 has no runtime diagnostic: its claim is the DOM a program ends with, and the grids judge diagnostics. scripts/flip/witnesses.json holds the programs with the DOM measured, and fixture rc21-content-competition each branch"
+ },
+ {
+  "finding": "SC1005 exempted every argument and needed a proven accessor: `String(c)`, `JSON.stringify({ c })`, a spread value, `as any`, an erased `==`, a hook's accessor in a template certified; a written `toString` kept the violation (ADR 0652)",
+  "found": "the flip audit",
+  "fixed": "ADR 0652",
+  "outside": "SC1005 has no runtime diagnostic: its claim is the value a program renders, and the grids judge diagnostics. scripts/flip/witnesses.json holds the programs, and fixture uncalled-accessor-v2 each branch"
  }
 ]

@@ -2200,7 +2200,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // attribute and the called and passed-on accessors were already
         // silent. Binary arithmetic and bitwise operands stay silent because
         // TypeScript rejects a function there (TS2365/TS2362).
-        assert_rule_findings(&findings, "uncalled-accessor", 5);
+        assert_rule_findings(&findings, "uncalled-accessor", 13);
         for position in [
             "string concatenation",
             "logical-not operator",
