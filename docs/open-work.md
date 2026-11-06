@@ -12,6 +12,10 @@ Value-use census (ADR 0692), accepted trade: a hook's object or tuple handed on 
 
 Census, later proof (coordinator, 2026-11-07): `refresh(t)` and `affects(t, k?)` read only `t[$REFRESH]` or `t[$TARGET]` (rc.21 `@solidjs/signals` dev.js:3636, :10018), and a computed key coerces a function without calling it, so these positions could be followed instead of `value-in-carrier` / `value-use-unclassified`. Not done: show a store proxy's `$REFRESH` Get is untracked, and measure in Chrome. Until then they stay uncertifiable (tsc-oracle cases [4], [6], [21] carry them as distinct findings).
 
+Census, missing proofs (U today): ownership cases [79] hook-member-write and [80] hook-member-write-in-setter open at `store` (value-held-in-binding). The census runs before upstream_compat, and SC2003 leaves no row it can read: [79]'s is a static violation, [80]'s write is legal in the setter. Proof: surface the member writes SC2003 examined, without changing what it reports (upstream-parity skill), and run the census after it.
+
+Not checked (PLAN.md, kept here when it goes): SC7007 at runtime (no host compiles `"use server"`); SC7006's `export let` edit on a server; every `continue` in `cleanup.rs` read line by line; `effect_phase.rs` `None` arms beyond the method path.
+
 Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
 
 A memo over a parameter or a callback prop that every caller fills with a settled value is uncertifiable (ADR 0802): `source_compute_open` does not follow the arguments yet. A setter or a closure in a hook's tuple keeps ADR 0282's full veto (ADR 0801), so it stays SC9012 in most programs where an accessor slot is exact. So does a memo whose compute calls a `.map` callback's parameter over a closed literal (`objects.map(item => item.read())`): the handed net does not follow it.
