@@ -5563,5 +5563,19 @@
    "mx-reactive-write-in-owned-scope-iter-same-wd-class-write-direct-none"
   ],
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
+ },
+ {
+  "finding": "`flush()` in a closure handed through forwarding helpers (`hc1(() => flush())`, `hc1 = (g) => hc0(g)`) inside `action(function* …)` certified while Chrome throws FLUSH_IN_ACTION: the action-step climb stops at a forwarded closure and the unplaced net placed it",
+  "found": "W's recall grids at 4c81fcc00 (origin/claude/flip-research-w 41ccacbc0, research-w-grids-merged.md), every row rerun uncached in Chrome",
+  "fixed": "ADR 0832",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-action-x-direct-forward-2",
+   "mx-flush-in-action-action-x-wrapper-forward-13",
+   "mx-flush-in-action-action-after-yield-x-direct-forward-2",
+   "mx-flush-in-action-action-after-yield-x-destructured-forward-13"
+  ],
+  "rediscovered": "FLUSH_IN_ACTION forward-2/forward-13 ids (40, Chrome confirmed): build wd3 (e0606cbb7) 20 certified false cleans (action and action-after-yield, every binding); ADR 0832 0 (40 recall-gap, SC2006 U function-run-unplaced). Legal twins of the same layers (160): clean on both. Fixture rc21-flush-in-action-unplaced Forwarded.tsx (U, and silent after the body's await)"
  }
 ]
