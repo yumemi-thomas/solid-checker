@@ -99,6 +99,57 @@ fn with_lookup<T>(
     body(&lookup)
 }
 
+/// ADR 0782: each disposal memo has its own table: a site and a function at
+/// one span are different questions.
+#[test]
+fn disposal_reach_memo_is_kept_per_site_and_depth_apart_from_the_mount_memo() {
+    use crate::execution_role::DisposalReach;
+    with_lookup("export function A() {}", &[], |lookup| {
+        let at = Span::new(0, 10);
+        let mount = lookup.component_mount_reach_memo(PATH, at, 0, || DisposalReach::Only);
+        let site = lookup.disposal_reach_memo(PATH, at, 0, || DisposalReach::NotIn);
+        assert_eq!((mount, site), (DisposalReach::Only, DisposalReach::NotIn));
+        // A repeat computes nothing; another depth is its own question.
+        let again = lookup.disposal_reach_memo(PATH, at, 0, || DisposalReach::Unplaced);
+        let deeper = lookup.disposal_reach_memo(PATH, at, 1, || DisposalReach::Unplaced);
+        assert_eq!(
+            (again, deeper),
+            (DisposalReach::NotIn, DisposalReach::Unplaced)
+        );
+    });
+}
+
+/// ADR 0782: the memo answers what the computation answered, per function and
+/// depth, and an answer computed in a probe is not kept.
+#[test]
+fn component_mount_reach_memo_is_kept_per_function_and_depth() {
+    use crate::execution_role::DisposalReach;
+    let source = "export function A() {} export function B() {}";
+    with_lookup(source, &[], |lookup| {
+        let a = Span::new(0, 10);
+        let b = Span::new(11, 20);
+        let runs = std::cell::Cell::new(0);
+        let ask = |span, depth, reach| {
+            lookup.component_mount_reach_memo(PATH, span, depth, || {
+                runs.set(runs.get() + 1);
+                reach
+            })
+        };
+        assert_eq!(ask(a, 0, DisposalReach::Only), DisposalReach::Only);
+        // A repeat computes nothing, whatever it would have answered.
+        assert_eq!(ask(a, 0, DisposalReach::NotIn), DisposalReach::Only);
+        assert_eq!(runs.get(), 1);
+        // Another depth or another function is its own question.
+        assert_eq!(ask(a, 4, DisposalReach::Unplaced), DisposalReach::Unplaced);
+        assert_eq!(ask(b, 0, DisposalReach::NotIn), DisposalReach::NotIn);
+        assert_eq!(runs.get(), 3);
+        let probed = super::memo_probes::as_probe(|| ask(b, 1, DisposalReach::Only));
+        assert_eq!(probed, DisposalReach::Only);
+        assert_eq!(ask(b, 1, DisposalReach::Unplaced), DisposalReach::Unplaced);
+        assert_eq!(runs.get(), 5);
+    });
+}
+
 #[test]
 fn exact_object_member_calls_require_a_closed_const_receiver() {
     for (source, admitted) in [

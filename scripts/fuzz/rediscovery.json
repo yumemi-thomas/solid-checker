@@ -4513,6 +4513,19 @@
   "outside": "the value is a cast literal in a parent's attribute: a context cannot write a parent, so the pattern lane holds it"
  },
  {
+  "finding": "A write in a component a cleanup mounts: SC2001 V, Chrome quiet, because rc.21 skips the write guard while disposalDepth is above zero (e703, g12). The report's fix site, write_roles.rs:799, is never reached for a component body: walk-direct-1 decides first",
+  "found": "T-D1, patterns report F1",
+  "fixed": "ADR 0782",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-cleanup-mount-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-cleanup-mount-store-direct-none",
+   "lg-reactive-write-in-owned-scope-cleanup-mount-refresh-direct-none"
+  ],
+  "rediscovered": "rbase (c6677ddac) 143 false positives of 190 cleanup-mount programs at layer none, the fix 0 (145 clean, 45 uncertifiable). cleanup-mount-mixed and handler-mount keep their violations on both builds"
+ },
+ {
   "finding": "SC2003 silent past its flow's rows: a destructured loop binding, declarator or parameter, the rest, a nested identity, a function literal called in place, Object.entries and fromEntries, a conditional, array or awaited root, a let, a delete through a call, .then, Map.get: certified, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
   "found": "research-sc9012.md section 2 (W's leftovers and 17 more), R3's probes",
   "fixed": "ADR 0790",

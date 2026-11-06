@@ -149,6 +149,7 @@ Base `879eca007` reports, branch `claude/flip-r2`, ADRs 0780-0789. Scratch `/tmp
 | List: 9 programs, 3 no-run | `a11`'s twin confirmed (STRICT_READ_UNTRACKED); `h03` is NO_OWNER_EFFECT, SC4001 stands; `e807` runs | | `e911` (`on:click` is TS2322) and `f08` (the plugin leaves `@dec` in, no way to run it; SC1001 U at its site) deleted |
 | P6, P5, P10 (ADR 0780) | `b05 b06 d7-export-star-as -store`, and `Api.flush()` SC2008, which the new binding found | `h18`, `onLoad` in a control-flow callback | 139 to 130 open |
 | P3, P4, F3 (ADR 0781) | | lying cast and patched global: `d01-cast d07 x30 e107 e108`, `t3-*-cast`, F3 no longer a false positive | 3 new held rows, `p3-cast-*`: an assertion away from the receiver, certified, Chrome warns. Needs the owner |
+| F1, `e703` (ADR 0782) | `s1`, `s2`, `e703`, `g12`: write legal, the only mount is in a cleanup; `b-handed`, `d-mixed`, `s4` stay V | | |
 ## R3
 
 Branch `claude/flip-r3`, pushed to `origin/claude/flip-r3` (since 2026-11-06 the landing rule: never push flip-reads; part 8 merges hourly). Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).
@@ -156,6 +157,35 @@ Branch `claude/flip-r3`, pushed to `origin/claude/flip-r3` (since 2026-11-06 the
 | Step | State | Moved | Notes |
 |---|---|---|---|
 | 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
+
+## R2 handoff, 2026-11-06
+
+For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.
+
+**Done and gated:** the list, P5, P6, P10 (ADR 0780); P3, P4, F3 (ADR 0781); F1 (ADR 0782); memory review items 4 and 7 and the handle fan-out, memoized by span and depth. ADR numbers left: 0783-0789. Patterns 120 open, 0 false positives.
+
+**Left, in order:** P9 and `f02`; P7; member tag; `primitive-value`. Plans: `research-patterns.md`, `research-sc9012.md` section 3.
+
+**Check first.** `$S/safe.sh` refuses a tree with `8428ec497` and without `10da57271`. Merge `origin/claude/flip-reads` only after part 8 reports round 1, then one build, no full gate run. If part 8 says this branch broke the merged tree, that comes first.
+
+**Machine rules, owner's, current.** Every run that starts `solid-checker-rust`: `$S/g.sh <command>` (load under 30, `sc-heavy`, `sc-guard.sh 12`; report if the guard fires). One heavy check at a time. Sweeps `--jobs 3`. Release builds bare with `CARGO_BUILD_JOBS=6`. No `focus.mjs` or `make fuzz-focus` until part 8 caps it: ids only.
+
+**Helpers in `$S`.** `bld.sh <tag>` makes `r<tag>`. `sw.sh <tag> <prev>`, `lane.sh <tag> [only,only]`, `cov.sh <tag> [update]`, `vd.sh <tag> <base>`, `lib.sh <tag>`, `chk.sh <cases> <bindir>` (wrap in `g.sh`), `probe.sh` (tsc, Chrome, checker), `one.sh` and `lg.sh` (mx-recall and lg-recall subsets), `ids.mjs` (id manifest by regex), `defs.py rm|add` (open-defects and rediscovery by text), `union.py` was lost in the reboot: rewrite it if a merge conflicts. Baselines: build `rca`, sweep `sweep-ca.json`, old-build `rbase` (c6677ddac).
+
+**P9 and `f02`, from reading, unbuilt.** `after_await.rs:287` skips an async generator as an entry and `:1506` returns on a generator helper, and a `for await` operand sits before its own suspension, so no region reaches it. Plan: a pass beside `unlisted_async_computations`: for each tracked compute, each call in it whose `function_called_at` is an async generator, every accessor read after the generator's first await or yield is a `ReactiveReadAfterAwait` with `GeneratorStepped`. `file.ast.yields` for the yield boundary. Stays quiet: `q4`, a read before the first suspension. Check `q2`, already U, for a duplicate row.
+
+**P7, from reading, unbuilt.** The report's `resolver_dependencies.rs` is not at that path: find it with `rg --files rust`. Programs `values/d8-pkg-getter-export`, `-side-effect-import`, `-types-lie-plain`.
+
+**Traps.**
+- A report's line is a lead: F1's named site is never reached. Use the role log, `SOLID_CHECKER_IR_ROLE_LOG=<file>`.
+- `functions_owning` is not innermost first.
+- ADR 0367: no decision reads type text, `descriptor_text_gate` fails it. Ask the producer for a fact.
+- `ir-read-lint` counts raw cross-file reads: route one through an existing helper.
+- The fuzz model refuses `call(member(dom))` and `call(dom)`: hand the callback by name with `domExpr`.
+- A local memo needs depth in its key if the bound changes the answer, and recorded reads as in `returned_invocation_sites_memo`.
+
+**For the owner, leave as they are:** `types/p3-cast-*` (an assertion away from the receiver, held in open-defects), and the unknown-key global trade in `docs/open-work.md`.
+
 | 2, SC2003 silent tail | `bfd336ce8`, ADR 0790; `0ccd0aa2e` (3 patterns) | +372 / -2 SC2003 U, -1 SC9012 U, 0 V moved | 44 Chrome-warning probes: base silent on 36, now 5 proved V, 39 U. False positive fixed: a write root took its first token's symbol. Demand for argumentless write-root calls. Grid: 168 FC + 48 FP on r3base, 0 on the fix; patterns v09, v10, d6-comma closed |
 | smoke refresh | `3b4e446bc` | n/a | reselected from a full VM run at bfd336ce8, 406 leaving programs named; V-D1 removed, attributed to 061f71bd2 (ADR 0718) by id; 5 entries added, open before R3 |
 | 3, P8 | `ff0e75ed6`, ADR 0791, narrowed | 0 | U: a delete behind an optional chain (p9, p10). Not closed: p1-p8 (computed key, index, required `T \| undefined`, `unknown`), owed a producer answer, below |

@@ -496,15 +496,6 @@
    "certified": true
   },
   {
-   "id": "types/g12-cleanup-comp-store-write",
-   "item": "T-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
-  },
-  {
    "id": "types/h08-setter-as-cb",
    "item": "T-other",
    "outcome": "false-clean",

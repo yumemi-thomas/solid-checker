@@ -56,7 +56,8 @@ export const FLIP_READ_CONTEXTS = {
   UNTRACKED_READ_AFTER_AWAIT: ["then-named"],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING],
+  // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
+  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, "cleanup-mount-mixed", "handler-mount"],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
@@ -67,7 +68,8 @@ export const FLIP_READ_LEGAL = {
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach"],
+  // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount"],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
@@ -281,6 +283,14 @@ export function flipReadContext(context, stmts, kit) {
     const [patch, callee] = PATCHES[context];
     const h = kit.name("f");
     return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
+  }
+  if (context === "cleanup-mount" || context === "cleanup-mount-mixed" || context === "handler-mount") {
+    const [k, d, b] = [kit.name("K"), kit.name("f"), kit.name("b")];
+    const holder = decl(k, fn([...stmts, ret(domExpr("<i />"))]));
+    const mount = `createRoot(() => <${k} />)`;
+    if (context === "handler-mount") return { body: [holder], view: [button(b, [expr(domExpr(mount, undefined, ["createRoot"]))])] };
+    const root = decl(d, domExpr(`createRoot((r) => { onCleanup(() => { ${mount}; }); return r; })`, undefined, ["createRoot", "onCleanup"]));
+    return { body: [holder, root, ...(context === "cleanup-mount-mixed" ? [expr(domExpr(mount))] : [])], view: [button(b, [expr(domExpr(`${d}()`))])] };
   }
   if (context === "cast-late-foreach") {
     const t = kit.name("t");
