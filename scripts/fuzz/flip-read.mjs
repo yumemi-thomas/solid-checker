@@ -108,6 +108,53 @@ export const ABSENT_GUARD = {
   "guard-passed": { kind: "plain", contexts: ["body"], imports: ["children"], text: guarded("on ") },
   "guard-absent": { kind: "plain", contexts: [], legal: ["memo"], imports: ["children"], text: guarded("") },
 };
+// ADR 0790: a store write through a root no row of SC2003's flow described, on `createStore({ v, a: { v }, items })`. Each warns
+// STORE_WRITE_OUTSIDE_SETTER in Chrome (rc.21); the build before certified each. In a handler or a timer: no strict read beside it.
+const SUB_WRITE = { kind: "store-nested", contexts: ["handler", "timer"] };
+const SUB_IDS = "const swId = <T,>(x: T): T => x; const swOuter = <T,>(y: T): T => swId(y);";
+export const SUB_VALUE_WRITES = {
+  "sw-loop-pattern": { ...SUB_WRITE, text: (o) => `for (const { a } of [${o}]) a.v = 7;` },
+  "sw-decl-pattern": { ...SUB_WRITE, text: (o) => `const { a } = ${o}; a.v = 7;` },
+  "sw-nested-identity": { ...SUB_WRITE, text: (o) => `${SUB_IDS} swOuter(${o}).v = 7;` },
+  "sw-called-literal": { ...SUB_WRITE, text: (o) => `((x: typeof ${o}) => x)(${o}).v = 7;` },
+  "sw-entries": { ...SUB_WRITE, text: (o) => `for (const [, x] of Object.entries({ k: ${o}.a })) x.v = 7;` },
+  "sw-from-entries": { ...SUB_WRITE, text: (o) => `Object.fromEntries(Object.entries({ k: ${o}.a })).k.v = 7;` },
+  "sw-conditional": { ...SUB_WRITE, text: (o) => `(Math.random() >= 0 ? ${o} : { v: 0, a: { v: 0 }, items: [] }).v = 7;` },
+  "sw-array-root": { ...SUB_WRITE, text: (o) => `[${o}.a][0].v = 7;` },
+  "sw-let": { ...SUB_WRITE, text: (o) => `let r = { v: 0 }; r = ${o}.a; r.v = 7;` },
+  "sw-param-pattern": { ...SUB_WRITE, text: (o) => `const w = ({ a }: { a: { v: number } }) => { a.v = 7; }; w(${o});` },
+  "sw-rest": { ...SUB_WRITE, text: (o) => `const w = (...xs: { v: number }[]) => { xs[0].v = 7; }; w(${o}.a);` },
+  "sw-delete-call": { ...SUB_WRITE, text: (o) => `${SUB_IDS} delete (swId(${o}.a) as { v?: number }).v;` },
+  "sw-await": { ...SUB_WRITE, text: (o) => `void (async () => { (await Promise.resolve(${o}.a)).v = 7; })();` },
+  "sw-then": { ...SUB_WRITE, text: (o) => `void Promise.resolve(${o}.a).then((x) => { x.v = 7; });` },
+  "sw-map-get": { ...SUB_WRITE, text: (o) => `new Map([[1, ${o}.a]]).get(1)!.v = 7;` },
+  // patterns api/v09-store-write-nullish and values/d6-comma: a `??` and a comma whose value is the store (root writes).
+  "sw-coalesce": { ...SUB_WRITE, text: (o) => `(((((): any => null)()) as typeof ${o} | null) ?? ${o}).v = 7;` },
+  "sw-comma": { ...SUB_WRITE, text: (o) => `(Math.random(), ${o}).v = 7;` },
+  // ADR 0791: a delete behind an optional chain, tsc-clean, warns.
+  "sw-delete-optional-chain": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}?.v;` },
+  // ADR 0790, research-sc9012.md section 2's t5, t13, t22, t33, dl8: roots no row described, each U now.
+  "sw-object-root": { ...SUB_WRITE, text: (o) => `({ s: ${o}.a }).s.v = 7;` },
+  "sw-generator": { ...SUB_WRITE, text: (o) => `function* swGen() { yield ${o}.a; } for (const x of swGen()) x.v = 7;` },
+  "sw-assign-copy": { ...SUB_WRITE, text: (o) => `Object.assign({}, ${o}).a.v = 7;` },
+  "sw-param-array-pattern": { ...SUB_WRITE, text: (o) => `const w = ([e]: { v: number }[]) => { e.v = 7; }; w([${o}.a]);` },
+  "sw-foreach-pattern": { ...SUB_WRITE, text: (o) => `[${o}].forEach(({ a }) => { a.v = 7; });` },
+  // Rediscovery 214-219, ADRs 0716, 0717, 0719, 0720: a loop head, an aliased standard write, a plain parameter, and a call's result or
+  // a loop's element. The build before ADR 0716 (1232c2f2c^) certified each.
+  "sw-loop-head": { ...SUB_WRITE, text: (o) => `for (${o}.v of [2]) { }` },
+  "sw-assign-alias": { ...SUB_WRITE, text: (o) => `const as = Object.assign; as(${o}, { v: 2 });` },
+  "sw-param-plain": { ...SUB_WRITE, text: (o) => `const w = (x: { v: number }) => { x.v = 7; }; w(${o}.a);` },
+  "sw-identity": { ...SUB_WRITE, text: (o) => `const swId1 = <T,>(x: T): T => x; swId1(${o}).v = 7;` },
+  "sw-find": { ...SUB_WRITE, text: (o) => `[${o}.a].find(() => true)!.v = 7;` },
+  "sw-for-of": { ...SUB_WRITE, text: (o) => `for (const e of [${o}.a]) e.v = 7;` },
+  "sw-filter": { ...SUB_WRITE, text: (o) => `[${o}.a].filter(() => true)[0].v = 7;` },
+  "sw-values": { ...SUB_WRITE, text: (o) => `Object.values({ k: ${o}.a })[0].v = 7;` },
+  // Quiet in Chrome: a fresh literal written at its own property, and the frame's plain argument. The build before reported the first
+  // a violation: the conditional's entity named its first token, the store in its test.
+  "sw-fresh-test": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `(${o}.v > 0 ? { v: 1 } : { v: 2 }).v = 7;` },
+  "sw-fresh-spread": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `(Math.random() >= 0 ? { ...${o}.a } : { v: 0 }).v = 7;` },
+  "sw-fresh-frame": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `${SUB_IDS} swOuter({ v: 1 }).v = 7; void swOuter(${o});` },
+};
 // ADRs 0770-0772, the handed net (research report section 1). A prop's member past the first step, a value handed to a helper's parameter at a
 // tracked position, a hook no call edge resolves. Each writes, acts or reads through a value no fact resolves; the build before certified each.
 const SET = "const [, w] = createSignal(0);";
@@ -156,15 +203,26 @@ export const NET_STORE_CALLS = {
   "net-push-held": { ...STORE_CALL, text: (o) => `const f = Array.prototype.push.bind(${o}); f(1);` },
   "net-push-reflect": { ...STORE_CALL, text: (o) => `Reflect.apply(Array.prototype.push, ${o}, [1]);` },
   "net-push-apply-held": { ...STORE_CALL, text: (o) => `const more = [1]; Array.prototype.push.apply(${o}, more);` },
+  // Rediscovery 217, ADRs 0688 and 0773: `sort` on a store array through `Function.call`, `bind` or `Reflect.apply`. A descending
+  // comparator on `[1, 2]`, so the sort writes.
+  "net-sort-call": { ...STORE_CALL, kind: "store-list", text: (o) => `Array.prototype.sort.call(${o}.items, (x: number, y: number) => y - x);` },
+  "net-sort-bind": { ...STORE_CALL, kind: "store-list", text: (o) => `Array.prototype.sort.bind(${o}.items)((x: number, y: number) => y - x);` },
+  "net-sort-reflect": { ...STORE_CALL, kind: "store-list", text: (o) => `Reflect.apply(Array.prototype.sort, ${o}.items, [(x: number, y: number) => y - x]);` },
+};
+
+// Rediscovery 202, ADR 0676: a read in a store setter's callback in an apply, the setter a module store's.
+const SETTER_STORE = { importLines: ['import { setSw2 } from "./sw2";'], files: { "sw2.ts": 'import { createStore } from "solid-js";\nexport const [sw2, setSw2] = createStore({ n: 0 });\n' } };
+export const SETTER_READS = {
+  "setter-fn-apply": { ...SETTER_STORE, kind: "plain", contexts: ["effect-apply"], text: (o) => `setSw2((d) => { d.n = ${o}(); });` },
 };
 
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: NET_PENDING,
-  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES },
+  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

@@ -144,6 +144,26 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 2637,
+      "end": 2645,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 2656,
+      "end": 2683,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/Namespace.tsx",
