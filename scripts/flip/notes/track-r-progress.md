@@ -103,6 +103,8 @@ Stop report, 2026-11-06, the 72 of `pos-flush-fn` (STORE_WRITE_OUTSIDE_SETTER, `
 
 Pushed. Tree clean. Fresh Opus 5.5 high agent: read this section first. Census research runs separately and writes `/tmp/sc-scratch.noindex/census-research/report.md`: read it before step 4.
 
+| Merge 6 | W to `91311857e`, ADRs 0750, 0751 | +1 U (SC6002 `search-depth-limit`, inferay `useQueryResource:140`), 0 V moved, `sweep-t3.json`, 21,617 U, 377 V, 0 unnamed | The first commit of this merge did not compile. Repair found two real defects: W's rows joined blocker and detail with a space, so ADR 0680 called them unnamed; and SC2006, SC2008, SC6002 had lost ADRs 0673, 0674's arms, which dropped 3 SC6002 U rows from `coverage`. `unplaced_blocker` now asks both walks. `check.mjs all` 296 of 336, 40 fail, all kind `clean` (32 SC9012, 4 SC2003, 2 SC2009, 1 SC1002, 1 SC1003), no keep, regress or warn. W's six named witnesses are all that fail of its list: c04 and j05 pass |
+
 **Baselines.** Build `rk2/`, sweep `sweep-k2.json`: 21,616 U, 377 V, 0 unnamed, 0 exit errors. Patterns 139 open (3 FP, 133 FC, 3 no run). `make verify` green on this tree through verify-delta's escalation, in the lanes as written. Set `SOLID_CHECKER_TSRS_BIN=/Users/thomas/Documents/Github/tsrs/target/release/tsrs` for old-revision judges (scratch `judge.sh <rev> <bindir>`).
 
 **Merge first.** `origin/claude/flip-writes` moved 2 commits past the last merge: `138ff86e7` (ADR 0750, a walk past its depth limit is undecided) and `91311857e` (ADR 0751, a value chain past its limit). They overlap step 6 below. W took 0750 and 0751, so continue from 0752 if R's range runs out.

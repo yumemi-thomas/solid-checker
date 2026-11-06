@@ -536,6 +536,40 @@
    }
   },
   {
+   "id": "no-store-mutation-outside-setter/setter-alias-limit/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// The setter through six `const` aliases: past the four followed, its callback is a window not proven\n// either way (ADR 0751), so the write in it is unproven, never dropped.\nexport function Six() {\n  const [store, setStore] = createStore({ a: 1 });\n  const s1 = setStore; const s2 = s1; const s3 = s2; const s4 = s3; const s5 = s4; const s6 = s5;\n  const bump = () => { store.a = 2; };\n  return <button onClick={() => s6(() => { bump(); })}>{store.a}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "store.a",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
    "id": "no-store-mutation-outside-setter/nested-props-value/001",
    "dialect": "solid-v2",
    "source": {

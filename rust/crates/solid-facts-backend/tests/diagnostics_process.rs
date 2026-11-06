@@ -2631,3 +2631,98 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     );
     assert!(!closed.contains("SC9005"), "{closed}");
 }
+
+/// The rows `findings` reports at `file:line`, as `(code, kind, analysisContext)`.
+fn rows_at<'a>(
+    findings: &'a [serde_json::Value],
+    file: &str,
+    line: u64,
+) -> Vec<(&'a str, &'a str, &'a str)> {
+    findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with(&format!("/{file}")))
+                && row["primaryLocation"]["line"].as_u64() == Some(line)
+        })
+        .map(|row| {
+            (
+                row["id"].as_str().unwrap_or_default(),
+                row["kind"].as_str().unwrap_or_default(),
+                row["analysisContext"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+/// The 1-based line of the first line of `source` containing `needle`.
+fn line_of(source: &str, needle: &str) -> u64 {
+    let offset = source.find(needle).expect("needle occurs in source");
+    u64::try_from(source[..offset].matches('\n').count() + 1).unwrap()
+}
+
+/// ADR 0750: each walk answers within its limit, and past it the search is
+/// undecided (`search-depth-limit`), never clean: `effect_phase`'s 12 layers
+/// (SC2008, SC6002), the promise chain's 6 (SC1002, SC9012), the handed-read
+/// regions' 3, the unplaced-caller net's 4 helpers (SC2008).
+#[test]
+fn walks_past_their_depth_limit_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-search-depth-limit") else {
+        return;
+    };
+    let app = include_str!("../../../../fixtures/reactive-ir/bounds-search-depth-limit/App.tsx");
+    let stepped =
+        include_str!("../../../../fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx");
+    const LIMIT: &str = "search-depth-limit";
+    let has = |rows: &[(&str, &str, &str)], code: &str, kind: &str, limit: bool| {
+        rows.iter().any(|(id, found, context)| {
+            *id == code && *found == kind && context.starts_with(LIMIT) == limit
+        })
+    };
+    // Twelve helpers: proven. Thirteen: undecided, not certified.
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function fa12("));
+    assert!(has(&at, "SC2008", "violation", false), "{at:?}");
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function fb13("));
+    assert!(has(&at, "SC2008", "uncertifiable", true), "{at:?}");
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function mb13("));
+    assert!(has(&at, "SC6002", "uncertifiable", true), "{at:?}");
+    let at = rows_at(
+        &findings,
+        "App.tsx",
+        line_of(app, "const m = createMemo(async () => Promise"),
+    );
+    assert!(has(&at, "SC1002", "uncertifiable", true), "{at:?}");
+    assert!(has(&at, "SC9012", "uncertifiable", true), "{at:?}");
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function k3("));
+    assert!(has(&at, "SC9012", "uncertifiable", true), "{at:?}");
+    let at = rows_at(&findings, "stepped.tsx", line_of(stepped, "function s15("));
+    assert!(has(&at, "SC2008", "uncertifiable", true), "{at:?}");
+}
+
+/// ADR 0751: a value chain past its limit is unknown. `is_own_setter`'s four
+/// aliases: the sixth-alias setter's callback is a window not proven either
+/// way, so the write in it is uncertifiable, not dropped (Chrome is quiet);
+/// `handed_value`'s six steps: the eighth member's call after an await opens
+/// the handed-read obligation.
+#[test]
+fn value_chains_past_their_limit_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-value-depth-limit") else {
+        return;
+    };
+    let setter =
+        include_str!("../../../../fixtures/reactive-ir/bounds-value-depth-limit/setter.tsx");
+    let handed =
+        include_str!("../../../../fixtures/reactive-ir/bounds-value-depth-limit/handed.tsx");
+    let four = rows_at(&findings, "setter.tsx", line_of(setter, "const bumpFour"));
+    assert!(four.is_empty(), "{four:?}");
+    let six = rows_at(&findings, "setter.tsx", line_of(setter, "const bumpSix"));
+    assert_eq!(six, [("SC2003", "uncertifiable", "search-depth-limit")]);
+    let past = rows_at(&findings, "handed.tsx", line_of(handed, "m6.m7.read()"));
+    assert!(
+        past.iter().any(|(id, kind, context)| {
+            *id == "SC9012" && *kind == "uncertifiable" && *context == "handed-read-after-await"
+        }),
+        "{past:?}"
+    );
+}

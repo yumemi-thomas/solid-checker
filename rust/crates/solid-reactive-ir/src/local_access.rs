@@ -222,7 +222,8 @@ pub(crate) fn literal_member_has_getter(
 }
 
 /// ADR 0509: whether the value at `span` is one a caller supplied
-/// ([`UNRESOLVED_HANDED_MEMBER`]), through at most `depth` steps.
+/// ([`UNRESOLVED_HANDED_MEMBER`]), through at most `depth` steps. ADR 0751:
+/// past them it may be, so it answers true (this only opens obligations).
 pub(crate) fn handed_value(
     t: &HandedTables<'_, '_>,
     file: &solid_facts::FileFacts,
@@ -8275,7 +8276,7 @@ pub(crate) fn run_unplaced(
 /// getter, `toString`, an iterator, a tag, a field) has no call node, so this
 /// is decided from the function, and from the functions an exact call of the
 /// named helper around `span` sits in. `inside_class_member` stays beside
-/// [`crate::static_api::runs_unplaced_through_callers`]: it has a climb that
+/// [`crate::static_api::runs_unplaced_exhaustive`]: it has a climb that
 /// reports exhaustion.
 fn placed_nowhere(
     file: &solid_facts::FileFacts,
@@ -8284,7 +8285,7 @@ fn placed_nowhere(
 ) -> bool {
     function_escapes_unfollowed(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
-        || crate::static_api::runs_unplaced_through_callers(file, span, lookup, false)
+        || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
 }
 
 pub(crate) fn function_escapes_unfollowed(

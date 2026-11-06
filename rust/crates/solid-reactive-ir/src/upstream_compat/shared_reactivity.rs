@@ -1618,7 +1618,7 @@ fn no_direct_mutation(
             analysis_context: if may_not_write {
                 crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
             } else {
-                String::new()
+                standing.blocker().unwrap_or_default().to_owned()
             },
             fixes: vec![],
             // A write through a 2.0 props object, or a `merge`/`omit` view of
@@ -1630,7 +1630,7 @@ fn no_direct_mutation(
             uncertain: props
                 || typed_store.is_some()
                 || past_root
-                || standing == WriteStanding::Unproven
+                || standing.unproven()
                 || may_not_write,
         });
     }
@@ -2944,8 +2944,23 @@ enum WriteStanding {
     Exempt,
     /// The write runs with no window open, at least on one run: dropped.
     Dropped,
-    /// Whether a window is open when it runs is not proven: uncertifiable.
-    Unproven,
+    /// Whether a window is open when it runs is not proven: uncertifiable,
+    /// with the blocker naming why when one does (ADR 0751).
+    Unproven(Option<&'static str>),
+}
+
+impl WriteStanding {
+    fn unproven(self) -> bool {
+        matches!(self, Self::Unproven(_))
+    }
+
+    /// ADR 0751: the blocker an unproven standing names, if any.
+    fn blocker(self) -> Option<&'static str> {
+        match self {
+            Self::Unproven(blocker) => blocker,
+            _ => None,
+        }
+    }
 }
 
 /// Where a write through the proven store `symbol` stands.
@@ -2982,7 +2997,7 @@ fn store_write_standing(
     // ADR 0630: a write through a `merge` of several sources meets the view's
     // own trap, or the last source itself: no store claims it.
     if merge_view_root(file, context, site.root) {
-        return WriteStanding::Unproven;
+        return WriteStanding::Unproven(None);
     }
     // ADR 0634: a raw value's write lands: no proxy drops it.
     if context
@@ -2992,17 +3007,24 @@ fn store_write_standing(
             context.lookup.store_value_may_be_raw(binding_file, binding)
         })
     {
-        return WriteStanding::Unproven;
+        return WriteStanding::Unproven(None);
     }
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
     let stores = store_and_aliases(context, file, site.root, symbol);
     let windows = write_windows(file, context, &stores, symbol);
-    if windows.is_empty() {
-        return WriteStanding::Dropped;
+    let standing = if windows.is_empty() {
+        WriteStanding::Dropped
+    } else {
+        write_window_standing(file, context, &windows, site.span, WINDOW_DEPTH)
+    };
+    match standing {
+        WriteStanding::Dropped if windows.undecided => {
+            WriteStanding::Unproven(Some(crate::blockers::SEARCH_DEPTH_LIMIT))
+        }
+        standing => standing,
     }
-    write_window_standing(file, context, &windows, site.span, WINDOW_DEPTH)
 }
 
 /// How many named functions [`write_window_standing`] follows from a write to
@@ -3032,7 +3054,20 @@ fn write_windows(
 ) -> Windows {
     let mut windows = Windows::default();
     for call in &file.ast.calls {
-        if !is_own_setter(context, file, call.callee, stores, 4) {
+        let cut = std::cell::Cell::new(false);
+        if !is_own_setter(context, file, call.callee, stores, 4, &cut) {
+            // Only an argument that can hold a function can be a window.
+            windows.undecided |= cut.get()
+                && call.arguments.iter().any(|argument| {
+                    argument.spread
+                        || matches!(
+                            argument.value,
+                            solid_facts::ast::ArgumentValueKind::Identifier
+                                | solid_facts::ast::ArgumentValueKind::Function
+                                | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                                | solid_facts::ast::ArgumentValueKind::Other
+                        )
+                });
             continue;
         }
         for argument in &call.arguments {
@@ -3068,6 +3103,10 @@ fn write_windows(
 struct Windows {
     regions: Vec<WriteWindow>,
     arguments: Vec<Span>,
+    /// ADR 0751: a call whose callee's alias chain [`is_own_setter`] stopped
+    /// following at its depth: it may be the store's own setter, so a write
+    /// outside every proven window is unproven, never dropped.
+    undecided: bool,
 }
 
 impl Windows {
@@ -3184,12 +3223,14 @@ fn close_over_local_aliases(
 /// one of `stores` (`const [store, setStore] = createStore(...)`),
 /// directly or through exact `const` aliases of it (`const set = setStore`, at
 /// most `depth` of them). Another store's setter or a same-spelled local is not.
+/// ADR 0751: `cut` is set where an alias went on past `depth`.
 fn is_own_setter(
     context: &UpstreamCompatContext<'_>,
     file: &solid_facts::FileFacts,
     callee: Span,
     stores: &[crate::SymbolId],
     depth: usize,
+    cut: &std::cell::Cell<bool>,
 ) -> bool {
     // ADR 0482: a member read that is exactly a `const` (ADR 0481) calls that
     // `const`: the setter slot of one of `stores`' patterns, or an alias of it.
@@ -3197,7 +3238,7 @@ fn is_own_setter(
         .ast
         .local_alias_member(file.ast.peel_ts_sugar_span(callee))
     {
-        return setter_declaration_is_own(context, file, alias.source, stores, depth);
+        return setter_declaration_is_own(context, file, alias.source, stores, depth, cut);
     }
     let Some((binding_file, binding, callee_symbol)) = context
         .lookup
@@ -3222,14 +3263,31 @@ fn is_own_setter(
                 .initializer_identifier
                 .as_ref()
                 .is_some_and(|source| {
-                    is_own_setter(context, binding_file, source.span, stores, depth - 1)
+                    is_own_setter(context, binding_file, source.span, stores, depth - 1, cut)
                 })
-                || literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+                || literal_alias_is_own_setter(
+                    context,
+                    binding_file,
+                    &callee_symbol,
+                    stores,
+                    depth,
+                    cut,
+                )
         }
         _ if depth > 0 => {
-            literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+            literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth, cut)
         }
-        _ => false,
+        shape => {
+            // ADR 0751: an alias the depth did not follow.
+            if (shape == solid_facts::ast::BindingShape::Identifier
+                && binding.immutable
+                && binding.initializer_identifier.is_some())
+                || literal_alias_of(context, binding_file, &callee_symbol)
+            {
+                cut.set(true);
+            }
+            false
+        }
     }
 }
 
@@ -3242,6 +3300,7 @@ fn literal_alias_is_own_setter(
     symbol: &crate::SymbolId,
     stores: &[crate::SymbolId],
     depth: usize,
+    cut: &std::cell::Cell<bool>,
 ) -> bool {
     let path = file.path.as_str();
     let Some(alias) = file
@@ -3252,7 +3311,21 @@ fn literal_alias_is_own_setter(
     else {
         return false;
     };
-    setter_declaration_is_own(context, file, alias.source, stores, depth)
+    setter_declaration_is_own(context, file, alias.source, stores, depth, cut)
+}
+
+/// Whether `symbol` is an exact local alias (`local_alias_bindings`) of
+/// anything.
+fn literal_alias_of(
+    context: &UpstreamCompatContext<'_>,
+    file: &solid_facts::FileFacts,
+    symbol: &crate::SymbolId,
+) -> bool {
+    let path = file.path.as_str();
+    file.ast
+        .local_alias_bindings
+        .iter()
+        .any(|alias| context.entities.at(path, alias.local) == Some(symbol))
 }
 
 /// Whether the binding declared at `declaration` is the setter slot of one of
@@ -3263,6 +3336,7 @@ fn setter_declaration_is_own(
     declaration: Span,
     stores: &[crate::SymbolId],
     depth: usize,
+    cut: &std::cell::Cell<bool>,
 ) -> bool {
     let path = file.path.as_str();
     if let Some(binding) = file.ast.bindings.iter().find(|binding| {
@@ -3283,7 +3357,11 @@ fn setter_declaration_is_own(
     let Some(source) = context.entities.at(path, declaration) else {
         return false;
     };
-    depth > 0 && literal_alias_is_own_setter(context, file, source, stores, depth - 1)
+    if depth == 0 {
+        cut.set(cut.get() || literal_alias_of(context, file, source));
+        return false;
+    }
+    literal_alias_is_own_setter(context, file, source, stores, depth - 1, cut)
 }
 
 /// Where the site at `span` (a store write, or the call of a function that
@@ -3351,7 +3429,7 @@ fn write_window_standing(
                         })
                     }) =>
             {
-                return WriteStanding::Unproven;
+                return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::InPlace(call) => {
                 in_list |= !function.body.contains(at);
@@ -3365,7 +3443,7 @@ fn write_window_standing(
                 at = call;
             }
             crate::execution_role::LayerRun::InPlaceAmongOthers(_) if inside => {
-                return WriteStanding::Unproven;
+                return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::FreshStack if inside => return WriteStanding::Dropped,
             _ => break,
@@ -3389,12 +3467,12 @@ fn write_window_standing(
             }
         }
         return if in_list || !owner.body.contains(at) {
-            WriteStanding::Unproven
+            WriteStanding::Unproven(None)
         } else {
             match suspended {
                 None => WriteStanding::Exempt,
                 Some(true) => WriteStanding::Dropped,
-                Some(false) => WriteStanding::Unproven,
+                Some(false) => WriteStanding::Unproven(None),
             }
         };
     }
@@ -3413,7 +3491,7 @@ fn write_window_standing(
     match named_function_standing(file, context, windows, owner, depth) {
         Some(standing) => standing,
         None if in_window || called_in_window(file, context, windows, owner) => {
-            WriteStanding::Unproven
+            WriteStanding::Unproven(None)
         }
         None => WriteStanding::Dropped,
     }
@@ -3486,7 +3564,9 @@ fn named_function_standing(
     }
     // The chain of callers is longer than this follows: unknown, not dropped.
     if depth == 0 {
-        return Some(WriteStanding::Unproven);
+        return Some(WriteStanding::Unproven(Some(
+            crate::blockers::SEARCH_DEPTH_LIMIT,
+        )));
     }
     let name = crate::owners::function_binding_name(file, function)?;
     let path = file.path.as_str();
@@ -3550,7 +3630,7 @@ fn named_function_standing(
         return None;
     }
     Some(if handed || function.r#async || !current {
-        WriteStanding::Unproven
+        WriteStanding::Unproven(None)
     } else if standings.contains(&WriteStanding::Dropped) {
         WriteStanding::Dropped
     } else if standings
@@ -3559,7 +3639,7 @@ fn named_function_standing(
     {
         WriteStanding::Exempt
     } else {
-        WriteStanding::Unproven
+        WriteStanding::Unproven(standings.iter().find_map(|standing| standing.blocker()))
     })
 }
 
@@ -4553,15 +4633,12 @@ fn no_store_mutator_call(
             },
             location: location(file.path.shared(), call.span),
             analysis_context: if writes {
-                String::new()
+                standing.blocker().unwrap_or_default().to_owned()
             } else {
                 crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
             },
             fixes: vec![],
-            uncertain: typed_store.is_some()
-                || past_root
-                || !writes
-                || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some() || past_root || !writes || standing.unproven(),
         });
     }
 }
@@ -4631,7 +4708,7 @@ fn no_store_method_write(
                     target: store_target(context, symbol),
                 },
                 location: location(file.path.shared(), call.span),
-                analysis_context: String::new(),
+                analysis_context: standing.blocker().unwrap_or_default().to_owned(),
                 fixes: vec![],
                 uncertain: standing != WriteStanding::Dropped
                     || !store_path_holds_writing_method(file, context, symbol, callee),
@@ -4901,15 +4978,12 @@ fn no_store_standard_library_write(
             },
             location: location(file.path.shared(), call.span),
             analysis_context: if writes {
-                String::new()
+                standing.blocker().unwrap_or_default().to_owned()
             } else {
                 crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
             },
             fixes: vec![],
-            uncertain: typed_store.is_some()
-                || past_root
-                || !writes
-                || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some() || past_root || !writes || standing.unproven(),
         });
     }
 }
@@ -5051,9 +5125,9 @@ fn no_store_delete(
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), member),
-            analysis_context: String::new(),
+            analysis_context: standing.blocker().unwrap_or_default().to_owned(),
             fixes: vec![],
-            uncertain: uncertain || typed_store.is_some() || standing == WriteStanding::Unproven,
+            uncertain: uncertain || typed_store.is_some() || standing.unproven(),
         });
     }
 }

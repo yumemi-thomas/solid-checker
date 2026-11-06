@@ -154,6 +154,8 @@ effect.
   the project names a primitive that defers a callback: an apply may be what
   runs it, and Chrome warns when one does. A proven apply position stays a
   violation.
+- **A walk past its bound** (13 helpers, 400 sites, 4 helpers in the net):
+  uncertifiable, `search-depth-limit` (ADR 0750).
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or

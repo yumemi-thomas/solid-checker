@@ -408,7 +408,7 @@ impl StaticApiContext<'_> {
             } else if let Some(kind) = kind
                 && dialect.throws_inside_action_step(kind)
                 && self.lookup.project_steps_action_callbacks()
-                && runs_unplaced_through_callers(file, call.span, self.lookup, false)
+                && let Some(blocker) = unplaced_blocker(file, call.span, self.lookup, false)
             {
                 // ADR 0708: the call runs in a function no call edge places
                 // (an object or class member, a slot, a tag, a function
@@ -419,11 +419,12 @@ impl StaticApiContext<'_> {
                     id: "SC2006".into(),
                     rule: "flush-in-action".into(),
                     message: format!(
-                        "{primitive}() is called in a function that runs where no call edge places it, and this program steps an action's body; if a step is on the stack when it runs, the installed @solidjs/signals throws FLUSH_IN_ACTION in dev, and in production the call drains nothing"
+                        "{primitive}() is called {}, and this program steps an action's body; if a step is on the stack when it runs, the installed @solidjs/signals throws FLUSH_IN_ACTION in dev, and in production the call drains nothing",
+                        unplaced_clause(blocker)
                     ),
                     hint: "Call flush() only from code proven outside every action body (an event handler that starts no action, a timer), or remove it: an action's writes commit when the action settles.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: crate::blockers::FUNCTION_RUN_UNPLACED.into(),
+                    analysis_context: blocker.into(),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -471,12 +472,18 @@ impl StaticApiContext<'_> {
                 result.violations.push(StaticViolation {
                     id: "SC2008".into(),
                     rule: "flush-in-effect-callback".into(),
-                    message: format!(
-                        "{primitive}() is called {reached}; whenever it runs, it runs inside the flush that drains effects, so the queue is already running and this flush drains nothing (the dev build usually also warns FLUSH_IN_EFFECT_CALLBACK), and the writes it was meant to reveal are processed in that flush's continuation, not at this call"
-                    ),
+                    message: if origin.undecided.is_some() {
+                        format!(
+                            "{primitive}() may run on an effect's apply: the walk from this call to the code that runs it stopped at its bound before it decided, so whether it runs inside the flush draining effects (and drains nothing) is not proven"
+                        )
+                    } else {
+                        format!(
+                            "{primitive}() is called {reached}; whenever it runs, it runs inside the flush that drains effects, so the queue is already running and this flush drains nothing (the dev build usually also warns FLUSH_IN_EFFECT_CALLBACK), and the writes it was meant to reveal are processed in that flush's continuation, not at this call"
+                        )
+                    },
                     hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: origin.undecided.unwrap_or_default().into(),
                     fixes: vec![],
                     uncertain: origin.mixed,
                 });
@@ -492,14 +499,17 @@ impl StaticApiContext<'_> {
                 self.lookup.synchronous_event_flush_dispatch_present()
                     || crate::execution_role::in_denied_handler(file, call.span)
             };
-            let mut unplaced = false;
+            let mut unplaced = None;
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
                 && (dispatched() || {
-                    unplaced = self.lookup.project_defers_callbacks()
-                        && runs_unplaced_through_callers(file, call.span, self.lookup, false);
-                    unplaced
+                    unplaced = self
+                        .lookup
+                        .project_defers_callbacks()
+                        .then(|| unplaced_blocker(file, call.span, self.lookup, false))
+                        .flatten();
+                    unplaced.is_some()
                 })
                 && !result.violations.iter().any(|violation| {
                     violation.id == "SC2008"
@@ -517,15 +527,23 @@ impl StaticApiContext<'_> {
                         |function| !self.lookup.function_may_be_component(file, function),
                     )
                 {
-                    let (message, hint, blocker) = if unplaced {
+                    let (message, hint, blocker) = if let Some(blocker) = unplaced {
                         (
-                            format!(
-                                "{primitive}() runs in a function no call edge places (a member, a slot, \
-                                 a function handed on): if an effect's apply runs it, it runs inside the \
-                                 flush draining effects and drains nothing"
-                            ),
+                            if blocker == crate::blockers::FUNCTION_RUN_UNPLACED {
+                                format!(
+                                    "{primitive}() runs in a function no call edge places (a member, a slot, \
+                                     a function handed on): if an effect's apply runs it, it runs inside the \
+                                     flush draining effects and drains nothing"
+                                )
+                            } else {
+                                format!(
+                                    "{primitive}() runs {}: if an effect's apply runs it, it runs inside the \
+                                     flush draining effects and drains nothing",
+                                    unplaced_clause(blocker)
+                                )
+                            },
                             "Remove the flush(), or call it only from code proven outside every effect's apply (an event handler, a timer).",
-                            crate::blockers::FUNCTION_RUN_UNPLACED,
+                            blocker,
                         )
                     } else {
                         (
@@ -642,7 +660,11 @@ impl StaticApiContext<'_> {
                 result.violations.push(StaticViolation {
                     id: "SC6002".into(),
                     rule: "primitive-in-effect-callback".into(),
-                    message: if earlier_call {
+                    message: if origin.undecided.is_some() {
+                        format!(
+                            "{primitive}() may run on an effect's apply with no owner set: the walk from this call to the code that runs it stopped at its bound before it decided, so whether the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK here is not proven"
+                        )
+                    } else if earlier_call {
                         format!(
                             "{primitive}() is called {reached}, with no owner set in between; the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK here unless a call that runs earlier in the callback ran an effect synchronously (which lowers the marker the guard reads), and whether one does is not proven"
                         )
@@ -653,7 +675,7 @@ impl StaticApiContext<'_> {
                     },
                     hint: "Create the computation in the effect's compute function or the component body, where an owner holds it, or parent it explicitly: capture `const owner = getOwner()` outside and wrap the creation in `runWithOwner(owner, () => …)`.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: origin.undecided.unwrap_or_default().into(),
                     fixes: vec![],
                     // ADR 0613: the effect phase is the queue's drain, which
                     // a synchronous `flush()` runs under its caller's owner.
@@ -684,18 +706,23 @@ impl StaticApiContext<'_> {
                         && violation.location == location(file.path.shared(), call.callee)
                 })
                 && self.lookup.project_defers_callbacks()
-                && runs_unplaced_through_callers(file, call.span, self.lookup, true)
+                && let Some(blocker) = unplaced_blocker(file, call.span, self.lookup, true)
                 && !self.runs_off_every_apply(file, call.span, &allowed)
             {
                 result.violations.push(StaticViolation {
                     id: "SC6002".into(),
                     rule: "primitive-in-effect-callback".into(),
                     message: format!(
-                        "{primitive}() is called in a function no call edge places (a member, a getter, a slot, a function handed on); if an effect's apply runs it with no owner set in between, the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK, and whether one does is not proven"
+                        "{primitive}() is called {}; if an effect's apply runs it with no owner set in between, the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK, and whether one does is not proven",
+                        if blocker == crate::blockers::FUNCTION_RUN_UNPLACED {
+                            "in a function no call edge places (a member, a getter, a slot, a function handed on)"
+                        } else {
+                            unplaced_clause(blocker)
+                        }
                     ),
                     hint: "Create the computation in the component body or an effect's compute function, where an owner holds it, or parent it explicitly with `runWithOwner(owner, () => …)`.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: crate::blockers::FUNCTION_RUN_UNPLACED.into(),
+                    analysis_context: blocker.into(),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -1533,7 +1560,7 @@ const UNPLACED_WALK_BUDGET: usize = 4096;
 /// ADR 0674: only reaching a placed end answers false. The walk visits each
 /// function once, in any order, so a helper reached by a long path answers the
 /// same as by a short one, and the budget fails closed.
-pub(crate) fn runs_unplaced_through_callers<'s, 'f: 's>(
+pub(crate) fn runs_unplaced_exhaustive<'s, 'f: 's>(
     file: &'s FileFacts,
     site: Span,
     lookup: &SemanticLookup<'f>,
@@ -1565,7 +1592,7 @@ fn search_fails_closed<T>(
     false
 }
 
-/// One site of [`runs_unplaced_through_callers`]: true when it is unplaced,
+/// One site of [`runs_unplaced_exhaustive`]: true when it is unplaced,
 /// else the sites above it go on `pending`.
 fn unplaced_step<'s, 'f: 's>(
     file: &'s FileFacts,
@@ -1676,21 +1703,96 @@ fn unplaced_step<'s, 'f: 's>(
     false
 }
 
-/// ADR 0674: whether `at` is a whole argument of a primitive at a tracked
-/// callback position: a computation's compute reads tracked.
-fn foreign_quiet_primitive(file: &FileFacts, at: Span, lookup: &SemanticLookup<'_>) -> bool {
-    file.ast.arguments_containing(at).any(|(call, index)| {
-        file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
-            && !call.arguments[index].spread
-            && lookup
-                .primitive_at_call(file, call.span)
-                .is_some_and(|primitive| {
-                    lookup
-                        .dialect
-                        .tracked_callback_timing(primitive, index, call.arguments.len())
-                        .is_some()
-                })
+/// Whether a rule's net answers at `site`, and with what blocker. Both walks
+/// ask: [`runs_unplaced_through_callers`] names a limit it stopped at (ADR
+/// 0750), [`runs_unplaced_exhaustive`] holds the hand-offs from hidden members
+/// and other files (ADRs 0673, 0674), so a row either raises stays.
+fn unplaced_blocker(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    ownerless: bool,
+) -> Option<&'static str> {
+    runs_unplaced_through_callers(file, site, lookup, 4, ownerless).or_else(|| {
+        runs_unplaced_exhaustive(file, site, lookup, ownerless)
+            .then_some(crate::blockers::FUNCTION_RUN_UNPLACED)
     })
+}
+
+/// ADR 0708: [`crate::execution_role::unplaced_run`] at `site`, or at an
+/// exact call of the named function around it, through `depth` helpers: a
+/// helper whose callers include an object method or slot runs wherever that
+/// member does, which no call edge places either. The blocker it answers with:
+/// ADR 0750, a climb that had callers left to ask past `depth` (or whose
+/// in-place climb was cut) is undecided, never placed.
+fn runs_unplaced_through_callers(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    ownerless: bool,
+) -> Option<&'static str> {
+    // ADR 0710: with `ownerless`, a site a primitive's synchronous callback
+    // runs (other than `untrack`'s) has the owner that primitive sets, and a
+    // body that may be a component's runs under the owner its render sets
+    // (as ADR 0639's net assumes).
+    if ownerless
+        && (owner_set_around(file, site, lookup)
+            || crate::owners::containing_ast_function(&file.ast, site)
+                .is_some_and(|function| lookup.function_may_be_component(file, function)))
+    {
+        return None;
+    }
+    if crate::execution_role::unplaced_run(file, site, lookup) {
+        return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
+    }
+    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
+        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
+        Some(climb) if climb.exhausted => return Some(crate::blockers::SEARCH_DEPTH_LIMIT),
+        // The layers that run in place end at a call in other code: ask
+        // there.
+        Some(climb) if climb.at != site => {
+            let Some(depth) = depth.checked_sub(1) else {
+                return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
+            };
+            return runs_unplaced_through_callers(file, climb.at, lookup, depth, ownerless);
+        }
+        Some(_) | None => site,
+    };
+    let function = crate::owners::owning_function(&file.ast, at)
+        .filter(|function| function.body.contains(at) && !function.generator)?;
+    crate::owners::function_binding_name(file, function)?;
+    let calls = lookup
+        .function_call_sites(file.path.as_str(), function.span)
+        .into_iter()
+        .flat_map(|(caller, callee)| {
+            caller
+                .ast
+                .calls
+                .iter()
+                .filter(move |call| {
+                    !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+                })
+                .map(move |call| (caller, call))
+        })
+        .collect::<Vec<_>>();
+    if calls.is_empty() {
+        return None;
+    }
+    let Some(depth) = depth.checked_sub(1) else {
+        return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
+    };
+    let mut answer = None;
+    for (caller, call) in calls {
+        match runs_unplaced_through_callers(caller, call.span, lookup, depth, ownerless) {
+            Some(crate::blockers::FUNCTION_RUN_UNPLACED) => {
+                return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
+            }
+            Some(blocker) => answer = Some(blocker),
+            None => {}
+        }
+    }
+    answer
 }
 
 /// ADR 0674: whether `at` is the whole value of an attribute of an intrinsic
@@ -1708,6 +1810,33 @@ fn foreign_jsx_value(file: &FileFacts, at: Span) -> bool {
                     .is_some_and(|expression| file.ast.peel_ts_sugar_span(expression) == at)
             })
     })
+}
+
+/// ADR 0674: whether `at` is a whole argument of a primitive at a tracked
+/// callback position: a computation's compute reads tracked.
+fn foreign_quiet_primitive(file: &FileFacts, at: Span, lookup: &SemanticLookup<'_>) -> bool {
+    file.ast.arguments_containing(at).any(|(call, index)| {
+        file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
+            && !call.arguments[index].spread
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .tracked_callback_timing(primitive, index, call.arguments.len())
+                        .is_some()
+                })
+    })
+}
+
+/// ADR 0750: how a finding of [`runs_unplaced_through_callers`] names where
+/// its call runs.
+fn unplaced_clause(blocker: &str) -> &'static str {
+    if blocker == crate::blockers::FUNCTION_RUN_UNPLACED {
+        "in a function that runs where no call edge places it"
+    } else {
+        "in a function whose callers the walk stopped asking at its depth limit"
+    }
 }
 
 /// ADR 0710: whether the functions directly around `site` are callbacks of
