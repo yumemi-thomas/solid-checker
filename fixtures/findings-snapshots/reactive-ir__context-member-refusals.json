@@ -49,6 +49,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 713,
+      "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
@@ -123,6 +134,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 1815,
+      "end": 1820,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -170,6 +192,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 2357,
+      "end": 2362,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
@@ -197,6 +230,17 @@
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
       "start": 2775,
       "end": 2785,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 2775,
+      "end": 2796,
       "fixes": 0
     },
     {
@@ -236,6 +280,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 3092,
+      "end": 3108,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
@@ -269,6 +324,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 3515,
+      "end": 3523,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
@@ -296,6 +362,17 @@
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
       "start": 3857,
       "end": 3867,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 3899,
+      "end": 3904,
       "fixes": 0
     },
     {

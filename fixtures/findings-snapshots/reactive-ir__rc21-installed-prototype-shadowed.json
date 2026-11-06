@@ -8,6 +8,28 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-shadowed/App.tsx",
+      "start": 218,
+      "end": 223,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-shadowed/App.tsx",
+      "start": 298,
+      "end": 304,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-shadowed/App.tsx",
       "start": 339,
       "end": 344,
       "fixes": 0

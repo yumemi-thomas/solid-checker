@@ -85,6 +85,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4054,
+      "end": 4059,
+      "fixes": 0
+    },
+    {
       "rule": "uncalled-accessor",
       "code": "SC1005",
       "kind": "uncertifiable",

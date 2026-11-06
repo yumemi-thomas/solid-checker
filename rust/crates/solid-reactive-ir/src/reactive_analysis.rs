@@ -430,6 +430,21 @@ pub(crate) fn collect_project<'facts>(
             .chain(draft.static_defects.iter().map(|defect| &defect.location)),
     )
     .with_member_writes(&decided_writes);
+    let census_obligation =
+        |callee: &str, location: typefacts::Location, blocker: &str| crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: callee.to_owned(),
+                member: None,
+            },
+            location,
+            analysis_context: blocker.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        };
+    // After every walk's own row: one SC9012 stands per start, and a
+    // reference's row stays where it was.
+    let mut use_rows = Vec::new();
+    let mut used = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
@@ -440,22 +455,24 @@ pub(crate) fn collect_project<'facts>(
             } else {
                 census.callable_use(&reference, ctx.accessors.contains_key(symbol), pending)
             };
+            let callee = ctx
+                .symbol_names
+                .get(symbol)
+                .map_or_else(|| "this value".to_owned(), ToString::to_string);
+            // The obligation sits at each use the walk ended at, too.
+            for (location, blocker) in census.take_uses() {
+                if used.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    use_rows.push(census_obligation(&callee, location, blocker));
+                }
+            }
             let Some(blocker) = open else {
                 continue;
             };
-            handed.push(crate::StaticDefect {
-                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: ctx
-                        .symbol_names
-                        .get(symbol)
-                        .map_or_else(|| "this value".to_owned(), ToString::to_string),
-                    member: None,
-                },
-                location: reference,
-                analysis_context: blocker.to_owned(),
-                fixes: vec![],
-                uncertain: true,
-            });
+            handed.push(census_obligation(&callee, reference, blocker));
         }
     }
     // P13: a source with no name has no reference to start from.
@@ -467,26 +484,32 @@ pub(crate) fn collect_project<'facts>(
             if !ctx.dialect.creates_reactive_source(primitive) {
                 continue;
             }
-            let Some(blocker) = census.created_use(
+            let open = census.created_use(
                 file,
                 call.span,
                 ctx.dialect.returns_store(primitive),
                 ctx.dialect.returns_reactive_tuple(primitive),
-            ) else {
+            );
+            for (location, blocker) in census.take_uses() {
+                if used.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    use_rows.push(census_obligation("this value", location, blocker));
+                }
+            }
+            let Some(blocker) = open else {
                 continue;
             };
-            handed.push(crate::StaticDefect {
-                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: "this value".to_owned(),
-                    member: None,
-                },
-                location: call.span.location(file.path.as_str()),
-                analysis_context: blocker.to_owned(),
-                fixes: vec![],
-                uncertain: true,
-            });
+            handed.push(census_obligation(
+                "this value",
+                call.span.location(file.path.as_str()),
+                blocker,
+            ));
         }
     }
+    handed.extend(use_rows);
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.
     let covered = |obligation: &crate::StaticDefect| {

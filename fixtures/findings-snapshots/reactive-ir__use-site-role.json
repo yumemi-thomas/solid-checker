@@ -349,6 +349,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 3042,
+      "end": 3078,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
       "start": 3044,
       "end": 3048,
       "fixes": 0

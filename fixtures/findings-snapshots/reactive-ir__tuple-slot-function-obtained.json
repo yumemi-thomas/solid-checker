@@ -51,6 +51,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-function-obtained/hook.ts",
+      "start": 106,
+      "end": 109,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-function-obtained/hook.ts",
       "start": 107,
       "end": 108,
       "fixes": 0

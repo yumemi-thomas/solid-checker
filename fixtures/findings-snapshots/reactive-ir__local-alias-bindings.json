@@ -245,6 +245,17 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4354,
+      "end": 4362,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
       "start": 4382,
       "end": 4384,
       "fixes": 0
@@ -290,6 +301,17 @@
       "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
       "start": 4612,
       "end": 4614,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4619,
+      "end": 4636,
       "fixes": 0
     },
     {

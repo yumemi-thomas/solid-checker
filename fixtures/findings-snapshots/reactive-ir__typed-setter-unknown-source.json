@@ -71,6 +71,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/typed-setter-unknown-source/hook.ts",
+      "start": 338,
+      "end": 357,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/typed-setter-unknown-source/hook.ts",
       "start": 340,
       "end": 345,
       "fixes": 0

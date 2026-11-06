@@ -258,11 +258,33 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 2728,
+      "end": 2733,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 2752,
       "end": 2762,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 2907,
+      "end": 2920,
       "fixes": 0
     },
     {
@@ -447,6 +469,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 5070,
+      "end": 5078,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 5072,
       "end": 5076,
       "fixes": 0
@@ -543,6 +576,17 @@
       "code": "SC2003",
       "kind": "uncertifiable",
       "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 6312,
+      "end": 6322,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 6312,
@@ -701,6 +745,17 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 8614,
       "end": 8624,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 8732,
+      "end": 8739,
       "fixes": 0
     },
     {
@@ -1052,6 +1107,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 472,
+      "end": 491,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -1121,6 +1187,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 1440,
+      "end": 1460,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
@@ -1137,6 +1214,17 @@
       "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
       "start": 1918,
       "end": 1923,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 1936,
+      "end": 1943,
       "fixes": 0
     },
     {

@@ -40,6 +40,17 @@
       "blocker": "value-root-in-helper",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 682,
+      "end": 691,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 688,
       "end": 690,
       "fixes": 0
@@ -218,6 +229,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 1318,
+      "end": 1326,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -237,6 +259,28 @@
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 1479,
       "end": 1493,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 1479,
+      "end": 1491,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 1891,
+      "end": 1906,
       "fixes": 0
     }
   ]

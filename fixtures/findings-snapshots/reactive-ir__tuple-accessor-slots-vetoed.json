@@ -8,6 +8,17 @@
       "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-accessor-slots-vetoed/patched.tsx",
+      "start": 252,
+      "end": 255,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots-vetoed/patched.tsx",
       "start": 253,
       "end": 254,
       "fixes": 0

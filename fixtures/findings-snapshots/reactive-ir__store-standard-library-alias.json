@@ -61,6 +61,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-standard-library-alias/App.tsx",
+      "start": 575,
+      "end": 597,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-standard-library-alias/App.tsx",
       "start": 585,
       "end": 586,
       "fixes": 0

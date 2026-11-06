@@ -126,6 +126,17 @@
       "start": 1707,
       "end": 1715,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1707,
+      "end": 1712,
+      "fixes": 0
     }
   ]
 }

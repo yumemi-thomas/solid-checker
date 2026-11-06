@@ -78,6 +78,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1969,
+      "end": 1973,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",

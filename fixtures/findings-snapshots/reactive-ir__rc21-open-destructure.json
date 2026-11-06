@@ -52,6 +52,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 229,
+      "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 230,
       "end": 235,
       "fixes": 0
@@ -98,6 +109,17 @@
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 294,
       "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 306,
+      "end": 313,
       "fixes": 0
     },
     {

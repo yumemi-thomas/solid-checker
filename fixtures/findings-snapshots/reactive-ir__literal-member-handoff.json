@@ -155,6 +155,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-member-handoff/App.tsx",
+      "start": 2609,
+      "end": 2618,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-member-handoff/App.tsx",

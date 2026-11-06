@@ -79,6 +79,17 @@
       "blocker": "value-root-in-helper",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 1501,
+      "end": 1506,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
       "start": 1872,
       "end": 1877,
       "fixes": 0

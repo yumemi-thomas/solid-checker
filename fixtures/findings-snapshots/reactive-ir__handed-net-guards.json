@@ -19,6 +19,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net-guards/c16.tsx",
+      "start": 207,
+      "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/c16.tsx",
       "start": 215,
       "end": 216,
       "fixes": 0
@@ -51,6 +62,17 @@
       "kind": "uncertifiable",
       "blocker": "value-held-in-binding",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g1a.tsx",
+      "start": 231,
+      "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net-guards/g1c.tsx",
       "start": 183,
       "end": 184,
@@ -65,6 +87,17 @@
       "path": "fixtures/reactive-ir/handed-net-guards/n7.tsx",
       "start": 183,
       "end": 193,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/r8.tsx",
+      "start": 153,
+      "end": 157,
       "fixes": 0
     },
     {

@@ -328,6 +328,9 @@ pub(crate) struct Census<'l, 'a> {
     /// The walked source may be pending: a tracked position is SC5003's and
     /// SC5001's question then, which only a row answers (W's review H3).
     async_walk: bool,
+    /// The uses a walk ended at, past the reference it started from: the
+    /// obligation sits at the use too, so each has a row of its own.
+    uses: Vec<(Location, &'static str)>,
 }
 
 impl<'l, 'a> Census<'l, 'a> {
@@ -365,7 +368,13 @@ impl<'l, 'a> Census<'l, 'a> {
             exported,
             hop_starts: HashSet::default(),
             async_walk: true,
+            uses: Vec::new(),
         }
+    }
+
+    /// The uses the walks so far ended at, each with the position it is in.
+    pub(crate) fn take_uses(&mut self) -> Vec<(Location, &'static str)> {
+        std::mem::take(&mut self.uses)
     }
 
     /// The obligation one reference of an accessor, setter or action owes.
@@ -504,6 +513,7 @@ impl<'l, 'a> Census<'l, 'a> {
         if self.steps > MAX_STEPS {
             return Position::Open(blockers::VALUE_USE_UNCLASSIFIED);
         }
+        let entry = self.steps;
         let key = (file.path.to_string(), at, mode);
         match self.walked.get(&key) {
             Some(Some(answer)) => return *answer,
@@ -511,18 +521,28 @@ impl<'l, 'a> Census<'l, 'a> {
             None => {}
         }
         self.walked.insert(key.clone(), None);
+        let recorded = self.uses.len();
         let holders = self.holders(file, at);
-        // A value several tables name is as open as the worst of them.
+        // A value several tables name is as open as the first open one. The
+        // walk goes on past it: every use it reaches gets its row.
         let mut answer = if holders.is_empty() {
             self.unheld(file, at, mode)
         } else {
             Position::Followed
         };
         for row in holders {
-            answer = self.through(file, at, row, mode);
-            if answer != Position::Followed {
-                break;
+            let position = self.through(file, at, row, mode);
+            if answer == Position::Followed {
+                answer = position;
             }
+        }
+        // The walk ended here, past the reference it started from, and no use
+        // further on was named: this position is the use.
+        if let Position::Open(blocker) = answer
+            && entry > 1
+            && self.uses.len() == recorded
+        {
+            self.uses.push((at.location(file.path.as_str()), blocker));
         }
         self.walked.insert(key, Some(answer));
         answer
@@ -602,7 +622,17 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::JsxValue(element, slot) => self.jsx_value(file, element, Some(slot), mode),
             Holder::JsxSpread(element) => self.jsx_value(file, element, None, mode),
             Holder::Binding(binding) => self.bound(file, binding, mode),
-            Holder::Assigned(assignment) => assigned(file, assignment),
+            Holder::Assigned(assignment) => {
+                let answer = assigned(file, assignment);
+                // `r = source`: the name's uses hold it as a binding's do.
+                let target = ast.peel_ts_sugar_span(ast.assignments[assignment].target);
+                if ast.member_at(target).is_none()
+                    && let Some(declaration) = ast.reference_declaration(target)
+                {
+                    self.name_uses(file, declaration, mode);
+                }
+                answer
+            }
             Holder::Returned(returned) => {
                 let function = crate::owners::containing_ast_function(ast, returned);
                 self.returned(file, function.map(|function| function.span), mode)
@@ -681,7 +711,10 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             Holder::Argument(call, index) => self.argument(file, call, index, mode),
             Holder::TaggedSubstitution => Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE),
-            Holder::ClassField => Position::Open(blockers::VALUE_IN_CLASS_FIELD),
+            Holder::ClassField => {
+                self.class_field_uses(file, at, mode);
+                Position::Open(blockers::VALUE_IN_CLASS_FIELD)
+            }
             Holder::ParameterDefault => Position::Open(blockers::VALUE_AS_PARAMETER_DEFAULT),
             Holder::Awaited => Position::Open(blockers::VALUE_THROUGH_AWAIT),
             Holder::Yielded => Position::Open(blockers::VALUE_THROUGH_GENERATOR),
@@ -958,7 +991,7 @@ impl<'l, 'a> Census<'l, 'a> {
         }
         self.return_hops += 1;
         let mut answer = Position::Followed;
-        'names: for name in &parameter.names {
+        for name in &parameter.names {
             let identifier = parameter.shape == solid_facts::ast::BindingShape::Identifier;
             if !identifier && file.source_text(name.span) != Some(prop) {
                 continue;
@@ -975,9 +1008,9 @@ impl<'l, 'a> Census<'l, 'a> {
                 } else {
                     reference
                 };
-                answer = self.position(file, at, mode);
-                if answer != Position::Followed {
-                    break 'names;
+                let position = self.position(file, at, mode);
+                if answer == Position::Followed {
+                    answer = position;
                 }
             }
         }
@@ -1014,12 +1047,12 @@ impl<'l, 'a> Census<'l, 'a> {
                 })
                 .map(|(call, _)| call.span);
             // A context handed on has readers no reference names.
-            answer = match call {
+            let position = match call {
                 Some(call) => self.position(reader, call, mode),
                 None => Position::Open(blockers::VALUE_FORWARDED),
             };
-            if answer != Position::Followed {
-                break;
+            if answer == Position::Followed {
+                answer = position;
             }
         }
         self.return_hops -= 1;
@@ -1044,17 +1077,23 @@ impl<'l, 'a> Census<'l, 'a> {
     fn bound(&mut self, file: &'a FileFacts, binding: usize, mode: Mode) -> Position {
         let ast = &file.ast;
         let binding = &ast.bindings[binding];
-        if !binding.immutable {
-            return Position::Open(blockers::VALUE_HELD_IN_BINDING);
-        }
+        // A `let` holds the value where no row reads it. Its uses are walked
+        // all the same, so each has a row of its own.
+        let held = |answer: Position| {
+            if binding.immutable {
+                answer
+            } else {
+                Position::Open(blockers::VALUE_HELD_IN_BINDING)
+            }
+        };
         let identifier = binding.shape == solid_facts::ast::BindingShape::Identifier;
         // A pattern over a root is SC1003's; its slots hold links. Over a root a
         // helper received, no row sees it.
         if !identifier && mode == Mode::RootParameter {
-            return Position::Open(blockers::VALUE_ROOT_IN_HELPER);
+            return held(Position::Open(blockers::VALUE_ROOT_IN_HELPER));
         }
         if !identifier && mode == Mode::Root {
-            return Position::Followed;
+            return held(Position::Followed);
         }
         let each = match mode {
             Mode::Holder(_) if !identifier => Mode::Value,
@@ -1062,8 +1101,9 @@ impl<'l, 'a> Census<'l, 'a> {
             other => other,
         };
         let Some(names) = self.slot_names(binding, mode) else {
-            return Position::Open(blockers::VALUE_IN_CARRIER);
+            return held(Position::Open(blockers::VALUE_IN_CARRIER));
         };
+        let mut answer = Position::Followed;
         for name in names {
             // A name that is a source itself (ADR 0463's exact alias) is walked
             // from its own references, with its own rows, in the same mode: a
@@ -1077,37 +1117,145 @@ impl<'l, 'a> Census<'l, 'a> {
             {
                 continue;
             }
-            for reference in self.references(file, name.span) {
-                let position = self.position(file, reference, each);
-                if position != Position::Followed {
-                    return position;
-                }
-            }
-            // An exported binding is read in other files too.
-            let symbol = self
-                .lookup
-                .entities()
-                .exact(&name.span.location(file.path.as_str()));
-            for reference in symbol
-                .map(|symbol| self.lookup.symbol_references(symbol.as_str()))
-                .unwrap_or_default()
-            {
-                if reference.path.as_ref() == file.path.as_str() {
-                    continue;
-                }
-                let Some((holder, at)) = self.place(&reference) else {
-                    return Position::Open(blockers::VALUE_USE_UNCLASSIFIED);
-                };
-                if !is_value_reference(holder, at) {
-                    continue;
-                }
-                let position = self.position(holder, at, each);
-                if position != Position::Followed {
-                    return position;
-                }
+            let position = self.name_uses(file, name.span, each);
+            if answer == Position::Followed {
+                answer = position;
             }
         }
-        Position::Followed
+        held(answer)
+    }
+
+    /// Where a declared name's references put the value it holds: in its
+    /// file, and in every file that imports it.
+    fn name_uses(&mut self, file: &'a FileFacts, name: Span, mode: Mode) -> Position {
+        let mut answer = Position::Followed;
+        for reference in self.references(file, name) {
+            let position = self.position(file, reference, mode);
+            if answer == Position::Followed {
+                answer = position;
+            }
+        }
+        // An exported binding is read in other files too.
+        let symbol = self
+            .lookup
+            .entities()
+            .exact(&name.location(file.path.as_str()));
+        for reference in symbol
+            .map(|symbol| self.lookup.symbol_references(symbol.as_str()))
+            .unwrap_or_default()
+        {
+            if reference.path.as_ref() == file.path.as_str() {
+                continue;
+            }
+            let position = match self.place(&reference) {
+                None => Position::Open(blockers::VALUE_USE_UNCLASSIFIED),
+                Some((holder, at)) if is_value_reference(holder, at) => {
+                    self.position(holder, at, mode)
+                }
+                Some(_) => continue,
+            };
+            if answer == Position::Followed {
+                answer = position;
+            }
+        }
+        answer
+    }
+
+    /// A class field holds the value where no row reads it. Its uses are
+    /// walked all the same, so each has a row: `this.<key>` in the class, and
+    /// a member Get of an instance (`new K()`) or, for a static field, of the
+    /// class. A reference of the class the walk cannot follow is a use too.
+    fn class_field_uses(&mut self, file: &'a FileFacts, at: Span, mode: Mode) {
+        let ast = &file.ast;
+        let Some((class, element)) = ast.classes.iter().find_map(|class| {
+            class
+                .elements
+                .iter()
+                .find(|element| {
+                    element.value.map(|value| ast.peel_ts_sugar_span(value)) == Some(at)
+                })
+                .map(|element| (class, element))
+        }) else {
+            return;
+        };
+        let slot = match element
+            .key
+            .filter(|_| !element.computed)
+            .and_then(|key| file.source_text(key))
+            .and_then(written_key)
+        {
+            Some(key) => self.key(key),
+            None => Slot::Any,
+        };
+        let held = match mode {
+            Mode::Value => Mode::Holder(slot),
+            Mode::Root => Mode::RootHolder(slot),
+            // A holder in a holder, or a helper's root: no member step names it.
+            Mode::Holder(_) | Mode::RootHolder(_) | Mode::RootParameter => return,
+        };
+        if !element.r#static {
+            let reads = ast
+                .members
+                .iter()
+                .filter(|member| {
+                    class.span.contains(member.span)
+                        && file.source_text(member.object) == Some("this")
+                })
+                .map(|member| member.object)
+                .collect::<Vec<_>>();
+            for this in reads {
+                self.position(file, this, held);
+            }
+        }
+        let Some(name) = &class.name else {
+            return;
+        };
+        let mut references = self
+            .references(file, name.span)
+            .into_iter()
+            .map(|reference| (file, reference))
+            .collect::<Vec<_>>();
+        let symbol = self
+            .lookup
+            .entities()
+            .exact(&name.span.location(file.path.as_str()));
+        for reference in symbol
+            .map(|symbol| self.lookup.symbol_references(symbol.as_str()))
+            .unwrap_or_default()
+        {
+            if reference.path.as_ref() == file.path.as_str() {
+                continue;
+            }
+            match self.place(&reference) {
+                Some(place) => references.push(place),
+                None => self.uses.push((reference, blockers::VALUE_IN_CLASS_FIELD)),
+            }
+        }
+        for (holder, reference) in references {
+            if !is_value_reference(holder, reference) || class.span.contains(reference) {
+                continue;
+            }
+            let construct = holder
+                .ast
+                .calls
+                .iter()
+                .find(|call| {
+                    call.construct && holder.ast.peel_ts_sugar_span(call.callee) == reference
+                })
+                .map(|call| call.span);
+            match (element.r#static, construct) {
+                (false, Some(instance)) => {
+                    self.position(holder, instance, held);
+                }
+                (true, _) => {
+                    self.position(holder, reference, held);
+                }
+                (false, None) => self.uses.push((
+                    reference.location(holder.path.as_str()),
+                    blockers::VALUE_IN_CLASS_FIELD,
+                )),
+            }
+        }
     }
 
     /// The names that may hold the walked slot: all of them, but for a static
@@ -1178,8 +1326,10 @@ impl<'l, 'a> Census<'l, 'a> {
                 Some(slot) if slot == call.index => self.position(file, call.span, mode),
                 _ => Position::Open(blockers::VALUE_FROM_PRIMITIVE_CALLBACK),
             }
-        } else if file.ast.calls_with_peeled_callee(function).next().is_some() {
-            // An IIFE: its call has no row.
+        } else if let Some(call) = file.ast.calls_with_peeled_callee(function).next() {
+            // An IIFE: its call has no row. Where its value goes is walked all
+            // the same, so each use has one.
+            self.position(file, call.span, mode);
             Position::Open(blockers::VALUE_HELD_IN_BINDING)
         } else {
             self.callers(file, function, mode)
@@ -1258,17 +1408,14 @@ impl<'l, 'a> Census<'l, 'a> {
                 .map(|call| call.span)
                 .collect::<Vec<_>>();
             for call in calls {
-                answer = if caller.ast.calls_with_peeled_callee(call).next().is_some() {
+                let position = if caller.ast.calls_with_peeled_callee(call).next().is_some() {
                     Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE)
                 } else {
                     self.position(caller, call, mode)
                 };
-                if answer != Position::Followed {
-                    break;
+                if answer == Position::Followed {
+                    answer = position;
                 }
-            }
-            if answer != Position::Followed {
-                break;
             }
         }
         self.return_hops -= 1;
@@ -1368,13 +1515,13 @@ impl<'l, 'a> Census<'l, 'a> {
         }
         self.parameter_hops += 1;
         let mut answer = Position::Followed;
-        'references: for name in &parameter.names {
+        for name in &parameter.names {
             for reference in self.references(callee_file, name.span) {
                 self.hop_starts
                     .insert((callee_file.path.to_string(), reference));
-                answer = self.position(callee_file, reference, handed);
-                if answer != Position::Followed {
-                    break 'references;
+                let position = self.position(callee_file, reference, handed);
+                if answer == Position::Followed {
+                    answer = position;
                 }
             }
         }

@@ -500,6 +500,25 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        163,
+        164
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -559,6 +578,25 @@
        "textRange": [
         228,
         230
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        225,
+        231
        ]
       },
       "fix": {
@@ -3278,6 +3316,25 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        260,
+        272
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": [
@@ -3286,7 +3343,7 @@
      }
     ]
    },
-   "note": "ADR 0811, the negative: the write in the setter is decided, but the same holder member is also handed to a function no source describes, so `store` stays open (SC9012 `value-to-unresolved-callee`). A decided write speaks only for its own use."
+   "note": "ADR 0811, the negative: the write in the setter is decided, but the same holder member is also handed to a function no source describes, so `store` stays open (SC9012 `value-to-unresolved-callee`). A decided write speaks only for its own use; the handed use has its own row (ADR 0831)."
   },
   {
    "id": "jsx-no-duplicate-props/solid-v2/open-spread/001",
@@ -3478,6 +3535,25 @@
        "textRange": [
         62,
         67
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        61,
+        68
        ]
       },
       "fix": {
@@ -3764,6 +3840,25 @@
        "textRange": [
         415,
         417
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        409,
+        418
        ]
       },
       "fix": {

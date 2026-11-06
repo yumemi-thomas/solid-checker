@@ -63,6 +63,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-return-producer/index.ts",
+      "start": 1070,
+      "end": 1086,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-return-producer/index.ts",
       "start": 1177,
       "end": 1182,
       "fixes": 0
