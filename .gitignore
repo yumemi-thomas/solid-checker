@@ -1079,3 +1079,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/lying-assertion/node_modules/**
 !fixtures/reactive-ir/standard-patches/node_modules/
 !fixtures/reactive-ir/standard-patches/node_modules/**
+!fixtures/reactive-ir/component-mounted-in-disposal/node_modules/
+!fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
