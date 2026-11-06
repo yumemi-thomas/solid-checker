@@ -10,7 +10,13 @@ Defects the runtime reports and the checker does not. Each is a missing violatio
 
 Value-use census (ADR 0692), accepted trade: a hook's object or tuple handed on past one hop (`value-forwarded`, `value-to-unresolved-callee`, `value-in-carrier`) is uncertifiable, 1,221 corpus sites. Reopen: follow holders through a second hop and through `Object.keys`-style calls that read no value.
 
-Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `may_run_in_leaf_owner_within` (3), `value_reaches` (4). `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
+Census, later proof (coordinator, 2026-11-07): `refresh(t)` and `affects(t, k?)` read only `t[$REFRESH]` or `t[$TARGET]` (rc.21 `@solidjs/signals` dev.js:3636, :10018), and a computed key coerces a function without calling it, so these positions could be followed instead of `value-in-carrier` / `value-use-unclassified`. Not done: show a store proxy's `$REFRESH` Get is untracked, and measure in Chrome. Until then they stay uncertifiable (tsc-oracle cases [4], [6], [21] carry them as distinct findings).
+
+Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
+
+A memo over a parameter or a callback prop that every caller fills with a settled value is uncertifiable (ADR 0802): `source_compute_open` does not follow the arguments yet. A setter or a closure in a hook's tuple keeps ADR 0282's full veto (ADR 0801), so it stays SC9012 in most programs where an accessor slot is exact. So does a memo whose compute calls a `.map` callback's parameter over a closed literal (`objects.map(item => item.read())`): the handed net does not follow it.
+
+**False positive, open (R1c):** ADR 0282's census misses a `Function` held in a parameter and called with a string (`run(globalThis.Function)`, `make("…")()`), which can patch iteration. A hook's setter slot is then taken as exact: pattern `types/s02-setter-slot-function-escaped` gives SC2001 where Chrome is silent, the same on `0818e258a`. ADR 0222's returned-source reads rest on the same census. The accessor slot does not: ADR 0801's census refuses any program that obtains `Function` (fixture `tuple-slot-function-obtained`).
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 

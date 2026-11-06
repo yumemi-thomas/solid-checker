@@ -64,6 +64,8 @@ pub(super) trait World<'w> {
     fn dependency_member_stable(&self, path: &str, object: Span, name: &str) -> bool;
     /// ADR 0282: a visible mutation may change the array iteration protocol.
     fn tuple_iteration(&self) -> bool;
+    /// ADR 0801: a program that says it mutates that protocol.
+    fn tuple_slot_iteration(&self) -> bool;
     /// `eval` or a code-evaluating call makes every receiver channel opaque.
     fn receiver_channels_opaque(&self) -> bool;
     /// Whether source discovery found an accessor for `symbol`.
@@ -252,6 +254,10 @@ impl<'a, 'facts: 'a> World<'a> for Resolver<'a, 'facts> {
 
     fn tuple_iteration(&self) -> bool {
         self.member_stability.tuple_iteration
+    }
+
+    fn tuple_slot_iteration(&self) -> bool {
+        self.member_stability.tuple_slot_iteration
     }
 
     fn receiver_channels_opaque(&self) -> bool {

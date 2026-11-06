@@ -874,6 +874,20 @@ fn call_summary(
     let ambiguous_candidates = site.ambiguous_candidates();
     let summary = if let Some(transported) = transported {
         match transported {
+            // ADR 0222: a callee that is a source in its own right
+            // (`const [read] = makeTuple()`) is read at this call by local
+            // access; ADR 0801's slot names that same read again.
+            accessor_provenance::Callable::Accessor(symbol)
+                if super::transport_reads::source_in_own_right(
+                    provenance,
+                    context.lookup,
+                    file,
+                    call.callee,
+                    symbol,
+                ) =>
+            {
+                (label, Vec::new(), None)
+            }
             accessor_provenance::Callable::Accessor(symbol) => (
                 label,
                 super::transport_reads::transported_read(provenance, symbol, file, call.span)

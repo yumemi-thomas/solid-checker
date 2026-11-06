@@ -225,6 +225,9 @@
   "rust/crates/solid-reactive-ir/src/loading_hold.rs": {
     "facts.files": 1
   },
+  "rust/crates/solid-reactive-ir/src/local_access/open_compute.rs": {
+    "file_by_path": 2
+  },
   "rust/crates/solid-reactive-ir/src/local_access.rs": {
     "facts.files": 3,
     "file_by_path": 5,

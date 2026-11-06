@@ -73,6 +73,10 @@
         {
           "rule": "strict-read-untracked",
           "why": "The reactive-read finding concerns reading a source outside tracking while forming the target; TS2345 concerns whether the resulting value carries the refresh brand."
+        },
+        {
+          "rule": "reactive-dispatch-unresolved",
+          "why": "The census row is an internal uncertifiable naming where the store root `state` goes (an argument of refresh()); TS2345 concerns the target's type."
         }
       ],
       "why": "SC7003, removed 2026-08-17. `Refreshable<T> = T & { readonly [$REFRESH]: any }` encodes the source brand *as a type*, so every target shape the rule proved invalid -- a wrapper thunk, a read value, an object literal, a plain accessor, a store child record, and a value-form store -- is TS2345 against it. A valid target type-checks, so the type draws the same line the rule drew. TypeScript 7.1 reports the object literal `{}` as TS2741 (`Property '[$REFRESH]' is missing in type '{}'`) where 5.9.3 reported TS2345: a general 7.1 change of the code for a missing required property, same error and span, so the rule stays tsc-redundant (ADR 0361).",
@@ -99,6 +103,10 @@
         {
           "rule": "strict-read-untracked",
           "why": "The reactive-read finding concerns invoking an accessor outside tracking; TS2345 concerns passing that returned value as an affects target."
+        },
+        {
+          "rule": "reactive-dispatch-unresolved",
+          "why": "The census rows are internal uncertifiables naming where `memo` and `signalGet` go (an argument of affects()); TS2345 concerns the extra key argument."
         }
       ],
       "why": "SC7004, removed 2026-08-17. A key on an accessor target selects the one-argument `affects(target: Accessor<unknown> | Store<object>)` overload, whose second parameter does not exist, so TypeScript reports TS2345 on the key itself -- exactly the rule's claim.",
@@ -247,6 +255,12 @@
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "distinctFindings": [
+        {
+          "rule": "reactive-dispatch-unresolved",
+          "why": "The census row is an internal uncertifiable naming where `label` goes (a computed key); TS2538 concerns its type as an index."
+        }
+      ],
       "why": "SC1005's three typed value positions, narrowed 2026-08-17: a native JSX attribute (TS2322 -- an accessor is never assignable to a DOM attribute's type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), and a computed property access (TS2538, \"cannot be used as an index type\"). All three hold in both dialects. The rule SURVIVES on the positions TypeScript permits -- see the sibling `silent` case.",
       "allow": [
         2322,

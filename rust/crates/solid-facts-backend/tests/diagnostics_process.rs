@@ -351,6 +351,7 @@ fn factory_read_summaries_respect_dialect_callback_boundaries() {
         ("MemoHelper", None),
         ("MemoReturned", None),
         ("NamespaceMemo", None),
+        // ADR 0802: an SC5003 uncertifiable of its own, pinned below.
         ("MemoArray", None),
         ("EffectCompute", None),
         ("SettledRead", None),
@@ -372,6 +373,20 @@ fn factory_read_summaries_respect_dialect_callback_boundaries() {
                         .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
             })
             .collect::<Vec<_>>();
+        // ADR 0802: a memo whose compute calls a value it was handed
+        // (`objects.map(item => item.read())`) is open until the handed net
+        // follows the callback parameter to the literal.
+        let (open, rows): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| {
+            row["id"] == "SC5003" && row["analysisContext"] == "async-provenance-unproven"
+        });
+        assert_eq!(
+            open.len(),
+            usize::from(name == "MemoArray"),
+            "{name}: {open:#?}"
+        );
+        for row in &open {
+            assert_eq!(row["kind"], "uncertifiable", "{name}");
+        }
         if let Some(kind) = expected {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], "SC1001", "{name}");
@@ -861,6 +876,20 @@ fn member_dispatch_keeps_the_source_invocation_context() {
                 .is_some_and(|path| path.ends_with("/MemberContexts.tsx"))
         })
         .collect::<Vec<_>>();
+    // ADR 0802: a memo over a parameter is open while its callers are not
+    // followed: the three helpers that return a memo reading `options.read()`.
+    let (open, rows): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| {
+        row["id"] == "SC5003" && row["analysisContext"] == "async-provenance-unproven"
+    });
+    let mut open_at = open
+        .iter()
+        .map(|row| {
+            assert_eq!(row["kind"], "uncertifiable", "{row:#?}");
+            row["primaryLocation"]["line"].as_u64().unwrap()
+        })
+        .collect::<Vec<_>>();
+    open_at.sort_unstable();
+    assert_eq!(open_at, [7, 13, 31], "{open:#?}");
     assert_eq!(rows.len(), 3, "{rows:#?}");
     for (name, helper, unresolved) in [
         ("TrackedMember", "trackedMember", false),
@@ -1290,6 +1319,20 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
             .collect::<Vec<_>>();
+        // ADR 0801: gateways.ts obtains `Function`, so an accessor slot is
+        // never exact here. A kept case also has that SC9012 at AccessorRead's
+        // call, beside ADR 0222's read; a vetoed one has ADR 0282's there.
+        let (slot, read): (Vec<_>, Vec<_>) = read.into_iter().partition(|row| {
+            case["veto"] != true
+                && row["id"] == "SC9012"
+                && row["analysisContext"] == "returned-callable-outside-source-universe"
+        });
+        assert_eq!(
+            slot.len(),
+            usize::from(case["veto"] != true),
+            "{}: {slot:#?}",
+            case["name"]
+        );
         assert_eq!(read.len(), 2, "{}: {rows:#?}", case["name"]);
         let (kind, code) = if case["veto"] == true {
             ("uncertifiable", "SC9012")

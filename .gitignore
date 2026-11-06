@@ -1095,3 +1095,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/value-use-census/node_modules/**
 !fixtures/reactive-ir/generator-stepped/node_modules/
 !fixtures/reactive-ir/generator-stepped/node_modules/**
+!fixtures/reactive-ir/tuple-accessor-slots/node_modules/
+!fixtures/reactive-ir/tuple-accessor-slots/node_modules/**
+!fixtures/reactive-ir/tuple-accessor-slots-vetoed/node_modules/
+!fixtures/reactive-ir/tuple-accessor-slots-vetoed/node_modules/**
+!fixtures/reactive-ir/tuple-slot-function-obtained/node_modules/
+!fixtures/reactive-ir/tuple-slot-function-obtained/node_modules/**
+!fixtures/reactive-ir/open-source-computes/node_modules/
+!fixtures/reactive-ir/open-source-computes/node_modules/**
+!fixtures/reactive-ir/value-walk-chain/node_modules/
+!fixtures/reactive-ir/value-walk-chain/node_modules/**

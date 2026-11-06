@@ -73,6 +73,15 @@
    "certified": true
   },
   {
+   "id": "types/s02-setter-slot-function-escaped",
+   "item": "R1c: ADR 0282's census misses a Function held in a parameter and called with a string that patches iteration; a hook's setter slot is then taken as exact (same on 0818e258a)",
+   "outcome": "false-positive",
+   "codes": [],
+   "rules": [
+    "no-write-in-pure-computation"
+   ]
+  },
+  {
    "id": "values/d6-delete-computed",
    "item": "V-D6",
    "outcome": "false-clean",

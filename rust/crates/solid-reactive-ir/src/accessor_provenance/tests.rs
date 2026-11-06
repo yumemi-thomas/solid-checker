@@ -437,6 +437,47 @@ fn returned_array_census_requires_every_exact_slot_to_be_a_closed_object() {
 }
 
 #[test]
+fn only_a_value_of_an_array_intrinsic_reaches_iteration() {
+    for (source, obtained) in [
+        ("const s = Array.prototype.slice.call(x);", false),
+        ("Array.isArray(x);", false),
+        ("new Array(3); Array(3);", false),
+        ("x instanceof Array;", false),
+        ("x.constructor === Array;", false),
+        ("x.constructor.name;", false),
+        ("setTimeout(() => 1, 0);", false),
+        ("Object.getPrototypeOf(x) === Object.prototype;", false),
+        ("table[key] = value; run(table);", false),
+        ("const x: Array<number> = [];", false),
+        ("function f(x: Array<number>, g: Function): void {}", false),
+        ("const y = x as Array<number>;", false),
+        ("type T = Function | Array<string>;", false),
+        ("const p = Array.prototype;", true),
+        ("Array.prototype[Symbol.iterator] = f;", true),
+        ("f(Array.prototype);", true),
+        ("const A = Array;", true),
+        ("f(Array);", true),
+        ("(globalThis as any).Array.prototype.x = 1;", true),
+        ("window[k];", true),
+        ("[].__proto__;", true),
+        ("Object.getPrototypeOf([]);", true),
+        ("Reflect.getPrototypeOf([]);", true),
+        ("const g = Object.getPrototypeOf;", true),
+        ("[].constructor.prototype;", true),
+        ("new Function('x');", true),
+        ("Function('x');", true),
+        ("(0, eval)('x');", true),
+        ("setTimeout('x', 0);", true),
+    ] {
+        assert_eq!(
+            array_intrinsic_obtained(&file(source)),
+            obtained,
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn returned_tuple_census_requires_every_slot_literal() {
     for (source, slots) in [
         (

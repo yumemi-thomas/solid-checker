@@ -4734,5 +4734,42 @@
    "mx-reactive-write-in-owned-scope-body-use-write-throw-direct-none"
   ],
   "rediscovered": "counted in the ADR 0692 STRICT_READ_UNTRACKED entry's use-* run: 1,782 programs, old build 772 certified false cleans, census build 0"
+ },
+ {
+  "finding": "a sync-looking source over what its compute reads: `createMemo(() => g())` over a parameter, a memo over that memo, `createSignal(() => a())`, `createStore(() => ({ v: a() }), seed)`: certified at the read, Chrome warns",
+  "found": "R1 C1b guards t1, t11, l2-l5, l7",
+  "fixed": "ADR 0802",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-open-hook-memo-direct-none",
+   "mx-async-outside-loading-boundary-show-open-hook-memo-direct-none",
+   "mx-async-outside-loading-boundary-jsx-open-memo-chain-direct-none",
+   "mx-async-outside-loading-boundary-show-open-memo-chain-direct-none",
+   "mx-async-outside-loading-boundary-jsx-open-signal-fn-direct-none",
+   "mx-async-outside-loading-boundary-show-open-signal-fn-direct-none",
+   "mx-async-outside-loading-boundary-jsx-open-store-fn-direct-none",
+   "mx-async-outside-loading-boundary-show-open-store-fn-direct-none"
+  ],
+  "rediscovered": "rm0 false-clean 144 of 324, this build 0 false-clean, 324 recall-gap; guards fixture open-source-computes stay certified"
+ },
+ {
+  "finding": "a caught pending read through five or more helpers: Chrome reports CAUGHT_REACTIVE_READ, SC5008 had no row",
+  "found": "R1, value_reaches' depth 4",
+  "fixed": "ADR 0800",
+  "grid": "mx-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-memo-caught-chain-5-direct-none",
+   "mx-caught-reactive-read-memo-caught-chain-9-direct-none",
+   "mx-caught-reactive-read-effect-compute-caught-chain-5-direct-none"
+  ],
+  "rediscovered": "rm0 false-clean 72 of 72, this build 0, 72 recall-gap; fixture value-walk-chain, past the budget too"
+ },
+ {
+  "finding": "one read, two rows: ADR 0801's slot transport and ADR 0222's returned source both claimed the read at 'const [read] = makeTuple(); read()' (SC1001 V twice, SC5003 U twice)",
+  "found": "R1c, diagnostics_process returned_tuple_iteration_mutations_withdraw_only_the_proven_read (case intact), then fixture snapshots",
+  "fixed": "ADR 0801 (R1c)",
+  "outside": "a grid judges each site's outcome, and a second row of the same read at the same site changes none. Fixtures tuple-accessor-slots body-read (once) and helper-read; 6 snapshots each lost one duplicate row (local-alias-literal-slots, project-callback-uses, read-in-place-layers-summary, root-window-reads, tuple-accessor-slots, use-site-role)"
  }
 ]

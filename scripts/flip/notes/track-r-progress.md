@@ -325,3 +325,14 @@ Stopped at the owner's 500k rule after landing the census. A new agent takes the
 **Fuzz judge fact.** `scripts/fuzz/checker.mjs parseFindings` keeps only `App.tsx` findings, so an uncertifiable in a helper file is judged certified (conservative for the judge, but a cross-file fix looks unfixed). H1's shapes export from App.tsx for that reason.
 
 **Scratch** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads`): `round.sh <tag> <prev-sweep>`, `fb.sh <tag> <fixture dirs>` (findings with blockers), `fz.sh` (id sets: `t/use-ids.json`, `t/w-ids.json`, `t/w1-ids.json`), `trace-patch.py` (applies a census trace to `value_use.rs` for a scratch build; restore the file after: `cp t/value_use.rs.fixed`), `classify.py <trace.tsv>`, `ftr.sh`, `wadv/cases` (W's 10 programs), `k10`-`k12` (Chrome probes). Builds `rcen14`-`rcen24`; `rcen18` is the pre-W build, `rcb` the pre-census base.
+
+## R1c, landing R1b's batch (2026-11-06)
+
+Worktree t3-b3846b2a, branch `claude/flip-r1-wip` on `add797a82`, work uncommitted until the coordinator answers the test-pin question. Scratch `/Users/thomas/dev/sc-scratch.noindex/flip-r1` (`tools/`, `cases/c2-c6`, builds `rd1-rd3`, `rdbg6`, `rdbg7`).
+
+- open-defects.json: 35 FIXED rows were stale merge carry-overs, all fine on `rm0` (0818e258a) and already gone on flip-reads with their rediscovery entries here; removed by text. The 3 `p3-cast-*` rows were missing here: copied from flip-reads (owner: open until W's cast research).
+- ir-read-lint: ADR 0801's `files()` scan moved to a per-file base hazard `ArrayIntrinsicObtained` (memo 59 removed); the two `file_by_path` in `open_compute.rs` stay (it is the recorded hand-out; answers live per analysis in `OpenComputes`).
+- Doubled rows: ADR 0801's slot transport and ADR 0222's returned source both claimed one read; `transport_reads::source_in_own_right` keeps one at call sites (result reads). Not in helper summaries: that dropped a proof.
+- Tried and withdrawn on the coordinator's challenge: accepting ADR 0282's census for an accessor slot. `cases/c3 p1` (Function handed to a parameter, called with a string) is certified then, Chrome warns. It also shows a pre-existing false positive on setter slots: pattern `types/s02-setter-slot-function-escaped`, open, held.
+- A fixture stub that types the accessor as `() => T` certifies a helper read the real typings hold (`handed-member-read`): `tuple-slot-function-obtained` has no helper case for that reason.
+- Pending the coordinator: 3 diagnostics_process pins (scratch `tools/diag-pins.diff`), then `make verify` and the landing commit. Catch-all test: belongs to the census module (`value_use.rs`, flip-census), not on this branch.

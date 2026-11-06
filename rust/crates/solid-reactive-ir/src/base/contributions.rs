@@ -688,6 +688,10 @@ pub(crate) enum Hazard {
     ModuleLevelExport,
     /// Some export at all (value 0).
     Export,
+    /// The file obtains an array intrinsic or code from a string as a value
+    /// (ADR 0801, [`crate::interproc::accessor_provenance::array_intrinsic_obtained`];
+    /// value 0).
+    ArrayIntrinsicObtained,
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -1149,6 +1153,9 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     }
     if !file.ast.exports.is_empty() {
         entries.push((Hazard::Export, 0));
+    }
+    if crate::interproc::accessor_provenance::array_intrinsic_obtained(file) {
+        entries.push((Hazard::ArrayIntrinsicObtained, 0));
     }
     entries
 }

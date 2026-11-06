@@ -654,9 +654,8 @@ pub(super) fn simple_array_binding(binding: &ast::BindingFact) -> bool {
 /// identifier for the exact unwritten `const` arrow binding the factory itself
 /// declares. Arrows only, as in `member_value`: a `function` value's `this` and
 /// a declaration's hoisted, writable binding are outside the summary. An
-/// accessor slot (`running`) is source discovery's, never a second claim here;
-/// a parameter, an import, a module binding, a call result and every other
-/// expression refuse.
+/// accessor slot is `tuple_slot`'s own arm (ADR 0801); a parameter, an import, a
+/// module binding, a call result and every other expression refuse.
 pub(super) fn slot_closure(
     file: &FileFacts,
     factory: Span,

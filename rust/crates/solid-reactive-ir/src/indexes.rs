@@ -2410,6 +2410,11 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| self.whole_program_answer::<TupleIterationVeto>())
     }
 
+    /// ADR 0801: two hazard probes, no project scan of its own.
+    pub(super) fn tuple_slot_iteration_may_be_mutated(&self) -> bool {
+        crate::interproc::accessor_provenance::tuple_slot_iteration_write(self)
+    }
+
     /// Facts are immutable for this lookup's lifetime. Proxy and invocation
     /// guards consume the same project census as tuple identity, without
     /// repeating it at every source-call site. A new generation has a new lock.
