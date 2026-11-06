@@ -5703,12 +5703,9 @@ fn no_store_delete(
         let Some(member) = file.peel_parentheses(target) else {
             continue;
         };
-        // A computed key reaches the same trap, but Type Facts answers no
-        // optionality for an element access, so whether TypeScript rejects
-        // it (TS2790) is open: silent until the producer answers (P8).
-        if file.ast.member_at(member).is_none()
-            || file.ast.computed_members.binary_search(&member).is_ok()
-        {
+        // A computed key reaches the same trap (ADR 0829): the producer's
+        // rejection proof decides it below, as for a static key.
+        if file.ast.member_at(member).is_none() {
             continue;
         }
         let Some(root) = member_root(file, member) else {
@@ -5780,16 +5777,26 @@ fn no_store_delete(
             continue;
         }
         let path = file.path.as_str();
-        let uncertain = match context.lookup.entity_at(path, member) {
-            None => true,
-            Some(entity) if !entity.writable_optional_property => continue,
-            Some(_) => match chain_links_verdict(file, context, member, root) {
+        // ADR 0829: TypeScript rejects the delete (TS18011, TS2704, TS2790,
+        // the producer's proof under this program's options, in a file tsc
+        // checks): the defect is TypeScript's, silent (invariant 1). An
+        // operand not proven writable-optional and not proven rejected (a
+        // computed or index key, a required `T | undefined`, `unknown`) may
+        // well type-check: uncertifiable, never silent.
+        let entity = context.lookup.entity_at(path, member);
+        if entity.is_some_and(|entity| entity.delete_operand_rejected) && tsc_reports_in(file) {
+            continue;
+        }
+        let operand_unproven = entity.is_none_or(|entity| !entity.writable_optional_property);
+        let uncertain = operand_unproven
+            || match chain_links_verdict(file, context, member, root) {
                 None => continue,
                 Some(past_root) => past_root,
-            },
-        };
+            };
         let analysis_context = if optional {
             crate::blockers::STORE_OPERATION_MAY_NOT_WRITE
+        } else if operand_unproven {
+            crate::blockers::DELETE_OPERAND_UNPROVEN
         } else {
             standing.blocker().unwrap_or_default()
         };

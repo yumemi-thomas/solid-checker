@@ -549,7 +549,7 @@ fn store_write_chain_links_ask_for_their_primitive_value_domain() {
 }
 
 #[test]
-fn writable_optional_property_demands_are_static_delete_operands() {
+fn writable_optional_property_demands_are_member_delete_operands() {
     let source = "delete store.a.b; delete (store.v); delete store[key]; delete value; store.w; \
                   delete store.x!; delete (store.y as T);";
     let file = test_file_facts("src/deletes.ts", source);
@@ -572,12 +572,10 @@ fn writable_optional_property_demands_are_static_delete_operands() {
         .map(|demand| demand.location.clone())
         .collect();
     let location = |needle: &str| typefacts_location(file.path.as_str(), span_of(needle));
-    assert_eq!(
-        asked.len(),
-        2,
-        "only the static member operands ask: {asked:?}"
-    );
+    // ADR 0829: a computed operand asks too, for the rejection proof.
+    assert_eq!(asked.len(), 3, "only the member operands ask: {asked:?}");
     assert!(asked.contains(&location("store.a.b")));
+    assert!(asked.contains(&location("store[key]")));
     assert!(
         asked.contains(&location("store.v")),
         "the parenthesized operand asks at its member"

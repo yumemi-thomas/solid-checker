@@ -59,8 +59,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V23: u64 = 23;
 /// v24 adds the writable-optional-property entity flag (ADR 0461): row flag
 /// bit 17, with no payload.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V24: u64 = 24;
+/// v25 adds the delete-operand-rejected entity flag (ADR 0829): row flag bit
+/// 18, with no payload, answered under the writable-optional-property demand.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V25: u64 = 25;
 /// Every Wire table schema a transition may carry (v10 is retired).
-pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 21] = [
+pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 22] = [
     TYPE_FACTS_TABLE_SCHEMA_V3,
     TYPE_FACTS_TABLE_SCHEMA_V4,
     TYPE_FACTS_TABLE_SCHEMA_V5,
@@ -82,6 +85,7 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 21] = [
     TYPE_FACTS_TABLE_SCHEMA_V22,
     TYPE_FACTS_TABLE_SCHEMA_V23,
     TYPE_FACTS_TABLE_SCHEMA_V24,
+    TYPE_FACTS_TABLE_SCHEMA_V25,
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
@@ -509,7 +513,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // program's effective option, which the retained table keeps.
 // Protocol 89 (ADR 0654) adds the async function flag `returnOpen`; a
 // protocol-88 consumer would refuse the new bit.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 89;
+// Protocol 90 (ADR 0829) adds the entity flag `deleteOperandRejected`, carried
+// by Wire table schema v25; a protocol-89 consumer would refuse the new bit.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 90;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -902,6 +908,7 @@ pub(crate) mod rows {
     pub(crate) const ENTITY_RUNTIME_BINDING_KIND: u64 = 1 << 15;
     pub(crate) const ENTITY_DECLARED_KEYS: u64 = 1 << 16;
     pub(crate) const ENTITY_WRITABLE_OPTIONAL_PROPERTY: u64 = 1 << 17;
+    pub(crate) const ENTITY_DELETE_OPERAND_REJECTED: u64 = 1 << 18;
 
     pub(crate) const PARAMETER_DECLARATION: u64 = 1 << 0;
     pub(crate) const PARAMETER_REST: u64 = 1 << 1;
@@ -1413,6 +1420,7 @@ fn decode_entity_run(
             | TYPE_FACTS_TABLE_SCHEMA_V22 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V23 => 131071,
             TYPE_FACTS_TABLE_SCHEMA_V24 => 262143,
+            TYPE_FACTS_TABLE_SCHEMA_V25 => 524287,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1647,6 +1655,7 @@ fn decode_entity_run(
             library_types,
             declared_keys,
             writable_optional_property: flags & rows::ENTITY_WRITABLE_OPTIONAL_PROPERTY != 0,
+            delete_operand_rejected: flags & rows::ENTITY_DELETE_OPERAND_REJECTED != 0,
             primitive_value_domain,
             primitive_literal_candidates,
             reference_space,

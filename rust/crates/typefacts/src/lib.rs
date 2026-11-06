@@ -1051,6 +1051,14 @@ pub struct EntityFact {
     /// required or readonly property), never evidence that `delete` errors.
     #[serde(default, skip_serializing_if = "is_false")]
     pub writable_optional_property: bool,
+    /// ADR 0829: `delete` of the demanded expression is a TypeScript error
+    /// under this program's options (TS18011, TS2704 or TS2790), by the
+    /// checker's own test of the access's resolved symbol. Answered under the
+    /// writable-optional-property demand. `false` is the absence of that
+    /// proof (not demanded, no resolved property symbol), never evidence that
+    /// `delete` type-checks.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub delete_operand_rejected: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]

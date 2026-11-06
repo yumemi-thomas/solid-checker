@@ -60,6 +60,16 @@
       "start": 2250,
       "end": 2256,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-computed-delete/App.tsx",
+      "start": 2863,
+      "end": 2910,
+      "fixes": 0
     }
   ]
 }
