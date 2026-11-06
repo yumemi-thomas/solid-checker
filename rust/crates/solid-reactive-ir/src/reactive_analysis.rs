@@ -296,6 +296,26 @@ pub(crate) fn collect_project<'facts>(
         }
     }
     handed.extend(transported.dispatch_obligations);
+    // F0: a standard iteration over a transported array runs its members, and
+    // no obligation of its own stood at that call to keep.
+    let mut open_members = interprocedural
+        .source_call_targets
+        .iter()
+        .filter(|(_, target)| {
+            matches!(
+                target,
+                crate::interproc::accessor_provenance::Callable::ArrayMembers(_)
+            ) && !target_summary_complete(ctx, target)
+        })
+        .map(|(callee, _)| callee)
+        .collect::<Vec<_>>();
+    open_members
+        .sort_unstable_by_key(|callee| (callee.path.clone(), callee.start_byte, callee.end_byte));
+    let open_members = open_members
+        .into_iter()
+        .filter_map(|callee| Some((analyzed_file(ctx, callee.path.as_ref())?, callee)))
+        .collect::<Vec<_>>();
+    handed.extend(local_access_context.open_array_member_obligations(&open_members));
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.source_call_targets = interprocedural.source_call_targets.clone();
     draft.strict_read_obligations += interprocedural.reads.len();

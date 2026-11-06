@@ -130,6 +130,16 @@
       "start": 4417,
       "end": 4418,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/uncalled-accessor-v2/App.tsx",
+      "start": 4670,
+      "end": 4674,
+      "fixes": 0
     }
   ]
 }

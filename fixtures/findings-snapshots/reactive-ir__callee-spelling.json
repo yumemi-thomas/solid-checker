@@ -217,6 +217,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4447,
+      "end": 4448,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 4706,
       "end": 4718,
       "fixes": 0

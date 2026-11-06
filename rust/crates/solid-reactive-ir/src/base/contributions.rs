@@ -754,8 +754,41 @@ fn class_overrides(
         .collect()
 }
 
+/// Whether the receiver of `callee` is, by a fact of this file, no instance of
+/// a subclass of `container`: an array literal, or a `new` of the global
+/// `container` itself, on the spot or held by a binding nothing rebinds.
+fn plain_container_receiver(file: &solid_facts::FileFacts, callee: Span, container: &str) -> bool {
+    let ast = &file.ast;
+    let Some(member) = ast.member_at(ast.peel_ts_sugar_span(callee)) else {
+        return false;
+    };
+    let receiver = ast.peel_ts_sugar_span(member.object);
+    let held = ast.reference_declaration(receiver).and_then(|declaration| {
+        ast.bindings
+            .iter()
+            .find(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declaration)
+                    && (binding.immutable
+                        || (binding.runtime_let
+                            && !crate::indexes::binding_written(file, declaration)))
+            })
+            .and_then(|binding| binding.initializer)
+            .map(|initializer| ast.peel_ts_sugar_span(initializer))
+    });
+    let value = held.unwrap_or(receiver);
+    file.source_text(value)
+        .is_some_and(|text| text.starts_with('['))
+        || ast.call_at(value).is_some_and(|call| {
+            let constructor = ast.peel_ts_sugar_span(call.callee);
+            call.construct
+                && file.source_text(constructor) == Some(container)
+                && ast.reference_declaration(constructor).is_none()
+        })
+}
+
 /// The hazards that withhold `qualified_name` at `callee`. None where the
-/// receiver is an array literal, which is no instance of a subclass.
+/// receiver is plain ([`plain_container_receiver`]).
 pub(crate) fn subclass_veto(
     file: &solid_facts::FileFacts,
     callee: Span,
@@ -771,12 +804,7 @@ pub(crate) fn subclass_veto(
     if !STANDARD_CONTAINERS.contains(&container) {
         return None;
     }
-    let literal = file
-        .ast
-        .member_at(file.ast.peel_ts_sugar_span(callee))
-        .and_then(|member| file.source_text(file.ast.peel_ts_sugar_span(member.object)))
-        .is_some_and(|receiver| receiver.starts_with('['));
-    (!literal).then(|| {
+    (!plain_container_receiver(file, callee, container)).then(|| {
         [
             standard_override(container, member),
             standard_override(container, ANY_MEMBER),

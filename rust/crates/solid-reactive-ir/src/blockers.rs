@@ -78,6 +78,24 @@ pub(crate) const LOADING_HOLD_UNPROVEN: &str = "loading-hold-unproven";
 pub(crate) const EFFECT_OWNER_UNPROVEN: &str = "effect-owner-unproven";
 pub(crate) const PACKAGE_SOURCE_UNAVAILABLE: &str = "package-source-unavailable";
 pub(crate) const FUNCTION_CALL_TARGET_UNRESOLVED: &str = "function-call-target-unresolved";
+pub(crate) const CREATED_ACCESSOR_READ_UNPROVEN: &str = "created-accessor-read-unproven";
+
+// `value_use.rs`: where a proven source leaves what the analysis follows.
+pub(crate) const VALUE_HELD_IN_BINDING: &str = "value-held-in-binding";
+pub(crate) const VALUE_HELD_IN_MEMBER: &str = "value-held-in-member";
+pub(crate) const VALUE_THROUGH_LOGICAL: &str = "value-through-logical";
+pub(crate) const VALUE_IN_CLASS_FIELD: &str = "value-in-class-field";
+pub(crate) const VALUE_THROUGH_GENERATOR: &str = "value-through-generator";
+pub(crate) const VALUE_THROUGH_AWAIT: &str = "value-through-await";
+pub(crate) const VALUE_THROUGH_NEW: &str = "value-through-new";
+pub(crate) const VALUE_AS_PARAMETER_DEFAULT: &str = "value-as-parameter-default";
+pub(crate) const VALUE_IN_CARRIER: &str = "value-in-carrier";
+pub(crate) const VALUE_TO_UNRESOLVED_CALLEE: &str = "value-to-unresolved-callee";
+pub(crate) const VALUE_FROM_PRIMITIVE_CALLBACK: &str = "value-from-primitive-callback";
+pub(crate) const VALUE_BOUND_HELD: &str = "value-bound-held";
+pub(crate) const VALUE_FORWARDED: &str = "value-forwarded";
+pub(crate) const VALUE_ROOT_IN_HELPER: &str = "value-root-in-helper";
+pub(crate) const VALUE_USE_UNCLASSIFIED: &str = "value-use-unclassified";
 pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-premise";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
@@ -200,7 +218,7 @@ pub(crate) fn for_rule(code: &str) -> &'static str {
         "SC2009" => OPTIMISTIC_REACH_UNRESOLVED,
         "SC4001" => OWNER_UNPROVEN,
         "SC5006" => LOADING_HOLD_UNPROVEN,
-        "SC6001" => EFFECT_OWNER_UNPROVEN,
+        "SC6001" | "SC6002" => EFFECT_OWNER_UNPROVEN,
         "SC9005" => PACKAGE_SOURCE_UNAVAILABLE,
         _ => PROOF_STEP_UNNAMED,
     }

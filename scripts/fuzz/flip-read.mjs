@@ -54,8 +54,33 @@ export const FLIP_READ_LEGAL = {
 };
 
 // ADR 0665: a source no type proves sync or async. Each is pending at the read; the build before took it for a settled signal.
+// ADR 0689: a hook's result used on the spot, or iterated: the hook's closure reads what the site handed it, and no binding holds the result.
+const HANDED_HOOKS = ["body", "effect-apply", "root", "render-apply"];
+export const HANDED_READS = {
+  "handed-chain": { kind: "plain", contexts: HANDED_HOOKS, text: (o) => `const useT = (n: () => number) => ({ read: (): number => n() }); void useT(${o}).read();` },
+  "handed-curried": { kind: "plain", contexts: HANDED_HOOKS, text: (o) => `const useT = (n: () => number) => () => () => n(); void useT(${o})()();` },
+  "handed-element": { kind: "plain", contexts: HANDED_HOOKS, text: (o) => `const useT = (n: () => number) => [(): number => n()]; useT(${o}).forEach((f) => void f());` },
+  "handed-held-element": { kind: "plain", contexts: HANDED_HOOKS, text: (o) => `const useT = (n: () => number) => [(): number => n()]; const x = useT(${o}); x.forEach((f) => void f());` },
+  "handed-element-member": { kind: "plain", contexts: HANDED_HOOKS, text: (o) => `const useT = (n: () => number) => [{ m: (): number => n() }]; const x = useT(${o}); x.forEach((e) => e.m());` },
+};
+// ADR 0690: what these primitives return is a memo's accessor. Each makes one and reads it, in a strict window or a tracked one.
+const CREATED = { kind: "plain", contexts: ["body", "root"], legal: ["memo", "effect-compute"] };
+export const CREATED_READS = {
+  "created-children": { ...CREATED, imports: ["children"], text: (o) => `const r = children(() => ${o}()); void r();` },
+  "created-children-array": { ...CREATED, imports: ["children"], text: (o) => `const r = children(() => ${o}()); void r.toArray();` },
+  "created-map-array": { ...CREATED, imports: ["mapArray"], text: (o) => `const r = mapArray(() => [${o}()], (x) => x); void r();` },
+  "created-repeat": { ...CREATED, imports: ["repeat"], text: (o) => `const r = repeat(() => ${o}(), (i) => i); void r();` },
+  "created-memo-call": { ...CREATED, imports: ["createMemo"], text: (o) => `void createMemo(() => ${o}())();` },
+};
+// ADR 0696: a prop's function, run only behind a prop of the component. A caller that passes it warns; one that leaves it out runs nothing.
+const guarded = (attribute) => (o) => `const K = (p: { r?: () => number; on?: boolean }) => { if (p.on) void p.r!(); return null; }; void children(() => <K ${attribute}r={() => ${o}()} />)();`;
+export const ABSENT_GUARD = {
+  "guard-passed": { kind: "plain", contexts: ["body"], imports: ["children"], text: guarded("on ") },
+  "guard-absent": { kind: "plain", contexts: [], legal: ["memo"], imports: ["children"], text: guarded("") },
+};
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

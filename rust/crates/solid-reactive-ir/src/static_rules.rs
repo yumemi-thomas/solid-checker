@@ -4,7 +4,7 @@
 
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
-use crate::execution_role::{allowed_callback_spans, semantic_execution_role};
+use crate::execution_role::{allowed_callback_spans, read_execution_role, semantic_execution_role};
 use crate::identity::SymbolId;
 use crate::owners::{
     component_binding_name, component_props_parameter_fix, containing_ast_function,
@@ -570,8 +570,10 @@ fn may_snapshot_at_setup(
     pattern: Span,
     allowed: &[Span],
 ) -> bool {
+    // The read's own role: a ref's nested layers and rows are unplaced or
+    // strict there, whatever the semantic walk says of the callback around them.
     !matches!(
-        semantic_execution_role(
+        read_execution_role(
             file,
             pattern,
             allowed,

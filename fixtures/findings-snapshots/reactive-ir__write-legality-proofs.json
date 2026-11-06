@@ -72,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 3253,
+      "end": 3265,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -79,6 +89,16 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 3562,
       "end": 3569,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 3582,
+      "end": 3594,
       "fixes": 0
     },
     {

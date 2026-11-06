@@ -759,6 +759,8 @@ pub fn project_findings(
                     pending.apply_first_run_pending = true;
                     let mut finding = project_finding(FindingSeed::AsyncRead(&pending), catalog);
                     finding.kind = "uncertifiable".into();
+                    crate::blockers::SOURCE_PENDING_UNPROVEN
+                        .clone_into(&mut finding.analysis_context);
                     finding
                 }),
         );

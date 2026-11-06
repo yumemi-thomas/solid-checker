@@ -110,24 +110,6 @@
    "certified": true
   },
   {
-   "id": "api/r09-map-get-held",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/r10-project-call-inline",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "api/v01-store-map-get",
    "item": "C-D3 value-use",
    "outcome": "false-clean",
@@ -165,15 +147,6 @@
   },
   {
    "id": "api/v05-store-iife",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v06-store-weakref",
    "item": "C-D3 value-use",
    "outcome": "false-clean",
    "codes": [
@@ -263,105 +236,6 @@
    "certified": true
   },
   {
-   "id": "api/v31-handed-nullish",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v32-handed-or",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v33-handed-let",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v34-handed-map",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v35-handed-class",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v36-handed-iife",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v37-context-nullish",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v38-context-map",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v40-helper-call-of-let",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v41-helper-map-module",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v43-member-class-instance-module",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "api/v49-await-accessor",
    "item": "C-D3 value-use",
    "outcome": "false-clean",
@@ -371,70 +245,7 @@
    "certified": true
   },
   {
-   "id": "api/w07-memo-in-root-body",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/w08-direct-primitive-call-body",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a01-map-get",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a02-set-values",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a03-weakmap-get",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "census/a05-object-assign",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a06-object-fromentries",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a08-array-at",
    "item": "section-4 census:a",
    "outcome": "false-clean",
    "codes": [
@@ -452,25 +263,7 @@
    "certified": true
   },
   {
-   "id": "census/a18-generator-yield",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "census/a19-globalthis",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a20-proxy-of-accessor",
    "item": "section-4 census:a",
    "outcome": "false-clean",
    "codes": [
@@ -497,177 +290,6 @@
    "certified": true
   },
   {
-   "id": "census/a24-static-block",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a25-label-break-handoff",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a29-logical-handoff",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a30-iife-return",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a31-promise-sync-no",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/a32-try-finally-handoff",
-   "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/cases3b-f06-children-helper-read",
-   "item": "section-4 census:f",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e01-let-plain-assign",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e03-let-bare-block",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e04-let-for-block",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e05-let-try-only",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e06-let-switch",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e07-let-arrow-assign-called",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e08-const-or",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e09-const-and",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e10-const-nullish-unknown-left",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e12-const-comma",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e20-map-literal-set-get",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e23-class-public-field",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "census/e24-class-ctor-assign",
    "item": "section-4 census:e",
    "outcome": "false-clean",
@@ -682,60 +304,6 @@
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e26-promise-executor-assign",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e27-callback-sync-assign",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e28-pending-via-map",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e29-pending-via-private",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "PENDING_ASYNC_UNTRACKED_READ"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e31-write-via-static-block",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e32-write-via-nullish",
-   "item": "section-4 census:e",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
   },
@@ -774,42 +342,6 @@
    ]
   },
   {
-   "id": "census/h22-private-field",
-   "item": "section-4 census:h",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/h26-weakref-deref",
-   "item": "section-4 census:h",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/k10-mapArray-result",
-   "item": "section-4 census:k",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/k11-repeat-result",
-   "item": "section-4 census:k",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "census/k12-createRoot-returns-accessor",
    "item": "section-4 census:k",
    "outcome": "false-clean",
@@ -830,42 +362,6 @@
   {
    "id": "census/k14-runWithOwner-returns-accessor",
    "item": "section-4 census:k",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/w01-private-field-setter",
-   "item": "section-4 census:w",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/w02-weakref-setter",
-   "item": "section-4 census:w",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/w03-map-setter",
-   "item": "section-4 census:w",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "queue/C-inner-call-identity",
-   "item": "C-inner-call-identity",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
@@ -900,15 +396,6 @@
    "certified": true
   },
   {
-   "id": "returns/fc-08-capture",
-   "item": "H-capture",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "returns/q4-typed-module-field",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
@@ -919,15 +406,6 @@
   },
   {
    "id": "returns/r05-array-real-assign",
-   "item": "H-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/r05b-array-no-copier",
    "item": "H-D2",
    "outcome": "false-clean",
    "codes": [
@@ -954,42 +432,6 @@
    "certified": true
   },
   {
-   "id": "returns/r05e-array-other-program-copier-only",
-   "item": "H-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/r08-capture-real-assign",
-   "item": "H-capture",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/r08b-capture-no-copier",
-   "item": "H-capture",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/r08d-capture-assign-open-source",
-   "item": "H-capture",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "returns/t14-closure-over-object-field",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
@@ -999,25 +441,7 @@
    "certified": true
   },
   {
-   "id": "returns/v08-no-binding-call",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "returns/v11-for-of",
-   "item": "H-D1 (F0)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "returns/v12-map",
    "item": "H-D1 (F0)",
    "outcome": "false-clean",
    "codes": [
@@ -1179,42 +603,6 @@
    "certified": true
   },
   {
-   "id": "types/b01-children-static",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/b02-children-apply",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/b03-maparray-static",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/b04-repeat-static",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/b05-errorboundary",
    "item": "T-other",
    "outcome": "false-clean",
@@ -1225,15 +613,6 @@
   },
   {
    "id": "types/b06-loadingboundary",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/b13-accessor-map",
    "item": "T-other",
    "outcome": "false-clean",
    "codes": [
@@ -1346,25 +725,7 @@
    "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e911-on-colon/App.tsx"
   },
   {
-   "id": "types/f14-children-helper-read-in-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/f18-reflect-apply",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/f19-map-call",
    "item": "T-other",
    "outcome": "false-clean",
    "codes": [
@@ -1382,15 +743,6 @@
    "certified": true
   },
   {
-   "id": "types/f30-accessor-reassign",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/g12-cleanup-comp-store-write",
    "item": "T-D1",
    "outcome": "false-positive",
@@ -1398,15 +750,6 @@
    "rules": [
     "no-write-in-pure-computation"
    ]
-  },
-  {
-   "id": "types/h01-children-toarray-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
   },
   {
    "id": "types/h04-reflect-apply-setter",
@@ -1418,34 +761,7 @@
    "certified": true
   },
   {
-   "id": "types/h06-array-setter-foreach",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/h08-setter-as-cb",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/h10-let-setter",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/h12-map-get-setter",
    "item": "T-other",
    "outcome": "false-clean",
    "codes": [
@@ -1465,24 +781,6 @@
   {
    "id": "types/h18-iframe-show-cb",
    "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/i02-maparray-result-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/i03-repeat-result-body",
-   "item": "T-D2",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
@@ -1553,42 +851,6 @@
    "certified": false
   },
   {
-   "id": "types/x10-children-accessor-read-in-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/x11-children-toarray-in-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/x12-maparray-accessor-read-in-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/x13-repeat-accessor-read-in-body",
-   "item": "T-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/x30-thenable-cast-to-promise",
    "item": "T-D4",
    "outcome": "false-clean",
@@ -1600,15 +862,6 @@
   {
    "id": "values/d2-body-read-root",
    "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d3-map-call",
-   "item": "V-D3",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"

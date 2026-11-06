@@ -4105,6 +4105,46 @@
   "fixed": "ADR 0696: proved silent",
   "grid": "lg-recall",
   "code": "STRICT_READ_UNTRACKED",
-  "outside": "patterns: the build before reports it, the fix does not; guards returns/h17-guard-* hold passed, maybe, exported, spread and default. The generator shape needs the text variants of the next commit, and lands there"
+  "outside": "patterns: the build before reports it, the fix does not; guards returns/h17-guard-* hold passed, maybe, exported, spread and default. Generator tried: guard-passed, 18 programs, agree; guard-absent, 18, is uncertifiable on rm5 and on the fix alike, because K is a local in a memo and is not placed, so no grid fails the old build and the pattern lane holds it"
+ },
+ {
+  "finding": "a hook's result used on the spot, called again or iterated: certified, Chrome warns (v08, f01, f12, f02)",
+  "found": "F0, patterns and probes",
+  "fixed": "ADR 0689",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-handed-chain-direct-none",
+   "mx-strict-read-untracked-body-handed-curried-direct-none",
+   "mx-strict-read-untracked-body-handed-element-direct-none",
+   "mx-strict-read-untracked-body-handed-held-element-direct-none",
+   "mx-strict-read-untracked-body-handed-element-member-direct-none"
+  ],
+  "rediscovered": "rm5 false-clean, the fix recall-gap: 360 handed-* programs, all of them, same grid run by id"
+ },
+ {
+  "finding": "children, mapArray, repeat results and a createMemo called where it is made: certified, Chrome warns (T-D2, w07, w08, k10, k11)",
+  "found": "T-D2, patterns",
+  "fixed": "ADR 0690",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-created-children-direct-none",
+   "mx-strict-read-untracked-body-created-map-array-direct-none",
+   "mx-strict-read-untracked-body-created-repeat-direct-none",
+   "mx-strict-read-untracked-body-created-memo-call-direct-none"
+  ],
+  "rediscovered": "rm5 false-clean, the fix agree on 144 and recall-gap on 36, 180 created-* programs"
+ },
+ {
+  "finding": "a store destructure in a ref's rows and nested layers: certified, Chrome warns, because SC1003 asked the semantic role",
+  "found": "whole mx-recall, 152 false cleans",
+  "fixed": "ADR 0691",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-ref-named-store-dstr-assign-direct-closure"
+  ],
+  "rediscovered": "rm5 false-clean, the fix recall-gap: all 152 by id"
  }
 ]

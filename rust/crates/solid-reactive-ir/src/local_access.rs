@@ -229,13 +229,41 @@ pub(crate) fn handed_value(
     span: solid_facts::core::Span,
     depth: usize,
 ) -> bool {
+    // Past the bound the value is unknown, and this only opens obligations.
     if depth == 0 {
-        return false;
+        return true;
     }
     let span = file.ast.peel_ts_sugar_span(span);
     if let Some(member) = file.ast.member_at(span) {
         // A computed member too (`pair[1]`): this only opens obligations.
         return handed_value(t, file, member.object, depth - 1);
+    }
+    // F-B: an operand's value, whichever operand runs.
+    if let Some(conditional) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|conditional| conditional.span == span)
+    {
+        return handed_value(t, file, conditional.consequent, depth - 1)
+            || handed_value(t, file, conditional.alternate, depth - 1);
+    }
+    if let Some(logical) = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|logical| logical.span == span)
+    {
+        return handed_value(t, file, logical.left, depth - 1)
+            || handed_value(t, file, logical.right, depth - 1);
+    }
+    if let Some(sequence) = file
+        .ast
+        .sequences
+        .iter()
+        .find(|sequence| sequence.span == span)
+    {
+        return handed_value(t, file, sequence.tail, depth - 1);
     }
     // A local literal destructured or indexed later (`const [, f] = [0,
     // ctx.read]`, `const { f } = { f: imported }`): one of its values.
@@ -277,6 +305,11 @@ pub(crate) fn handed_value(
                     depth - 1,
                 )
             });
+    }
+    // F0: a hook's result used on the spot (`useT(p.n).read()`, `useT(n)()()`),
+    // which no binding holds.
+    if let Some(call) = file.ast.call_at(span) {
+        return handed_call(t, file, call, depth);
     }
     if !file.ast.identifiers.iter().any(|identifier| {
         identifier.span == span && identifier.role == solid_facts::ast::IdentifierRole::Reference
@@ -331,6 +364,11 @@ pub(crate) fn handed_value(
     }) {
         return true;
     }
+    // F0: a callback's parameter holds an element of the standard iteration's
+    // receiver (`useT(n).forEach((f) => f())`).
+    if let Some(receiver) = iteration_receiver_of_parameter(t, file, declaration) {
+        return handed_value(t, file, receiver, depth - 1);
+    }
     let Some(binding) = file
         .ast
         .bindings
@@ -342,27 +380,188 @@ pub(crate) fn handed_value(
     if let Some(call) = binding
         .call_initializer
         .and_then(|initializer| file.ast.call_at(initializer))
+        && handed_call(t, file, call, depth)
     {
-        if call.construct {
-            return false;
-        }
-        return match t.lookup.primitive_at_call(file, call.span) {
-            Some(primitive) => {
-                t.lookup
-                    .dialect
-                    .name_of(primitive)
-                    .and_then(|name| t.lookup.dialect.context_role(name))
-                    == Some(solid_dialect::ContextRole::Read)
-            }
-            None => t
-                .lookup
-                .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
-                .is_some(),
-        };
+        return true;
     }
-    binding
+    if binding
         .initializer
         .is_some_and(|initializer| handed_value(t, file, initializer, depth - 1))
+    {
+        return true;
+    }
+    // F-B: what a rebound binding was given.
+    if !binding.immutable
+        && file.ast.assignments.iter().any(|assignment| {
+            file.ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(assignment.target))
+                == Some(declaration)
+                && handed_value(t, file, assignment.value_span, depth - 1)
+        })
+    {
+        return true;
+    }
+    // F-B: what a standard container was filled with (`m.set("f", p.f)`).
+    let container = binding.initializer.is_some_and(|initializer| {
+        let initializer = file.ast.peel_ts_sugar_span(initializer);
+        file.ast.array_literal_at(initializer).is_some()
+            || file.ast.call_at(initializer).is_some_and(|call| {
+                let constructor = file.ast.peel_ts_sugar_span(call.callee);
+                call.construct
+                    && file.ast.reference_declaration(constructor).is_none()
+                    && matches!(
+                        file.source_text(constructor),
+                        Some("Map" | "Set" | "WeakMap" | "WeakSet" | "Array")
+                    )
+            })
+    });
+    container
+        && file.ast.calls.iter().any(|call| {
+            file.ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    file.ast
+                        .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+                        == Some(declaration)
+                })
+                && call
+                    .arguments
+                    .iter()
+                    .any(|argument| handed_value(t, file, argument.span, depth - 1))
+        })
+}
+
+/// The receiver of the standard-library call `declaration`'s function is an
+/// argument of, when `declaration` is one of that function's parameters.
+fn iteration_receiver_of_parameter(
+    t: &HandedTables<'_, '_>,
+    file: &solid_facts::FileFacts,
+    declaration: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    let callback = file.ast.functions.iter().find(|function| {
+        function
+            .parameters
+            .iter()
+            .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+    })?;
+    let call = file.ast.calls.iter().find(|call| {
+        call.arguments
+            .iter()
+            .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == callback.span)
+    })?;
+    t.lookup
+        .standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    file.ast
+        .member_at(file.ast.peel_ts_sugar_span(call.callee))
+        .map(|member| member.object)
+}
+
+/// Whether the value `call` answers is one a caller supplied: `useContext`'s, or
+/// a project function's. A call of a call is the inner call's answer.
+fn handed_call(
+    t: &HandedTables<'_, '_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    depth: usize,
+) -> bool {
+    let depth = depth.saturating_sub(1);
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let handed_argument = || {
+        call.arguments
+            .iter()
+            .any(|argument| handed_value(t, file, argument.span, depth))
+    };
+    // F-B: an object built around a handed value (`new Map([["f", p.f]])`), or a
+    // class that holds one.
+    if call.construct {
+        return handed_argument() || class_holds_handed_value(t, file, callee, depth);
+    }
+    if let Some(primitive) = t.lookup.primitive_at_call(file, call.span) {
+        return t
+            .lookup
+            .dialect
+            .name_of(primitive)
+            .and_then(|name| t.lookup.dialect.context_role(name))
+            == Some(solid_dialect::ContextRole::Read);
+    }
+    if t.lookup
+        .function_called_at(file.path.as_str(), callee)
+        .is_some()
+    {
+        return true;
+    }
+    if let Some(inner) = file.ast.call_at(callee) {
+        return handed_call(t, file, inner, depth);
+    }
+    // F-B: an IIFE's answer.
+    if let Some(function) = file.ast.function_at(callee) {
+        let returned = function
+            .expression_body
+            .then_some(function.body)
+            .into_iter()
+            .chain(
+                file.ast
+                    .returns
+                    .iter()
+                    .filter(|returned| {
+                        crate::owners::containing_ast_function(&file.ast, returned.span)
+                            .is_some_and(|holder| holder.span == function.span)
+                    })
+                    .filter_map(|returned| returned.argument),
+            )
+            .collect::<Vec<_>>();
+        return returned
+            .into_iter()
+            .any(|value| handed_value(t, file, value, depth));
+    }
+    // F-B: a function chosen at run time (`const hook = c ? useA : useB`).
+    let chosen = file
+        .ast
+        .reference_declaration(callee)
+        .and_then(|declaration| {
+            file.ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+        })
+        .and_then(|binding| binding.initializer)
+        .unwrap_or(callee);
+    if !file.ast.composite_callee_operands(chosen).is_empty() {
+        return true;
+    }
+    // F-B: a standard call hands on what it was given (`m.get("f")`).
+    t.lookup
+        .standard_library_declaration(file, call, typefacts::CallKind::Call)
+        .is_some()
+        && (handed_argument()
+            || file
+                .ast
+                .member_at(callee)
+                .is_some_and(|member| handed_value(t, file, member.object, depth)))
+}
+
+/// Whether the class `callee` names has a field holding a handed value.
+fn class_holds_handed_value(
+    t: &HandedTables<'_, '_>,
+    file: &solid_facts::FileFacts,
+    callee: solid_facts::core::Span,
+    depth: usize,
+) -> bool {
+    let Some(declaration) = file.ast.reference_declaration(callee) else {
+        return false;
+    };
+    file.ast
+        .classes
+        .iter()
+        .filter(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        })
+        .flat_map(|class| &class.elements)
+        .filter_map(|element| element.value)
+        .any(|value| handed_value(t, file, value, depth))
 }
 
 /// Do not apply an incoming-prop witness to a replaced or escaping root.
@@ -2113,6 +2312,39 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         if self.lookup.callee_symbol(file, call.callee).is_none() {
+            if let Some(created) = file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(call.callee))
+                .filter(|inner| self.creates_whole_accessor(file, inner))
+            {
+                self.discover_created_accessor_call(file, call, created, allowed, result);
+                return;
+            }
+            // F-B: a call of what a call handed back (`m.get("f")!()`, `make()()`).
+            if file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some()
+                && self.handed_member_callee(file, call.callee)
+            {
+                let execution = read_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                self.push_owned_dispatch_obligation(
+                    file,
+                    call,
+                    allowed,
+                    execution,
+                    UNRESOLVED_HANDED_MEMBER,
+                    result,
+                );
+                return;
+            }
             let reactive = file
                 .ast
                 .composite_callee_references(call.callee)
@@ -2170,6 +2402,92 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         self.discover_call_as(file, call, call.callee, allowed, result, seen);
+    }
+
+    /// Whether `call` is a primitive whose whole result is an accessor.
+    fn creates_whole_accessor(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        self.lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                self.lookup
+                    .dialect
+                    .reactive_result_slot(primitive, solid_dialect::ResultSlot::Whole)
+                    == Some(solid_dialect::ReactiveRole::Accessor)
+            })
+    }
+
+    /// ADR 0690: `createMemo(() => c())()`, the accessor a primitive just made,
+    /// called where it is made. A plain read, unless its compute may suspend.
+    fn discover_created_accessor_call(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        created: &solid_facts::ast::CallFact,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
+        let execution = read_execution_role(
+            file,
+            call.callee,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        // In an apply the creation throws first: SC6002's, and the read never runs.
+        if execution == ExecutionRole::EffectApply
+            || (!execution.reports_untracked_read() && !execution.reports_unplaced())
+        {
+            return;
+        }
+        let compute = created.arguments.first();
+        let settled = compute.is_some_and(|argument| {
+            !crate::source_discovery::source_may_be_async(self.lookup, file, argument)
+                && !file
+                    .ast
+                    .identifiers
+                    .iter()
+                    .filter(|id| {
+                        id.role == solid_facts::ast::IdentifierRole::Reference
+                            && argument.span.contains(id.span)
+                    })
+                    .filter_map(|id| self.lookup.callee_symbol(file, id.span))
+                    .any(|symbol| self.async_sources.contains(symbol))
+        });
+        let callee = location(file.path.shared(), call.callee);
+        if settled
+            && (self.reachable_calls.contains_key(&callee)
+                || execution == ExecutionRole::EffectApply
+                || enclosing_render_function(file, call.callee, self.lookup))
+        {
+            let name = file
+                .source_text(created.callee)
+                .unwrap_or("createMemo")
+                .to_owned();
+            let accessor = (
+                crate::symbol_id(&name),
+                location(file.path.shared(), created.span),
+            );
+            self.push_accessor_read(file, call, "", &accessor, execution, result);
+            return;
+        }
+        result.dispatch_obligations.push(crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: file
+                    .source_text(call.callee)
+                    .unwrap_or("this callee")
+                    .to_owned(),
+                member: None,
+            },
+            location: callee,
+            analysis_context: crate::blockers::CREATED_ACCESSOR_READ_UNPROVEN.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        });
     }
 
     /// ADR 0516: a known accessor read in a function that reaches a place the
@@ -4290,6 +4608,43 @@ impl LocalAccessContext<'_, '_> {
                 result.action_invocations.push(record);
             }
         }
+    }
+
+    /// F0: the obligation of each call that runs a transported array's members
+    /// whose summaries are not complete, where a run there could report.
+    pub(crate) fn open_array_member_obligations(
+        &self,
+        callees: &[(&solid_facts::FileFacts, &Location)],
+    ) -> Vec<crate::StaticDefect> {
+        let mut result = LocalAccessResult::default();
+        for (file, callee) in callees {
+            let Some(call) = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| location(file.path.shared(), call.callee) == **callee)
+            else {
+                continue;
+            };
+            let allowed = allowed_callback_spans(file, self.lookup);
+            let execution = read_execution_role(
+                file,
+                call.callee,
+                &allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            );
+            self.push_owned_dispatch_obligation(
+                file,
+                call,
+                &allowed,
+                execution,
+                UNRESOLVED_HANDED_MEMBER,
+                &mut result,
+            );
+        }
+        result.dispatch_obligations
     }
 
     /// Calls whose callee accessor transport resolves to a setter or an

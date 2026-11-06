@@ -57,6 +57,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
+      "start": 1499,
+      "end": 1512,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
+      "start": 1717,
+      "end": 1730,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
       "start": 1856,
       "end": 1861,
       "fixes": 0
@@ -159,6 +179,16 @@
       "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
       "start": 4265,
       "end": 4276,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
+      "start": 4874,
+      "end": 4881,
       "fixes": 0
     },
     {

@@ -104,6 +104,16 @@
     {
       "rule": "caught-reactive-read",
       "code": "SC5008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 1791,
+      "end": 1816,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",

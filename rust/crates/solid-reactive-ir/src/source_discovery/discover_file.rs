@@ -291,40 +291,58 @@ pub(crate) fn discover_file_sources(
                 let mut options = first_answer_options(lookup, file, call, resolved);
                 // ADR 0628: a sync memo over an async source is pending with it,
                 // and answers once it settled: its reads are open.
-                let over_async = resolved == Some(Primitive::CreateMemo)
-                    && call.arguments.first().is_some_and(|argument| {
-                        argument.value == solid_facts::ast::ArgumentValueKind::Function
-                            && file
-                                .ast
-                                .identifiers
-                                .iter()
-                                .filter(|identifier| argument.span.contains(identifier.span))
-                                .filter_map(|identifier| {
-                                    super::reference_symbol(file, identifier.span, entities, lookup)
-                                })
-                                .any(|read| result.async_sources.contains(&read))
-                    });
+                // ADR 0690: `mapArray` and `repeat` take a list or a count, so a
+                // value handed by name is no compute of theirs: it is pending
+                // only as what it names.
+                let by_value = matches!(resolved, Some(Primitive::MapArray | Primitive::RepeatMap));
+                let over_async = matches!(
+                    resolved,
+                    Some(
+                        Primitive::CreateMemo
+                            | Primitive::Children
+                            | Primitive::MapArray
+                            | Primitive::RepeatMap
+                    )
+                ) && call.arguments.first().is_some_and(|argument| {
+                    (by_value || argument.value == solid_facts::ast::ArgumentValueKind::Function)
+                        && file
+                            .ast
+                            .identifiers
+                            .iter()
+                            .filter(|identifier| argument.span.contains(identifier.span))
+                            .filter_map(|identifier| {
+                                super::reference_symbol(file, identifier.span, entities, lookup)
+                            })
+                            .any(|read| result.async_sources.contains(&read))
+                });
                 options.opaque |= over_async;
                 if options != AsyncSourceOptions::default() {
                     result.source_async_options.push((symbol.clone(), options));
                 }
                 if over_async
-                    || call
-                        .arguments
-                        .first()
-                        .is_some_and(|argument| source_may_be_async(lookup, file, argument))
+                    || call.arguments.first().is_some_and(|argument| {
+                        (!by_value
+                            || argument.value == solid_facts::ast::ArgumentValueKind::Function)
+                            && source_may_be_async(lookup, file, argument)
+                    })
                 {
                     result.async_sources.push(symbol.clone());
                 }
             }
         }
-        if resolved != Some(Primitive::CreateMemo)
-            && let Some(name) = if binding.shape == solid_facts::ast::BindingShape::Array {
-                binding.array_slots.get(1).and_then(Option::as_ref)
-            } else {
-                binding.names.get(1)
-            }
-        {
+        if !matches!(
+            resolved,
+            Some(
+                Primitive::CreateMemo
+                    | Primitive::Children
+                    | Primitive::MapArray
+                    | Primitive::RepeatMap
+            )
+        ) && let Some(name) = if binding.shape == solid_facts::ast::BindingShape::Array {
+            binding.array_slots.get(1).and_then(Option::as_ref)
+        } else {
+            binding.names.get(1)
+        } {
             let declaration = location(file.path.shared(), name.span);
             if let Some(symbol) = entities.get(&declaration) {
                 result.setters.push((

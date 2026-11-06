@@ -1600,9 +1600,14 @@ impl Dialect for Solid2 {
             (Primitive::CreateSignal, ResultSlot::TupleItem(1)) => Some(ReactiveRole::Setter),
             // `createDeferred` returns `accessor(computed(…))`, as `createMemo`
             // does (`accessor_getter_length`).
-            (Primitive::CreateMemo | Primitive::CreateDeferred, ResultSlot::Whole) => {
-                Some(ReactiveRole::Accessor)
-            }
+            (
+                Primitive::CreateMemo
+                | Primitive::CreateDeferred
+                | Primitive::Children
+                | Primitive::MapArray
+                | Primitive::RepeatMap,
+                ResultSlot::Whole,
+            ) => Some(ReactiveRole::Accessor),
             _ => None,
         }
     }
@@ -2424,6 +2429,10 @@ impl Dialect for Solid2 {
                 | Primitive::CreateProjection
                 | Primitive::CreateOptimistic
                 | Primitive::CreateOptimisticStore
+                // ADR 0690: each returns an accessor of a memo it creates.
+                | Primitive::Children
+                | Primitive::MapArray
+                | Primitive::RepeatMap
         )
     }
 
