@@ -118,7 +118,7 @@
       "start": 3581,
       "end": 3593,
       "fixes": 0,
-      "message": "setter \"setKind\" is called in code the analysis cannot place, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+      "message": "setter \"setKind\" is called, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
       "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
@@ -142,7 +142,7 @@
       "start": 3756,
       "end": 3768,
       "fixes": 0,
-      "message": "setter \"setKind\" is called in code the analysis cannot place, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+      "message": "setter \"setKind\" is called, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
       "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {

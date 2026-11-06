@@ -1931,6 +1931,10 @@ Its flow (ADRs 0719, 0720) was silent past its rows: 36 of 44 probes certified w
 ## ADR 0791 — A delete behind an optional chain is open
 `delete st?.a` and `delete st.o?.c` on a property Type Facts proves optional were certified: `no_store_delete` skipped any `?.`. Chrome (rc.21) warns STORE_WRITE_OUTSIDE_SETTER, tsc accepts both. The chain may skip the delete, so each is now uncertifiable, `store-operation-may-not-write`. P8 (a computed key) is not closed: making an operand whose `writableOptionalProperty` is false (an element access, an index signature, a required `T | undefined`, `unknown`) uncertifiable also reported TS2790 programs, which the ownership gate sees (invariant 1). Those stay silent, a known miss owed a producer answer (docs/open-work.md). Fixture `store-delete`, ownership case `delete-computed-required/001` (TypeScript's, silent).
 
+<a id="adr-0792"></a>
+## ADR 0792 — Wording of W's unplaced writes and open context reads
+SC4002's obligation said "its context has no default; a provider exists in the program" for every open key (ADR 0713). An open context may have a default the syntax cannot rule out, may only be exported or handed on, and an unknown key names no context, so the message and evidence now say what holds for each: nothing proves a default or a provider above every render. SC2001's and SC2002's unplaced rows with no enclosing function read "is called in code the analysis cannot place, but no compiler or semantic fact places where this code runs"; the place clause is dropped there. Kinds, spans and blockers unchanged.
+
 <a id="adr-0750"></a>
 ## ADR 0750 — A walk past its depth limit is undecided
 Walks that answered clean where they stopped (bounds audit): `effect_phase`'s 12 layers, 400 sites and 8 re-exports (SC2008, SC6002: 13 helpers from an apply certified), the promise chain's 6 (after_await, `native_promise`), the handed-read regions' 3 (`static_rules.rs`), the unplaced-caller net's 4 helpers (`static_api.rs`). Each now answers uncertifiable, blocker `search-depth-limit` or `search-budget-exhausted` (`blockers.rs`); no limit changed, nothing within one moved. Fixture `bounds-search-depth-limit`.
