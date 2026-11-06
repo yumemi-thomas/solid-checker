@@ -164,7 +164,44 @@ Branch `claude/flip-r2`, worktree `t3-7c67e91b`, ADRs 0820-0829. Baseline on the
 
 | Family | Proved | Now uncertifiable | Rows |
 |---|---|---|---|
+| P7 (ADRs 0821, 0822) | `export const` copy of a signal or store, read or written elsewhere; `d8-pkg-types-lie-plain` | a package's Get the walk does not close, `dependency-value-unfollowed`; a global a package installs, `dependency-global-read` | export-copy 108 FC to 108 V, legal 72 clean. Lane: 15 d8 closed, 3 `d8-pkg-plain-*` stay open. Corpus +361 U, 0 V |
 | P9, `f02` (ADR 0820) | read after an `await` in an async generator a `for await` in the compute steps: `f02`, `f1`, `f6`, `f8`, `f13`, `f16` | past a `yield`, a wrapper, `next()`, `yield*`, an inline generator, a sync generator across an await, blocker `generator-stepped` | 1,488 ids: old 1,092 FC, new 0 FC, 0 FP, 200 V, 1,288 U. Legal 0 FP of 1,316. Corpus 0 moved. Patterns 89 open |
+
+## R2c, from 2026-11-06
+
+Same branch and worktree, scratch `$S` as R2. Baseline: build `rp9e`, sweep `sweep-p9e.json` (= `sweep-m1.json`, 0 moved).
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P7 landed (ADRs 0821, 0822) | as R2b's row | as R2b's row; `WindowQuery` in `dependency-source-proxy-store` (was silent) | build `p7i`: +361 U, -1 U, 0 V; witnesses 300 of 336, same 36 census ids as `p9e` |
+| Member tag (ADR 0823) | a same-file sealed holder's tag is a call site: `async-prop-getter`, SC1001 V (`n1 n3 n4 n5`), literal clean (`n2`, `m4`) | a leaf-owner prop read whose callers do not exclude a pending getter, `prop-pending-unproven` (`m5 m6 m8-m11`) | grids: mx-src 60 FC to 0, mx-combo 26 FC to 0, 0 FP; legal 84, 0 FP. Corpus +51 U, -10 U same-start, 0 V |
+| Props destructure (ADR 0824) | | `const { v } = props` with a pending getter outside tracked JSX or in a leaf owner, `async-prop-getter`; open callers in a leaf, `prop-pending-unproven` | async-value-dstr 84 ids: 60 FC to 0, 0 FP; legal 84, 0 FP. Corpus 0 moved |
+| primitive-value (ADR 0825) | the 2 rows an import confirms keep the primitive's name | 78 rows: `primitive-identity-unproven`, same sites, still U | corpus 0 moved, 78 relabelled |
+
+### R2c handoff, 2026-11-06
+
+Head on `claude/flip-r2`: P7 `afcee743f`, lint `f6de3eb2f`, member tag `328763a21`, props destructure `44f848399`, primitive-value (ADR 0825) the commit holding this section. ADRs used: 0821-0825; 0826-0829 left. All landed with verify-delta, witnesses (300 of 336, the 36 census ids), sweep and `make verify` green. Baseline for the next slice: build `rpv1`, sweep `sweep-pv1.json`.
+
+**Helpers added in `$S`:** `srcids.mjs` (mx-src or combo id manifest by regex), `lgsrc.mjs` (lg-src legal ids), `snapdiff.mjs` (a fixture's full finding diff against its snapshot: coverage's report caps its lists), `moved.mjs` (sweep rows grouped by blocker).
+
+**Open, not done:**
+- Imported compound holder (`import { Ui } from "./ui"; <Ui.C />`): U `prop-pending-unproven`, not proved; needs the holder file's literal through a recorded read.
+- `primitive-identity-unproven`: why hoxxes-briefing, inferay, spookysoftware-www facts attribute `createOwner` to unresolved imports is not traced; W's ADR 0711 has the same root for calls.
+- Lost proof: `dependency-source-window-realm` under `--runtime-realm window`, 3 V to 3 U in `f2e5f60e0` (open-work.md).
+- Held for the integrator (census or `shared_reactivity.rs`): `use().v` on a returned store, `export let read = c` (open-defects P12); `d8-pkg-plain-*` (a store handed to a package function).
+- Smoke: `smoke/mx-src.json` gained 60 `async-value-dstr` ids by hand; reselect from a full run at the final stage.
+
+**Traps found:** `push_defect` keeps one SC9012 per start byte, so a new obligation hides another at the same start (sites stay U). For a shorthand `{ C }` the value's symbol is the property's: use `reference_declaration`. `run.mjs` copies only `App.tsx`. A coverage fixture's stubs must be staged (`git add`) before coverage counts them as tracked.
+
+## R2d, from 2026-11-07
+
+Same branch, worktree and scratch `$S` as R2c. Baseline: build `rpv1`, sweep `sweep-pv1.json`.
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| primitive identity (ADR 0826) | root cause: `symbol_names` named the unknown symbol (root of every unresolved import) after `@solidjs/router`'s unresolved `import { createOwner } from "solid-js"`; a root with no declaration is named by nothing | | corpus `pi1` vs `pv1`: 0 V moved, -82 U (SC9012 78, SC3001 2, SC6001 2), +8 SC9012 U once hidden by one row per start. Witnesses 300 of 336, same fails. Coverage 0 moved |
+| unresolved import (ADR 0827), the coordinator's challenge to 0826 | | every runtime use of an import the compiler did not resolve, `import-unresolved` (was certified: JSX call, body read, effect argument, tag, write) | corpus `iu1` vs `pi1`: +7,109 U, 0 removed, 0 V moved. Coverage: 15 fixtures, additions only, read |
+| forward closure in a root or owner callback in a handler (ADR 0828), W's early grid | `pos-handler-root` forward-2/13: 38 V | `pos-handler-owner` forward-2/13: 38 U | 76 ids: 76 FC to 0; legal 2,242: 0 FP, 0 differ; corpus 0 moved; coverage 0 moved |
 
 ## R2 handoff, 2026-11-06
 

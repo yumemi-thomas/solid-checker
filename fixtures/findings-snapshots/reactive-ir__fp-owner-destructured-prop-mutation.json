@@ -30,6 +30,26 @@
       "start": 710,
       "end": 721,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-destructured-prop-mutation/App.tsx",
+      "start": 769,
+      "end": 780,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-destructured-prop-mutation/App.tsx",
+      "start": 817,
+      "end": 828,
+      "fixes": 0
     }
   ]
 }

@@ -969,6 +969,13 @@ pub(super) fn interprocedural_reads(
         );
         result.extend(getter_reads);
         dispatch_obligations.extend(getter_obligations);
+        dispatch_obligations.extend(super::dependency_values::dependency_value_obligations(
+            facts,
+            context.lookup,
+            &provenance,
+            entities,
+            symbol_names,
+        ));
     }
     let step_started = Instant::now();
     export_parameter_member_dispatch_obligations(context, nodes, &mut dispatch_obligations);

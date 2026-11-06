@@ -302,6 +302,11 @@ export const VALUE_USES = {
   "use-store-holder-member": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; const [st] = createStore({ a: 1 }); const v = { st }; void v.st.a;` },
   // H5: a bare child is what its parent does with it; `For` calls it as the mapper.
   "use-child-for": { ...USE_READ, imports: ["For"], text: (o) => `const el = <For each={[1]}>{${o}}</For>; void (el as unknown as () => unknown)();` },
+  // P12 (R2b's held patterns): a store a hook returns, read through the hook's call; and a `let` export of an accessor.
+  "use-hook-store-member": { ...USE_READ, imports: ["createStore"], importLines: ['const [hsm] = createStore({ v: 1 });', 'const useHsm = () => hsm;'], text: (o) => `void ${o}; void useHsm().v;` },
+  // The hook is App's own export and another module reads through it, so the obligation lands in App.tsx, the file the grid judge reads.
+  "use-hook-store-module": { ...USE_READ, imports: ["createStore"], importLines: ['const [hse] = createStore({ v: 1 });', 'export function useHse() { return hse; }', 'import { readHse } from "./hse";'], files: { "hse.ts": 'import { useHse } from "./App";\nexport const readHse = () => useHse().v;\n' }, text: (o) => `void ${o}; void readHse();` },
+  "use-export-let": { ...USE_READ, importLines: ['const [elc] = createSignal(1);', 'export let elRead = elc;', 'import { readEl } from "./el";'], files: { "el.ts": 'import { elRead } from "./App";\nexport const readEl = () => elRead();\n' }, text: (o) => `void ${o}; void readEl();` },
 };
 const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
 export const VALUE_WRITES = {
@@ -309,15 +314,28 @@ export const VALUE_WRITES = {
   "use-write-let": { ...USE_WRITE, text: () => `${SET} let g = w; g(1);` },
   "use-write-map": { ...USE_WRITE, text: () => `${SET} new Map([["k", w]]).get("k")!(1);` },
 };
+// ADR 0821: a `const` copy of a source another module exports. Every reference to it is outside the file that holds the source.
+const EXPORT_COPY = {
+  kind: "plain",
+  importLines: ['import { copied, copiedStore } from "./export-copy";'],
+  files: { "export-copy.ts": 'import { createSignal, createStore } from "solid-js";\nconst [c] = createSignal(1);\nconst [st] = createStore({ v: 1 });\nexport const copied = c;\nexport const copiedStore = st;\n' },
+};
+export const EXPORT_COPY_READS = {
+  "export-copy-signal": { ...EXPORT_COPY, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "void copied();" },
+  "export-copy-store": { ...EXPORT_COPY, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "void copiedStore.v;" },
+};
+export const EXPORT_COPY_WRITES = {
+  "export-copy-write": { ...EXPORT_COPY, contexts: ["body", "handler"], text: () => "copiedStore.v = 2;" },
+};
 
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
   CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
-  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES },
+  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

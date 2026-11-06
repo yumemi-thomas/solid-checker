@@ -2,6 +2,26 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 522,
+      "end": 530,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 547,
+      "end": 555,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -37,8 +57,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 1135,
+      "end": 1143,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
       "start": 1259,
       "end": 1273,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 1259,
+      "end": 1267,
       "fixes": 0
     },
     {
@@ -59,6 +99,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
       "start": 1560,
       "end": 1570,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 1895,
+      "end": 1903,
       "fixes": 0
     },
     {
@@ -108,7 +158,7 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
       "start": 2970,
-      "end": 2983,
+      "end": 2980,
       "fixes": 0
     },
     {

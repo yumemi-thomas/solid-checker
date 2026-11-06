@@ -30,6 +30,16 @@
       "start": 260,
       "end": 275,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params-pnp/App.tsx",
+      "start": 360,
+      "end": 369,
+      "fixes": 0
     }
   ]
 }

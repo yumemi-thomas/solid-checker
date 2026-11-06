@@ -1538,6 +1538,109 @@ fn in_place_in_root_named_callback(
     true
 }
 
+/// ADR 0828: whether a function around `span` is handed to a call that is no
+/// primitive and no standard-library call with a reviewed behavior
+/// (`hc1(() => set(1))`, a helper that forwards its callback to another), and
+/// sits, through any layers, in a callback a primitive runs under an owner it
+/// supplies: a created root (`createRoot`'s body) or one the call names
+/// (`runWithOwner(owner, fn)` with a created or unproven owner). The helper
+/// may run the closure on that callback's stack, under that owner, so the
+/// permissive role of a region around the callback (the handler that holds
+/// the `createRoot` call) is no proof for the site; the site's own entries
+/// decide. The same as ADR 0471's named closure, for an anonymous one handed
+/// on.
+fn handed_closure_in_owner_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    functions_around(file, span).into_iter().any(|function| {
+        function.method_name.is_none()
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+            && handed_to_unreviewed_call(file, function, lookup)
+            && owner_supplying_callback_around(file, function, lookup)
+    })
+}
+
+/// Whether `function` is written as an argument of a call that is no
+/// primitive and whose callee no standard-library declaration resolves.
+fn handed_to_unreviewed_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })
+        .any(|(call, _)| {
+            lookup.primitive_at_call(file, call.span).is_none()
+                && !lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .is_some_and(|declaration| declaration.standard_library)
+        })
+}
+
+/// Whether the first function around `function` that a primitive call takes
+/// as its literal callback runs under an owner the call supplies: a created
+/// root, or an owner `runWithOwner` names that is created or not proven null
+/// ([`solid_dialect::CallbackOwner::Creates`], `Conditional`). Past the bound
+/// the layers are unread (ADR 0532): `true`.
+fn owner_supplying_callback_around(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = function.span;
+    // Bounded: each step moves to the function that holds the previous one.
+    for _ in 0..16 {
+        let Some(outer) = crate::owners::owning_function(&file.ast, at) else {
+            return false;
+        };
+        // A handler, a callback prop or a scheduled callback runs later, on
+        // its own entries: an owner a call outside it supplies is not its.
+        if jsx_attribute_value_function(file, outer.span)
+            || matches!(layer_run(file, outer, lookup), LayerRun::FreshStack)
+        {
+            return false;
+        }
+        let positions = file
+            .ast
+            .arguments_containing(outer.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+            })
+            .filter_map(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .map(|primitive| (call, index, primitive))
+            })
+            .collect::<Vec<_>>();
+        if positions.is_empty() {
+            at = outer.span;
+            continue;
+        }
+        return positions.into_iter().any(|(call, index, primitive)| {
+            lookup
+                .dialect
+                .callback_runs_in_created_root(primitive, index)
+                || (lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index)
+                    && matches!(
+                        callback_owner_at_call(file, call, primitive, index, lookup),
+                        Some(
+                            solid_dialect::CallbackOwner::Creates
+                                | solid_dialect::CallbackOwner::Conditional
+                        )
+                    ))
+        });
+    }
+    true
+}
+
 /// The primitive call positions that take `function`: as the literal argument,
 /// or by a bare identifier argument whose symbol is its binding's.
 fn primitive_positions(
@@ -2305,7 +2408,9 @@ pub(super) fn write_role_walk<'f>(
             .flatten()
     });
     let tracked_named_or_root = tracked_named.is_some()
-        || (permissive_around_root && in_place_in_root_named_callback(file, span, lookup));
+        || (permissive_around_root
+            && (in_place_in_root_named_callback(file, span, lookup)
+                || handed_closure_in_owner_callback(file, span, lookup)));
     let direct = if tracked_named_or_root {
         ExecutionRole::Unknown
     } else {

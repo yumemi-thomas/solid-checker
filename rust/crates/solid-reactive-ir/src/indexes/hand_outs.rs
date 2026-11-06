@@ -498,6 +498,15 @@ impl<'a> SemanticLookup<'a> {
     /// every analyzed file that holds one: what a question about the
     /// bindings that name the symbol reads, as a binding naming a symbol is
     /// one of its declarations.
+    /// ADR 0827: whether `symbol` has no declaration in the table (the
+    /// checker's one unknown symbol, the root of every unresolved import),
+    /// noting the read as [`Self::note_symbol_declarations`] does.
+    pub(crate) fn symbol_undeclared(&self, symbol: &str) -> bool {
+        self.note_symbol_declarations(symbol);
+        self.symbol_declarations(symbol)
+            .is_none_or(<[typefacts::Declaration]>::is_empty)
+    }
+
     pub(crate) fn note_symbol_declarations(&self, symbol: &str) {
         if self.hand_out_frame().is_none() {
             return;

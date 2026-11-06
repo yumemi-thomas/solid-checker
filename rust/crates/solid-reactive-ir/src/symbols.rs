@@ -131,8 +131,12 @@ pub(super) fn add_solid_import_names(
 /// primitive would make every unresolved import in the project that
 /// primitive.
 fn undeclared(facts: &ProjectFacts, symbol: &SymbolId) -> bool {
-    facts
-        .typescript
+    undeclared_in(&facts.typescript, symbol)
+}
+
+/// [`undeclared`] against the table alone.
+fn undeclared_in(table: &TypeScriptTable, symbol: &SymbolId) -> bool {
+    table
         .symbol(symbol.as_str())
         .is_none_or(|fact| fact.declarations().is_empty())
 }
@@ -468,6 +472,8 @@ pub(super) fn patch_typescript_indexes(
     for root in &affected_roots {
         cache.source_declarations.remove(root);
         cache.symbol_names.remove(root);
+        // ADR 0826, as in [`symbol_names`].
+        let unnamed = undeclared_in(table, root);
         for id in cache.symbols_by_root.get(root).into_iter().flatten() {
             let Some(symbol) = symbols_by_id.get(id.as_str()) else {
                 continue;
@@ -482,7 +488,7 @@ pub(super) fn patch_typescript_indexes(
                     .source_declarations
                     .insert(root.clone(), declaration.clone());
             }
-            for declaration in symbol.declarations() {
+            for declaration in symbol.declarations().iter().filter(|_| !unnamed) {
                 if solid_primitive_declaration(declaration, dialect) {
                     cache
                         .symbol_names
@@ -656,6 +662,15 @@ pub(super) fn symbol_names(
             .get(symbol.id())
             .cloned()
             .unwrap_or_else(|| interner.intern(symbol.id()));
+        // ADR 0826: an import inside a Solid package that its target does
+        // not export (`@solidjs/web`'s `import { createOwner } from
+        // "solid-js"` against rc.21's typings) aliases the checker's one
+        // unknown symbol, the root of every unresolved import in the
+        // project. Its declaration names no root: naming that one would make
+        // every unresolved import the primitive.
+        if undeclared_in(table, &root) {
+            continue;
+        }
         for declaration in symbol.declarations() {
             if solid_primitive_declaration(declaration, dialect) {
                 names.insert(root.clone(), symbol_name(declaration.name.as_ref()));

@@ -896,14 +896,22 @@
           "path": "<root>/Row.tsx",
           "startByte": 55,
           "endByte": 63
+        },
+        {
+          "id": "SC9012",
+          "rule": "reactive-dispatch-unresolved",
+          "kind": "uncertifiable",
+          "path": "<root>/Use.tsx",
+          "startByte": 65,
+          "endByte": 69
         }
       ],
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 1,
+        "proofObligations": 2,
         "cachedSummaries": 0,
-        "unresolvedObligations": 0
+        "unresolvedObligations": 1
       },
       "premises": [
         "standard runtime configuration (ADRs 0266/0268)",

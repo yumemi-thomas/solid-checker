@@ -114,6 +114,24 @@ pub(crate) const WRITE_PATH_VIA: &str = "a write's path";
 /// ADR 0820: a generator's body past its first suspension, on a stepping the
 /// walk does not prove.
 pub(crate) const GENERATOR_STEPPED: &str = "generator-stepped";
+/// ADR 0822: a Get of a value a selected package produces where the walk over
+/// its source ends: a class, a proxy, a call nothing resolves, an accessor
+/// installed at run time.
+pub(crate) const DEPENDENCY_VALUE_UNFOLLOWED: &str = "dependency-value-unfollowed";
+/// ADR 0822: importing a package installs a function on a global, and that
+/// function may read a source wherever it is called.
+pub(crate) const DEPENDENCY_GLOBAL_READ: &str = "dependency-global-read";
+/// ADR 0823: a prop read in a leaf owner (createTrackedEffect, onSettled)
+/// whose callers do not prove the value is no pending async getter: an
+/// unseen caller, or a visible one passing a value nothing classifies.
+pub(crate) const PROP_PENDING_UNPROVEN: &str = "prop-pending-unproven";
+/// ADR 0825: the producer attributes a Solid primitive to a value no import
+/// confirms (ADR 0711): which function it is, and so what reaches it, is open.
+pub(crate) const PRIMITIVE_IDENTITY_UNPROVEN: &str = "primitive-identity-unproven";
+/// ADR 0827: a runtime use of an import the compiler did not resolve (a
+/// missing module, an export its target lacks): what the value is, and so
+/// what any call, read, tag or write through it does, is unknown.
+pub(crate) const IMPORT_UNRESOLVED: &str = "import-unresolved";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";

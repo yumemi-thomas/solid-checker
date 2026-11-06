@@ -44,7 +44,11 @@ pub(crate) fn static_prepass<'a>(
             .as_deref_mut()
             .map(|chunks| &mut chunks.value_references),
         &inputs,
-        |file| primitive_value_references(ctx, file),
+        |file| {
+            let mut defects = primitive_value_references(ctx, file);
+            defects.extend(unresolved_import_references(ctx, file));
+            defects
+        },
     );
     push_defects(draft, &per_file);
     let per_file = crate::late_chunks::FileChunks::run(
@@ -150,6 +154,66 @@ fn primitive_result_methods(
     defects
 }
 
+/// ADR 0827: every runtime reference of an import binding the compiler did
+/// not resolve. The binding's symbol aliases a root with no declaration (the
+/// checker's one unknown symbol): a missing module, an export its target
+/// lacks, an import silenced by `@ts-ignore`. Nothing says what the value is,
+/// so a call of it, a read of it in a tracked scope, a tag, a write through
+/// it are all open: an obligation at each reference, never a silent clean.
+/// A binding with no entity is the same missing fact. Type positions are
+/// erased and skipped.
+fn unresolved_import_references(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let ast = &file.ast;
+    let mut defects = Vec::new();
+    for import in ast.imports.iter().filter(|import| !import.type_only) {
+        for binding in import
+            .bindings
+            .iter()
+            .filter(|binding| !binding.type_only && binding.runtime_referenced)
+        {
+            let declaration = binding.local.span;
+            let unresolved = ctx
+                .entities
+                .at(file.path.as_str(), declaration)
+                .is_none_or(|symbol| ctx.semantic_lookup.symbol_undeclared(symbol.as_str()));
+            if !unresolved {
+                continue;
+            }
+            let name = file.source_text(declaration).unwrap_or("this import");
+            for &(reference, _) in
+                ast.reference_declarations
+                    .iter()
+                    .filter(|(reference, declared)| {
+                        *declared == declaration && *reference != declaration
+                    })
+            {
+                if ast
+                    .type_queries
+                    .iter()
+                    .chain(&ast.type_names)
+                    .any(|erased| erased.contains(reference))
+                {
+                    continue;
+                }
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: name.to_owned(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), reference),
+                    analysis_context: crate::blockers::IMPORT_UNRESOLVED.to_owned(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
+    }
+    defects
+}
+
 /// A dialect primitive referenced as a value rather than called by name
 /// (`const effect = createEffect; effect(…)`, `Reflect.apply(createEffect,
 /// …)`, `afterEach(cleanup)`, `[Solid.createEffect]`). Every rule finds a
@@ -228,13 +292,38 @@ fn primitive_value_references(
             ) else {
                 continue;
             };
+            // ADR 0825: the primitive is named only when the binder confirms
+            // it (ADR 0711); a symbol the producer attributes to one with no
+            // import that says so stays open, named by its own text.
+            let value = ast
+                .members
+                .iter()
+                .find(|member| member.property == span)
+                .map_or(span, |member| member.span);
+            let proven = ast
+                .reference_declaration(span)
+                .is_some_and(|declaration| ast.namespace_member_binding(declaration).is_some())
+                || crate::cleanup::primitive_identity_proven_at(
+                    ctx.dialect,
+                    file,
+                    value,
+                    &primitive,
+                );
+            let (callee, context) = if proven {
+                (primitive.to_string(), crate::PRIMITIVE_VALUE)
+            } else {
+                (
+                    file.source_text(value).unwrap_or("this value").to_owned(),
+                    crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN,
+                )
+            };
             defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: primitive.to_string(),
+                    callee,
                     member: None,
                 },
                 location: location(file.path.shared(), span),
-                analysis_context: crate::PRIMITIVE_VALUE.to_owned(),
+                analysis_context: context.to_owned(),
                 fixes: vec![],
                 uncertain: true,
             });
@@ -370,6 +459,53 @@ fn component_props_destructure(
                 ctx.symbol_names,
                 ctx.semantic_lookup,
             );
+            // ADR 0823: a destructure reads every slot it binds. In a leaf
+            // owner a pending getter there is PENDING_ASYNC_FORBIDDEN_SCOPE;
+            // the callers either exclude one or the read is an obligation.
+            // As ADR 0509 asks of `props.x`: a getter of an async source
+            // outside tracked JSX, or in a leaf owner; an open caller set in
+            // a leaf owner.
+            if let Some(declaration) = &prop_declaration {
+                let leaf = || {
+                    crate::local_access::may_run_in_leaf_owner(
+                        file,
+                        binding.pattern,
+                        ctx.entities,
+                        ctx.symbol_names,
+                        ctx.semantic_lookup,
+                    )
+                };
+                let names = (binding.names.len() <= binding.object_slots.len()).then(|| {
+                    binding
+                        .object_slots
+                        .iter()
+                        .map(|slot| slot.property.to_string())
+                        .collect::<Vec<_>>()
+                });
+                let context = match tables.props_pending(declaration, names) {
+                    1 if role != crate::ExecutionRole::TrackedJsx || leaf() => {
+                        Some("async-prop-getter")
+                    }
+                    2 if leaf() => Some(crate::blockers::PROP_PENDING_UNPROVEN),
+                    _ => None,
+                };
+                if let Some(context) = context {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                            callee: binding
+                                .initializer
+                                .and_then(|span| file.source_text(span))
+                                .unwrap_or("this props object")
+                                .to_owned(),
+                            member: None,
+                        },
+                        location: location(file.path.shared(), binding.pattern),
+                        analysis_context: context.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
+            }
             // Fresh-at-call-time contexts: tracked scopes re-run and
             // re-subscribe; event handlers, deferred/leaf callbacks, effect
             // apply, untrack, and directive application read current values

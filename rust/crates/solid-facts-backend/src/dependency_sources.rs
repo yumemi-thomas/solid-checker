@@ -900,18 +900,24 @@ fn subpaths_of(bare: &BTreeSet<String>, packages: &BTreeSet<String>) -> BTreeSet
 }
 
 /// The bare specifiers a module loads with a runtime binding, or
-/// re-exports. A side-effect or type-only import binds nothing to redirect.
+/// re-exports. A type-only import binds nothing to redirect. ADR 0822: a
+/// side-effect import of a module runs it: no redirect, and its source is what
+/// says what it installs. An asset import (`pkg/theme.css`) names no module.
 fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> {
     facts
         .imports
         .iter()
         .filter(|import| {
             !import.type_only
-                && import.bindings.iter().any(|binding| {
+                && (import.bindings.iter().any(|binding| {
                     !binding.type_only
                         && binding.runtime_referenced
                         && binding.kind != solid_facts::ast::ImportKind::SideEffect
-                })
+                }) || (import
+                    .bindings
+                    .iter()
+                    .all(|binding| binding.kind == solid_facts::ast::ImportKind::SideEffect)
+                    && !asset_specifier(&import.module)))
         })
         .map(|import| import.module.as_str())
         .chain(
@@ -937,6 +943,16 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
         .filter(|module| split_bare_specifier(module).is_some())
         .map(str::to_owned)
         .collect()
+}
+
+/// A specifier with a file extension no module has.
+fn asset_specifier(specifier: &str) -> bool {
+    Path::new(specifier).extension().is_some_and(|extension| {
+        !matches!(
+            extension.to_str(),
+            Some("js" | "mjs" | "cjs" | "ts" | "mts" | "cts" | "jsx" | "tsx")
+        )
+    })
 }
 
 /// Binding forms that `symbol_redirects` does not join to runtime exports.

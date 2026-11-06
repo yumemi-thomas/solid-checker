@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-root-pass/App.tsx",
+      "start": 424,
+      "end": 428,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -29,6 +39,16 @@
       "path": "fixtures/reactive-ir/rc21-root-pass/App.tsx",
       "start": 445,
       "end": 451,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-root-pass/App.tsx",
+      "start": 458,
+      "end": 462,
       "fixes": 0
     },
     {
@@ -49,6 +69,26 @@
       "path": "fixtures/reactive-ir/rc21-root-pass/App.tsx",
       "start": 533,
       "end": 539,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-root-pass/App.tsx",
+      "start": 614,
+      "end": 618,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-root-pass/App.tsx",
+      "start": 642,
+      "end": 646,
       "fixes": 0
     }
   ]

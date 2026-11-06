@@ -1105,3 +1105,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/open-source-computes/node_modules/**
 !fixtures/reactive-ir/value-walk-chain/node_modules/
 !fixtures/reactive-ir/value-walk-chain/node_modules/**
+!fixtures/reactive-ir/exported-const-copy/node_modules/
+!fixtures/reactive-ir/exported-const-copy/node_modules/**
+!fixtures/reactive-ir/dependency-value-unfollowed/node_modules/
+!fixtures/reactive-ir/dependency-value-unfollowed/node_modules/**
+!fixtures/reactive-ir/compound-member-tag/node_modules/
+!fixtures/reactive-ir/compound-member-tag/node_modules/**
+!fixtures/reactive-ir/props-destructure-pending/node_modules/
+!fixtures/reactive-ir/props-destructure-pending/node_modules/**
+!fixtures/reactive-ir/import-unresolved/node_modules/
+!fixtures/reactive-ir/import-unresolved/node_modules/**

@@ -42,6 +42,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 1926,
+      "end": 1930,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 1976,
+      "end": 1980,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -72,6 +92,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3097,
+      "end": 3100,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3137,
+      "end": 3140,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -79,6 +119,26 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 3283,
       "end": 3294,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3488,
+      "end": 3492,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3539,
+      "end": 3543,
       "fixes": 0
     },
     {
@@ -92,6 +152,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3852,
+      "end": 3855,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3903,
+      "end": 3906,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -99,6 +179,26 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 4049,
       "end": 4060,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 4207,
+      "end": 4210,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 4251,
+      "end": 4254,
       "fixes": 0
     }
   ]

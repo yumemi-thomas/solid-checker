@@ -3738,45 +3738,7 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         span: solid_facts::core::Span,
     ) -> bool {
-        let mut seen = HashSet::default();
-        self.may_run_in_leaf_owner_within(file, span, &mut seen)
-    }
-
-    fn may_run_in_leaf_owner_within(
-        &self,
-        file: &solid_facts::FileFacts,
-        span: solid_facts::core::Span,
-        seen: &mut HashSet<solid_facts::core::Span>,
-    ) -> bool {
-        if containing_leaf_owner(file, span, self.entities, self.symbol_names, self.lookup)
-            .is_some()
-            || file.ast.functions.iter().any(|leaf| {
-                leaf.span.contains(span)
-                    && containing_leaf_owner(
-                        file,
-                        leaf.span,
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                    )
-                    .is_some()
-            })
-        {
-            return true;
-        }
-        let Some(function) = containing_ast_function(&file.ast, span) else {
-            return false;
-        };
-        let Some(name) = function_binding_name(file, function) else {
-            return false;
-        };
-        file.ast.identifiers.iter().any(|identifier| {
-            identifier.role == solid_facts::ast::IdentifierRole::Reference
-                && file.ast.reference_declaration(identifier.span) == Some(name.span)
-                && (seen.len() >= VALUE_WALK_BUDGET
-                    || (seen.insert(identifier.span)
-                        && self.may_run_in_leaf_owner_within(file, identifier.span, seen)))
-        })
+        may_run_in_leaf_owner(file, span, self.entities, self.symbol_names, self.lookup)
     }
 
     /// Whether the callee, or the binding it names, is typed as a Solid
@@ -6922,15 +6884,34 @@ impl LocalAccessContext<'_, '_> {
                 pending_open = !uncertain;
                 uncertain = true;
             }
-            if exact_root
+            let async_passed = exact_root
                 && backing == PropUse::Reactive
-                && (execution != ExecutionRole::TrackedJsx
-                    || self.may_run_in_leaf_owner(file, member.span))
                 && property.is_some_and(|property| {
                     self.props_reactivity
                         .async_getter(prop_declaration, property)
-                })
+                });
+            // ADR 0823: in a leaf owner (createTrackedEffect, onSettled) a
+            // pending read is the runtime's PENDING_ASYNC_FORBIDDEN_SCOPE.
+            // Unless every caller is enumerated and none may pass a pending
+            // getter, an unseen or unclassified caller may: an obligation.
+            let context = if async_passed
+                && (execution != ExecutionRole::TrackedJsx
+                    || self.may_run_in_leaf_owner(file, member.span))
             {
+                Some("async-prop-getter")
+            } else if !async_passed
+                && !(exact_root
+                    && property.is_some_and(|property| {
+                        self.props_reactivity
+                            .pending_excluded(prop_declaration, property)
+                    }))
+                && self.may_run_in_leaf_owner(file, member.span)
+            {
+                Some(crate::blockers::PROP_PENDING_UNPROVEN)
+            } else {
+                None
+            };
+            if let Some(context) = context {
                 result.dispatch_obligations.push(crate::StaticDefect {
                     kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
                         callee: file
@@ -6940,7 +6921,7 @@ impl LocalAccessContext<'_, '_> {
                         member: None,
                     },
                     location: location(file.path.shared(), member.span),
-                    analysis_context: "async-prop-getter".to_owned(),
+                    analysis_context: context.to_owned(),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -10019,4 +10000,69 @@ pub(crate) fn unreached_write_may_run(
             crate::execution_role::SiteReach::new(lookup).site(file, span),
             crate::execution_role::Reach::Unreached(_)
         )
+}
+
+/// Whether `span` is inside a leaf owner's callback (`onSettled`,
+/// `createTrackedEffect`), where a pending async read is forbidden, or in a
+/// named local function a reference inside one names. ADR 0800: each
+/// reference is visited once, and a walk out of budget may.
+pub(crate) fn may_run_in_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut seen = HashSet::default();
+    may_run_in_leaf_owner_within(file, span, entities, symbol_names, lookup, &mut seen)
+}
+
+fn may_run_in_leaf_owner_within(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    seen: &mut HashSet<solid_facts::core::Span>,
+) -> bool {
+    if containing_leaf_owner(file, span, entities, symbol_names, lookup).is_some()
+        || file.ast.functions.iter().any(|leaf| {
+            leaf.span.contains(span)
+                && containing_leaf_owner(file, leaf.span, entities, symbol_names, lookup).is_some()
+        })
+    {
+        return true;
+    }
+    // The innermost function a name holds, through any IIFE written around
+    // the span (it runs where it is written); any other anonymous function
+    // runs where it is handed, which this does not follow.
+    let mut enclosing = file.ast.functions_containing(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.span.end - function.span.start);
+    for function in enclosing {
+        if let Some(name) = function_binding_name(file, function) {
+            return file.ast.identifiers.iter().any(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && file.ast.reference_declaration(identifier.span) == Some(name.span)
+                    && (seen.len() >= VALUE_WALK_BUDGET
+                        || (seen.insert(identifier.span)
+                            && may_run_in_leaf_owner_within(
+                                file,
+                                identifier.span,
+                                entities,
+                                symbol_names,
+                                lookup,
+                                seen,
+                            )))
+            });
+        }
+        let invoked = file
+            .ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == function.span);
+        if !invoked {
+            return false;
+        }
+    }
+    false
 }

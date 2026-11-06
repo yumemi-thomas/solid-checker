@@ -675,6 +675,17 @@ fn primitive_identity_proven(
     call: &solid_facts::ast::CallFact,
     primitive: &PrimitiveName,
 ) -> bool {
+    primitive_identity_proven_at(dialect, file, call.callee, primitive)
+}
+
+/// [`primitive_identity_proven`] for the value at `callee`, whether or not a
+/// call holds it (ADR 0825: a primitive used as a value).
+pub(crate) fn primitive_identity_proven_at(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    callee: Span,
+    primitive: &PrimitiveName,
+) -> bool {
     use solid_facts::ast::ImportKind;
     let Some(kind) = primitive.primitive() else {
         return false;
@@ -690,7 +701,7 @@ fn primitive_identity_proven(
                 .map(|binding| (import, binding))
         })
     };
-    let callee = ast.peel_ts_sugar_span(call.callee);
+    let callee = ast.peel_ts_sugar_span(callee);
     if let Some(member) = ast.member_at(callee) {
         let object = ast.peel_ts_sugar_span(member.object);
         return ast

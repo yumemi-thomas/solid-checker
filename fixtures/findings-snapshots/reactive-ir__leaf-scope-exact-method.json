@@ -48,7 +48,7 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-exact-method/App.tsx",
       "start": 1225,
-      "end": 1249,
+      "end": 1237,
       "fixes": 0
     },
     {

@@ -58,7 +58,7 @@ export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
   context: ["context", "context-destructured"],
   module: ["module", "module-hook", "module-hook-member", "module-hook-shared", "module-hook-direct"],
-  async: ["async-prop", "async-value", "async-value-member", "async-context", "async-loading"],
+  async: ["async-prop", "async-value", "async-value-member", "async-value-dstr", "async-context", "async-loading"],
   // The recall axes (`--recall`): the values through a barrel module that re-exports `helpers.ts` (`lib.ts`), or a hook that is
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
   files: ["module-barrel", "module-default-hook"],
@@ -69,7 +69,7 @@ export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct"];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module");
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
-const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member";
+const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
 
 /**
  * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
@@ -115,6 +115,8 @@ export function sourcesOption(value) {
 export function sourcedName(source, name) {
   switch (source) {
     case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
+    // ADR 0823: the read is a body destructure of the props object, written where the read is.
+    case "async-value-dstr": return `(() => { const { ${name} } = props; return ${name}; })()`;
     case "prop-merge": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
     case "context": case "async-context": return `ctx.${name}`;
