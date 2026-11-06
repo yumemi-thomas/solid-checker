@@ -194,7 +194,12 @@ fn http_response_in_file<'a>(
                     "Decide the response head in shell content — above every <{boundary}> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
                 ),
                 location: location(file.path.shared(), call.callee),
-                analysis_context: String::new(),
+                analysis_context: if server_rendering.renders() {
+                    crate::blockers::BOUNDARY_SETTLE_ORDER_UNPROVEN
+                } else {
+                    crate::blockers::SERVER_RENDERING_UNRESOLVED
+                }
+                .to_owned(),
                 fixes: vec![],
                 uncertain: true,
             });

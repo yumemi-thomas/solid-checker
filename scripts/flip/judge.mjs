@@ -3,8 +3,9 @@
 import { codeOfThrown, codeRules, ruleHasRuntimeCounterpart } from "../fuzz/codes.mjs";
 import { judgePattern } from "../fuzz/patterns.mjs";
 
-/** A blocker is kebab-case words and an optional `:detail`; a function's name says where, not what is missing (ADR 0680). */
-export const isNamedBlocker = (context) => /^[a-z0-9]+(-[a-z0-9]+)+(:.*)?$/s.test(context ?? "") && !String(context).startsWith("proof-step-unnamed");
+import { isNamedBlocker } from "../lib/blockers.mjs";
+
+export { isNamedBlocker };
 
 /** Every code the recorded run showed: its diagnostics, and each uncaught error's code (`<phase>: [CODE] …` or a known message). */
 export function recordedCodes(runtime) {

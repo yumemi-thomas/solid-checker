@@ -732,8 +732,30 @@ pub(crate) fn gate_diagnostics(
             ApplyExecution::Proven => true,
         });
     gate!(leaf_operations, uncertain);
-    gate!(static_defects, uncertain);
-    gate!(static_violations, uncertain);
+    // ADR 0590: a row an apply of unknown execution supplies; as a read's,
+    // its blocker is that the callee's invocation is unresolved.
+    macro_rules! gate_named {
+        ($table:ident) => {
+            draft
+                .$table
+                .retain_mut(|row| match execution(&row.location) {
+                    ApplyExecution::Absent => false,
+                    ApplyExecution::Unknown => {
+                        row.uncertain = true;
+                        if !crate::blockers::named(&row.analysis_context) {
+                            row.analysis_context = crate::blockers::with_detail(
+                                crate::blockers::CALLEE_CALLBACK_TIMING,
+                                &row.analysis_context,
+                            );
+                        }
+                        true
+                    }
+                    ApplyExecution::Proven => true,
+                });
+        };
+    }
+    gate_named!(static_defects);
+    gate_named!(static_violations);
     gate!(async_reads, invocation_context_unproven);
     draft
         .writes

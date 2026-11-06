@@ -146,6 +146,14 @@ pub(crate) const DELETE_OPERAND_UNPROVEN: &str = "delete-operand-unproven";
 /// `@ts-nocheck` may silence, or in JavaScript `tsc` may not check. Nothing
 /// may report it, and the runtime may throw or warn there.
 pub(crate) const SOLID_CALL_REJECTED_UNCHECKED: &str = "solid-call-rejected-unchecked";
+/// ADR 0703: an `httpStatus`/`httpHeader` call below a `Loading` boundary in a
+/// project that server-renders: whether the boundary settles before the shell
+/// flush (the head applies) or after it (the call is dropped) is open.
+pub(crate) const BOUNDARY_SETTLE_ORDER_UNPROVEN: &str = "boundary-settle-order-unproven";
+/// ADR 0427: an export of a module-level `"use server"` file whose value no
+/// fact shows to be a function (a call of a project wrapper): registration
+/// throws at server boot unless it is one.
+pub(crate) const SERVER_EXPORT_VALUE_UNPROVEN: &str = "server-export-value-unproven";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";
@@ -251,6 +259,10 @@ pub(crate) const fn for_async_read(read: &crate::AsyncRead) -> &'static str {
         CREATION_PASS_UNPROVEN
     } else if read.provenance_open {
         ASYNC_PROVENANCE_UNPROVEN
+    } else if read.settle_unproven {
+        // ADR 0518: a top-level `await` may settle the source before the
+        // read; the last hole, so a row with an earlier one keeps its name.
+        SOURCE_PENDING_UNPROVEN
     } else {
         PROOF_STEP_UNNAMED
     }

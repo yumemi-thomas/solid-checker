@@ -31,6 +31,7 @@ import { promisify } from "node:util";
 
 import { dialectStubProblems } from "./lib/dialect-stubs.mjs";
 import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
+import { isNamedBlocker } from "./lib/blockers.mjs";
 import { gateConcurrency, mapPool } from "./lib/pool.mjs";
 import { runCoverageUnit } from "./lib/coverage-cache.mjs";
 
@@ -376,6 +377,11 @@ async function analyzeUnguarded(tsconfig, keepWording) {
     }
   );
   const snapshot = JSON.parse(output);
+  // ADR 0680: every uncertifiable row names its blocker. Kept beside the
+  // snapshot, never in it (the snapshot holds no blocker).
+  const unnamed = (snapshot.findings ?? [])
+    .filter((finding) => finding.kind === "uncertifiable" && !isNamedBlocker(finding.analysisContext))
+    .map((finding) => `${finding.id}@${finding.primaryLocation?.line}:${finding.analysisContext ?? ""}`);
   const findings = (snapshot.findings ?? []).map((finding) =>
     comparable(finding, keepWording)
   );
@@ -388,7 +394,7 @@ async function analyzeUnguarded(tsconfig, keepWording) {
   );
   // status is part of the contract too: a change that keeps every finding but
   // flips the verdict is still a change.
-  return { status: snapshot.status, findings };
+  return { status: snapshot.status, findings, ...(unnamed.length ? { unnamed } : {}) };
 }
 
 mkdirSync(snapshots, { recursive: true });
@@ -468,6 +474,13 @@ const computed = await mapPool(
 let changed = 0;
 let total = 0;
 const moved = [];
+// Rows with no named blocker fail the gate whatever the snapshots say.
+const unnamedRows = [];
+for (const [index, project] of projects.entries()) {
+  const { unnamed, ...value } = computed[index].value;
+  computed[index].value = value;
+  for (const row of unnamed ?? []) unnamedRows.push(`${project.id} ${row}`);
+}
 /** What moved in one snapshot, as sets of finding keys. */
 function movedEntry(id, expectedText, value) {
   const expected = JSON.parse(expectedText);
@@ -555,7 +568,9 @@ const verb = update ? "recorded" : "compared";
 console.log(`${verb} ${projects.length} fixture projects, ${total} findings`);
 console.log(`${cache.summary()}; concurrency ${concurrency}`);
 console.log(`inference cache bypass: ${computed.filter((unit) => unit.inferenceCacheBypassed).length} unit(s)`);
+for (const row of unnamedRows) console.error(`uncertifiable with no named blocker (ADR 0680): ${row}`);
 if (changed > 0) {
   console.error(`${changed} project(s) differ -- re-run with --update if intended`);
   process.exit(1);
 }
+if (unnamedRows.length > 0) process.exit(1);

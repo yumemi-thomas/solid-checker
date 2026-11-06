@@ -411,7 +411,7 @@ fn module_exports(file: &FileFacts, wrappers: &[WrapperCall], draft: &mut Progra
                             if exported_call(file, declaration.local.span)
                                 .is_some_and(|call| wrappers.iter().any(|w| w.span == call)) => {}
                         ExportShape::Unresolved => {
-                            draft.static_violations.push(violation(
+                            let mut open = violation(
                                 file,
                                 declaration.local.span,
                                 format!(
@@ -419,7 +419,10 @@ fn module_exports(file: &FileFacts, wrappers: &[WrapperCall], draft: &mut Progra
                                 ),
                                 "Export a function declaration or expression, or a call whose result is a function.",
                                 true,
-                            ));
+                            );
+                            crate::blockers::SERVER_EXPORT_VALUE_UNPROVEN
+                                .clone_into(&mut open.analysis_context);
+                            draft.static_violations.push(open);
                         }
                     }
                 }

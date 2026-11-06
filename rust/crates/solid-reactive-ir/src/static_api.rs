@@ -462,7 +462,14 @@ impl StaticApiContext<'_> {
                     ),
                     hint: "Remove the flush(): an action's writes are held by its transaction and commit when the action settles, so no flush inside the body can reveal them. To observe the result, read after the action resolves (`await save(); …`).".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    // ADRs 0516, 0537, 0538: a layer between the step and the
+                    // call is not placed, so whether a step is on the stack
+                    // when it runs is open.
+                    analysis_context: if stepped {
+                        crate::blockers::FUNCTION_RUN_UNPLACED.to_owned()
+                    } else {
+                        String::new()
+                    },
                     fixes: vec![],
                     uncertain: stepped,
                 });

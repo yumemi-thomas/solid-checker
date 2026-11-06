@@ -1439,7 +1439,15 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         if depth > MAX_REGION_DEPTH {
+            // ADR 0750: past the depth the walk follows.
+            let mark = draft.static_defects.len();
             self.push_unfollowed(draft, walk, file, call, call.callee);
+            for defect in &mut draft.static_defects[mark..] {
+                defect.analysis_context = crate::blockers::with_detail(
+                    crate::blockers::SEARCH_DEPTH_LIMIT,
+                    &defect.analysis_context,
+                );
+            }
             return;
         }
         let ctx = self.ctx;
@@ -1698,7 +1706,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .to_owned(),
                     },
                     location: location(file.path.shared(), argument.span),
-                    analysis_context: walk.member.context.clone(),
+                    // A callee whose body cannot be read.
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED,
+                        &walk.member.context,
+                    ),
                     fixes: vec![],
                     uncertain: false,
                 }),
@@ -2044,7 +2056,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                     callee: file.source_text(tag).unwrap_or("this tag").to_owned(),
                 },
                 location: location(file.path.shared(), tag),
-                analysis_context: walk.member.context.clone(),
+                // ADR 0750: past the depth the walk follows.
+                analysis_context: crate::blockers::with_detail(
+                    crate::blockers::SEARCH_DEPTH_LIMIT,
+                    &walk.member.context,
+                ),
                 fixes: vec![],
                 uncertain: false,
             });
@@ -2297,7 +2313,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .to_owned(),
                     },
                     location: location(file.path.shared(), argument.span),
-                    analysis_context: walk.member.context.clone(),
+                    // A callee whose body cannot be read.
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED,
+                        &walk.member.context,
+                    ),
                     fixes: vec![],
                     uncertain: false,
                 }),
