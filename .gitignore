@@ -1089,3 +1089,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/lying-assertion/node_modules/**
 !fixtures/reactive-ir/standard-patches/node_modules/
 !fixtures/reactive-ir/standard-patches/node_modules/**
+!fixtures/reactive-ir/tuple-accessor-slots/node_modules/
+!fixtures/reactive-ir/tuple-accessor-slots/node_modules/**
+!fixtures/reactive-ir/tuple-accessor-slots-vetoed/node_modules/
+!fixtures/reactive-ir/tuple-accessor-slots-vetoed/node_modules/**
+!fixtures/reactive-ir/open-source-computes/node_modules/
+!fixtures/reactive-ir/open-source-computes/node_modules/**
+!fixtures/reactive-ir/value-walk-chain/node_modules/
+!fixtures/reactive-ir/value-walk-chain/node_modules/**

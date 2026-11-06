@@ -69,6 +69,7 @@ pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
     DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer, PROJECT_TABLES_FROM,
     ProjectTables, RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
+    TupleSlotIterationVeto,
 };
 pub(crate) use test_runner::TestRunnerCallback;
 
@@ -936,6 +937,7 @@ pub(super) struct SemanticLookup<'a> {
     /// [`Self::section_fingerprint`], once per build.
     section_fingerprints: [OnceLock<[u8; 32]>; crate::base::reads::Section::ALL.len()],
     tuple_iteration_veto: crate::base::reads::Recorded<bool>,
+    tuple_slot_iteration_veto: crate::base::reads::Recorded<bool>,
     string_code_veto: crate::base::reads::Recorded<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
@@ -1285,6 +1287,7 @@ impl<'a> SemanticLookup<'a> {
             result_access_forwarded: crate::base::reads::Recorded::new(),
             section_fingerprints: std::array::from_fn(|_| OnceLock::new()),
             tuple_iteration_veto: crate::base::reads::Recorded::new(),
+            tuple_slot_iteration_veto: crate::base::reads::Recorded::new(),
             string_code_veto: crate::base::reads::Recorded::new(),
             parameter_completion_calls: crate::base::reads::Recorded::new(),
             never_returning_calls: OnceLock::new(),
@@ -2388,6 +2391,12 @@ impl<'a> SemanticLookup<'a> {
         *self
             .tuple_iteration_veto
             .get_or_init(|| self.whole_program_answer::<TupleIterationVeto>())
+    }
+
+    pub(super) fn tuple_slot_iteration_may_be_mutated(&self) -> bool {
+        *self
+            .tuple_slot_iteration_veto
+            .get_or_init(|| self.whole_program_answer::<TupleSlotIterationVeto>())
     }
 
     /// Facts are immutable for this lookup's lifetime. Proxy and invocation

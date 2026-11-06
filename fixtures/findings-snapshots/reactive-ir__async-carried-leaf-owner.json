@@ -155,6 +155,16 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
+      "start": 2724,
+      "end": 2728,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
       "start": 3040,
@@ -199,6 +209,16 @@
       "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
       "start": 3316,
       "end": 3320,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
+      "start": 3412,
+      "end": 3415,
       "fixes": 0
     }
   ]

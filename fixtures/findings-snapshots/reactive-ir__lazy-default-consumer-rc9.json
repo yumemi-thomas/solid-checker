@@ -27,28 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
-      "start": 630,
-      "end": 637,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
       "start": 1051,
       "end": 1056,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
-      "start": 1096,
-      "end": 1103,
       "fixes": 0
     },
     {

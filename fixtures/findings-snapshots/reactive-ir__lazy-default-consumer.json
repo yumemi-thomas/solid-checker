@@ -17,28 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
-      "start": 539,
-      "end": 546,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
       "start": 796,
       "end": 801,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
-      "start": 829,
-      "end": 836,
       "fixes": 0
     },
     {
@@ -72,16 +52,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Clean.tsx",
-      "start": 322,
-      "end": 329,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -99,16 +69,6 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
       "start": 560,
       "end": 565,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
-      "start": 593,
-      "end": 600,
       "fixes": 0
     },
     {
@@ -147,28 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
-      "start": 630,
-      "end": 637,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
       "start": 1051,
       "end": 1056,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
-      "start": 1096,
-      "end": 1103,
       "fixes": 0
     },
     {
@@ -206,29 +146,9 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/FakeLazy.tsx",
-      "start": 323,
-      "end": 330,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
       "start": 352,
       "end": 357,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
-      "start": 385,
-      "end": 392,
       "fixes": 0
     },
     {
@@ -247,28 +167,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 544,
-      "end": 551,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 868,
       "end": 873,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 901,
-      "end": 908,
       "fixes": 0
     },
     {
@@ -287,28 +187,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 1254,
-      "end": 1261,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 1549,
       "end": 1554,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 1582,
-      "end": 1589,
       "fixes": 0
     },
     {
@@ -327,28 +207,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 1945,
-      "end": 1952,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 2248,
       "end": 2253,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 2281,
-      "end": 2288,
       "fixes": 0
     },
     {
@@ -367,16 +227,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 2584,
-      "end": 2591,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 2889,
       "end": 2894,
       "fixes": 0
@@ -387,28 +237,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 2922,
-      "end": 2929,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 3220,
       "end": 3225,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 3253,
-      "end": 3260,
       "fixes": 0
     },
     {
@@ -437,28 +267,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 3772,
-      "end": 3779,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 4009,
       "end": 4014,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 4048,
-      "end": 4055,
       "fixes": 0
     },
     {
@@ -572,16 +382,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
-      "start": 393,
-      "end": 400,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -627,28 +427,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
-      "start": 1015,
-      "end": 1022,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
       "start": 1375,
       "end": 1380,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
-      "start": 1408,
-      "end": 1415,
       "fixes": 0
     },
     {

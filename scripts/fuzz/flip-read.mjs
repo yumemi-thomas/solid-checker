@@ -197,6 +197,36 @@ export const NET_PENDING = {
   "net-peek": { ...PEEK, text: (o) => `const peek = (g: () => number) => g(); void peek(${o});` },
   "net-peek-member": { ...PEEK, text: (o) => `const peek = (h: { go: () => number }) => h.go(); void peek({ go: ${o} });` },
 };
+// ADR 0802: no fact calls these sources async, and each is pending by what its compute reads. Chrome warns on each; each certified before.
+const OPEN_MEMO = "const useM = (g: () => number) => createMemo(() => g());";
+export const OPEN_COMPUTES = {
+  "open-hook-memo": { ...PEEK, imports: ["createMemo"], text: (o) => `${OPEN_MEMO} const m = useM(${o}); void m();` },
+  "open-hook-object": { ...PEEK, imports: ["createMemo"], text: (o) => `const useM = (g: () => number) => { const m = createMemo(() => g()); return { m }; }; const { m } = useM(${o}); void m();` },
+  "open-hook-tuple": { ...PEEK, imports: ["createMemo"], text: (o) => `const useM = (g: () => number) => { const m = createMemo(() => g()); return [m] as const; }; const [m] = useM(${o}); void m();` },
+  "open-hook-let": { ...PEEK, imports: ["createMemo"], text: (o) => `${OPEN_MEMO} let m = useM(${o}); m = useM(${o}); void m();` },
+  "open-hook-box": { ...PEEK, imports: ["createMemo"], text: (o) => `${OPEN_MEMO} const box = { m: useM(${o}) }; void box.m();` },
+  "open-memo-chain": { ...PEEK, imports: ["createMemo"], text: (o) => `${OPEN_MEMO} const m = useM(${o}); const d = createMemo(() => m() + 1); void d();` },
+  "open-signal-fn": { ...PEEK, imports: ["createSignal"], text: (o) => `const [s] = createSignal(() => ${o}()); void s();` },
+  "open-store-fn": { ...PEEK, imports: ["createStore"], text: (o) => `const [s] = createStore(() => ({ v: ${o}() }), { v: 0 }); void s.v;` },
+};
+// ADR 0801: a hook's tuple slot is the accessor it names. Quiet, and each answered SC9012 before; the proof must not lose them.
+const nowHook = (imports, setup) => ({ importLines: ['import { useNow } from "./now-hook";'], files: { "now-hook.ts": `import { ${imports} } from "solid-js";\nexport function useNow(interval = 50) {\n  const [now, setNow] = createSignal(new Date());\n  ${setup}\n  return [now] as const;\n}\n` } });
+const SETTLED_SLOT = { kind: "plain", contexts: [], legal: ["jsx", "show"], text: () => "const [now] = useNow(); void now();" };
+export const SETTLED_SLOTS = {
+  "settled-slot": { ...SETTLED_SLOT, ...nowHook("createSignal", "") },
+  "settled-slot-writer": { ...SETTLED_SLOT, ...nowHook("createSignal, onSettled", "onSettled(() => { const t = setInterval(() => setNow(new Date()), interval); return () => clearInterval(t); });") },
+};
+// ADR 0801: the same slot over a pending source is a proved read of it.
+export const PENDING_SLOTS = {
+  "pending-slot": { ...PEEK, text: (o) => `const useM = () => [${o}] as const; const [m] = useM(); void m();` },
+};
+// ADR 0800: a value's walk has no length limit. Each catches the pending read through helpers; the build before stopped at four hops.
+const chain = (hops) => (o) => `const f1 = () => ${o}(); ${Array.from({ length: hops - 1 }, (_, i) => `const f${i + 2} = () => f${i + 1}();`).join(" ")} try { f${hops}(); } catch { }`;
+const CAUGHT = { kind: "async", contexts: ["memo", "effect-compute"] };
+export const CAUGHT_CHAINS = {
+  "caught-chain-5": { ...CAUGHT, text: chain(5) },
+  "caught-chain-9": { ...CAUGHT, text: chain(9) },
+};
 const STORE_CALL = { kind: "store-array", contexts: ["body", "handler"] };
 export const NET_STORE_CALLS = {
   "net-push-bind": { ...STORE_CALL, text: (o) => `Array.prototype.push.bind(${o})(1);` },
@@ -221,7 +251,8 @@ export const FLIP_READ_VARIANTS = {
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: NET_PENDING,
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
+  CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");

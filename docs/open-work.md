@@ -8,7 +8,9 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
-Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `may_run_in_leaf_owner_within` (3), `value_reaches` (4). `typed_sources` views (8) and `context_origin` rest on the census.
+Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `typed_sources` views (8) and `context_origin` rest on the census.
+
+A memo over a parameter or a callback prop that every caller fills with a settled value is uncertifiable (ADR 0802): `source_compute_open` does not follow the arguments yet. A setter or a closure in a hook's tuple keeps ADR 0282's full veto (ADR 0801), so it stays SC9012 in most programs where an accessor slot is exact.
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 

@@ -1,0 +1,3 @@
+# open-source-computes
+
+**Claim (ADR 0802).** A source no fact calls async is pending while what its compute reads is: `prop`, `object`, `direct`, `tuple`, `signal-fn`, `store-fn`, `alias`, `let`, `box`, `closure`, `derived` warned in Chrome (rc.21) and answer SC5003 or SC9012 uncertifiable at the read, `async-provenance-unproven`. `quiet-callback` and `sync-argument` are quiet: nothing proves it, so they stay uncertifiable. A compute over settled sources (`settled`, `settled-helper`), one that only calls standard methods (`standard`), a read under `Loading` (`covered`) stay certified. `body` keeps its proved SC1001 when the read is a strict one: wrong settled, wrong pending.
