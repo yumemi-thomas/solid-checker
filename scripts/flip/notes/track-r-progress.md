@@ -225,3 +225,38 @@ Branch `claude/flip-r3`, pushed. Commits `a98bc8e58` (step 4, no checker change)
 - Same doubled clause left in SC1001's unplaced read message (findings.rs:467), out of step 5's scope.
 - One mx-census smoke row moves better on every build since the merge (memo-shared false-clean to recall-gap): not R3b's, listed.
 - `python3` heredocs hang in this shell; use node.
+
+## Handoff at round 1 (part 8, integrator), 2026-11-06
+
+Stopped at the owner's 500k rule. Part 8's order is finished except the census. A new agent takes the integrator's job and the census.
+
+**Pushed head.** `claude/flip-reads` at `dd137e284`: 25,343 U, 377 V, 0 V moved against `f5fa5f5af` (24,515 U, 377 V), 0 exit errors, 0 unnamed, 92 open patterns (2 false positive, 90 false clean), `check.mjs all` 299 of 336, 37 kind clean, HOST 25 of 25. Holds R2 to `c6677ddac` plus item 7, R3 to `63c15d6df`, ADRs 0694, 0695, the composite walk fix, memory review items 2, 3, 5, 6, 8, the `focus.mjs` cap.
+
+**Not in that head.**
+- **R1, `8428ec497`, ADRs 0774-0779, including C6 and C1.** Dropped from round 1: `repro-causes` fails on `clean-interval-hook` (SC9012 `handed-member-read`, a hook's tuple accessor in JSX). Built alone it fails the same way, so it is R1's, not the merge's. `verify-delta` never selects `repro-causes`. R1b is on it in `t3-b3846b2a`. The fix is C1b's shape: an accessor that reaches only sync sources is proved clean. Do not relabel the case. Merge `claude/flip-r1` normally: this line was rebuilt without that merge, with no revert, so it is not a no-op.
+- `claude/flip-reads-with-r1` (`cdc49ac7f`) is the old head with R1 merged, kept for reference. At that tree: 27,229 U, 377 V, the VM's number, patterns 91 open, witnesses 301 of 336. Do not push it.
+- **R2's F1, `d2d45d470`, ADR 0782,** on `claude/flip-r2-wip`, not gated by its own message. The memos `fcf5abf1c` and `3fff4102a` stand on it and do not cherry-pick alone. Take the branch whole once R2 says F1 is ready.
+
+**The integrator's job.** R1b and R2 commit to local branches, R3 pushes `origin/claude/flip-r3`, nobody else pushes `claude/flip-reads`. About once an hour: merge what they have, then one set of gates on the result, read every moved violation, push, report commit and totals. A branch that fails: find it, build it alone to prove it, drop it from the round, tell the owner, land the rest. Union `blockers.rs`, `rediscovery.json`, `open-defects.json`, `cases.json`.
+
+**Scratch, which survives a reboot.** `/Users/thomas/dev/sc-scratch.noindex/flip-reads`. Never `/tmp`. All in sh, and these helpers exist because zsh does not split `$H`: `round.sh <tag> <prev-sweep>` is build, `patterns --update`, coverage, witnesses, HOST, sweep, diff; `covu.sh` updates snapshots; `v5.sh` is `verify-seq` writing a real exit to `t/vd-*.rc`; `mkverify.py` regenerates `verify-seq.sh` from `scripts/verify.sh`, so it cannot go stale; `union-red.py` unions `rediscovery.json`; `snapdiff.py` diffs snapshots row by row; `sweepdiff.py` lists every moved V with its source; `chk.sh` runs case dirs; `f.sh` runs a fixture; `gate-times.tsv` is the gate log. Baseline `sweep-base.json`, builds `rbase` (`f5fa5f5af`), `rm5` (this checker), `rr1` (R1 alone).
+
+**Rules in force.** Every checker run: `sc-heavy /Users/thomas/dev/sc-scratch.noindex/sc-guard.sh 12 <cmd>`, including tests that start it. Report if the guard fires; it has not. One heavy check at a time, sweeps `--jobs 3`, release builds bare with `CARGO_BUILD_JOBS=6`, load under 30 first (`waitload.sh`). Never `nohup` past the guard. Do not call `make fuzz-patterns`, it builds inside the lock: call `patterns.mjs`. `check.mjs --jobs 6`. `focus.mjs` is capped at 6 now.
+
+**The census, ADR 0692. Do not land it before R1b's C6 is in:** it sits in the same block of `reactive_analysis.rs` and trusts N1-N3, which are in.
+- The revision is `/Users/thomas/dev/sc-scratch.noindex/flip-reads/v2/value_use.rs` (934 lines), with `v2/census-block.rs`. It has never been compiled. Base, byte-identical to the 09:31 saved output: `/Users/thomas/dev/sc-scratch.noindex/recovered/value_use.rs`.
+- Applied there: the three bypasses of `endstage-report.md` 1c (`exported_directly`, the `++` arm dropped, `reference_use` exits answer `value-use-unclassified`), P11 (`Tag`, `Coerced` for holders), P12 (`returned` walks callers, `prop_reads`, `context_readers`, one hop), `created_use` for P13.
+- Still to do: add `mod value_use;`; the block goes after `open_members` in `reactive_analysis.rs`, and `p-census.diff`'s `read_only` hunk; loop over creating calls for `created_use`, whose holder is no binding, using `creates_reactive_source`, `store` by primitive, `tuple` for a call read through `[0]`; compile.
+- `primitive_results` holds only `++` and `--`, not the unary operators 1c says. Reading that report literally would be wrong there.
+- `gen-values.py` and `hold/fixtures` are lost. The shapes are saved in `v2/value-uses.mjs.txt`. Rewrite the fixture `value-use-census`, with each form at module scope, in `export function`, and in `export default function`: a module-scope test proves nothing about the export arm.
+- Confirmed in Chrome, certified before the census: `throw c` caught and called, at all three placements (scratch `ex1/`). Must end U: `throw`, `nested-operand`. `class-extends`, `computed-key` are quiet: they may go U.
+- `hops` (scratch `lim1/`): a live false clean at every depth through `yield c`, handed to the census as its test.
+- `check.mjs` needs a `closedBy` per the census note, not `status != certified`: an unrelated U must not pass a witness.
+- Over-reach to guard: `Object.keys(st)` is quiet.
+- Measure the rise and report it per project.
+
+**Left of the bounds.** `value_reaches`, `may_run_in_leaf_owner_within` in `local_access.rs`, R1b's file: draft gone with `/tmp`, the audit text in `bounds-audit.md` holds the design; use the exact walk, a depth-limit answer of true moved 13 true V. `typed_sources` views and `context_origin` wait for the census.
+
+**Open for the owner.** `flush(fn)` ruling done, ADR 0694; its `rediscovery.json` entry says no old build fails, because the judge rates both answers agree. Item 2 bounds depth, not fan-out: `sites^8` is the worst case left. `verify-delta` should select `repro-causes`: same hole as `tsc-oracle`, not done. `types/p3-cast-*` are R2's listed residual, for the owner.
+
+**Traps from this session.** A merge conflict on `open-defects.json` that takes one side drops the other's entries; `--update` puts them back without their `item` text: restore it. `bld.sh` used to copy a stale binary after a failed build; it refuses now. A task's "exit 0" is the shell's last command: read the `.rc` file. Chain with `&&`: a failed `git switch` let a cherry-pick run on the wrong branch once. A script with `cat` last hides the real exit. `====` in a zsh command line is an error and kills the rest.
