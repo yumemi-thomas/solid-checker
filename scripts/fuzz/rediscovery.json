@@ -4613,6 +4613,7 @@
   "rediscovered": "flip-read.mjs net-sort-bind, net-sort-reflect (a descending comparator on `[1, 2]`): r3base (80db411e5, before c129b2c29) false-clean on 54 of 72 (bind in a handler, reflect in body and handler; bind in a body is recall-gap there), c11f67588 recall-gap on 72; the build before ADR 0716 (1dd911b95) false-clean on 72. Probes: bfd336ce8 certified both, the merge 8ff25dca5 made both uncertifiable. sc VM, Chrome confirming each direct-none program"
  },
  {
+<<<<<<< HEAD
   "finding": "an async read no fact places, at a `<Dynamic>` body, a tag or depth 16: certified or SC5001 only, Chrome warns the boundary",
   "found": "census research C6, 288 rows",
   "fixed": "ADR 0774",
@@ -4684,4 +4685,29 @@
   "rediscovered": "rc6b false-clean, this build recall-gap: 14 of 14; patterns net/c3-cbp-wrapper; guards net/g4b, net/g4c stay certified"
  },
  {"finding": "a value the census did not name: `throw`, a default, a tag, a spread, a method's result, an export's position: certified, Chrome warned", "found": "end-stage report 1c, census research P11-P13", "fixed": "ADR 0692", "grid": "mx-recall", "code": "STRICT_READ_UNTRACKED", "ids": ["mx-strict-read-untracked-body-use-default-direct-none", "mx-strict-read-untracked-body-use-tagged-direct-none", "mx-strict-read-untracked-body-use-spread-direct-none", "mx-strict-read-untracked-body-use-root-direct-none", "mx-strict-read-untracked-body-use-untrack-direct-none", "mx-strict-read-untracked-body-use-throw-direct-none", "mx-strict-read-untracked-body-use-throw-operand-direct-none", "mx-strict-read-untracked-body-use-throw-hook-direct-none", "mx-strict-read-untracked-body-use-throw-created-direct-none", "mx-strict-read-untracked-body-use-class-return-direct-none", "mx-strict-read-untracked-body-use-slot-return-direct-none", "mx-strict-read-untracked-body-use-fn-alias-direct-none", "mx-strict-read-untracked-body-use-tag-direct-none", "mx-strict-read-untracked-body-use-created-values-direct-none", "mx-strict-read-untracked-body-use-created-json-direct-none", "mx-reactive-write-in-owned-scope-body-use-write-throw-direct-none"], "rediscovered": "old build 772 certified false cleans of 1,782 `use-*` programs (STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE); this build 0, 1,706 runtime-confirmed answer uncertifiable; 72 not fired, 4 typed away"}
+=======
+  "finding": "A generator stepped from a tracked async compute: `for await (… of gen())` with a read after the generator's first await or yield, a wrapper's iterator, `yield*`, an inline generator, a sync generator stepped across the loop's await. UNTRACKED_READ_AFTER_AWAIT in Chrome, certified: no region reached the operand of a `for await`, and helpers returned on a generator",
+  "found": "census/f02-async-generator-read-after-await, patterns report P9, R2's probes f1-f50",
+  "fixed": "ADR 0820",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-gen-await-x-direct-none",
+   "mx-untracked-read-after-await-gen-await-x-direct-closure",
+   "mx-untracked-read-after-await-gen-await-effect-x-direct-none",
+   "mx-untracked-read-after-await-gen-await-effect-x-direct-closure",
+   "mx-untracked-read-after-await-gen-yield-x-direct-none",
+   "mx-untracked-read-after-await-gen-yield-x-direct-closure",
+   "mx-untracked-read-after-await-gen-iife-x-direct-none",
+   "mx-untracked-read-after-await-gen-iife-x-direct-closure",
+   "mx-untracked-read-after-await-gen-wrap-x-direct-none",
+   "mx-untracked-read-after-await-gen-wrap-x-direct-closure",
+   "mx-untracked-read-after-await-gen-delegate-x-direct-none",
+   "mx-untracked-read-after-await-gen-delegate-x-direct-closure",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-none",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-closure"
+  ],
+  "rediscovered": "flip-read.mjs gen-*, id subset gen1.json of 1,488 programs: rbase (c6677ddac) 1,092 false-clean, 396 recall-gap, the fix 0 false-clean, 0 false-positive (200 agree, 1,288 recall-gap, withholding). Legal gen-prefix, gen-drain on the fix: 0 false-positive of 1,316"
+ }
+>>>>>>> claude/flip-reads
 ]

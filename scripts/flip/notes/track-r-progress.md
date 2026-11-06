@@ -158,6 +158,14 @@ Branch `claude/flip-r3`, pushed to `origin/claude/flip-r3` (since 2026-11-06 the
 |---|---|---|---|
 | 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
 
+## R2b, from 2026-11-06
+
+Branch `claude/flip-r2`, worktree `t3-7c67e91b`, ADRs 0820-0829. Baseline on the merged tree: build `rm1`, `sweep-m1.json`.
+
+| Family | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P9, `f02` (ADR 0820) | read after an `await` in an async generator a `for await` in the compute steps: `f02`, `f1`, `f6`, `f8`, `f13`, `f16` | past a `yield`, a wrapper, `next()`, `yield*`, an inline generator, a sync generator across an await, blocker `generator-stepped` | 1,488 ids: old 1,092 FC, new 0 FC, 0 FP, 200 V, 1,288 U. Legal 0 FP of 1,316. Corpus 0 moved. Patterns 89 open |
+
 ## R2 handoff, 2026-11-06
 
 For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.
