@@ -155,3 +155,32 @@ Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/fl
 | Step | State | Moved | Notes |
 |---|---|---|---|
 | 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
+
+## R2 handoff, 2026-11-06
+
+For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.
+
+**Done and gated:** the list, P5, P6, P10 (ADR 0780); P3, P4, F3 (ADR 0781); F1 (ADR 0782); memory review items 4 and 7 and the handle fan-out, memoized by span and depth. ADR numbers left: 0783-0789. Patterns 120 open, 0 false positives.
+
+**Left, in order:** P9 and `f02`; P7; member tag; `primitive-value`. Plans: `research-patterns.md`, `research-sc9012.md` section 3.
+
+**Check first.** `$S/safe.sh` refuses a tree with `8428ec497` and without `10da57271`. Merge `origin/claude/flip-reads` only after part 8 reports round 1, then one build, no full gate run. If part 8 says this branch broke the merged tree, that comes first.
+
+**Machine rules, owner's, current.** Every run that starts `solid-checker-rust`: `$S/g.sh <command>` (load under 30, `sc-heavy`, `sc-guard.sh 12`; report if the guard fires). One heavy check at a time. Sweeps `--jobs 3`. Release builds bare with `CARGO_BUILD_JOBS=6`. No `focus.mjs` or `make fuzz-focus` until part 8 caps it: ids only.
+
+**Helpers in `$S`.** `bld.sh <tag>` makes `r<tag>`. `sw.sh <tag> <prev>`, `lane.sh <tag> [only,only]`, `cov.sh <tag> [update]`, `vd.sh <tag> <base>`, `lib.sh <tag>`, `chk.sh <cases> <bindir>` (wrap in `g.sh`), `probe.sh` (tsc, Chrome, checker), `one.sh` and `lg.sh` (mx-recall and lg-recall subsets), `ids.mjs` (id manifest by regex), `defs.py rm|add` (open-defects and rediscovery by text), `union.py` was lost in the reboot: rewrite it if a merge conflicts. Baselines: build `rca`, sweep `sweep-ca.json`, old-build `rbase` (c6677ddac).
+
+**P9 and `f02`, from reading, unbuilt.** `after_await.rs:287` skips an async generator as an entry and `:1506` returns on a generator helper, and a `for await` operand sits before its own suspension, so no region reaches it. Plan: a pass beside `unlisted_async_computations`: for each tracked compute, each call in it whose `function_called_at` is an async generator, every accessor read after the generator's first await or yield is a `ReactiveReadAfterAwait` with `GeneratorStepped`. `file.ast.yields` for the yield boundary. Stays quiet: `q4`, a read before the first suspension. Check `q2`, already U, for a duplicate row.
+
+**P7, from reading, unbuilt.** The report's `resolver_dependencies.rs` is not at that path: find it with `rg --files rust`. Programs `values/d8-pkg-getter-export`, `-side-effect-import`, `-types-lie-plain`.
+
+**Traps.**
+- A report's line is a lead: F1's named site is never reached. Use the role log, `SOLID_CHECKER_IR_ROLE_LOG=<file>`.
+- `functions_owning` is not innermost first.
+- ADR 0367: no decision reads type text, `descriptor_text_gate` fails it. Ask the producer for a fact.
+- `ir-read-lint` counts raw cross-file reads: route one through an existing helper.
+- The fuzz model refuses `call(member(dom))` and `call(dom)`: hand the callback by name with `domExpr`.
+- A local memo needs depth in its key if the bound changes the answer, and recorded reads as in `returned_invocation_sites_memo`.
+
+**For the owner, leave as they are:** `types/p3-cast-*` (an assertion away from the receiver, held in open-defects), and the unknown-key global trade in `docs/open-work.md`.
+
