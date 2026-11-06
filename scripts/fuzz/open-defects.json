@@ -725,15 +725,6 @@
    "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e911-on-colon/App.tsx"
   },
   {
-   "id": "types/f18-reflect-apply",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/f26-accessor-as-callback",
    "item": "T-other",
    "outcome": "false-clean",
@@ -750,15 +741,6 @@
    "rules": [
     "no-write-in-pure-computation"
    ]
-  },
-  {
-   "id": "types/h04-reflect-apply-setter",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
   },
   {
    "id": "types/h08-setter-as-cb",
@@ -906,15 +888,6 @@
   },
   {
    "id": "values/d3-param-default",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d3-reflect-apply",
    "item": "V-D3",
    "outcome": "false-clean",
    "codes": [
@@ -1132,33 +1105,6 @@
   {
    "id": "values/d9-this-getter-store",
    "item": "V-D9",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-bind-cast-arg",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-bind-cast-noarg",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-call-cast",
-   "item": "V-D3",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"

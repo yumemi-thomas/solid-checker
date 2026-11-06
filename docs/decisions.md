@@ -1930,3 +1930,19 @@ Walks that answered clean where they stopped (bounds audit): `effect_phase`'s 12
 <a id="adr-0752"></a>
 ## ADR 0752 — A budget that runs out decides nothing
 The forwarding loop stops after 8 rounds: `o.read()` forwarded through 12 helpers from an apply certified. An owner the next round would extend, and every owner forwarding to one, now gains an unmodeled use (an obligation at its callers), to a fixed point, sorted, in the fresh and replayed loops alike. `calls_reach` past 512 nodes may reach (SC2009), asked only with an async optimistic source. Corpus +258, inferay tests. Fixture `bounds-budget-limit`.
+
+<a id="adr-0770"></a>
+## ADR 0770 — A handed value's call is an obligation at any member depth
+`props.o.go(1)` in a memo and `props.o.go()` in a body certified; Chrome (rc.21) writes and reads. `handed_member_callee` stops at one member step so a plain Get (`props.a.b`) does not open, and the call arm asked it after already ruling out a standard-library method, so the gate only dropped real calls. The call arm now asks `handed_callee`, at any depth, and so does a member with no symbol (`o: any`). The Get path keeps the gate. `<K o={{ go: () => {} }} />` is uncertifiable on purpose: no fact at the call says the value is plain.
+
+<a id="adr-0771"></a>
+## ADR 0771 — A value handed to a helper at a tracked position decides the helper's obligations
+`excluded_role_holds` says a tracked position needs no dispatch proof, and its reason is about reads. `run(setS)` in a memo certified; Chrome writes (`a1`, `a9`, `r1`-`r11`). A tracked call now holds its obligations, and `reactive_analysis`, which has the tables a cached chunk may not read, keeps them when an argument passes `handed_value` over setters, actions and async sources. A plain function, a sync accessor and a parameter never called stay certified. The same held path takes a local helper every caller of which is tracked, and a member call of a parameter in a function written in a memo, which `SiteExclusions::at` excluded on its lexical role (found by the generator, not the report). A read a helper makes through a parameter gets the async row it lacked at a tracked position, without a boundary, and in a local function it is held the same way (`a13`, `net-peek`). Writes through a parameter stay an obligation: a row for an exact `run(setS)` would prove them.
+
+<a id="adr-0772"></a>
+## ADR 0772 — A call no arm resolves is handed when its callee is open
+`handed_call` ended in `false`, so `useThing.call(null)`, `useThing.bind(null)()`, `hooks[0]()`, a rebound `let hook` and `props.api.use()` certified what their result's members ran; Chrome throws (`c7`, `c9`, `c11`, `c12`). `.call`, `.apply` and `.bind` of a value the file binds answer as their target; a computed member, a rebound binding and a method of a handed value answer true. A standard method's own arm stays last. The standard-library test is the qualified name, so a project's own `client.call()` is not this.
+
+<a id="adr-0773"></a>
+## ADR 0773 — Every Function.prototype hand-off of a reactive value is an obligation
+`Array.prototype.sort.bind(st.a)()`, `Reflect.apply(sort, st.a, [])` and `.apply(st.a, list)` with a list no fact shows certified; Chrome warns. `push_function_call_target_obligation` took `.call` and a provable `.apply`. It now takes `.bind`, held or not, `Reflect.apply`, and any `.apply`: a dispatch that may not run is still no proof it does not. The root of the argument is walked through every member step.

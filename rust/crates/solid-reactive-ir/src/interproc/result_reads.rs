@@ -300,31 +300,44 @@ fn call_result_reads(
     // helper's call raises: an event handler is such a helper.
     // ADR 0320: so is a call after an await its async function reaches
     // on every path, an ownerless continuation on a later task.
-    if crate::execution_role::excluded_role_holds(file, call.callee, execution, lookup)
-        || crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup)
-        || (dispatch_obligations.len() > obligations_before
-            && dispatch_obligations[obligations_before..]
-                .iter()
-                .all(|defect| {
-                    matches!(
-                        defect.analysis_context.as_str(),
-                        "parameter-member-target-unresolved"
-                            | "parameter-member-targets-diverge"
-                            | "parameter-member-path-unresolved"
-                            | "parameter-default-unresolved"
-                            | "parameter-use-unmodeled"
-                    )
-                })
-            && local_dispatch_exclusion_depth(
-                file,
-                call.callee,
-                allowed,
-                lookup,
-                &mut HashSet::default(),
-                excluded_dispatch_helpers,
-            )
-            .is_some())
+    let excluded = crate::execution_role::excluded_role_holds(file, call.callee, execution, lookup);
+    let continuation =
+        crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup);
+    let helper_excluded = !excluded
+        && !continuation
+        && dispatch_obligations.len() > obligations_before
+        && dispatch_obligations[obligations_before..]
+            .iter()
+            .all(|defect| {
+                matches!(
+                    defect.analysis_context.as_str(),
+                    "parameter-member-target-unresolved"
+                        | "parameter-member-targets-diverge"
+                        | "parameter-member-path-unresolved"
+                        | "parameter-default-unresolved"
+                        | "parameter-use-unmodeled"
+                )
+            })
+        && local_dispatch_exclusion_depth(
+            file,
+            call.callee,
+            allowed,
+            lookup,
+            &mut HashSet::default(),
+            excluded_dispatch_helpers,
+        )
+        .is_some();
+    // ADR 0771: that holds of reads. A write or an async read a helper makes
+    // through its parameter still reports at a tracked position, so what this
+    // call's arguments hold decides: `reactive_analysis`, which has the tables.
+    if (excluded && !continuation && execution == ExecutionRole::TrackedJsx)
+        || (helper_excluded
+            && reaches_tracked_caller(file, call.callee, allowed, lookup, &mut HashSet::default()))
     {
+        for defect in &mut dispatch_obligations[obligations_before..] {
+            hold_at_tracked_call(defect, call.span);
+        }
+    } else if excluded || continuation || helper_excluded {
         dispatch_obligations.truncate(obligations_before);
     }
     let object_callable = runs_in_unrendered_object_callable(file, call.callee, lookup);
@@ -337,9 +350,6 @@ fn call_result_reads(
     // or a function written as a member's value, places them nowhere.
     let in_named = inside_non_component_function(file, call.callee, lookup)
         || crate::local_access::nested_named_function(file, call.callee, lookup);
-    // ADR 0320: a call past an await on every path decides nothing.
-    let continuation =
-        crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup);
     // ADR 0614: an object's callable holds a carrier like any named function.
     let handed = (in_named && !continuation)
         .then(|| {
@@ -392,6 +402,24 @@ fn call_result_reads(
             && !(execution == ExecutionRole::Unknown
                 && crate::execution_role::inside_rerun_effect_cleanup(file, call.callee, lookup))
         {
+            // ADR 0771: a read this call makes through a value it hands over
+            // has no row here, and an async source may be pending wherever the
+            // function around it runs: the arguments decide, as above.
+            let here = location(file.path.shared(), call.span);
+            if effective.iter().any(|read| read.origin == here) {
+                let mut defect = StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: label.clone(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: "parameter-call-argument-unproven".into(),
+                    fixes: vec![],
+                    uncertain: true,
+                };
+                hold_at_tracked_call(&mut defect, call.span);
+                dispatch_obligations.push(defect);
+            }
             return;
         }
         execution = ExecutionRole::Unknown;
@@ -523,6 +551,66 @@ fn call_result_reads(
             });
         }
     }
+}
+
+/// Whether code at `span` runs at a tracked position, itself or through the
+/// local helpers around it, every one of whose callers
+/// [`local_dispatch_exclusion_depth`] has censused.
+fn reaches_tracked_caller(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<Span>,
+) -> bool {
+    let role = semantic_execution_role(
+        file,
+        span,
+        allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+    );
+    if role == ExecutionRole::TrackedJsx {
+        return true;
+    }
+    let Some(helper) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if !following.insert(helper.span) {
+        return false;
+    }
+    let Some(binding) = function_binding_name(file, helper) else {
+        return false;
+    };
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|id| {
+            id.role == solid_facts::ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(id.span) == Some(binding.span)
+        })
+        .any(|id| reaches_tracked_caller(file, id.span, allowed, lookup, following))
+}
+
+/// Marks an obligation held at a tracked call, before its context: decided
+/// when every table is built ([`held_at_tracked_call`]).
+const HELD_AT_TRACKED_CALL: &str = "held-at-tracked-call:";
+
+fn hold_at_tracked_call(defect: &mut StaticDefect, call: Span) {
+    defect.analysis_context = format!(
+        "{HELD_AT_TRACKED_CALL}{}:{}:{}",
+        call.start, call.end, defect.analysis_context
+    );
+}
+
+/// The tracked call that holds `defect`, and the defect's own context.
+pub(crate) fn held_at_tracked_call(defect: &StaticDefect) -> Option<(Span, &str)> {
+    let held = defect.analysis_context.strip_prefix(HELD_AT_TRACKED_CALL)?;
+    let mut parts = held.splitn(3, ':');
+    let start = parts.next()?.parse().ok()?;
+    let end = parts.next()?.parse().ok()?;
+    Some((Span::new(start, end), parts.next()?))
 }
 
 fn push_withheld_member_obligation(

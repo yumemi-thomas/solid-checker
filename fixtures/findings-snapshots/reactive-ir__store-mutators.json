@@ -132,6 +132,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-mutators/App.tsx",
+      "start": 989,
+      "end": 1006,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-mutators/App.tsx",
+      "start": 1140,
+      "end": 1154,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",

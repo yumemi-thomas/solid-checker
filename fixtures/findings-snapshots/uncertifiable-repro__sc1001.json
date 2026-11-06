@@ -42,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
+      "start": 683,
+      "end": 706,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -49,6 +59,16 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
       "start": 1011,
       "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
+      "start": 746,
+      "end": 769,
       "fixes": 0
     },
     {
@@ -282,6 +302,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/options-handed-to-project.tsx",
+      "start": 883,
+      "end": 906,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -394,6 +424,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-merged-nested-helper.tsx",
+      "start": 930,
+      "end": 948,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/prop-merged-nested-helper.tsx",
@@ -779,6 +819,16 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/r-for-each-array.tsx",
       "start": 642,
       "end": 648,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/r-new-options.tsx",
+      "start": 427,
+      "end": 443,
       "fixes": 0
     },
     {

@@ -217,6 +217,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 2429,
+      "end": 2442,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 2578,
       "end": 2590,
       "fixes": 0
@@ -249,6 +259,16 @@
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 3398,
       "end": 3409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 3398,
+      "end": 3414,
       "fixes": 0
     },
     {
