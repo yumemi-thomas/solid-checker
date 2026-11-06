@@ -47,6 +47,21 @@ describe("judge", () => {
       .toMatchObject({ outcome: "recall-gap", detail: { corroborated: ["strict-read-untracked"] } });
     expect(judge({ code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]) }).outcome).toBe("wrong-rule");
   });
+  it("a placeless code corroborates another rule's violation through its own `loc` at a node enclosing the site, counted on its own", () => {
+    // ASYNC_OUTSIDE_LOADING_BOUNDARY names the `{` of the JSX hole (line 8) that holds the site (line 10); its stack names no App.tsx line.
+    const built = { lineTable: [{ line: 1, endLine: 20, path: ["body"] }, { line: 8, endLine: 11, path: ["body", 0] }, { line: 10, endLine: 10, path: ["body", 0, "x"] }] };
+    const at = { ...site, path: ["body", 0, "x"] };
+    const findings = [finding("async-outside-loading-boundary", "violation"), finding("loading-on-outside-hold", "uncertifiable")];
+    const hold = (loc, others = []) => judge({ code: "LOADING_ON_OUTSIDE_HOLD", site: at, typecheck: { ok: true }, checker: { ok: true, findings }, built, others,
+      runtime: run([event("LOADING_ON_OUTSIDE_HOLD", null), event("ASYNC_OUTSIDE_LOADING_BOUNDARY", null, { loc })]) });
+    expect(hold("cases/x/App.tsx:8:25")).toMatchObject({ outcome: "recall-gap", detail: { corroborated: ["async-outside-loading-boundary"], holeCorroborated: true } });
+    // A `loc` on no enclosing node, or none at all, corroborates nothing.
+    expect(hold("cases/x/App.tsx:12:3").outcome).toBe("wrong-rule");
+    expect(hold(null).outcome).toBe("wrong-rule");
+    // A node that also holds another use site names neither: only the hole itself (line 8) is still this site's.
+    expect(hold("cases/x/App.tsx:1:1", [[15]]).outcome).toBe("wrong-rule");
+    expect(hold("cases/x/App.tsx:8:25", [[15]]).outcome).toBe("recall-gap");
+  });
   it("another rule's uncertifiable finding on the site is not a recall gap for this code: listed, and the program falls through", () => {
     const result = verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable")] } });
     expect(result).toMatchObject({ outcome: "false-clean", detail: { unrelated: ["no-write-in-pure-computation/uncertifiable@10"] } });

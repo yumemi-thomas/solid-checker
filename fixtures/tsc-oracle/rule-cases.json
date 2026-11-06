@@ -347,8 +347,25 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 1,
-      "why": "SC2003's surviving store arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span. The capitalized ordinary helper with no JSX result is a negative control: its parameter is not component props merely because the function is named `Props`. A nested write (`profile.user.name = ...`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass; it is pinned by the fixtures `store-write-chain-links` and `store-write-chain-links-loose`.",
+      "why": "SC2003's surviving store arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span. A nested write (`profile.user.name = ...`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass; it is pinned by the fixtures `store-write-chain-links` and `store-write-chain-links-loose`.",
       "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// A cast erases the root's readonly-ness from a root property.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "The negative control case 32 held: a capitalized helper with no JSX result is not component props merely because the function is named `Props`, so its write is no violation. Exported, its callers are open and one may hand a store, so it stays a named obligation (ADR 0719). The closed twin below answers silent.",
+      "code": "export function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The closed twin of the control above: every caller is visible and hands a plain literal, so `props` is no store and no component's props, and the name proves nothing.",
+      "code": "function Props(props: { n: number }) {\n  props.n = 1;\n}\nProps({ n: 0 });\n"
     },
     {
       "rule": "reactive-dispatch-unresolved",
