@@ -234,6 +234,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         ),
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
+            member: None,
+        } if defect.analysis_context == crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN => (
+            format!(
+                "{callee} is used as a value, and which function it is cannot be proven: the type facts attribute a Solid primitive to it, but no import of a Solid module names it, so the calls that reach it are not followed"
+            ),
+            "Import the value by name from its module, so its identity is exact, or make that module's source available to solid-checker.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
             member: Some(member),
         } if defect.analysis_context == crate::PRIMITIVE_RESULT_METHOD => (
             format!(

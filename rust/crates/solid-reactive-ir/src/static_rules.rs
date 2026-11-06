@@ -228,13 +228,38 @@ fn primitive_value_references(
             ) else {
                 continue;
             };
+            // ADR 0825: the primitive is named only when the binder confirms
+            // it (ADR 0711); a symbol the producer attributes to one with no
+            // import that says so stays open, named by its own text.
+            let value = ast
+                .members
+                .iter()
+                .find(|member| member.property == span)
+                .map_or(span, |member| member.span);
+            let proven = ast
+                .reference_declaration(span)
+                .is_some_and(|declaration| ast.namespace_member_binding(declaration).is_some())
+                || crate::cleanup::primitive_identity_proven_at(
+                    ctx.dialect,
+                    file,
+                    value,
+                    &primitive,
+                );
+            let (callee, context) = if proven {
+                (primitive.to_string(), crate::PRIMITIVE_VALUE)
+            } else {
+                (
+                    file.source_text(value).unwrap_or("this value").to_owned(),
+                    crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN,
+                )
+            };
             defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: primitive.to_string(),
+                    callee,
                     member: None,
                 },
                 location: location(file.path.shared(), span),
-                analysis_context: crate::PRIMITIVE_VALUE.to_owned(),
+                analysis_context: context.to_owned(),
                 fixes: vec![],
                 uncertain: true,
             });

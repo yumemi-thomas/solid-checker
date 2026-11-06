@@ -122,6 +122,9 @@ pub(crate) const DEPENDENCY_GLOBAL_READ: &str = "dependency-global-read";
 /// whose callers do not prove the value is no pending async getter: an
 /// unseen caller, or a visible one passing a value nothing classifies.
 pub(crate) const PROP_PENDING_UNPROVEN: &str = "prop-pending-unproven";
+/// ADR 0825: the producer attributes a Solid primitive to a value no import
+/// confirms (ADR 0711): which function it is, and so what reaches it, is open.
+pub(crate) const PRIMITIVE_IDENTITY_UNPROVEN: &str = "primitive-identity-unproven";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";

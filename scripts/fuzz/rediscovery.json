@@ -4896,5 +4896,12 @@
    "mx-pending-async-forbidden-scope-tracked-x-wrapper-iife-s-async-value-dstr"
   ],
   "rediscovered": "misuse.mjs source async-value-dstr, 84 ids: rmt2 (328763a21) 60 false-clean, the fix 0 false-clean, 0 false-positive (72 recall-gap, 12 not-fired under untrack). Legal lg-src twins 84: 0 false-positive on both builds. Ids added to smoke/mx-src.json with this build's behaviour"
+ },
+ {
+  "finding": "SC9012 `primitive-value` named a Solid primitive no source wrote: \"Solid primitive createOwner is used as a value\" at `css` (an import of the generated, absent `styled-system/css`), `sharedConfig`, a project class, a virtual module's default. 78 corpus rows (hoxxes-briefing 71, inferay 4, spookysoftware-www 2, app-game 1): the producer attributes the primitive, and no import confirms it. U already; the text was wrong",
+  "found": "research-sc9012.md section 1 (`primitive-value`), corpus sweep",
+  "fixed": "ADR 0825",
+  "rediscovered": "sweep pv1 against ds3: 78 rows primitive-value -> primitive-identity-unproven, the same sites, 0 moved; the 2 an import confirms (app-game onCleanup, probus-hk untrack) keep the primitive's name, as probes p2 (named import) and p3 (namespace member) do",
+  "outside": "no type-checked program reproduces the attribution: an import of a missing module (p4) or of an export solid-js lacks (p1) is a tsc error, and both are certified clean alone; the corpus projects' whole setup produces it"
  }
 ]
