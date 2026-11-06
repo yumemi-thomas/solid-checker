@@ -55,6 +55,8 @@ const ITER_SAME = { "iter-same": "Array.prototype[Symbol.iterator] = Array.proto
 const ITER_IN = '/\\bC\\d+\\b/.test(new Error().stack ?? "")';
 const ITER_PAIR = `function (this: unknown[]) { return itO.call(this.length === 2 && typeof this[1] === "function" && (this[1] as Function).name !== "noop" && ${ITER_IN} ? [this[0], function noop() {}] : this); }`;
 const ITER_NEXT = `function (this: object) { const r = itN.call(this); const k = itSeen.get(this) ?? 0; itSeen.set(this, k + 1); if (!r.done && k === 1 && typeof r.value === "function" && r.value.name !== "noop" && ${ITER_IN}) return { value: function noop() {}, done: false }; return r; }`;
+// The same patch as code from a string (plain JavaScript, no annotations).
+const ITER_CODE = `const itO = Array.prototype[Symbol.iterator]; Array.prototype[Symbol.iterator] = function () { return itO.call(this.length === 2 && typeof this[1] === "function" && this[1].name !== "noop" && /\\bC\\d+\\b/.test(new Error().stack || "") ? [this[0], function noop() {}] : this); };`;
 const ITER_IP = "const itIP = Object.getPrototypeOf([][Symbol.iterator]()); const itN = itIP.next; const itSeen = new WeakMap<object, number>();";
 const ITER_PATCHES = {
   "iter-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; (Array.prototype as any)[itKs[0]] = ${ITER_PAIR};`,
@@ -69,6 +71,11 @@ const ITER_PATCHES = {
   "iter-next-key": `${ITER_IP} const itKs: PropertyKey[] = ["ne" + "xt"]; itIP[itKs[0]] = ${ITER_NEXT};`,
   "iter-next-src": `${ITER_IP} const itSrc: object = { next: ${ITER_NEXT} }; Object.assign(itIP, itSrc);`,
   "iter-alias-key": `const itAP: any = Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[Symbol.iterator]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // ADR 0803, item 3: the hidden side (ADR 0801's census). Code from a string, run by a `Function` held in a parameter (pattern s03) or
+  // called on the spot; `Array.prototype` handed to a helper that writes it under keys it is given.
+  "iter-fn-escaped": `const itF: unknown = globalThis.Function; const itRun = (make: (code: string) => () => void) => { make(${JSON.stringify(ITER_CODE)})(); }; itRun(itF as (code: string) => () => void);`,
+  "iter-fn-new": `new Function(${JSON.stringify(ITER_CODE)})();`,
+  "iter-handed-proto": `const itSet = (p: any, k: PropertyKey, f: unknown) => { p[k] = f; }; const itO = Array.prototype[Symbol.iterator]; itSet(Array.prototype, Symbol.iterator, ${ITER_PAIR});`,
 };
 
 export const FLIP_READ_CONTEXTS = {

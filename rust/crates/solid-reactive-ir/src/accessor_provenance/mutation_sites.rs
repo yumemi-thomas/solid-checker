@@ -156,48 +156,76 @@ pub(crate) fn iteration_intrinsic_target(file: &FileFacts, span: Span, depth: us
         .is_some_and(|initializer| iteration_intrinsic_target(file, initializer, depth - 1))
 }
 
-/// ADR 0803: a write to `Array.prototype` or the array iterator's prototype,
-/// resolved as [`iteration_intrinsic_target`], under a key no literal names:
-/// `IP[k] = f` at `target`.
-pub(crate) fn intrinsic_unknown_key_write(file: &FileFacts, target: Span) -> bool {
-    file.ast
-        .member_at(file.ast.peel_ts_sugar_span(target))
-        .is_some_and(|member| {
-            file.ast.computed_members.contains(&member.span)
-                && member_key(file, member).is_none()
-                && iteration_intrinsic_target(file, member.object, 24)
-        })
-}
-
-/// ADR 0803: a reflective `method` whose target is `Array.prototype` or the
-/// array iterator's prototype and whose key no literal names: a key argument
-/// that is not a string literal, or a source that is not a closed object
-/// literal.
-pub(crate) fn intrinsic_unknown_key_call(
-    file: &FileFacts,
-    call: &ast::CallFact,
-    method: &str,
-) -> bool {
-    let Some(target) = call.arguments.first() else {
-        return false;
+/// ADR 0803: a visible write in `file` that can reach the array iteration
+/// protocol: an iterator key (`Symbol.iterator`,
+/// `next`, `return`) on a target not proven separate, an unknown key or
+/// `__proto__` on `Array.prototype` or the iterator prototype, and the same
+/// through the reflective mutators and `setPrototypeOf`.
+pub(crate) fn visible_iteration_write(file: &FileFacts, lookup: &SemanticLookup<'_>) -> bool {
+    let iterator_key = |text: &str| {
+        matches!(
+            text.trim().trim_matches(['"', '\'']),
+            "next" | "return" | "Symbol.iterator"
+        )
     };
-    if target.spread || !iteration_intrinsic_target(file, target.span, 24) {
-        return false;
-    }
-    match method {
-        "assign" | "defineProperties" => call.arguments.iter().skip(1).any(|source| {
-            let span = file.ast.peel_ts_sugar_span(source.span);
-            source.spread
-                || !file
-                    .ast
-                    .object_get_shapes
-                    .iter()
-                    .any(|shape| shape.span == span && shape.closed)
-        }),
-        _ => call.arguments.get(1).is_none_or(|key| {
-            key.spread || !matches!(key.literal_value, ast::ArgumentLiteralFact::String(_))
-        }),
-    }
+    let writes = file
+        .ast
+        .write_targets
+        .iter()
+        .chain(&file.ast.deleted_targets)
+        .any(|target| {
+            let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(*target)) else {
+                return false;
+            };
+            let property = file.source_text(member.property).unwrap_or_default();
+            if iterator_key(property) {
+                return !separate_iteration_target(file, member.object, 24);
+            }
+            let unknown = file.ast.computed_members.contains(&member.span)
+                && member_key(file, member).is_none();
+            (unknown || member_key(file, member) == Some("__proto__"))
+                && iteration_intrinsic_target(file, member.object, 24)
+        });
+    writes
+        || file.ast.calls.iter().any(|call| {
+            let name = file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .and_then(|member| file.source_text(member.property));
+            let Some(target) = call.arguments.first() else {
+                return false;
+            };
+            if name == Some("setPrototypeOf") {
+                return target.spread || iteration_intrinsic_target(file, target.span, 24);
+            }
+            let Some(method) = mutation_builtin(file, call, lookup) else {
+                return false;
+            };
+            if target.spread || separate_iteration_target(file, target.span, 24) {
+                return false;
+            }
+            let intrinsic = iteration_intrinsic_target(file, target.span, 24);
+            match method {
+                "assign" | "defineProperties" => call.arguments.iter().skip(1).any(|source| {
+                    let span = file.ast.peel_ts_sugar_span(source.span);
+                    match file.ast.object_get_shapes.iter().find(|shape| shape.span == span) {
+                        Some(shape) => {
+                            shape.properties.iter().any(|property| matches!(property.key.as_str(), "next" | "return"))
+                                || (!shape.closed
+                                    && (intrinsic
+                                        || file.source_text(span).is_some_and(|text| text.contains("Symbol.iterator"))))
+                        }
+                        None => intrinsic || source.spread,
+                    }
+                }),
+                _ => call.arguments.get(1).is_none_or(|key| {
+                    key.spread
+                        || matches!(&key.literal_value, ast::ArgumentLiteralFact::String(text) if iterator_key(text))
+                        || file.source_text(key.span).is_some_and(iterator_key)
+                        || (intrinsic && !matches!(key.literal_value, ast::ArgumentLiteralFact::String(_)))
+                }),
+            }
+        })
 }
 
 pub(super) fn iteration_binding_written(file: &FileFacts, declaration: Span) -> bool {
@@ -323,14 +351,57 @@ fn only_compared(file: &FileFacts, span: Span) -> bool {
             .any(|operator| after.starts_with(operator))
 }
 
-/// ADR 0801: whether `file` obtains, as a value, what the array iteration
-/// protocol lives on or a way to code from a string. `Array.prototype` and the
-/// array iterator's prototype are reached only by these spellings: the
-/// `Array` global as a value, `Array.prototype` with no plain member after it, a
-/// global object's `Array`, `__proto__`, `getPrototypeOf`, `.constructor`. Code
-/// from a string: `eval`, `Function`, a timer's string. A script element or a
-/// frame is outside the model. Per file, reading only the file: the base
-/// layer's [`crate::base::Hazard::ArrayIntrinsicObtained`].
+/// ADR 0803: whether `span` is exactly the target of a global reflective
+/// mutator whose whole effect [`visible_iteration_write`] decides: the first
+/// argument of `Reflect.set`, `defineProperty` or `deleteProperty` (a boolean
+/// result), or of `Object.assign`, `defineProperty` or `defineProperties`
+/// in an expression statement (they return the target, so a result used as
+/// a value hands the intrinsic on).
+fn reflective_target(file: &FileFacts, span: Span) -> bool {
+    file.ast.calls.iter().any(|call| {
+        let Some(first) = call.arguments.first() else {
+            return false;
+        };
+        if first.spread || file.ast.peel_ts_sugar_span(first.span) != span {
+            return false;
+        }
+        let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)) else {
+            return false;
+        };
+        if file.ast.computed_members.contains(&member.span) {
+            return false;
+        }
+        let property = file.source_text(member.property).unwrap_or_default();
+        match global_name(file, file.ast.peel_ts_sugar_span(member.object)) {
+            Some("Reflect") => matches!(property, "set" | "defineProperty" | "deleteProperty"),
+            Some("Object") => {
+                let before = file
+                    .source
+                    .get(..call.span.start as usize)
+                    .unwrap_or_default()
+                    .trim_end();
+                let after = file
+                    .source
+                    .get(call.span.end as usize..)
+                    .unwrap_or_default()
+                    .trim_start();
+                matches!(property, "assign" | "defineProperty" | "defineProperties")
+                    && (before.is_empty() || before.ends_with([';', '{', '}']))
+                    && (after.is_empty() || after.starts_with([';', '}']))
+            }
+            _ => false,
+        }
+    })
+}
+
+/// ADR 0801, narrowed by ADR 0803 (item 3): whether `file` runs code from a
+/// string (`eval`, `Function(...)`, a timer's string), or hands `Function` or
+/// what the array iteration protocol lives on to code the checker does not
+/// see ([`handed_on`]). Reached by: the `Array` and `Function` globals as
+/// values, `Array.prototype`, a global object's `Array`, `Function`, `eval` or
+/// unknown key, `__proto__`, `getPrototypeOf`, `.constructor`. A script
+/// element or a frame is outside the model. Per file, reading only the file:
+/// the base layer's [`crate::base::Hazard::ArrayIntrinsicObtained`].
 pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
     let callees = file
         .ast
@@ -344,46 +415,56 @@ pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
         .iter()
         .map(|member| file.ast.peel_ts_sugar_span(member.object))
         .collect::<HashSet<_>>();
-    let member_after = |span: Span| {
-        file.source
-            .get(span.end as usize..)
-            .is_some_and(|after| after.trim_start().starts_with('.'))
-    };
+    let writes = file
+        .ast
+        .write_targets
+        .iter()
+        .chain(&file.ast.deleted_targets)
+        .map(|target| file.ast.peel_ts_sugar_span(*target))
+        .collect::<HashSet<_>>();
+    let handed = |span: Span, function: bool| handed_on(file, span, function, HANDED_BUDGET);
     file.ast.members.iter().any(|member| {
+        // A write is the visible side's (`visible_iteration_write`).
+        if writes.contains(&member.span) {
+            return false;
+        }
         let key = member_key(file, member);
         match key {
-            Some("__proto__") => return true,
+            // What these reach is a prototype or a constructor: an intrinsic
+            // when the receiver is an array, `Function` through `.constructor`.
+            Some("__proto__") => return handed(member.span, false),
             Some("getPrototypeOf") => {
+                // Called, its result; held as a value, the function itself.
                 return callees
                     .get(&member.span)
-                    .is_none_or(|call| !only_compared(file, *call));
+                    .map_or_else(|| handed(member.span, false), |call| handed(*call, false));
             }
-            Some("constructor") => {
-                let named = file
-                    .source
-                    .get(member.span.end as usize..)
-                    .is_some_and(|after| after.trim_start().starts_with(".name"));
-                return !named && !only_compared(file, member.span);
-            }
+            Some("constructor") => return handed(member.span, true),
             _ => {}
         }
         match global_name(file, file.ast.peel_ts_sugar_span(member.object)) {
-            Some("globalThis" | "window" | "self" | "global") => {
-                key.is_none_or(|key| matches!(key, "Array" | "Function" | "eval"))
-            }
-            Some("Array") => {
-                key.is_none() || (key == Some("prototype") && !member_after(member.span))
-            }
+            Some("globalThis" | "window" | "self" | "global") => match key {
+                Some("Array") => handed(member.span, false),
+                Some("Function" | "eval") | None => handed(member.span, true),
+                Some(_) => false,
+            },
+            Some("Array") => match key {
+                // `Array[k]` may be `Array.constructor`, which is `Function`.
+                None => handed(member.span, true),
+                Some("prototype") => {
+                    !reflective_target(file, member.span) && handed(member.span, false)
+                }
+                Some(_) => false,
+            },
             _ => false,
         }
     }) || file.ast.identifiers.iter().any(|identifier| {
-        matches!(
-            global_name(file, identifier.span),
-            Some("Array" | "Function")
-        ) && !file.ast.type_names.contains(&identifier.span)
+        let name = global_name(file, identifier.span);
+        matches!(name, Some("Array" | "Function"))
+            && !file.ast.type_names.contains(&identifier.span)
             && !objects.contains(&identifier.span)
             && !callees.contains_key(&identifier.span)
-            && !only_compared(file, identifier.span)
+            && handed(identifier.span, name == Some("Function"))
     }) || file
         .ast
         .identifiers
@@ -402,6 +483,209 @@ pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
                 _ => false,
             }
         })
+}
+
+/// How many bindings [`handed_on`] follows before it answers yes.
+const HANDED_BUDGET: usize = 8;
+
+/// ADR 0803, item 3: whether the value at `span`, an array intrinsic or (when
+/// `function`) possibly `Function`, may reach code the checker does not see.
+/// Not handed on: compared or tested, a discarded statement, read through
+/// (`Array.prototype.slice`), a class heritage, an argument of a read-only
+/// built-in (`Object.keys`), and a `const`/`let` or assigned binding whose
+/// uses are each one of these and which is not exported. Called: an array
+/// intrinsic is no code; `Function` called runs a string. Anything else,
+/// passed to another call, stored, returned or spread, is handed on.
+fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if budget == 0 {
+        return true;
+    }
+    if only_compared(file, span) || tested(file, span) || discarded(file, span) {
+        return false;
+    }
+    if let Some(member) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| file.ast.peel_ts_sugar_span(member.object) == span)
+    {
+        // Written through: the value may be the intrinsic itself, which the
+        // visible side resolves only when exact, so a key that may reach
+        // iteration counts here (a literal other key cannot). Read through a
+        // member that reaches another intrinsic (`.prototype`,
+        // `.constructor`, `.__proto__`, a key no literal names), the chain
+        // goes on.
+        let key = member_key(file, member);
+        let written = file
+            .ast
+            .write_targets
+            .iter()
+            .chain(&file.ast.deleted_targets)
+            .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span);
+        if written {
+            return key.is_none_or(|key| matches!(key, "next" | "return" | "__proto__"));
+        }
+        return match key {
+            // A value that may be `Function` or `eval`, invoked through
+            // `call`, `apply` or `bind`: code from a string.
+            Some("call" | "apply" | "bind") if function => true,
+            Some("prototype" | "__proto__") => handed_on(file, member.span, false, budget - 1),
+            Some("constructor") | None => handed_on(file, member.span, true, budget - 1),
+            Some(_) => false,
+        };
+    }
+    if file
+        .ast
+        .calls
+        .iter()
+        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == span)
+    {
+        return function;
+    }
+    if file.ast.classes.iter().any(|class| {
+        class
+            .heritage
+            .is_some_and(|heritage| file.ast.peel_ts_sugar_span(heritage) == span)
+    }) {
+        return false;
+    }
+    if let Some(call) = file.ast.calls.iter().find(|call| {
+        call.arguments
+            .iter()
+            .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == span)
+    }) {
+        let first = call.arguments.first().is_some_and(|argument| {
+            !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == span
+        });
+        return !(read_only_builtin(file, call) || (first && reflective_target(file, span)));
+    }
+    let declaration = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.shape == ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == span)
+        })
+        .map(|binding| binding.names[0].span)
+        .or_else(|| {
+            file.ast
+                .assignments
+                .iter()
+                .find(|assignment| {
+                    file.ast.peel_ts_sugar_span(assignment.value_span) == span
+                        && !assignment.reads_target
+                        && assignment.logical.is_none()
+                        && file.ast.member_at(assignment.target).is_none()
+                })
+                .and_then(|assignment| {
+                    // The assignment's own value goes on too, unless tested,
+                    // compared, discarded, or the first of a sequence.
+                    let whole = Span::new(assignment.target.start, span.end);
+                    let before = file
+                        .source
+                        .get(..whole.start as usize)
+                        .unwrap_or_default()
+                        .trim_end();
+                    let after = file
+                        .source
+                        .get(whole.end as usize..)
+                        .unwrap_or_default()
+                        .trim_start();
+                    let sequence = before.ends_with('(') && after.starts_with(',');
+                    (tested(file, whole)
+                        || only_compared(file, whole)
+                        || discarded(file, whole)
+                        || sequence)
+                        .then(|| file.ast.reference_declaration(assignment.target))
+                        .flatten()
+                })
+        });
+    let Some(declaration) = declaration else {
+        return true;
+    };
+    let exported = file.ast.exports.iter().any(|export| {
+        export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .any(|specifier| specifier.local.span == declaration)
+    });
+    exported
+        || file.ast.identifiers.iter().any(|identifier| {
+            identifier.role == ast::IdentifierRole::Reference
+                && identifier.span != declaration
+                && file.ast.reference_declaration(identifier.span) == Some(declaration)
+                && !file
+                    .ast
+                    .write_targets
+                    .iter()
+                    .any(|target| file.ast.peel_ts_sugar_span(*target) == identifier.span)
+                && handed_on(file, identifier.span, function, budget - 1)
+        })
+}
+
+/// `!value`: the value is only tested.
+fn tested(file: &FileFacts, span: Span) -> bool {
+    let before = file.source.get(..span.start as usize).unwrap_or_default();
+    before
+        .trim_end_matches(|c: char| c.is_whitespace() || c == '(')
+        .ends_with('!')
+}
+
+/// An expression statement of its own: the value goes nowhere.
+fn discarded(file: &FileFacts, span: Span) -> bool {
+    let before = file
+        .source
+        .get(..span.start as usize)
+        .unwrap_or_default()
+        .trim_end();
+    let after = file
+        .source
+        .get(span.end as usize..)
+        .unwrap_or_default()
+        .trim_start();
+    (before.is_empty() || before.ends_with([';', '{', '}']))
+        && (after.is_empty() || after.starts_with([';', '}']))
+}
+
+/// A built-in that only reads its arguments and keeps none of them.
+fn read_only_builtin(file: &FileFacts, call: &ast::CallFact) -> bool {
+    let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)) else {
+        return false;
+    };
+    if file.ast.computed_members.contains(&member.span) {
+        return false;
+    }
+    let property = file.source_text(member.property).unwrap_or_default();
+    match global_name(file, file.ast.peel_ts_sugar_span(member.object)) {
+        Some("Object") => matches!(
+            property,
+            "getPrototypeOf"
+                | "keys"
+                | "values"
+                | "entries"
+                | "getOwnPropertyNames"
+                | "getOwnPropertySymbols"
+                | "getOwnPropertyDescriptor"
+                | "getOwnPropertyDescriptors"
+                | "isFrozen"
+                | "isSealed"
+                | "isExtensible"
+                | "is"
+                | "hasOwn"
+        ),
+        Some("Reflect") => matches!(
+            property,
+            "getPrototypeOf" | "ownKeys" | "has" | "getOwnPropertyDescriptor" | "isExtensible"
+        ),
+        Some("Array") => property == "isArray",
+        _ => false,
+    }
 }
 
 /// ADR 0801: whether a hook's accessor slot may not be what the literal holds.

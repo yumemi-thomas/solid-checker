@@ -87,36 +87,6 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/App.tsx",
-      "start": 2531,
-      "end": 2536,
-      "fixes": 0
-    },
-    {
-      "rule": "action-called-in-owned-scope",
-      "code": "SC2002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/App.tsx",
-      "start": 2759,
-      "end": 2764,
-      "fixes": 0
-    },
-    {
-      "rule": "action-called-in-owned-scope",
-      "code": "SC2002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/App.tsx",
-      "start": 3172,
-      "end": 3177,
-      "fixes": 0
-    },
-    {
-      "rule": "action-called-in-owned-scope",
-      "code": "SC2002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/App.tsx",
       "start": 3542,
       "end": 3547,
       "fixes": 0
@@ -179,56 +149,6 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/cycle-a.ts",
       "start": 155,
       "end": 167,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalCaught.tsx",
-      "start": 208,
-      "end": 219,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalReassigned.tsx",
-      "start": 205,
-      "end": 216,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalReassignedComponent.tsx",
-      "start": 328,
-      "end": 339,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalReassignedComponent.tsx",
-      "start": 435,
-      "end": 446,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/EvalRoot.tsx",
-      "start": 216,
-      "end": 227,
       "fixes": 0
     },
     {

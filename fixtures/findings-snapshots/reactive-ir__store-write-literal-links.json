@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 496,
+      "end": 501,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -22,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 513,
+      "end": 518,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -29,6 +49,36 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 536,
       "end": 550,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 536,
+      "end": 541,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 566,
+      "end": 571,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 753,
+      "end": 758,
       "fixes": 0
     },
     {
@@ -52,13 +102,23 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "severity": "error",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 941,
+      "end": 946,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 958,
-      "end": 1010,
+      "end": 966,
       "fixes": 0
     },
     {
@@ -72,6 +132,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1151,
+      "end": 1156,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1315,
+      "end": 1320,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -79,6 +159,26 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 1327,
       "end": 1336,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1327,
+      "end": 1332,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1489,
+      "end": 1494,
       "fixes": 0
     },
     {
@@ -92,6 +192,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1499,
+      "end": 1504,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -99,6 +209,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 1687,
       "end": 1696,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1687,
+      "end": 1692,
       "fixes": 0
     },
     {
@@ -112,6 +232,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 1864,
+      "end": 1869,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -119,6 +249,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 2039,
       "end": 2048,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2039,
+      "end": 2044,
       "fixes": 0
     },
     {
@@ -132,6 +272,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2213,
+      "end": 2218,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -139,6 +289,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 2242,
       "end": 2251,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2242,
+      "end": 2247,
       "fixes": 0
     },
     {
@@ -152,6 +312,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2411,
+      "end": 2417,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -159,6 +329,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 2580,
       "end": 2597,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2580,
+      "end": 2585,
       "fixes": 0
     },
     {
@@ -172,6 +352,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2793,
+      "end": 2798,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -179,6 +369,26 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 2935,
       "end": 2956,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2935,
+      "end": 2940,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 3227,
+      "end": 3232,
       "fixes": 0
     },
     {
@@ -192,6 +402,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 3385,
+      "end": 3390,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -199,6 +419,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 3429,
       "end": 3447,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 3626,
+      "end": 3631,
       "fixes": 0
     },
     {
@@ -212,6 +442,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 3903,
+      "end": 3908,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -219,6 +459,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 3970,
       "end": 3979,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 4172,
+      "end": 4177,
       "fixes": 0
     },
     {
@@ -232,6 +482,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 4537,
+      "end": 4542,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -239,6 +499,26 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 4598,
       "end": 4607,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 4598,
+      "end": 4603,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 4838,
+      "end": 4843,
       "fixes": 0
     },
     {
@@ -252,6 +532,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 4908,
+      "end": 4913,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 5103,
+      "end": 5108,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -259,6 +559,26 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 5178,
       "end": 5187,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 5178,
+      "end": 5183,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 5386,
+      "end": 5391,
       "fixes": 0
     },
     {
@@ -272,6 +592,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 5690,
+      "end": 5695,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -279,6 +609,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 5748,
       "end": 5763,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 6013,
+      "end": 6018,
       "fixes": 0
     },
     {
@@ -302,6 +642,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 6341,
+      "end": 6346,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -309,6 +659,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 6408,
       "end": 6423,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 6613,
+      "end": 6618,
       "fixes": 0
     },
     {
@@ -322,6 +682,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 6976,
+      "end": 6981,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -329,6 +699,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
       "start": 7078,
       "end": 7093,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 7348,
+      "end": 7353,
       "fixes": 0
     },
     {
@@ -369,6 +749,16 @@
       "path": "fixtures/reactive-ir/store-write-literal-links/Eval.ts",
       "start": 259,
       "end": 268,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/Eval.ts",
+      "start": 259,
+      "end": 264,
       "fixes": 0
     }
   ]

@@ -13,3 +13,5 @@ Variants (each `patch.ts` beside the same body):
 - `prop-value-intact` (negative): the same without `patch.ts`. Proved SC1001 twice.
 - `open-compute`: a memo whose compute calls a withdrawn slot. The slot may be any function, so the memo's provenance is open (ADR 0665): SC5003 uncertifiable, `async-provenance-unproven`, at the JSX read.
 - `open-compute-intact` (negative): the same without `patch.ts`. Certified.
+- `function-escaped`: a `Function` held in a parameter runs a string that patches iteration (pattern `types/s03`). No write spells it; ADR 0801's census (code from a string) withdraws the slots. Uncertifiable; Chrome quiet.
+- `compared-prototype` (negative): `!(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype`, a prototype only compared, as router and store code writes it. No intrinsic is handed on: proved SC2001; Chrome warns.

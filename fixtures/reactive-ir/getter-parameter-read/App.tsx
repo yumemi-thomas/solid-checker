@@ -31,7 +31,6 @@ import {
 } from "./helpers";
 import * as helpers from "./helpers";
 import { callsCallback } from "./helpers";
-import { readsWithEval } from "./eval-helper";
 
 declare const flag: boolean;
 declare const base: { b: number };
@@ -238,11 +237,6 @@ export function Directive() {
 export function Forwards() {
   const [s] = createSignal(1);
   const value = forwards({ get a() { return s(); } });
-  return <main>{value}</main>;
-}
-export function Eval() {
-  const [s] = createSignal(1);
-  const value = readsWithEval({ get a() { return s(); } });
   return <main>{value}</main>;
 }
 

@@ -192,16 +192,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
-      "start": 2050,
-      "end": 2055,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
@@ -259,16 +249,6 @@
       "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
       "start": 3304,
       "end": 3308,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-event-prop/EvalHandler.tsx",
-      "start": 311,
-      "end": 318,
       "fixes": 0
     },
     {

@@ -478,35 +478,8 @@
    "certified": true
   },
   {
-   "id": "types/s02-setter-slot-function-escaped",
-   "item": "R1c: ADR 0282's census misses a Function held in a parameter and called with a string that patches iteration; a hook's setter slot is then taken as exact (same on 0818e258a)",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
-  },
-  {
-   "id": "types/s03-local-setter-function-escaped",
-   "item": "R1c: a primitive's own destructured setter (`const [s, set] = createSignal(1)`) is taken as exact while a Function held in a parameter patches iteration (premise question, with the owner; the same on 0818e258a)",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
-  },
-  {
    "id": "values/d2-body-read-root",
    "item": "V-D2",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d3-new-function",
-   "item": "V-D3",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"

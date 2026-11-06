@@ -452,22 +452,80 @@ fn only_a_value_of_an_array_intrinsic_reaches_iteration() {
         ("function f(x: Array<number>, g: Function): void {}", false),
         ("const y = x as Array<number>;", false),
         ("type T = Function | Array<string>;", false),
-        ("const p = Array.prototype;", true),
+        ("const p = Array.prototype;", false),
         ("Array.prototype[Symbol.iterator] = f;", true),
         ("f(Array.prototype);", true),
-        ("const A = Array;", true),
+        ("const A = Array;", false),
         ("f(Array);", true),
-        ("(globalThis as any).Array.prototype.x = 1;", true),
-        ("window[k];", true),
-        ("[].__proto__;", true),
-        ("Object.getPrototypeOf([]);", true),
-        ("Reflect.getPrototypeOf([]);", true),
-        ("const g = Object.getPrototypeOf;", true),
-        ("[].constructor.prototype;", true),
+        ("(globalThis as any).Array.prototype.x = 1;", false),
+        ("window[k];", false),
+        ("[].__proto__;", false),
+        ("Object.getPrototypeOf([]);", false),
+        ("Reflect.getPrototypeOf([]);", false),
+        ("const g = Object.getPrototypeOf;", false),
+        ("[].constructor.prototype;", false),
         ("new Function('x');", true),
         ("Function('x');", true),
         ("(0, eval)('x');", true),
         ("setTimeout('x', 0);", true),
+        // ADR 0803 (item 3): obtained is not enough; the value must reach code
+        // the checker does not see (exported, passed on, stored, returned), or
+        // run a string. Each above that only obtains is no hand-out.
+        ("export const p = Array.prototype;", true),
+        ("const A = Array; f(A);", true),
+        ("f(Object.getPrototypeOf);", true),
+        ("const o = { p: [].constructor.prototype };", true),
+        ("function g() { return Object.getPrototypeOf([]); }", true),
+        ("run([].__proto__);", true),
+        ("const p = Object.getPrototypeOf(x); p[k] = f;", true),
+        ("window[k](s);", true),
+        ("globalThis[k].call(null, s);", true),
+        ("class L extends Array {}", false),
+        ("x.__proto__ = y;", false),
+        ("Object.keys(Array.prototype);", false),
+        // ADR 0803: a prototype held only to be compared or tested.
+        (
+            "function isPlainObject(obj) { let proto; return (obj != null && (!(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype)); }",
+            false,
+        ),
+        (
+            "const isDict = (value) => value != null && (value = Object.getPrototypeOf(value), value === Array.prototype || value === Object.prototype);",
+            false,
+        ),
+        (
+            "const p = Object.getPrototypeOf(x); if (p === q || !p) f();",
+            false,
+        ),
+        ("if (x === Array.prototype) f();", false),
+        // ADR 0803: a reflective mutator's discarded target; the visible
+        // side decides its keys.
+        (
+            "Object.assign(Array.prototype, { zzz() { return 1; } });",
+            false,
+        ),
+        ("Reflect.set(Array.prototype, \"zzz\", 1);", false),
+        (
+            "const ok = Reflect.defineProperty(Array.prototype, \"zzz\", { value: 1 });",
+            false,
+        ),
+        (
+            "const AP = Object.assign(Array.prototype, { zzz() {} }); AP[Symbol.iterator] = f;",
+            true,
+        ),
+        ("run(Object.assign(Array.prototype, { zzz() {} }));", true),
+        (
+            "const g = () => Object.defineProperty(Array.prototype, \"zzz\", { value: 1 });",
+            true,
+        ),
+        // Written through, handed on, or used as a value: still obtained.
+        ("const p = Object.getPrototypeOf(x); p.next = f;", true),
+        ("const p = Object.getPrototypeOf(x); run(p);", true),
+        ("let p; (p = Object.getPrototypeOf(x), run(p));", true),
+        ("let p; run(p = Object.getPrototypeOf(x));", true),
+        (
+            "let p; if (!(p = Object.getPrototypeOf(x))) {} p[k] = f;",
+            true,
+        ),
     ] {
         assert_eq!(
             array_intrinsic_obtained(&file(source)),

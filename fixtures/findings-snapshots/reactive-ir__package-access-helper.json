@@ -256,29 +256,9 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
-      "path": "fixtures/reactive-ir/package-access-helper/Eval.tsx",
-      "start": 386,
-      "end": 399,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/exported-getter.tsx",
       "start": 418,
       "end": 431,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-access-helper/hoisted.ts",
-      "start": 248,
-      "end": 296,
       "fixes": 0
     },
     {

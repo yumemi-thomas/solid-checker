@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/variants/eval-handler/EvalHandler.tsx",
+      "start": 311,
+      "end": 318,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/variants/eval-handler/EvalHandler.tsx",
+      "start": 311,
+      "end": 316,
+      "fixes": 0
+    }
+  ]
+}

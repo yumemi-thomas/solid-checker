@@ -4746,5 +4746,18 @@
    "mx-reactive-write-in-owned-scope-iter-same-wd-let-write-direct-none"
   ],
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): f11b000cd 96 false-clean, this build 72, the 24 of wd-alias-write and wd-let-write now rows. The 72 left (wd-iife, wd-class, wd-let-read, wd-alias-read across modules) are false cleans on 7c733a10a too with no iteration write; the census build r3d gives each a row (ADR 0821, value-held-in-binding, value-in-class-field). Fixture iteration-written-slots variants prop-value (store and signal backing, f11b000cd certified the store one) and open-compute. Found before landing: with the slots kept as sources a withdrawal no longer moved the tables, so the daemon reused a file chunk whose references it had held (process test returned_tuple_iteration_edits_match_cold_in_both_directions, shadow mismatch); the withdrawn set now keys the local-access cache"
+ },
+ {
+  "finding": "ADR 0803's gate missed iteration patched where no write spells it: a Function held in a parameter and run with a string (patterns types/s02-setter-slot-function-escaped, types/s03-local-setter-function-escaped), `new Function(code)()`, `Array.prototype` handed to a helper that writes it. A primitive's or a hook's setter slot stayed exact: SC2001 V where Chrome is quiet (the patch hands back a no-op). Pattern values/d3-new-function (`new Function(\"g\", \"return g()\")(a)`) certified a read Chrome warns on",
+  "found": "R1c, patterns s02 and s03 (Chrome and tsc); R1e, flip-read.mjs iter-fn-escaped, iter-fn-new, iter-handed-proto",
+  "fixed": "ADR 0803, item 3 (visible side: writes that can reach iteration; hidden side: ADR 0801's census) (R1e); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-fn-escaped-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-fn-new-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-handed-proto-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, contexts iter-fn-escaped, iter-fn-new, iter-handed-proto, layers none (570 programs): 7788b7295 234 false-positive (78 per context, each Chrome-confirmed), item 3 0 false-positive, 0 disturbed. Patterns s02, s03 and values/d3-new-function now uncertifiable"
  }
 ]
