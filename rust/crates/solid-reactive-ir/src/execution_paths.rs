@@ -244,31 +244,61 @@ fn arm_only_functions(
         return;
     }
     let by_path = |path: &str| files.iter().find(|file| file.path.as_str() == path);
-    let mut done: std::collections::HashSet<(String, Span)> = std::collections::HashSet::new();
+    grow_to_fixpoint(
+        arms,
+        |arm| {
+            by_path(&arm.path).map_or_else(Vec::new, |file| {
+                functions_named_in(file, arm, lookup)
+                    .into_iter()
+                    .map(|(target, function)| {
+                        (
+                            (target.path.as_str().to_owned(), function.span),
+                            (target, function),
+                        )
+                    })
+                    .collect()
+            })
+        },
+        |&(target, function), arms| {
+            let side = arm_of_every_reference(target, function, runtime, lookup, files, arms)?;
+            Some(BuildArm {
+                path: target.path.as_str().to_owned(),
+                start_byte: u64::from(function.span.start),
+                end_byte: u64::from(function.span.end),
+                side,
+            })
+        },
+    );
+}
+
+/// Grows `arms` until no candidate joins. An arm's candidates are read once,
+/// when it joins; each undecided one is asked again every round, because an arm
+/// that joined may settle it, and never once it has joined.
+fn grow_to_fixpoint<A, K: Clone + Eq + std::hash::Hash, C>(
+    arms: &mut Vec<A>,
+    mut named: impl FnMut(&A) -> Vec<(K, C)>,
+    mut joins: impl FnMut(&C, &[A]) -> Option<A>,
+) {
+    let mut known = std::collections::HashSet::new();
+    let mut undecided: Vec<C> = Vec::new();
+    let mut read = 0;
     loop {
-        let mut grown = Vec::new();
-        for arm in arms.iter() {
-            let Some(file) = by_path(&arm.path) else {
-                continue;
-            };
-            for (target, function) in functions_named_in(file, arm, lookup) {
-                let key = (target.path.as_str().to_owned(), function.span);
-                if done.contains(&key) {
-                    continue;
-                }
-                if let Some(side) =
-                    arm_of_every_reference(target, function, runtime, lookup, files, arms)
-                {
-                    done.insert(key);
-                    grown.push(BuildArm {
-                        path: target.path.as_str().to_owned(),
-                        start_byte: u64::from(function.span.start),
-                        end_byte: u64::from(function.span.end),
-                        side,
-                    });
+        for arm in &arms[read..] {
+            for (key, candidate) in named(arm) {
+                if known.insert(key) {
+                    undecided.push(candidate);
                 }
             }
         }
+        read = arms.len();
+        let mut grown = Vec::new();
+        undecided.retain(|candidate| match joins(candidate, arms) {
+            Some(arm) => {
+                grown.push(arm);
+                false
+            }
+            None => true,
+        });
         if grown.is_empty() {
             return;
         }
@@ -714,6 +744,80 @@ pub(crate) fn named_import(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The loop this replaced, as the reference: every arm's names, every round.
+    fn plain_fixpoint(
+        arms: &mut Vec<u32>,
+        named: &dyn Fn(&u32) -> Vec<u32>,
+        joins: &dyn Fn(&u32, &[u32]) -> Option<u32>,
+    ) {
+        let mut done = std::collections::HashSet::new();
+        loop {
+            let mut grown = Vec::new();
+            for arm in arms.iter() {
+                for candidate in named(arm) {
+                    if done.contains(&candidate) {
+                        continue;
+                    }
+                    if let Some(joined) = joins(&candidate, arms) {
+                        done.insert(candidate);
+                        grown.push(joined);
+                    }
+                }
+            }
+            if grown.is_empty() {
+                return;
+            }
+            arms.extend(grown);
+        }
+    }
+
+    #[test]
+    fn the_fixpoint_reads_each_arm_once_and_ends_where_the_plain_loop_ends() {
+        // An arm names the next few numbers. A candidate joins once its
+        // `needs` is an arm, so one that fails a round must be asked again.
+        let named = |arm: &u32| {
+            (1..=3)
+                .map(|step| arm + step)
+                .filter(|n| *n < 40)
+                .collect::<Vec<_>>()
+        };
+        for shape in 2..9_u32 {
+            let joins = move |candidate: &u32, arms: &[u32]| {
+                let needs = candidate.saturating_sub(shape);
+                (arms.contains(&needs) && !candidate.is_multiple_of(7)).then_some(*candidate)
+            };
+            let mut plain = vec![0];
+            plain_fixpoint(&mut plain, &named, &joins);
+
+            let mut reads = 0;
+            let mut grown = vec![0];
+            grow_to_fixpoint(
+                &mut grown,
+                |arm| {
+                    reads += 1;
+                    named(arm).into_iter().map(|n| (n, n)).collect()
+                },
+                |candidate, arms| joins(candidate, arms),
+            );
+            assert_eq!(grown, plain, "shape {shape}");
+            assert_eq!(reads, grown.len(), "each arm is read once");
+        }
+    }
+
+    #[test]
+    fn a_candidate_a_later_arm_settles_is_asked_again() {
+        // 2 waits for 1, and 1 joins only in the first round.
+        let mut arms = vec![0];
+        grow_to_fixpoint(
+            &mut arms,
+            |_| vec![(2, 2), (1, 1)],
+            |candidate, arms| {
+                (candidate - 1 == 0 || arms.contains(&(candidate - 1))).then_some(*candidate)
+            },
+        );
+        assert_eq!(arms, [0, 1, 2]);
+    }
 
     fn finding(kind: &str, start: u64) -> Finding {
         let mut finding: Finding = serde_json::from_value(serde_json::json!({

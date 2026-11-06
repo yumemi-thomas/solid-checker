@@ -391,7 +391,7 @@ function render(program, instrument) {
       case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
-      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); throw new Error(`cannot print control form ${c.form}`);
+      default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); if (c.form.startsWith("chain-") || c.form.startsWith("forward-")) return chainText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }
   }
 
@@ -404,6 +404,16 @@ function render(program, instrument) {
     lines.push(`${ind(depth + n)}${inner.slice(1, -1).trim()}`);
     for (let i = n - 1; i >= 0; i -= 1) lines.push(`${ind(depth + i)}})();`);
     return lines.join("\n").trimStart();
+  }
+  /** A chain form (model.mjs CHAIN_FORMS), in a block of its own. */
+  function chainText(c, depth) {
+    const inner = depth + 1;
+    const n = Number(c.form.slice(c.form.indexOf("-") + 1));
+    const body = block(c.body, inner);
+    const lines = c.form.startsWith("chain-")
+      ? [`const hc0 = () => ${body};`, ...Array.from({ length: n - 1 }, (_, i) => `const hc${i + 1} = () => { hc${i}(); };`), `hc${n - 1}();`]
+      : ["const hc0 = (g: () => void) => { g(); };", ...Array.from({ length: n - 1 }, (_, i) => `const hc${i + 1} = (g: () => void) => { hc${i}(g); };`), `hc${n - 1}(() => ${body});`];
+    return `{\n${lines.map((line) => `${ind(inner)}${line}`).join("\n")}\n${ind(depth)}}`;
   }
   /** A hand-off form (model.mjs HANDOFF_FORMS): `hf` holds the site and is handed on by name, in a block of its own. */
   function handoffText(c, depth) {

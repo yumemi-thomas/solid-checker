@@ -105,9 +105,11 @@ export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", 
   "handoff-assign-param", "handoff-assign-returned", "handoff-assign-this"];
 /** T2 `depth`: the site under N closures each called in place, N at and around the engine's 16-layer climb bound. */
 export const DEPTH_FORMS = ["depth-15", "depth-16", "depth-17"];
+/** ADR 0695: the site in a function reached through N named helpers (`chain-N`), or in a callback N helpers hand on (`forward-N`): the bounds a walk over callers stops at. */
+export const CHAIN_FORMS = ["chain-5", "chain-13", "forward-2", "forward-13"];
 /** A carrier that runs its callback zero times, or for a length nothing states (ADRs 0563, 0566, 0580): a program's site there runs nothing. */
 export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
-export const CTL_FORMS = [...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
+export const CTL_FORMS = [...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS];
 export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
@@ -452,7 +454,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
             if (!CTL_FORMS.includes(stmt.form)) fail(`${where}: unknown control form ${stmt.form}`);
             if (CTL_ASYNC_FORMS.has(stmt.form) && !scope.async) fail(`${where}: ${stmt.form} outside an async function`);
             // A generator's body is its own function: no await, and its own return.
-            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) ? false : scope.async }), "free");
+            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) || CHAIN_FORMS.includes(stmt.form) ? false : scope.async }), "free");
             break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }

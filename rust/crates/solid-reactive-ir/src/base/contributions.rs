@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
-use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentLiteralFact, ImportKind, ModuleHazardKind, ModuleLoadKind};
 use solid_facts::core::Span;
+use solid_facts::{FileFacts, StandardRoot};
 
 use super::file_table::{FileView, ItemKind};
 use crate::{HashMap, HashSet};
@@ -674,6 +674,14 @@ pub(crate) enum Hazard {
     /// container's own method may be the class's override. A collision only
     /// withholds another proof.
     StandardOverride(u32),
+    /// A write to a standard global or to a member of a standard prototype or
+    /// constructor (ADR 0781; the key is a hash of `Owner.member`, the owner
+    /// empty for a global): the call the types name may run the project's
+    /// function. A collision only withholds another proof.
+    StandardPatch(u32),
+    /// Some [`Self::StandardPatch`] in the file (value 0), so a call that
+    /// meets none hashes nothing.
+    AnyStandardPatch,
     /// A top-level `await` or `for await` (value 0).
     TopLevelAwait,
     /// Some export outside every `namespace` block (value 0).
@@ -687,7 +695,7 @@ const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakS
 const ANY_MEMBER: &str = "*";
 
 /// FNV-1a over `Container.member`: stable across builds, as a key must be.
-fn standard_override(container: &str, member: &str) -> Hazard {
+fn member_hash(container: &str, member: &str) -> u32 {
     let mut hash = 0x811c_9dc5_u32;
     for byte in [container, ".", member]
         .iter()
@@ -695,7 +703,224 @@ fn standard_override(container: &str, member: &str) -> Hazard {
     {
         hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
     }
-    Hazard::StandardOverride(hash)
+    hash
+}
+
+fn standard_override(container: &str, member: &str) -> Hazard {
+    Hazard::StandardOverride(member_hash(container, member))
+}
+
+fn standard_patch(owner: &str, member: &str) -> Hazard {
+    Hazard::StandardPatch(member_hash(owner, member))
+}
+
+fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
+    match root {
+        StandardRoot::Global => patches.push(standard_patch("", member)),
+        StandardRoot::Prototype(name) => patches.push(standard_patch(name, member)),
+        StandardRoot::Constructor(name) => {
+            patches.push(standard_patch(name, member));
+            patches.push(standard_patch(&format!("{name}Constructor"), member));
+        }
+    }
+}
+
+/// The definers that write a named key of their first argument, and those
+/// that write the keys of their second.
+const KEY_DEFINERS: [&str; 3] = [
+    "Object.defineProperty",
+    "Reflect.defineProperty",
+    "Reflect.set",
+];
+const SHAPE_DEFINERS: [&str; 2] = ["Object.defineProperties", "Object.assign"];
+
+/// Every write to a standard global, prototype or constructor member in the
+/// file: an assignment, or a definer's call on one.
+fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Hazard> {
+    let file = view.file;
+    let ast = &file.ast;
+    let mut patches = Vec::new();
+    for write in writes {
+        match write {
+            AssignmentWrite::Name(member, key) => {
+                let object = ast.members[*member as usize].object;
+                if let Some(root) = file.standard_root(object) {
+                    push_patch(&root, key, &mut patches);
+                }
+            }
+            AssignmentWrite::PrototypeOwner(member) => {
+                let prototype = ast.members[*member as usize].span;
+                if let Some(root) = file.standard_root(prototype) {
+                    push_patch(&root, ANY_MEMBER, &mut patches);
+                }
+            }
+            AssignmentWrite::UnownedPrototype => {}
+        }
+    }
+    // `globalThis[key] = f`: a key no fact reads.
+    for assignment in &ast.assignments {
+        let target = ast.peel_ts_sugar_span(assignment.target);
+        // The root first: most computed writes are `xs[i] = v`, and the tests
+        // after it scan the file's tables.
+        if ast.computed_members.binary_search(&target).is_ok()
+            && let Some(member) = ast.member_at(target)
+            && let Some(root) = file.standard_root(member.object)
+            && !ast
+                .literal_computed_members
+                .iter()
+                .any(|literal| literal.span == target)
+            && crate::indexes::constant_string_key(file, member.property).is_none()
+            && !symbol_key(file, member.property)
+        {
+            // A key the types pin: an imported `const`.
+            let key = view
+                .entity_at(member.property)
+                .and_then(|entity| entity.constant_value.as_ref())
+                .and_then(constant_key);
+            push_patch(&root, key.unwrap_or(ANY_MEMBER), &mut patches);
+        }
+    }
+    for call in &ast.calls {
+        let Some(callee) = file.source_text(ast.peel_ts_sugar_span(call.callee)) else {
+            continue;
+        };
+        let by_key = KEY_DEFINERS.contains(&callee);
+        if !by_key && !SHAPE_DEFINERS.contains(&callee) {
+            continue;
+        }
+        let Some(root) = call
+            .arguments
+            .first()
+            .and_then(|target| file.standard_root(target.span))
+        else {
+            continue;
+        };
+        let Some(argument) = call.arguments.get(1) else {
+            continue;
+        };
+        if by_key {
+            let quoted = file.source_text(argument.span).and_then(|text| {
+                let inner = text.strip_prefix(['\'', '"'])?.strip_suffix(['\'', '"'])?;
+                Some(inner.to_owned())
+            });
+            let literal =
+                quoted.or_else(|| crate::indexes::constant_string_key(file, argument.span));
+            push_patch(
+                &root,
+                literal.as_deref().unwrap_or(ANY_MEMBER),
+                &mut patches,
+            );
+        } else if argument.exact_object_literal {
+            for key in &argument.property_names {
+                let key = file.source_text(*key).unwrap_or(ANY_MEMBER);
+                push_patch(&root, key.trim_matches(['\'', '"', '`']), &mut patches);
+            }
+        } else {
+            push_patch(&root, ANY_MEMBER, &mut patches);
+        }
+    }
+    patches
+}
+
+/// Whether a computed key is a symbol the global `Symbol` makes on the spot,
+/// which replaces no named member.
+fn symbol_key(file: &FileFacts, key: Span) -> bool {
+    let key = file.ast.peel_ts_sugar_span(key);
+    file.source_text(key)
+        .is_some_and(|text| text.starts_with("Symbol(") || text.starts_with("Symbol."))
+        && file
+            .ast
+            .reference_declaration(Span::new(key.start, key.start + 6))
+            .is_none()
+}
+
+fn constant_key(value: &typefacts::ConstantValue) -> Option<&str> {
+    (value.kind == typefacts::ConstantValueKind::String).then_some(value.string.as_ref())
+}
+
+/// The patches that replace the standard function `qualified_name` names: its
+/// member, any member of its owner, the global of its name, and the owner's
+/// global (`globalThis.Promise = P`). A global written under a key no fact
+/// reads may be any function or constructor, and reaches a method only through
+/// a value that constructor made: that is the last entry's limit, and
+/// docs/open-work.md's.
+pub(crate) fn patch_veto(qualified_name: &str) -> [Hazard; 5] {
+    let (owner, member) = qualified_name
+        .rsplit_once('.')
+        .unwrap_or(("", qualified_name));
+    let container = owner.strip_prefix("Readonly").unwrap_or(owner);
+    let container = if container == "PromiseLike" {
+        "Promise"
+    } else {
+        container
+    };
+    [
+        standard_patch(container, member),
+        standard_patch(container, ANY_MEMBER),
+        standard_patch("", member),
+        standard_patch(
+            "",
+            container.strip_suffix("Constructor").unwrap_or(container),
+        ),
+        if owner.is_empty() || owner.ends_with("Constructor") {
+            standard_patch("", ANY_MEMBER)
+        } else {
+            standard_patch(container, ANY_MEMBER)
+        },
+    ]
+}
+
+/// Whether a call's written type rests on an assertion nothing proves
+/// (ADR 0781): the value under it is no literal or `new` of the standard owner,
+/// and its own type is not that owner alone, or for a method of no container
+/// any one library type (`stops[0] as HTMLElement`, a downcast whose object is
+/// the library's). `(t as unknown as number[]).forEach(cb)` runs whatever `t`
+/// holds.
+pub(crate) fn unproven_assertion<'e>(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    qualified_name: &str,
+    entity_at: impl Fn(Span) -> Option<&'e typefacts::EntityFact>,
+) -> bool {
+    let Some(value) = file.asserted_call_value(callee) else {
+        return false;
+    };
+    let ast = &file.ast;
+    let owner = qualified_name
+        .rsplit_once('.')
+        .map_or("", |(owner, _)| owner);
+    let owner = owner.strip_prefix("Readonly").unwrap_or(owner);
+    let value = ast.peel_ts_sugar_span(value);
+    let member = qualified_name.rsplit('.').next().unwrap_or(qualified_name);
+    if (owner.is_empty()
+        && file.source_text(value) == Some(member)
+        && ast.reference_declaration(value).is_none())
+        || (owner == "Array"
+            && file
+                .source_text(value)
+                .is_some_and(|text| text.starts_with('[')))
+        || ast.call_at(value).is_some_and(|call| {
+            let constructor = ast.peel_ts_sugar_span(call.callee);
+            call.construct
+                && file.source_text(constructor) == Some(owner)
+                && ast.reference_declaration(constructor).is_none()
+        })
+    {
+        return false;
+    }
+    let Some(entity) = entity_at(value) else {
+        return true;
+    };
+    let container = STANDARD_CONTAINERS.contains(&owner) || owner == "PromiseLike";
+    !entity.library_types.as_deref().is_some_and(|types| {
+        !types
+            .iter()
+            .any(|name| name.as_ref() == typefacts::LIBRARY_TYPE_OTHER)
+            && (!container && !owner.is_empty() && !types.is_empty()
+                || types
+                    .iter()
+                    .any(|name| name.strip_prefix("Readonly").unwrap_or(name) == owner))
+    })
 }
 
 /// The container an `extends` names: the global, a `globalThis.` member of it,
@@ -867,7 +1092,15 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));
     }
-    for write in assignment_writes(file) {
+    let writes = assignment_writes(file);
+    let patches = standard_patches(view, &writes);
+    if !patches.is_empty() {
+        entries.push((Hazard::AnyStandardPatch, 0));
+    }
+    for (index, patch) in patches.into_iter().enumerate() {
+        entries.push((patch, ordinal(index)));
+    }
+    for write in writes {
         match write {
             AssignmentWrite::Name(..) => {}
             AssignmentWrite::UnownedPrototype => entries.push((Hazard::UnownedPrototypeWrite, 0)),

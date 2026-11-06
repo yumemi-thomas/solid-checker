@@ -12,7 +12,7 @@ describe("the arm inventory", () => {
   it("lists every tagged arm of the checker's role and owner sources once, defaults marked", () => {
     const arms = armInventory();
     expect(arms.size).toBeGreaterThan(100);
-    expect(arms.get("callee_roles.allowed-unplaced-nested")).toEqual({ default: true, file: "execution_role/callee_roles.rs" });
+    expect(arms.get("callee_roles.inheriting-tracked-root")).toEqual({ default: true, file: "execution_role/callee_roles.rs" });
     // ADR 0535: an assigned member answers Unknown now, a fact, not a default.
     expect(arms.get("callee_roles.assigned-member-function")).toEqual({ default: false, file: "execution_role/callee_roles.rs" });
     expect(arms.get("owner_emission.context-0")?.default).toBe(true);

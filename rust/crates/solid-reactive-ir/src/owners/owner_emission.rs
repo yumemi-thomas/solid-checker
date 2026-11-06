@@ -391,10 +391,13 @@ pub(super) fn emit_file(
                 emission.static_violations.push(crate::StaticViolation {
                     id: "SC4002".into(),
                     rule: "missing-context-provider".into(),
-                    message: "this read runs under an owner, and its context has no default; a \
-                              provider exists in the program, but none is proven above every \
-                              render of the function reading it, and Solid throws \
-                              `ContextNotFoundError` where none is"
+                    // ADR 0792: true of every open key. An open context may
+                    // have a default the syntax cannot rule out, or be only
+                    // exported or handed on, and an unknown key names none.
+                    message: "this read runs under an owner, and nothing proves a default for \
+                              its context or a provider above every render of the function \
+                              reading it; Solid throws `ContextNotFoundError` where a context \
+                              with no default has no provider above"
                         .into(),
                     hint: "Render a provider above every use of this component, or give the \
                            context a default."

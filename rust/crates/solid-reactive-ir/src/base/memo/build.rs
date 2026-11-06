@@ -605,6 +605,14 @@ fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
             }
         }
         digest.update([u8::from(entity.writable_optional_property)]);
+        // ADR 0781: what an assertion's operand is. Demanded at few spans.
+        if let Some(names) = entity.library_types.as_deref() {
+            digest.update(u64::try_from(names.len()).unwrap_or(u64::MAX).to_le_bytes());
+            for name in names {
+                digest.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+                digest.update(name.as_bytes());
+            }
+        }
     }
     digest.finalize().into()
 }
@@ -1724,13 +1732,23 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx.record_input(Input::File(self.id, Section::Source));
         self.ctx
             .record_input(Input::File(self.id, Section::Signatures));
-        // ADR 0683: as `SemanticLookup::resolved_callee_call`.
+        // ADR 0683, ADR 0781: as `SemanticLookup::resolved_callee_call`.
         let resolved = self.view.resolved_callee_call(callee)?;
-        let vetoed = crate::runtime_semantics::standard_call_name(resolved)
-            .and_then(|name| {
-                crate::base::contributions::subclass_veto(self.view.file, callee, name)
-            })
-            .is_some_and(|hazards| hazards.into_iter().any(|hazard| self.ctx.hazard(hazard)));
+        let Some(name) = crate::runtime_semantics::standard_call_name(resolved) else {
+            return Some(resolved);
+        };
+        let vetoed = crate::base::contributions::subclass_veto(self.view.file, callee, name)
+            .is_some_and(|hazards| hazards.into_iter().any(|hazard| self.ctx.hazard(hazard)))
+            || (self.ctx.hazard(crate::base::Hazard::AnyStandardPatch)
+                && crate::base::contributions::patch_veto(name)
+                    .into_iter()
+                    .any(|hazard| self.ctx.hazard(hazard)))
+            || crate::base::contributions::unproven_assertion(
+                self.view.file,
+                callee,
+                name,
+                |span| self.entity_at(span),
+            );
         (!vetoed).then_some(resolved)
     }
 

@@ -466,15 +466,43 @@ pub(crate) fn provided_above(
     reading: &solid_facts::ast::FunctionFact,
     key: &Location,
 ) -> bool {
-    function_provided(lookup, file, reading, key, PROVIDED_DEPTH)
+    function_provided(
+        lookup,
+        file,
+        reading,
+        key,
+        PROVIDED_DEPTH,
+        &mut rustc_hash::FxHashMap::default(),
+    )
 }
 
+/// One function, asked at one remaining depth, for one `key`.
+type ProvidedMemo = rustc_hash::FxHashMap<(String, Span, usize), bool>;
+
+/// Asks each function once per remaining depth: a function many sites reach
+/// costs one walk, not one per path, and the answer is the same (`walk_memo`).
 fn function_provided(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     key: &Location,
     depth: usize,
+    memo: &mut ProvidedMemo,
+) -> bool {
+    crate::walk_memo::memoized(
+        memo,
+        (file.path.to_string(), function.span, depth),
+        |memo| function_provided_once(lookup, file, function, key, depth, memo),
+    )
+}
+
+fn function_provided_once(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    key: &Location,
+    depth: usize,
+    memo: &mut ProvidedMemo,
 ) -> bool {
     let Some(depth) = depth.checked_sub(1) else {
         return false;
@@ -517,7 +545,7 @@ fn function_provided(
         && !sites.is_empty()
         && sites
             .iter()
-            .all(|(caller, site)| site_provided(lookup, caller, *site, key, depth))
+            .all(|(caller, site)| site_provided(lookup, caller, *site, key, depth, memo))
 }
 
 /// Whether the call or render at `site` runs under a provider of `key`.
@@ -527,6 +555,7 @@ fn site_provided(
     site: Span,
     key: &Location,
     depth: usize,
+    memo: &mut ProvidedMemo,
 ) -> bool {
     let ast = &file.ast;
     let layer = containing_ast_function(ast, site);
@@ -555,7 +584,7 @@ fn site_provided(
             return true;
         }
     }
-    layer.is_some_and(|layer| function_provided(lookup, file, layer, key, depth))
+    layer.is_some_and(|layer| function_provided(lookup, file, layer, key, depth, memo))
 }
 
 /// ADR 0713: the component `element` renders is a wrapper that returns, on

@@ -3,7 +3,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { DEFAULT_GRIDS, GRIDS, diskFilled, noRoom, parse, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces, unitProblems } from "./focus.mjs";
+import { DEFAULT_GRIDS, GRIDS, HOST_LIMIT, diskFilled, hostArgs, hostLimits, noRoom, parse, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces, unitProblems } from "./focus.mjs";
+
+describe("hostLimits", () => {
+  it("caps every pool by default, on any machine, and takes every core only when named", () => {
+    expect(hostLimits({}, 14)).toEqual(["--concurrency", String(HOST_LIMIT), "--workers", String(HOST_LIMIT), "--chrome-concurrency", String(HOST_LIMIT)]);
+    expect(hostLimits({}, 4)).toEqual(["--concurrency", "4", "--workers", "4", "--chrome-concurrency", "4"]);
+    expect(hostLimits({ allCores: true }, 14)).toEqual(["--all-cores"]);
+    expect(hostArgs()).not.toContain("--all-cores");
+    expect(parse(["--codes", "A", "--all-cores"]).allCores).toBe(true);
+    expect(parse(["--codes", "A"]).allCores).toBeUndefined();
+  });
+});
 
 describe("readGrid", () => {
   it("tallies the outcomes, flags what needs a look, and counts every difference from the oracle as behaviour", () => {

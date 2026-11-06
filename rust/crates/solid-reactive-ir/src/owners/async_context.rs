@@ -1445,7 +1445,7 @@ pub(crate) fn computation_provenance(
                     && u64::from(function.span.end) == fact.expression.end_byte
             })
         });
-    if closed && !may_throw_not_ready(lookup, file, function, 4) {
+    if closed && !may_throw_not_ready(lookup, file, function) {
         ComputationProvenance::Sync
     } else {
         ComputationProvenance::Open
@@ -1493,26 +1493,41 @@ fn solid_import_named(file: &solid_facts::FileFacts, name: &str, region: Span) -
         })
 }
 
+const NOT_READY_WALK_BUDGET: usize = 2048;
+
 /// A sync compute that throws `NotReadyError` is pending while it does, and no
 /// return type says so. Its own body, or a function it calls, names the export.
 /// A helper no exact call names is beyond this walk; a project that names the
-/// error in one is what the walk's four levels are for.
+/// error in one is what the walk is for.
 fn may_throw_not_ready(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
-    depth: usize,
 ) -> bool {
-    let names = solid_import_named(file, "NotReadyError", function.span);
-    if names || depth == 0 {
-        return names;
+    may_throw_not_ready_within(lookup, file, function, &mut HashSet::default())
+}
+
+/// Each function once: a cycle adds nothing, and past [`NOT_READY_WALK_BUDGET`]
+/// a call may reach anything.
+fn may_throw_not_ready_within(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    seen: &mut HashSet<(String, Span)>,
+) -> bool {
+    if !seen.insert((file.path.to_string(), function.span)) {
+        return false;
+    }
+    if seen.len() > NOT_READY_WALK_BUDGET
+        || solid_import_named(file, "NotReadyError", function.span)
+    {
+        return true;
     }
     file.ast.calls_within(function.span).any(|call| {
         lookup
             .function_called_at(file.path.as_str(), call.callee)
             .is_some_and(|(target, called)| {
-                called.span != function.span
-                    && may_throw_not_ready(lookup, target, called, depth - 1)
+                may_throw_not_ready_within(lookup, target, called, seen)
             })
     })
 }

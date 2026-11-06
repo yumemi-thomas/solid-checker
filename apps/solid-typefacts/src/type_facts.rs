@@ -937,11 +937,19 @@ pub fn library_types_at(
 ) -> Option<Vec<Arc<str>>> {
     let value = checker.get_type_at_location(node);
     let mut names: BTreeSet<String> = BTreeSet::new();
+    let mut other = false;
     for constituent in value.distributed() {
         collect_library_types(checker, program, constituent, &mut names, true);
+        other |= !constituent.flags().intersects(
+            TypeFlags::Undefined | TypeFlags::Null | TypeFlags::Void | TypeFlags::Intersection,
+        ) && library_type_name(program, constituent).is_none()
+            && !checker.is_array_or_tuple_type(constituent);
     }
     if names.is_empty() {
         return None;
+    }
+    if other {
+        names.insert(typefacts::LIBRARY_TYPE_OTHER.to_owned());
     }
     Some(names.into_iter().map(Arc::from).collect())
 }

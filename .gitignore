@@ -825,6 +825,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/**
 !fixtures/reactive-ir/flush-write-path/node_modules/
 !fixtures/reactive-ir/flush-write-path/node_modules/**
+!fixtures/reactive-ir/walk-bounds/node_modules/
+!fixtures/reactive-ir/walk-bounds/node_modules/**
+!fixtures/reactive-ir/dynamic-entry-limit/node_modules/
+!fixtures/reactive-ir/dynamic-entry-limit/node_modules/**
+!fixtures/reactive-ir/cleanup-no-disposer/node_modules/
+!fixtures/reactive-ir/cleanup-no-disposer/node_modules/**
 !fixtures/reactive-ir/write-past-possible-await/node_modules/
 !fixtures/reactive-ir/write-past-possible-await/node_modules/**
 !fixtures/reactive-ir/write-past-layered-await/node_modules/
@@ -1051,6 +1057,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-parameter-flow/node_modules/**
 !fixtures/reactive-ir/store-element-flow/node_modules/
 !fixtures/reactive-ir/store-element-flow/node_modules/**
+!fixtures/reactive-ir/store-sub-value-flow/node_modules/
+!fixtures/reactive-ir/store-sub-value-flow/node_modules/**
 !fixtures/reactive-ir/absent-guard-prop/node_modules/
 !fixtures/reactive-ir/absent-guard-prop/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/
@@ -1077,3 +1085,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/boundary-accessors/node_modules/**
 !fixtures/reactive-ir/control-flow-denied-handler/node_modules/
 !fixtures/reactive-ir/control-flow-denied-handler/node_modules/**
+!fixtures/reactive-ir/lying-assertion/node_modules/
+!fixtures/reactive-ir/lying-assertion/node_modules/**
+!fixtures/reactive-ir/standard-patches/node_modules/
+!fixtures/reactive-ir/standard-patches/node_modules/**

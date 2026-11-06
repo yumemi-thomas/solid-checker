@@ -152,6 +152,26 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
+      "start": 403,
+      "end": 424,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
+      "start": 412,
+      "end": 419,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",

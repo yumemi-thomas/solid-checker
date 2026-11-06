@@ -121,6 +121,7 @@ export function configFrom(options, out) {
     typefacts: options.typefacts ? resolve(options.typefacts) : process.env.SOLID_TYPEFACTS_BIN,
     tsc: resolveTsc(options.tsc),
     casesDir: join(out, "cases"),
+    allCores: Boolean(options.allCores),
     concurrency: options.concurrency ?? defaultParallelism(undefined, { allCores: options.allCores }),
     workers: options.workers ?? defaultWorkers(undefined, { virtualClock: !options.realClock }),
     keepWork: Boolean(options.keepWork),

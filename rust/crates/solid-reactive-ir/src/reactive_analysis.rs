@@ -212,6 +212,7 @@ pub(crate) fn collect_project<'facts>(
     // at the same byte suppressed one another, and which survived depended on
     // push order. `push_defect` therefore derives the identity from the defect
     // kind's family and never from the vector it arrived in.
+    let mut summaries = crate::interproc::completeness::SummaryMemo::default();
     // ADR 0509: a call transport resolves exactly drops the obligation its
     // type alone, or its caller-supplied receiver, gave it.
     // A transported async source keeps it: where its read runs (a leaf
@@ -224,7 +225,7 @@ pub(crate) fn collect_project<'facts>(
                 target,
                 crate::interproc::accessor_provenance::Callable::Accessor(symbol)
                     if source.async_sources.contains(symbol)
-            ) && target_summary_complete(ctx, target)
+            ) && target_summary_complete(ctx, target, &mut summaries)
         })
         .map(|(callee, _)| callee)
         .chain(interprocedural.write_call_targets.keys())
@@ -305,7 +306,7 @@ pub(crate) fn collect_project<'facts>(
             matches!(
                 target,
                 crate::interproc::accessor_provenance::Callable::ArrayMembers(_)
-            ) && !target_summary_complete(ctx, target)
+            ) && !target_summary_complete(ctx, target, &mut summaries)
         })
         .map(|(callee, _)| callee)
         .collect::<Vec<_>>();
@@ -690,21 +691,16 @@ pub(crate) fn collect_project<'facts>(
 fn target_summary_complete(
     ctx: &AnalysisContext<'_>,
     target: &crate::interproc::accessor_provenance::Callable,
+    summaries: &mut crate::interproc::completeness::SummaryMemo,
 ) -> bool {
     use crate::interproc::accessor_provenance::Callable;
-    let complete = |path: &str, span: solid_facts::core::Span| {
+    let mut complete = |path: &str, span: solid_facts::core::Span| {
         analyzed_file(ctx, path).is_some_and(|file| {
             file.ast
                 .functions
                 .iter()
                 .find(|function| function.span == span)
-                .is_some_and(|function| {
-                    crate::interproc::completeness::summary_complete(
-                        file,
-                        function,
-                        ctx.semantic_lookup,
-                    )
-                })
+                .is_some_and(|function| summaries.complete(file, function, ctx.semantic_lookup))
         })
     };
     match target {

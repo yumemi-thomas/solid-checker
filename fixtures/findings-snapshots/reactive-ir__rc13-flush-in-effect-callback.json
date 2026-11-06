@@ -392,6 +392,16 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 9034,
+      "end": 9039,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",

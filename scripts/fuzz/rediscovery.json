@@ -2434,7 +2434,7 @@
   "finding": "the flush veto missed a flush() in a parameter default: the census took it for module evaluation, and an apply's write rc.17 rejects stayed certified clean (ADR 0613)",
   "found": "review of the stack, probed on rc.17",
   "fixed": "ADR 0613",
-  "outside": "the generator writes no flush in a parameter default; fixture flush-veto-default holds it"
+  "outside": "not generated. A FLIP_READ_VARIANTS text variant could write `const g = (x = flush()) => x; g();` beside an apply's write (misuse.mjs gives any listed code the variant's text), but the build before ADR 0613 (ae9f51456^) needs its own producer: apps/solid-typefacts changed since, so no old build was run. Fixture flush-veto-default holds it"
  },
  {
   "finding": "a write or an action call in a closure nested in an onSettled callback a root's flush() drains was certified legal: the leaf exemption answered for the layer (ADR 0613)",
@@ -3716,19 +3716,19 @@
   "finding": "SC5003 claimed a violation on a read whose first run is outside render(): a later mount of a pending source is quiet (ADR 0661)",
   "found": "the flip audit, async.md",
   "fixed": "ADR 0661",
-  "outside": "ASYNC_OUTSIDE_LOADING_BOUNDARY is in SPEC but not MISUSE_CODES, so it has no cells. scripts/flip/witnesses.json holds e02, fixture rc21-root-pass each branch"
+  "outside": "the legal twins exist since 3ffbc91b5 (flip-read.mjs FLIP_READ_LEGAL ASYNC_OUTSIDE_LOADING_BOUNDARY: show-false-later, ternary-later, and-later, dyn-jsx-later) and do not rediscover it: the build before (79b99b4fb^, 53089dcf1) gives no violation on any of their 1,512 lean programs (1,052 uncertifiable, 460 clean; sc VM, R3b). scripts/flip/witnesses.json holds e02, fixture rc21-root-pass each branch"
  },
  {
   "finding": "`<Dynamic component={K}>` read as a windowed mount: SC5001 violation where Chrome retries and renders; an alias too; a mixed mount would go silent (ADR 0662)",
   "found": "the flip audit, async.md",
   "fixed": "ADR 0662",
-  "outside": "`<Dynamic>` is not a mount in mounts.mjs: the grids generate `dynamic()` only. scripts/flip/witnesses.json holds p-dyn, and the note's m1 matrix, 76 programs in Chrome, was run against this build; fixture rc21-dynamic-mount each branch"
+  "outside": "`<Dynamic>` is not a mounts.mjs mount, but flip-read.mjs holder contexts write `<Dynamic component={K}>` (dyn-jsx-body, dyn-jsx-mixed, dyn-jsx-body-l, dyn-fn-body-l, portal-dyn); ADR 0662's false-clean entry holds that half's ids. The false-positive half does not rediscover: the build before (343bc76bb^, 79b99b4fb) is uncertifiable on all 756 lean PENDING_ASYNC_UNTRACKED_READ legal programs of dyn-jsx-body-l and dyn-fn-body-l, no violation (sc VM, R3b). scripts/flip/witnesses.json holds p-dyn, and the note's m1 matrix, 76 programs in Chrome, was run against this build; fixture rc21-dynamic-mount each branch"
  },
  {
   "finding": "`<Dynamic>` false positives from the audits: api/d04, d17, s03, x01, census/g02, types/c05, e421, g03 (T-D3, C-D1, ADR 0662)",
   "found": "the type and API audits",
   "fixed": "ADR 0662",
-  "outside": "as the `<Dynamic>` entry above: not a mount in mounts.mjs. The 8 programs stay in scripts/fuzz/patterns/ and pass there"
+  "outside": "the 8 programs stay in scripts/fuzz/patterns/ and pass there. flip-read.mjs's `<Dynamic>` contexts write the mount, but no context writes g02's and c05's `component={on() ? A : B}`, x01's exported holder or g03 (no `<Dynamic>`), and the generated dyn-jsx-body-l and dyn-fn-body-l programs do not fail on the build before (the `<Dynamic>` entry above)"
  },
  {
   "finding": "a member's type answered for its receiver's symbol, so `api.go` beside `api.state()` read as read-only and a setter called in a memo certified (ADR 0663)",
@@ -3740,7 +3740,7 @@
   "finding": "`clientOnly` and `lazy` with a server pass read as a windowed mount: SC1001 and SC5001 violations where the first mount is quiet: api/d05, d19, census/b03, j16 (ADR 0664)",
   "found": "the flip audit, async.md, and the SSR audit's D7",
   "fixed": "ADR 0664",
-  "outside": "`clientOnly` needs a second module, and a generated program is one file with no `import()`. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Host witnesses co-read, lz-pending; fixture rc21-deferred-mount holds each branch"
+  "outside": "`clientOnly` and `lazy` with a server pass need a dynamic `import()`, which no generator writes (print.mjs, misuse.mjs, flip-read.mjs, flip-write.mjs); programs do have other modules, helpers.ts and a barrel lib.ts. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Host witnesses co-read, lz-pending; fixture rc21-deferred-mount holds each branch"
  },
  {
   "finding": "a source whose compute returns `any`, or throws `NotReadyError`, read as a settled signal: SC5003 silent and SC1001 the wrong rule, api/n01, n03, n06, census/f01 (C-D4, ADR 0665)",
@@ -3772,7 +3772,7 @@
   "finding": "a `lazy` tag with no boundary certified: census/b04, j14, j15, types/d32 (ADR 0666)",
   "found": "async.md step 7",
   "fixed": "ADR 0666",
-  "outside": "`lazy` needs a component value the generator's `stmts` cannot hold as a site: the site is the tag. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Fixture rc21-open-provenance"
+  "outside": "not generated. A flip-read.mjs holder form with a `prelude` (as dyn-fn-body-l) could declare `const L = lazy(() => Promise.resolve({ default: K }))` and mount `<L />`; none is written, and where the judge places the placeless warning is unmeasured. The 4 programs stay in scripts/fuzz/patterns/ and pass there; `make fuzz-patterns` failed on each before this. Fixture rc21-open-provenance"
  },
  {
   "finding": "a pending read in an object method certified: j06 (ADR 0667)",
@@ -3784,7 +3784,7 @@
   "finding": "a `Loading` anywhere in a component read as cover: its own tag at the caller, and a read beside it (ADR 0668)",
   "found": "writing the fixture for ADR 0666",
   "fixed": "ADR 0668",
-  "outside": "the grids' views have one mount and no sibling `Loading`. A generator context would need a second site. Fixture rc21-open-provenance holds both"
+  "outside": "a read beside a sibling `<Loading>` is what misuse.mjs's loading-on-outside context writes, but those programs judge LOADING_ON_OUTSIDE_HOLD, not this read, and were not run on the build before (3ffbc91b5^). A component's own tag under a `Loading` in its body has no context. Fixture rc21-open-provenance holds both"
  },
  {
   "finding": "a `.then` handler handed by name certified: SC1002 c08 (ADR 0669)",
@@ -3801,7 +3801,7 @@
   "finding": "a parameter called after an await certified: SC1002 c12 (ADR 0669)",
   "found": "the flip audit",
   "fixed": "ADR 0669",
-  "outside": "a context wraps statements, so the site cannot itself be the parameter's call. Witness SC1002/c12-param and fixture rc21-after-await-handed hold it"
+  "outside": "tried (R3b): a FLIP_READ_VARIANTS text variant of UNTRACKED_READ_AFTER_AWAIT in memo-async and effect-async, `const run = async (f) => { await Promise.resolve(); return f(); }; void run(r);`, is not-fired: Chrome is silent on 36 of 36, on the build before ADR 0669 (8f24d0154^) and now. The witness's form, a sync memo returning the helper's promise under `<Loading>`, has no context. Witness SC1002/c12-param and fixture rc21-after-await-handed hold it"
  },
  {
   "finding": "a store destructure in an apply, a plain `ref` or an action certified; found by the grid at ADR 0665, unlisted (ADR 0670)",
@@ -3819,7 +3819,9 @@
   "finding": "SC8014 and SC8015 certified a governing expression that may read, or a receiver typed any (ADR 0671)",
   "found": "scripts/flip/witnesses.json, i03 i05 d04 d05 i08 d02 d03",
   "fixed": "ADR 0671",
-  "outside": "a preference has no runtime truth, so no grid judges it; the cases are in fixtures/ownership-cases/cases.json",
+  "outside": "a preference has no runtime truth, so no grid judges it; the cases are in fixtures/ownership-cases/cases.json"
+ },
+ {
   "finding": "valid-use-server (SC7006) certified a function-level server function that captures a binding an enclosing function declares, a compile error on both builds (SSR audit D12, scripts/flip/notes/ssr/report.md; ADR 0706)",
   "found": "the SSR premise audit (d01, d02, d24, d25), rerun here with @solidjs/compiler@2.0.0-rc.21 transformDirectives on twelve shapes",
   "fixed": "ADR 0706",
@@ -3862,19 +3864,19 @@
   "finding": "SC3001 named a createOwner no source holds at two corpus sites (solid-three storePath, an export rc.21 solid-js lacks; inferay recordUiTimings, imports from a missing build directory): the producer's symbol at the callee was taken as the primitive's identity (ADR 0711)",
   "found": "flip plan's SC3001 row (corpus, rc.21, --runtime-target browser)",
   "fixed": "ADR 0711",
-  "outside": "the generator imports every primitive by its own name from solid-js and never writes a missing export or module, and the producer misattribution was not reproduced outside those two projects; the corpus sweep shows both sites uncertifiable"
+  "outside": "the generator imports every primitive by its own name from solid-js and never writes a missing export or module. The misattribution is not limited to these two projects: research-sc9012.md section 1 counts 77 SC9012 `primitive-value` rows naming a primitive at a generated `styled-system/css` call (hoxxes-briefing 71, inferay 4, spookysoftware-www 2), all uncertifiable, not rerun here; the corpus sweep shows both sites uncertifiable"
  },
  {
   "finding": "a plain helper only a getter, toString, iterator, tag, field or Map slot runs certified a read Chrome warns on (ADR 0673)",
   "found": "scripts/flip/notes/sc1001.md, programs u01 u03-u07 u14 u15",
   "fixed": "ADR 0673",
-  "outside": "a context can only wrap statements in the component, where a helper already has a row: the old build passes those. The module-level programs are scripts/fuzz/patterns/values/hidden-helper-*, and the old build fails all 6 as NEW false-clean"
+  "outside": "not generated: a flip-read context can hoist a module-level declaration (`hoisted`, as mount-named) and the recall axis has a module-helper layer, but no context writes a getter, toString, iterator, tag, field or Map slot that runs a helper. The module-level programs are scripts/fuzz/patterns/values/hidden-helper-*, and the old build fails all 6 as NEW false-clean"
  },
  {
   "finding": "a read in a tag function certified; f05-tagged, open since the census (ADR 0673)",
   "found": "scripts/fuzz/patterns/types/f05-tagged",
   "fixed": "ADR 0673",
-  "outside": "a tag at module level, which a context cannot write; the program stays in the pattern lane, which fails on it if it regresses"
+  "outside": "not generated: a hoisted context could hold a module-level tag function, but none writes one; the program stays in the pattern lane, which fails on it if it regresses"
  },
  {
   "finding": "SC2009: an async optimistic setter handed to a component as a prop value (`<K s={setO} />`, K calling `props.s(2)` from a handler) threw OPTIMISTIC_WRITE_BEFORE_LOAD in Chrome and certified (flip witness SC2009 a04; ADR 0712)",
@@ -3898,19 +3900,19 @@
   "finding": "a read whose walk out to a hidden caller stopped short certified, Chrome warns: a generator's body, a parameter default, a read after an await on some paths (ADR 0674)",
   "found": "owner's note on ADR 0673's depth bound: probes in the walk found the stops, none past the depth itself",
   "fixed": "ADR 0674",
-  "outside": "module-level helpers, which a context cannot write: patterns values/hidden-generator, hidden-generator-held, hidden-may-await, hidden-param-default; the build at 9af0edf84 fails all 4 as NEW false-clean, the fix passes"
+  "outside": "not generated: each needs a module-level helper reached only through a generator's body, a parameter default or a path after an await, which a hoisted context could hold but none writes: patterns values/hidden-generator, hidden-generator-held, hidden-may-await, hidden-param-default; the build at 9af0edf84 fails all 4 as NEW false-clean, the fix passes"
  },
  {
   "finding": "a helper handed on by reference in a member only a coercion runs, or a helper from another file, certified: `h.call(null)`, `h.apply(null)`, `[1].map(h)`, `[1].reduce(h, 0)`, a `const` copy, a tag (ADR 0674)",
   "found": "the cross-file gap ADR 0673 left: same file and across files both certified",
   "fixed": "ADR 0674",
-  "outside": "needs a second file or a module-level helper: patterns values/hidden-call, hidden-apply, hidden-handed, hidden-reduce, foreign-alias, foreign-call, foreign-handed, foreign-tag; the build at 9af0edf84 fails all 8 as NEW false-clean, the fix passes"
+  "outside": "blocked (R3b, 2026-11-06): helpers.ts and the hoisted contexts can hold the helper, but the generated hand-off in tracked JSX (`[1].map(h)`) is a live false clean, open-defects.json's g2d named hand-off: `handed_role` gets no row there (local_access.rs, not R3's file). Patterns values/hidden-call, hidden-apply, hidden-handed, hidden-reduce, foreign-alias, foreign-call, foreign-handed, foreign-tag; the build at 9af0edf84 fails all 8 as NEW false-clean, the fix passes"
  },
  {
   "finding": "`[1].map(h)` in a component body, with a module-level `h` that reads an accessor, certified and Chrome warns (ADR 0674)",
   "found": "probe s-map-body while testing the cross-file gap",
   "fixed": "ADR 0674, a proved violation: the carrier provably runs",
-  "outside": "a module-level function, which a context cannot write: pattern values/handed-map-body; the build at 9af0edf84 fails it as NEW false-clean, the fix passes"
+  "outside": "blocked (R3b, 2026-11-06): the module-helper layer and the hoisted contexts can write a module-level `h`, but its tracked-JSX twin is the live g2d false clean in open-defects.json, which needs local_access.rs's handed_role (not R3's file). Pattern values/handed-map-body; the build at 9af0edf84 fails it as NEW false-clean, the fix passes"
  },
  {
   "finding": "the pattern lane called a read SC1001 reports with the no-window hint a false positive: the checker says the runtime does not warn, the program stays quiet in Chrome, and `judgePattern` never read the hint. 24 entries: a read in a mapArray/repeat run, a `<Dynamic>` mount, a no-name window",
@@ -3928,7 +3930,13 @@
   "finding": "a read in a setter's callback or a `reconcile` key: certified in an apply though Chrome warns (r11, r18, r19, z01, z09, z10), a V for a key that never ran (r13) or ran on a timer (r15), and a store's own Gets read as reads (ADR 0676)",
   "found": "sc1001.md steps 6 and 7",
   "fixed": "ADR 0676",
-  "outside": "the setter must be a destructured tuple slot, which a context cannot write: patterns values/setter-fn-apply, setter-signal-apply, setter-signal-own, setter-key-apply, setter-key-draft-apply, setter-other-store fail as NEW false-clean on the build before, setter-key-timer-q, setter-key-held-q as NEW false-positive; setter-own-store-q, setter-own-alias-q, setter-draft-q, setter-fn-timer-q, setter-tracked-store-q, setter-tracked-signal-q pin the quiet twins"
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-setter-fn-apply-direct-none",
+   "mx-strict-read-untracked-effect-apply-setter-fn-apply-alias-none"
+  ],
+  "rediscovered": "flip-read.mjs setter-fn-apply (a module store's setter, `setSw2((d) => { d.n = r(); })`, in an effect's apply): the build before (a92553232^, e918518de) false-clean on 18 of 18, c11f67588 agree on the 12 direct and alias programs, Chrome confirming each; sc VM. The 6 wrapper programs are false-clean on both builds and held in open-defects.json. Patterns values/setter-signal-apply, setter-signal-own, setter-key-apply, setter-key-draft-apply, setter-other-store fail as NEW false-clean on the build before, setter-key-timer-q, setter-key-held-q as NEW false-positive; setter-own-store-q, setter-own-alias-q, setter-draft-q, setter-fn-timer-q, setter-tracked-store-q, setter-tracked-signal-q pin the quiet twins"
  },
  {
   "finding": "SC4001: a hook called under the component owner and in a module-scope branch nothing takes was a proven violation: the module edge carried the unowned proof whether or not its call runs; Chrome (rc.21) is quiet, the only run is owned (flip research probe k-module-dead-branch; ADR 0714)",
@@ -4041,13 +4049,25 @@
   "finding": "SC2003: a store member as a `for … of`/`for … in` head target (`for (s.a of [2])`) was never asked (no_direct_mutation walked assignments only) and certified; Chrome (rc.21) warns STORE_WRITE_OUTSIDE_SETTER when the loop iterates (flip witnesses SC2003 c02, c03, j01, j02; ADR 0716)",
   "found": "flip plan SC2003 row; values/d6-for-of-target",
   "fixed": "ADR 0716",
-  "outside": "a recall context places the site and cannot respell it as a loop head: the spelling of the write is a SPEC variant in misuse.mjs, outside this track's file. fuzz-patterns: values/d6-for-of-target left open-defects.json at ADR 0716; the witnesses and fixture store-for-head-write pin the rest"
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-loop-head-direct-none",
+   "mx-store-write-outside-setter-timer-sw-loop-head-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs sw-loop-head, `for (st.v of [2]) { }`: the build before ADR 0716 (1232c2f2c^, 1dd911b95) false-clean on 36 of 36 (handler, timer), c11f67588 agree on 36; same id set in the sc VM, three builds; Chrome confirmed each direct-none program on the old build. values/d6-for-of-target, the witnesses and fixture store-for-head-write pin the rest"
  },
  {
   "finding": "SC2003: Object.assign called through a const alias on a store (`const as = Object.assign; as(s, { a: 2 })`) certified: the standard-library write needed a member callee before asking the declaration (flip witness SC2003 j04; ADR 0717)",
   "found": "flip plan SC2003 row",
   "fixed": "ADR 0717",
-  "outside": "a recall context places the site and cannot respell the write as an aliased call: the spelling is a SPEC variant in misuse.mjs, outside this track's file; the witness and fixture store-standard-library-alias pin it"
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-assign-alias-direct-none",
+   "mx-store-write-outside-setter-timer-sw-assign-alias-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs sw-assign-alias, `const as = Object.assign; as(st, { v: 2 })`: the build before ADR 0716 (1232c2f2c^, 1dd911b95) false-clean on 36 of 36, c11f67588 agree on 36; same id set in the sc VM, three builds; Chrome confirmed each direct-none program on the old build. The witness and fixture store-standard-library-alias pin it"
  },
  {
   "finding": "SC2003: a store operation that writes nothing on its run (`??=`/`&&=` the store's literal fails, `Object.assign` of null, an empty or inherited source, `sort`/`reverse`/`fill`/`copyWithin` on a short array or empty range) was a violation; Chrome (rc.21) is silent with no [[Set]] (V-D1; ADR 0718)",
@@ -4066,7 +4086,13 @@
   "finding": "a store handed to `Array.prototype.sort.call`, which resolves to `Function.call`: certified, Chrome warns (d1n)",
   "found": "Track W's SC2003 step 2, open defect values/d1n-array-proto-call",
   "fixed": "ADR 0688",
-  "outside": "not tried in a generator: W's write shapes are in flip-write.mjs, outside this track's file. Pattern values/d1n-array-proto-call was a listed false clean until this commit"
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-net-sort-call-direct-none",
+   "mx-store-write-outside-setter-handler-net-sort-call-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs net-sort-call, `Array.prototype.sort.call(st.items, (x, y) => y - x)` on `[1, 2]`: the build before ADR 0716 (1232c2f2c^, 1dd911b95), which predates ADR 0688 (merge 66684ac14), false-clean on 36 of 36 (body, handler); 80db411e5 and c11f67588 recall-gap on 36: uncertifiable, function-call-target-unresolved, not proved; same id set in the sc VM, three builds; Chrome confirmed each direct-none program on the old build. Pattern values/d1n-array-proto-call was a listed false clean until ADR 0688"
  },
  {
   "finding": "the 72 of pos-flush-fn under a dynamic-only body: SC1001 with the no-window hint is a claim of silence Chrome bears out, yet 60 read as wrong-rule and 12 as false positives. Same checker under older judges: none before 7e9b9d5ee (ADR 0641, beside), 72 wrong-rule from it, 60 + 12 from 5b8a1d7b5",
@@ -4079,17 +4105,34 @@
    "mx-store-write-outside-setter-pos-flush-fn-nested-assign-direct-none-m-dynamic",
    "mx-store-write-outside-setter-pos-flush-fn-nested-push-wrapper-none-m-dynamic"
   ],
-  "rediscovered": "same 607,719 ids before and after, on rm5: exactly these 72 moved, to agree, nothing else; the 12 went false-positive to wrong-rule on the counter alone, then all 72 to agree on the matrix line, and base gives the same rows. A judge artifact, so no old checker build fails: the old judge does, on any build",
+  "rediscovered": "same 607,719 ids before and after, on rm5: exactly these 72 moved, to agree, nothing else; the 12 went false-positive to wrong-rule on the counter alone, then all 72 to agree on the matrix line, and base gives the same rows. A judge artifact, so no old checker build fails: the old judge does, on any build"
+ },
+ {
   "finding": "SC2003: a store handed to a project function's parameter (`bump(st)`, `w(s.o)`) or to a callback's parameter by a project higher-order function (`each = (f) => f(s.l)`) and written there certified: a write through a parameter asked nothing of its callers (flip witnesses SC2003 c04, j05, j06; ADR 0719)",
   "found": "flip plan SC2003 row; fuzz-patterns values/d2-handler-link, d2-handler-root, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper",
   "fixed": "ADR 0719",
-  "outside": "model.mjs names a function's parameters positionally (`p0`) and STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name, so no flip-write.mjs context can hand the store to a parameter the site writes through (a parameter named like the store needs model.mjs, outside this track's file). fuzz-patterns: values/d2-handler-link, d2-handler-root, d2n-foreach-write, d2n-map-write, d2n-root-array-foreach, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper left open-defects.json at ADR 0719; the witnesses and fixture store-parameter-flow pin the rest"
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-param-plain-direct-none",
+   "mx-store-write-outside-setter-timer-sw-param-plain-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs sw-param-plain, `const w = (x) => { x.v = 7; }; w(st.a)`: the build before ADR 0716 (1232c2f2c^, 1dd911b95) false-clean on 36 of 36, 80db411e5 and c11f67588 recall-gap on 36 (uncertifiable, unproven-container-root); same id set in the sc VM, three builds; Chrome confirmed each direct-none program on the old build. fuzz-patterns values/d2-handler-link, d2-handler-root, d2n-foreach-write, d2n-map-write, d2n-root-array-foreach, t6-context-store-helper, t6-hook-store-helper, t6-prop-store-helper left open-defects.json at ADR 0719; the witnesses and fixture store-parameter-flow pin the rest"
  },
  {
   "finding": "SC2003: a store value reached the write through a call's result or a loop's element and certified: an identity function (`id(st).n = 5`), a `createMemo` compute, `find`, `for…of`, `filter`/`Object.values` copies, `For` rows (ADR 0720)",
   "found": "fuzz-patterns values/d2-identity-return, d2n-find-var-write, d2n-find-write, d2n-for-jsx-row-write, d2n-forof-write, d2n-memo-filter-write, d2n-memo-of-store-write, d2n-object-values-write, d2n-root-array-forof, t2-for-row-root-array, t2-for-row-write, t6-for-row-helper",
   "fixed": "ADR 0720",
-  "outside": "STORE_WRITE_OUTSIDE_SETTER's site text is built from the store's own name (`st.x = …`), and a flip-write.mjs context places the site without respelling it, so no context can root the write at a call's result or a loop element. The 12 fuzz-patterns entries left open-defects.json at ADR 0720; fixture store-element-flow pins the rest"
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-identity-direct-none",
+   "mx-store-write-outside-setter-handler-sw-find-direct-none",
+   "mx-store-write-outside-setter-handler-sw-for-of-direct-none",
+   "mx-store-write-outside-setter-handler-sw-filter-direct-none",
+   "mx-store-write-outside-setter-handler-sw-values-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs sw-identity (`id(st).v = 7`), sw-find, sw-for-of, sw-filter, sw-values (each over `[st.a]` or `{ k: st.a }`): the build before ADR 0716 (1232c2f2c^, 1dd911b95) false-clean on 180 of 180 (handler, timer); 80db411e5 and c11f67588 agree on sw-identity's 36 (a proved violation) and recall-gap on the other 144 (uncertifiable, unproven-container-root); same id set in the sc VM, three builds; Chrome confirmed each direct-none program on the old build. The 12 fuzz-patterns entries left open-defects.json at ADR 0720; fixture store-element-flow pins the rest"
  },
  {
   "finding": "owner ruling, ADR 0696: c16 and c16-spread-unread-key-L were listed false positives. The read is true and Chrome warns PENDING_ASYNC_UNTRACKED_READ, so no-destructure stands beside that code",
@@ -4346,6 +4389,118 @@
   "rediscovered": "focus on STORE_WRITE_OUTSIDE_SETTER, mx-recall, pos-flush-fn, rt4 against rt7, by id: 2,514 programs, 72 finding sets moved, 60 one SC1001 row and 12 two, V to U, SC2003 V on all 72, 0 outcomes moved. No old build fails: the judge rates a claim Chrome shows silent as agree on both builds, and the owner said not to change it. The moved findings are the check. Pattern programs returns/flush-dyn-path-get and returns/flush-dyn-real-read keep both shapes in the smoke set; fixture flush-write-path pins each answer"
  },
  {
+  "finding": "SC1002: report_helper_reads stopped at 3 helpers and returned, so a read 5 or 13 helpers below an await in a loop, a for await or a named then handler certified; Chrome reports UNTRACKED_READ_AFTER_AWAIT",
+  "found": "the chain-N shapes added for ADR 0695, 2026-11-06",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-memo-async-loop-x-direct-chain-5",
+   "mx-untracked-read-after-await-memo-async-loop-x-wrapper-chain-13",
+   "mx-untracked-read-after-await-then-named-x-direct-chain-5"
+  ],
+  "rediscovered": "focus on the chain and forward layers, 4 codes, 3,068 programs: rt9 exit 1, 70 false cleans; rb7 exit 0, 0 false cleans: by id all 70 are SC1002 uncertifiable, recall-gap, 0 proved"
+ },
+ {
+  "finding": "A callback helpers hand on and an effect phase or a read below it: no row placed it. The forward-N shapes read as certified or as a recall gap on the old build, with no finding at the site (ADR 0695)",
+  "found": "the bounds audit's forwarded-callback probes",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-signal-direct-forward-2"
+  ],
+  "rediscovered": "same run, by id: 588 finding sets moved from none to uncertifiable across STRICT_READ_UNTRACKED, PRIMITIVE_IN_EFFECT_CALLBACK and FLUSH_IN_EFFECT_CALLBACK at forward-2 and forward-13. The judge's outcome does not move: a recall gap on both builds, so the moved findings are the check"
+ },
+ {
+  "finding": "A read in a cleanup: allowed-unplaced-nested was a silent default, certified where Chrome warns (the 27 P2 patterns; b1 render's dispose, b2 another file, b3 a called handle, b4 a helper under createRoot)",
+  "found": "research-patterns.md P2, 2026-11-06",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-signal-direct-forward-2"
+  ],
+  "rediscovered": "fuzz-patterns, private run on rb6: rt9 fails all 27 as listed, the new build closes all 27, 0 new; open list 133 false cleans to 106. A grid generates no project disposer beside a cleanup read, so the shape stays in the pattern lane: types/a01-body and 26 others"
+ },
+ {
+  "finding": "The same forwarded callback under FLUSH_IN_EFFECT_CALLBACK (ADR 0695)",
+  "found": "the bounds audit's forwarded-callback probes",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-effect-apply-x-direct-forward-2"
+  ],
+  "rediscovered": "the forward-N rows of the entry above: from no finding to uncertifiable, a recall gap on both builds, so the moved findings are the check"
+ },
+ {
+  "finding": "The same forwarded callback under PRIMITIVE_IN_EFFECT_CALLBACK (ADR 0695)",
+  "found": "the bounds audit's forwarded-callback probes",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-effect-apply-memo-direct-forward-2"
+  ],
+  "rediscovered": "the forward-N rows of the entry above: from no finding to uncertifiable, a recall gap on both builds, so the moved findings are the check"
+ },
+ {
+  "finding": "A lying cast on a standard method: `(t as unknown as Promise<void>).then(fn)` resolved to Promise.then from the written type, on the spot, through `as any`, or held by a binding: a write in fn certified, Chrome warns (d01-cast, d07, x30)",
+  "found": "T-D4, patterns report P3",
+  "fixed": "ADR 0781",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-cast-then-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-then-store-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-then-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-any-then-signal-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on 9 of the 24 direct-none cast programs, the fix 0: agree or recall-gap"
+ },
+ {
+  "finding": "A patched global or prototype: `window.setTimeout =`, `(globalThis as any).setTimeout =`, defineProperty on globalThis, `Promise.prototype.then =`, through an alias: a write in the callback certified, Chrome warns (e107, e108). ADR 0683 had called this a premise",
+  "found": "T-other, patterns report P4",
+  "fixed": "ADR 0781",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-patch-global-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-global-store-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-global-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-window-signal-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on 15 of the 30 direct-none patch programs, the fix recall-gap on all"
+ },
+ {
+  "finding": "The same casts and patches around a read: certified, Chrome warns",
+  "found": "the fuzzer, this slice's own shapes",
+  "fixed": "ADR 0781",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-cast-then-signal-direct-none",
+   "mx-strict-read-untracked-cast-then-memo-direct-none",
+   "mx-strict-read-untracked-patch-global-signal-direct-none",
+   "mx-strict-read-untracked-patch-global-memo-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on 24 programs, the fix recall-gap"
+ },
+ {
+  "finding": "The lying cast the other way: `(t as unknown as number[]).forEach(cb)` with a `t` that defers, SC1001 and SC2001 V, Chrome quiet (F3, s1-then-cast-array)",
+  "found": "patterns report F3",
+  "fixed": "ADR 0781",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-cast-late-foreach-signal-wrapper-none",
+   "lg-strict-read-untracked-cast-late-foreach-signal-hook-none",
+   "lg-strict-read-untracked-cast-late-foreach-signal-hook-member-none"
+  ],
+  "rediscovered": "rt4 37 STRICT_READ and 123 REACTIVE_WRITE false positives in 430 cast-late-foreach programs (layer none), the fix 0"
+ },
+ {
   "finding": "a helper's standard-typed member call at a tracked position over a prop whose value is a setter behind a cast: certified, Chrome writes. Three process tests pinned that clean",
   "found": "verify on the merged tree, by writing a witness for the tests ADR 0771 moved",
   "fixed": "ADR 0771",
@@ -4356,6 +4511,93 @@
   ],
   "rediscovered": "rbase NEW false-clean in the pattern lane, the fix fine",
   "outside": "the value is a cast literal in a parent's attribute: a context cannot write a parent, so the pattern lane holds it"
+ },
+ {
+  "finding": "SC2003 silent past its flow's rows: a destructured loop binding, declarator or parameter, the rest, a nested identity, a function literal called in place, Object.entries and fromEntries, a conditional, array or awaited root, a let, a delete through a call, .then, Map.get: certified, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "research-sc9012.md section 2 (W's leftovers and 17 more), R3's probes",
+  "fixed": "ADR 0790",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-loop-pattern-alias-iife",
+   "mx-store-write-outside-setter-handler-sw-nested-identity-direct-none",
+   "mx-store-write-outside-setter-handler-sw-called-literal-direct-closure-helper",
+   "mx-store-write-outside-setter-handler-sw-entries-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-from-entries-alias-iife",
+   "mx-store-write-outside-setter-handler-sw-conditional-direct-none",
+   "mx-store-write-outside-setter-handler-sw-array-root-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-let-direct-none",
+   "mx-store-write-outside-setter-handler-sw-param-pattern-alias-closure-helper",
+   "mx-store-write-outside-setter-handler-sw-rest-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-delete-call-direct-none",
+   "mx-store-write-outside-setter-handler-sw-await-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-then-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-map-get-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 168 programs of the 14 shapes, certified; the fix agree on 36 (nested identity, called literal, conditional) and recall-gap on 132; same id set in the sc VM, both builds. sw-decl-pattern was a recall gap on both"
+ },
+ {
+  "finding": "SC2003 violation on a write to a fresh literal chosen by a store test: `(s.v > 0 ? { v: 1 } : { v: 2 }).v = 7`, Chrome quiet. The entity at the conditional's span named its first token, the store",
+  "found": "R3, fixture store-sub-value-flow while authoring ADR 0790",
+  "fixed": "ADR 0790: a write root names a store only when it is a bare identifier",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-sw-fresh-test-direct-none"
+  ],
+  "rediscovered": "r3base false-positive on 36 lg-recall and 12 mx-recall programs, Chrome confirmed 36 of 36; the fix clean and not-fired; sw-fresh-spread and sw-fresh-frame clean on both"
+ },
+ {
+  "finding": "patterns api/v09-store-write-nullish `((unk() as T | null) ?? st).x = 5`, api/v10-store-write-let `let s2; s2 = st; s2.x = 5`, values/d6-comma `(log(\"x\"), st).a = 5`: certified, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "the pattern lane (open-defects.json, certified false clean on 80db411e5)",
+  "fixed": "ADR 0790 (bfd336ce8): a `??` is either operand, a `let` its assigned values, any other root its parts",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-coalesce-direct-none",
+   "mx-store-write-outside-setter-handler-sw-comma-direct-none",
+   "mx-store-write-outside-setter-handler-sw-let-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 108 programs of sw-coalesce, sw-comma, sw-let (handler, timer); the fix agree on 36 (sw-coalesce) and recall-gap on 72; same id set in the sc VM. The pattern lane at 3b4e446bc: the three patterns certified false clean on 80db411e5, fine on bfd336ce8"
+ },
+ {
+  "finding": "a delete behind an optional chain, `delete st?.a`, `delete st.o?.c`, on a property Type Facts proves optional: certified, tsc-clean, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "R3's probes p9, p10 (step 3, P8's neighbours)",
+  "fixed": "ADR 0791: uncertifiable, store-operation-may-not-write",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-delete-optional-chain-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 36 sw-delete-optional-chain programs (handler, timer), the fix recall-gap on 36; same id set in the sc VM"
+ },
+ {
+  "finding": "a store write through a root ADR 0790 reads but no shape held: an object literal’s member (`({ s: st.a }).s.v = 7`), a generator’s yield, an `Object.assign({}, st)` copy, a destructured array parameter, a destructured `forEach` parameter: certified, tsc-clean, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "research-sc9012.md section 2 (t5, t33, t13, t22, dl8), the R3 prep notes; reproduced by R3b in Chrome and tsc",
+  "fixed": "ADR 0790 (bfd336ce8): uncertifiable, unproven-container-root",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-object-root-direct-none",
+   "mx-store-write-outside-setter-handler-sw-generator-direct-none",
+   "mx-store-write-outside-setter-handler-sw-assign-copy-direct-none",
+   "mx-store-write-outside-setter-handler-sw-param-array-pattern-direct-none",
+   "mx-store-write-outside-setter-handler-sw-foreach-pattern-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 180 programs of the 5 shapes (handler, timer), c11f67588 recall-gap on 180; same id set in the sc VM; the build before ADR 0716 (1dd911b95) false-clean on 180 too, Chrome confirming each direct-none program"
+ },
+ {
+  "finding": "`Array.prototype.sort.bind(st.items)(cmp)` and `Reflect.apply(Array.prototype.sort, st.items, [cmp])`: certified, tsc-clean, Chrome warns STORE_WRITE_OUTSIDE_SETTER (s6, s8, beside sort.call)",
+  "found": "research-sc9012.md section 4, entry `sort.call` (ADR 0688); reproduced by R3b in Chrome and tsc",
+  "fixed": "ADR 0773 (c129b2c29, merged at 8ff25dca5): uncertifiable, function-call-target-unresolved",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-net-sort-bind-direct-none",
+   "mx-store-write-outside-setter-handler-net-sort-reflect-direct-none",
+   "mx-store-write-outside-setter-body-net-sort-reflect-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs net-sort-bind, net-sort-reflect (a descending comparator on `[1, 2]`): r3base (80db411e5, before c129b2c29) false-clean on 54 of 72 (bind in a handler, reflect in body and handler; bind in a body is recall-gap there), c11f67588 recall-gap on 72; the build before ADR 0716 (1dd911b95) false-clean on 72. Probes: bfd336ce8 certified both, the merge 8ff25dca5 made both uncertifiable. sc VM, Chrome confirming each direct-none program"
  },
  {
   "finding": "an async read no fact places, at a `<Dynamic>` body, a tag or depth 16: certified or SC5001 only, Chrome warns the boundary",

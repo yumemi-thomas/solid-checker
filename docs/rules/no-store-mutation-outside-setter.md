@@ -64,6 +64,14 @@ element (`find`, `at`, `for…of`, a `For` row, a `filter`, `slice` or
 `Object.values` copy, a `map` not returning a fresh literal) is a link:
 uncertifiable. A copy written itself is a plain array.
 
+**Any other root (ADR 0790).** A destructured or rest parameter, a pattern
+binding, a `let` and its assignments, a callee's returns (with the call as the
+frame), a conditional's branches, `||`/`??` operands, and the values of any
+other root are followed; only the store itself through one frame or a branch is
+a violation (`outer(store).v = 1`, `(c ? store : x).v = 1`), the rest is
+uncertifiable. A literal or a `new` written at its own property is fresh, and a
+conditional's test is not its value (`(store.v > 0 ? {} : {}).n = 1` is silent).
+
 **Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
 violation: `createStore` wraps its initial value whatever it is
@@ -134,18 +142,22 @@ function this does not know, leaves it uncertifiable. Fixture
 Not reported, deliberately:
 
 - `delete` of a required or readonly property: tsc reports TS2790 (under
-  strictNullChecks) or TS2704. A non-optional property typed `T | undefined`
-  stays silent too (TS2790 under `exactOptionalPropertyTypes`). Only a property
-  the checker marks optional and not readonly (`v?: T`, `Partial<T>`) is
-  reported, through the Type Fact `writableOptionalProperty`. A type
+  strictNullChecks) or TS2704. Only a property the checker marks optional and
+  not readonly (`v?: T`, `Partial<T>`) is reported, through the Type Fact
+  `writableOptionalProperty`. Where that fact is false, which is no claim (an
+  element access `store["v"]` or `store.rec[k]`, an index signature, a
+  non-optional `T | undefined`, which tsc accepts without
+  `exactOptionalPropertyTypes`, an `unknown`), the rule is silent: an open
+  miss, since Type Facts cannot tell those from TS2790 (docs/open-work.md). A type
   assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
   TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
   is TS18048/TS18047: both silent. Any other chain past the root
   (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
-  proves nothing at run time. An element access, an optional chain and a
-  cast root are refused; an exact `const` alias of the store is the store
+  proves nothing at run time. An optional chain may skip the delete:
+  uncertifiable (ADR 0791). A cast root is the store (ADR 0790); an exact `const` alias of the store is the store
   (ADR 0463), for an assignment and a `delete` alike. Pinned in the tsc oracle and ownership cases
-  `…/delete-required-property/001`, `…/delete-optional-property/001`; fixture
+  `…/delete-required-property/001`, `…/delete-optional-property/001`,
+  `…/delete-computed-required/001`; fixture
   `store-delete`.
 - Reassigning an accessor binding (`count = 2`, this rule's former
   accessor-binding arm). On rc.17 a `const` binding is TS2588 and a `let`

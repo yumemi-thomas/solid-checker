@@ -399,15 +399,24 @@ impl<'a> SemanticLookup<'a> {
             callee,
             |span| self.entity_at(file.path.as_str(), span),
         )?;
+        let Some(name) = crate::runtime_semantics::standard_call_name(resolved) else {
+            return Some(resolved);
+        };
         // ADR 0683: a method a project subclass may have replaced is not the
-        // standard one: no proof reads it.
-        let vetoed = crate::runtime_semantics::standard_call_name(resolved)
-            .and_then(|name| crate::base::contributions::subclass_veto(file, callee, name))
-            .is_some_and(|hazards| {
+        // standard one: no proof reads it. ADR 0781: nor is one a patch
+        // replaced, or an assertion alone says the receiver has.
+        let vetoed =
+            crate::base::contributions::subclass_veto(file, callee, name).is_some_and(|hazards| {
                 hazards
                     .into_iter()
                     .any(|hazard| self.hazard_present(hazard))
-            });
+            }) || (self.hazard_present(crate::base::Hazard::AnyStandardPatch)
+                && crate::base::contributions::patch_veto(name)
+                    .into_iter()
+                    .any(|hazard| self.hazard_present(hazard)))
+                || crate::base::contributions::unproven_assertion(file, callee, name, |span| {
+                    self.entity_at(file.path.as_str(), span)
+                });
         (!vetoed).then_some(resolved)
     }
 

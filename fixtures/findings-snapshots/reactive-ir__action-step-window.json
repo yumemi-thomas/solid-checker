@@ -37,6 +37,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/action-step-window/App.tsx",
+      "start": 1431,
+      "end": 1435,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-step-window/App.tsx",
+      "start": 1663,
+      "end": 1674,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-step-window/App.tsx",
       "start": 2337,
       "end": 2341,
       "fixes": 0

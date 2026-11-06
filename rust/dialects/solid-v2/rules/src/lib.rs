@@ -139,9 +139,8 @@ impl CatalogWording for Catalog {
                 Rule::ActionCalledInOwnedScope.metadata(),
                 if action.is_uncertifiable() {
                     format!(
-                        "action {:?} is called in {}, but no compiler or semantic fact places where this code runs, so whether it starts a write transaction under a children-capable owner cannot be proven either way",
-                        action.action,
-                        unplaced_context(&action.context)
+                        "{}, but no compiler or semantic fact places where this code runs, so whether it starts a write transaction under a children-capable owner cannot be proven either way",
+                        unplaced_call(&format!("action {:?}", action.action), &action.context)
                     )
                 } else {
                     format!(
@@ -227,12 +226,15 @@ impl CatalogWording for Catalog {
     }
 }
 
-/// Where an unplaced site is written, for a message that claims no role.
-fn unplaced_context(context: &str) -> &str {
+/// The opening clause of an unplaced call's message: where it is written,
+/// when the row names a function, and no place otherwise. The clause after
+/// it already says that no fact places the code, so an empty context adds
+/// nothing (ADR 0792).
+fn unplaced_call(call: &str, context: &str) -> String {
     if context.is_empty() {
-        "code the analysis cannot place"
+        format!("{call} is called")
     } else {
-        context
+        format!("{call} is called in {context}")
     }
 }
 
@@ -287,8 +289,8 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             ReactiveWriteOperation::Setter => format!("setter {:?}", write.setter),
         };
         message = format!(
-            "{call} is called in {}, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
-            unplaced_context(&write.context)
+            "{}, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+            unplaced_call(&call, &write.context)
         );
         "no compiler or semantic fact places where this write runs".into()
     } else {
@@ -713,7 +715,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         }
         // ADR 0713: an open context's read (always uncertain on this channel).
         Rule::MissingContextProvider => {
-            "the read runs under an owner, and its context has no default; whether a provider is above every render of its function is not proven"
+            "the read runs under an owner, and neither a default for its context nor a provider above every render of its function is proven"
         }
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
