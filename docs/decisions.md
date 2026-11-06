@@ -1647,7 +1647,7 @@ A resolved `node_modules/solid-js/package.json` whose version names no release (
 
 <a id="adr-0701"></a>
 ## ADR 0701 — Every effect constructor's function slot
-SC7001 asked only `createEffect`, so `createRenderEffect(() => 1, undefined as any)` and `createReaction(undefined as any)` certified while Chrome threw. The Dialect question `effect_function_slot` gives each primitive's slot index, whether a bundle is read there, whether `undefined` throws before allocation, and when a non-callable fails. `createRenderEffect` (index 1, no bundle) is a violation on a proven non-callable, an object literal included; `createReaction` (index 0) fails only when its tracker runs: uncertifiable, `effect-returned-function-run-unproven`.
+SC7001 asked only `createEffect`, so `createRenderEffect(() => 1, undefined as any)` and `createReaction(undefined as any)` certified while Chrome threw. The Dialect question `effect_function_slot` gives each primitive's slot, bundle, `undefined` handling, and when a non-callable fails. `createRenderEffect` (index 1, no bundle) is a violation on a proven non-callable; `createReaction` (index 0) fails only when its tracker runs: uncertifiable, `effect-returned-function-run-unproven`.
 
 <a id="adr-0702"></a>
 ## ADR 0702 — SC7006 registers the initializer at the declaration
@@ -1663,19 +1663,19 @@ SC7007 judged only calls whose callee resolves to a server function, so `const s
 
 <a id="adr-0705"></a>
 ## ADR 0705 — Members the dispatch list lacked
-Supersedes ADR 0642's "Not hazards: `form.submit`". Both dispatch tables (`cleanup.rs`, `runtime_semantics.rs` `delivers_synchronously`) hold, by exact `lib.dom` declaration: `HTMLFormElement.submit`, global and `WindowOrWorkerGlobalScope.reportError`, `ChildNode.replaceWith`, `Node.replaceChild`, `ParentNode.replaceChildren`, `History.go`, `Location.assign`/`reload`/`replace`. Chrome (rc.21), from `onSettled`: `submit`, `reportError` threw `PRIMITIVE_IN_FORBIDDEN_SCOPE` (were certified); the blur family needs a focus; `beforeunload` is synchronous in an iframe. Unknown state delivers. Corpus +25 obligations.
+Supersedes ADR 0642's "Not hazards: `form.submit`". Both dispatch tables (`cleanup.rs`, `runtime_semantics.rs` `delivers_synchronously`) hold, by exact `lib.dom` declaration: `HTMLFormElement.submit`, global and `WindowOrWorkerGlobalScope.reportError`, `ChildNode.replaceWith`, `Node.replaceChild`, `ParentNode.replaceChildren`, `History.go`, `Location.assign`/`reload`/`replace`. Chrome (rc.21), from `onSettled`: `submit`, `reportError` threw (were certified); the blur family needs a focus; `beforeunload` is synchronous. Unknown state delivers. Corpus +25 obligations.
 
 <a id="adr-0706"></a>
 ## ADR 0706 — A server function cannot capture an enclosing binding
-SSR audit D12: a server function nested in a component capturing a binding declared there certified, while rc.21's `transformDirectives` rejects it. Measured on twelve shapes: an enclosing `const`, parameter, default, arrow, helper, own name or sibling server function errors; module-scope bindings, own locals, type-only references and a nested block's `let` compile. `valid_use_server.rs` `captured_bindings` proves it from the binder: a violation at the first capture; `tsc` passes all.
+SSR audit D12: a server function nested in a component capturing a binding declared there certified, while rc.21's `transformDirectives` rejects it. Measured on twelve shapes: an enclosing `const`, parameter, default, arrow, helper, own name or sibling server function errors; module-scope bindings, own locals and type-only references compile. `valid_use_server.rs` `captured_bindings` proves it from the binder: a violation at the first capture; `tsc` passes all.
 
 <a id="adr-0707"></a>
 ## ADR 0707 — SC7007 at rc.21's transport (SSR audit D4, D9, D10, D11)
-Measured at the real boundary (scripts/flip/notes/ssr/report.md). D9: a namespace member call (`api.save(new Date())`) certified; the call loop falls back to `namespace_member_function`. D10: rc.21 installs the codec inside `enableRichArguments()`, so only an unconditional module-scope call in the client entry before its `render`/`hydrate` (by import binding) proves the serializer; otherwise unresolved. D11: `-0` types as `0` and `isJSONSafe` rejects it, so a zero domain proves nothing; an unsigned decimal literal does. D4: an `undefined` before another argument may become `null`: an obligation. Not built: D5, dynamic `import()`, a client-reached non-entry file.
+Measured at the real boundary (scripts/flip/notes/ssr/report.md). D9: a namespace member call (`api.save(new Date())`) certified; the call loop falls back to `namespace_member_function`. D10: rc.21 installs the codec inside `enableRichArguments()`, so only an unconditional module-scope call in the client entry before its `render`/`hydrate` (by import binding) proves the serializer; otherwise unresolved. D11: `-0` types as `0` and `isJSONSafe` rejects it: a zero domain proves nothing, an unsigned decimal literal does. D4: an `undefined` before another argument may become `null`: an obligation. Not built: D5, dynamic `import()`, a client-reached non-entry file.
 
 <a id="adr-0708"></a>
 ## ADR 0708 — SC2006 does not certify a flush it cannot place
-A `flush()` in a function no call edge places (an object method or slot, a class method or getter, a `Map` slot, a handed function, `toString`), reached from an action's body, certified; Chrome (rc.21) throws `FLUSH_IN_ACTION` (witnesses a02-a10). With no step proof the call is now an obligation, `function-run-unplaced`, if `unplaced_run` holds at the call or at an exact call of its named helper (four helpers deep) and the project names a primitive that runs callbacks as action steps (`project_steps_action_callbacks`). Corpus: 21 new obligations.
+A `flush()` in a function no call edge places (an object or class method, a getter, a `Map` slot, a handed function, `toString`), reached from an action's body, certified; Chrome (rc.21) throws `FLUSH_IN_ACTION` (witnesses a02-a10). With no step proof the call is now an obligation, `function-run-unplaced`, if `unplaced_run` holds at the call or at an exact call of its named helper (four helpers deep) and the project names a primitive that steps action callbacks. Corpus: 21 new obligations.
 
 <a id="adr-0709"></a>
 ## ADR 0709 — SC2008 does not certify a flush it cannot place
@@ -1683,7 +1683,7 @@ A `flush()` in a module-level object method an apply calls certified while Chrom
 
 <a id="adr-0710"></a>
 ## ADR 0710 — SC6002 does not certify a creation it cannot place
-A `createMemo` in a module-level object or class method, or a getter, reached from an effect's apply threw `PRIMITIVE_IN_EFFECT_CALLBACK` in Chrome and certified (witnesses e05, f04, f07; census h11). Such a call is now an uncertain SC6002, `function-run-unplaced`, when `runs_unplaced_through_callers` holds and the project names a primitive that defers a callback (ADRs 0708, 0709). Not asked: a site directly in a synchronous primitive callback other than `untrack`'s, a body that may be a component's, a role that runs off every apply. Corpus: 271 new obligations.
+A `createMemo` in a module-level object or class method, or a getter, reached from an effect's apply threw `PRIMITIVE_IN_EFFECT_CALLBACK` in Chrome and certified (witnesses e05, f04, f07). Such a call is now an uncertain SC6002, `function-run-unplaced`, when `runs_unplaced_through_callers` holds and the project names a primitive that defers a callback (ADRs 0708, 0709). Not asked: a site directly in a synchronous primitive callback other than `untrack`'s, a body that may be a component's, a role that runs off every apply. Corpus: 271 new obligations.
 
 <a id="adr-0711"></a>
 ## ADR 0711 — SC3001 proves the primitive it names
@@ -1695,19 +1695,19 @@ Two corpus violations named a `createOwner` no source holds (solid-three `storeP
 
 <a id="adr-0713"></a>
 ## ADR 0713 — SC4002 does not certify a read of a context provided somewhere
-The census asked "is there a provider anywhere", so a read under a sibling's, child's, hook's, conditional or member's provider certified and threw `ContextNotFoundError` (witnesses g02-g06, a07). `context_census.rs` gives each context `Free`, `Open` (provided, escaped, exported, or not one unwritten `const`) or `Silent`. An `Open`, unknown or member read under an owner is an uncertain SC4002 static violation, `provider-not-proven-above`, unless `provided_above` proves every render of its function under `<Ctx value>` (children, intrinsics, a hook or component up to 8 callers, a one-`return` wrapper; named, non-async, call or render references only). Corpus +48 uncertifiable.
+The census asked "is there a provider anywhere", so a read under a sibling's, child's, hook's, conditional or member's provider certified and threw `ContextNotFoundError` (witnesses g02-g06, a07). `context_census.rs` gives each context `Free`, `Open` (provided, escaped, exported, or not one unwritten `const`) or `Silent`. An `Open`, unknown or member read under an owner is an uncertain SC4002 static violation, `provider-not-proven-above`, unless `provided_above` proves every render of its function under `<Ctx value>` (children, intrinsics, a hook or component up to 8 callers, a one-`return` wrapper). Corpus +48 uncertifiable.
 
 <a id="adr-0714"></a>
 ## ADR 0714 — SC4001 proves an unowned run only along calls that run
-A hook called under the component's owner and in a module-scope branch nothing takes was a violation; Chrome (rc.21) is quiet. `owner_discovery.rs` asks `every_unconditional_call` (one parse per file; `await` ordinary; a generator to its first `yield`): a `Preserve` call, invoked-literal or carrier edge off that set becomes `MayRun` (ADR 0468), a callback's `Unowned` `MayBeUnowned`. ADR 0290's package walk carries a `MayRun` edge as an obligation. Costs (Chrome warns): `f?.()`, a guard's branch, a module `try`. Blocker `owner-varies-by-caller` needs a `lib.rs` field (R's).
+A hook called under the component's owner and in a module-scope branch nothing takes was a violation; Chrome (rc.21) is quiet. `owner_discovery.rs` asks `every_unconditional_call` (one parse per file; `await` ordinary; a generator to its first `yield`): a `Preserve` call, invoked-literal or carrier edge off that set becomes `MayRun` (ADR 0468), a callback's `Unowned` `MayBeUnowned`. ADR 0290's package walk carries a `MayRun` edge as an obligation. Costs: `f?.()`, a guard's branch, a module `try`. Blocker `owner-varies-by-caller` needs a `lib.rs` field (R's).
 
 <a id="adr-0715"></a>
 ## ADR 0715 — SC2002 does not certify an action call no edge reaches
-An action call in a function no call edge reached (a helper a getter, tag, `Map` slot, constructor or field runs) certified; Chrome (rc.21) throws `ACTION_CALLED_IN_OWNED_SCOPE` (witnesses d05, d06, e03, e06). `unreached_write` and `transported_writes`' no-row branch push the action row uncertifiable (`alias_withheld`) when the call is in a function or instance field and `SiteReach` does not prove it unreached; module initialization is silent. Blocker `function-run-unplaced` needs a `lib.rs` row field (R's). Fixture `rc21-action-unplaced`.
+An action call in a function no call edge reached (a helper a getter, tag, `Map` slot, constructor or field runs) certified; Chrome (rc.21) throws (witnesses d05, d06, e03, e06). `unreached_write` and `transported_writes`' no-row branch push the action row uncertifiable (`alias_withheld`) when the call is in a function or instance field and `SiteReach` does not prove it unreached; module initialization is silent. Blocker `function-run-unplaced` needs a `lib.rs` row field (R's). Fixture `rc21-action-unplaced`.
 
 <a id="adr-0716"></a>
 ## ADR 0716 — SC2003 asks a store member written by a loop head
-`for (s.a of [2])` certified: `no_direct_mutation` walked assignments only (witnesses SC2003 c02, c03, j01, j02). It now also walks each `write_targets` leaf in an `iteration_targets` head. Chrome (rc.21): the head warns `STORE_WRITE_OUTSIDE_SETTER` only when the loop iterates (`[]`, an unknown array and `for … in {}` are quiet), so it is a violation only when `iteration_head_proven_nonempty` holds (an array literal with a value element); else uncertain, blocker `store-operation-may-not-write`. Corpus 0 moved. Fixture `store-for-head-write`.
+`for (s.a of [2])` certified: `no_direct_mutation` walked assignments only (witnesses SC2003 c02, c03, j01, j02). It now also walks each `write_targets` leaf in an `iteration_targets` head. Chrome (rc.21) warns only when the loop iterates, so it is a violation only when `iteration_head_proven_nonempty` holds (an array literal with a value element); else uncertain, blocker `store-operation-may-not-write`. Corpus 0 moved. Fixture `store-for-head-write`.
 
 <a id="adr-0717"></a>
 ## ADR 0717 — SC2003 judges a standard-library write through an alias by declaration
@@ -1719,7 +1719,7 @@ An action call in a function no call edge reached (a helper a getter, tag, `Map`
 
 <a id="adr-0719"></a>
 ## ADR 0719 — SC2003 asks a parameter's callers where its value came from
-`w(s)`, `w(s.o)` with `w = (x) => { x.a = 2 }`, and `each((l) => l.push(2))` with `each = (f) => f(s.l)` certified; Chrome (rc.21) warns (witnesses c04, j05, j06). A write rooted at a plain parameter `handed_container` does not place walks back (depth 6, 64 sites): a named function's call sites; for a literal handed to a project function, its calls of the parameter; a non-project callee passes its arguments and receiver. A proven store from a call outside every window, no link, every hop in place and reached, is a violation; another store flow, unenumerated callers or an unresolved callee is uncertain, `unproven-container-root`. A setter's draft is silent. Corpus +1,441 uncertifiable. Fixture `store-parameter-flow`.
+`w(s)`, `w(s.o)` with `w = (x) => { x.a = 2 }`, and `each((l) => l.push(2))` with `each = (f) => f(s.l)` certified; Chrome (rc.21) warns (witnesses c04, j05, j06). A write rooted at a plain parameter `handed_container` does not place walks back (depth 6, 64 sites): a named function's call sites; for a literal handed to a project function, its calls of the parameter; a non-project callee passes its arguments and receiver. A proven store from a call outside every window, no link, every hop in place and reached, is a violation; else uncertain, `unproven-container-root`. A setter's draft is silent. Corpus +1,441 uncertifiable. Fixture `store-parameter-flow`.
 
 <a id="adr-0720"></a>
 ## ADR 0720 — SC2003 follows a store through a call's result and a loop's element
@@ -1727,8 +1727,12 @@ An action call in a function no call edge reached (a helper a getter, tag, `Map`
 
 <a id="adr-0721"></a>
 ## ADR 0721 — SC2001 does not certify a write no edge reaches
-A setter or `refresh` call in a function no call edge reached (a method, constructor, field, getter, `toString`, iterator, `Map` slot, tag, or their helper: u11) certified; Chrome (rc.21) throws `REACTIVE_WRITE_IN_OWNED_SCOPE` (witnesses d02-d04, e01-e03, e07-e11, e13). ADR 0715's arm also pushes the setter row, and both `refresh` arms in `static_api.rs` push one as `Unknown`, under the same gate. The setter row keeps `handed_write_execution`'s answer: a write directly in a module-level tag the body runs is a violation (Chrome throws). Module initialization stays silent. Blocker as ADR 0715. Fixture `rc21-setter-unplaced`.
+A setter or `refresh` call in a function no call edge reached (a method, constructor, field, getter, `toString`, iterator, `Map` slot, tag, or their helper: u11) certified; Chrome (rc.21) throws `REACTIVE_WRITE_IN_OWNED_SCOPE` (witnesses d02-d04, e01-e03, e07-e11, e13). ADR 0715's arm also pushes the setter row, and both `refresh` arms in `static_api.rs` push one as `Unknown`, under the same gate. The setter row keeps `handed_write_execution`'s answer: a write directly in a module-level tag is a violation (Chrome throws). Module initialization stays silent. Blocker as ADR 0715. Fixture `rc21-setter-unplaced`.
 
 <a id="adr-0750"></a>
 ## ADR 0750 — A walk past its depth limit is undecided
-Walks that answered clean where they stopped (bounds audit): `effect_phase`'s 12 layers, 400 sites and 8 re-exports (SC2008, SC6002: 13 helpers from an apply certified), the promise chain's 6 (after_await `expand`, `native_promise`: a read past ten `then`s), the handed-read regions' 3 (`static_rules.rs`), the unplaced-caller net's 4 helpers (`static_api.rs`). Each now answers uncertifiable, blocker `search-depth-limit` or `search-budget-exhausted` (`blockers.rs`); no limit changed, nothing within one moved. Fixture `bounds-search-depth-limit`.
+Walks that answered clean where they stopped (bounds audit): `effect_phase`'s 12 layers, 400 sites and 8 re-exports (SC2008, SC6002: 13 helpers from an apply certified), the promise chain's 6 (after_await, `native_promise`), the handed-read regions' 3 (`static_rules.rs`), the unplaced-caller net's 4 helpers (`static_api.rs`). Each now answers uncertifiable, blocker `search-depth-limit` or `search-budget-exhausted` (`blockers.rs`); no limit changed, nothing within one moved. Fixture `bounds-search-depth-limit`.
+
+<a id="adr-0751"></a>
+## ADR 0751 — A value chain past its limit is unknown
+`is_own_setter` answered "not the setter" past four aliases: a write in the callback of `setStore` through six was an SC2003 violation, Chrome (rc.21) quiet. Such a call, with an argument that may hold a function, now makes the store's dropped writes in the file `Unproven(search-depth-limit)`. `handed_value` answers handed past six steps (it only opens obligations): corpus +14. Fixture `bounds-value-depth-limit`.

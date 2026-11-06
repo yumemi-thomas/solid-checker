@@ -2693,3 +2693,30 @@ fn walks_past_their_depth_limit_are_uncertifiable() {
     let at = rows_at(&findings, "stepped.tsx", line_of(stepped, "function s15("));
     assert!(has(&at, "SC2008", "uncertifiable", true), "{at:?}");
 }
+
+/// ADR 0751: a value chain past its limit is unknown. `is_own_setter`'s four
+/// aliases: the sixth-alias setter's callback is a window not proven either
+/// way, so the write in it is uncertifiable, not dropped (Chrome is quiet);
+/// `handed_value`'s six steps: the eighth member's call after an await opens
+/// the handed-read obligation.
+#[test]
+fn value_chains_past_their_limit_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-value-depth-limit") else {
+        return;
+    };
+    let setter =
+        include_str!("../../../../fixtures/reactive-ir/bounds-value-depth-limit/setter.tsx");
+    let handed =
+        include_str!("../../../../fixtures/reactive-ir/bounds-value-depth-limit/handed.tsx");
+    let four = rows_at(&findings, "setter.tsx", line_of(setter, "const bumpFour"));
+    assert!(four.is_empty(), "{four:?}");
+    let six = rows_at(&findings, "setter.tsx", line_of(setter, "const bumpSix"));
+    assert_eq!(six, [("SC2003", "uncertifiable", "search-depth-limit")]);
+    let past = rows_at(&findings, "handed.tsx", line_of(handed, "m6.m7.read()"));
+    assert!(
+        past.iter().any(|(id, kind, context)| {
+            *id == "SC9012" && *kind == "uncertifiable" && *context == "handed-read-after-await"
+        }),
+        "{past:?}"
+    );
+}

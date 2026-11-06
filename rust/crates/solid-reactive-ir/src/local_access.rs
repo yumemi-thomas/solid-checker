@@ -196,7 +196,8 @@ pub(crate) struct HandedTables<'a, 'l> {
 }
 
 /// ADR 0509: whether the value at `span` is one a caller supplied
-/// ([`UNRESOLVED_HANDED_MEMBER`]), through at most `depth` steps.
+/// ([`UNRESOLVED_HANDED_MEMBER`]), through at most `depth` steps. ADR 0751:
+/// past them it may be, so it answers true (this only opens obligations).
 pub(crate) fn handed_value(
     t: &HandedTables<'_, '_>,
     file: &solid_facts::FileFacts,
@@ -204,7 +205,7 @@ pub(crate) fn handed_value(
     depth: usize,
 ) -> bool {
     if depth == 0 {
-        return false;
+        return true;
     }
     let span = file.ast.peel_ts_sugar_span(span);
     if let Some(member) = file.ast.member_at(span) {

@@ -113,9 +113,8 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
 
 - **`enableRichArguments()` proven called first**: an unconditional
   module-scope call in the client entry, before its `render` or `hydrate`
-  (ADR 0707; rc.21 installs the codec inside the call, so an import alone, a
-  call in a function, under a condition, after the render or in another file
-  is uncertifiable), or
+  (ADR 0707; rc.21 installs the codec inside the call: an import alone, or a
+  call elsewhere, is uncertifiable), or
   **`configureServerFunctionsClient({ serializeArgs })`** configured: both
   install a serializer and remove the throw project-wide (probed), so the
   rule is silent for the whole project.

@@ -53,15 +53,16 @@ store's own setter called as `holder.setState(…)` is exempt.
 (`const bump = (o) => { o.n = 5; }`) asks its callers, or, for a callback
 literal handed to a project function, that function's calls of it. A proven
 store from a call outside every setter window, every hop in place, is a
-violation; a link, a nested closure, callers not all enumerated or an
-unresolved callee is uncertifiable (`unproven-container-root`); plain values
-and a setter's draft are silent.
+violation; anything else is uncertifiable (`unproven-container-root`); plain
+values and a setter's draft are silent. A setter reached through more aliases
+than are followed opens a window not proven either way: uncertifiable,
+`search-depth-limit` (ADR 0751).
 
 **Through a call or a loop (ADR 0720).** An identity function (`id(store).n =
 1`) or a `createMemo(() => store)` accessor returns the store: a violation. An
-element (`find`, `at`, `for…of`, a `For` row, an element of a `filter`,
-`slice` or `Object.values` copy, a `map` whose callback is not a fresh
-literal) is a link: uncertifiable. A copy written itself is a plain array.
+element (`find`, `at`, `for…of`, a `For` row, a `filter`, `slice` or
+`Object.values` copy, a `map` not returning a fresh literal) is a link:
+uncertifiable. A copy written itself is a plain array.
 
 **Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a

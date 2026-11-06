@@ -22,7 +22,7 @@ follows), `search-budget-exhausted` (a work budget, a site cap or a round cap ra
 | Family | Bounds | Unsound before | Fixed | ADR |
 |---|---:|---:|---:|---|
 | A. Static stack and phase walks (calls, promise chains, layers) | 29 | 9 | 8 | 0750 |
-| B. Value, alias and member chains | 52 | 6 | | 0751 |
+| B. Value, alias and member chains | 53 | 6 | 2 (+1 named) | 0751 |
 | C. Caller, site and holder walks | 22 | 1 | | |
 | D. Work budgets and round caps | 14 | 2 | | 0752 |
 | E. Write-role climbs (ADR 0532, 16/32 layers) | 13 | 0 | no change | |
@@ -80,18 +80,19 @@ follows), `search-budget-exhausted` (a work budget, a site cap or a round cap ra
 
 | Site | Bound | At the limit | Sound | Action |
 |---|---|---|---|---|
-| local_access.rs:206 `handed_value` | HANDED_DEPTH 6 | false: not handed, no obligation | **no** (probe) | true: open |
-| upstream_compat/shared_reactivity.rs:3220,3229,3286 `is_own_setter` | 4 aliases | not the setter: its callback opens no window, a write there is V | **no: false positive** (probe, Chrome) | window unproven: U |
+| local_access.rs:206 `handed_value` | HANDED_DEPTH 6 | false: not handed, no obligation | **no** (probe) | fixed: true (the callers' own obligation names it, e.g. `handed-read-after-await`) |
+| upstream_compat/shared_reactivity.rs:3220,3229,3286 `is_own_setter` | 4 aliases | not the setter: its callback opens no window, a write there is V | **no: false positive** (probe, Chrome) | fixed: `Windows::undecided`, dropped → `Unproven(search-depth-limit)` |
+| upstream_compat/shared_reactivity.rs:3084 `store_and_aliases` | 4 aliases | fewer intermediate aliases; the proven store `symbol` is always in the list (probes sa-7, sb-7: V and certified as at 2) | yes | |
 | upstream_compat/shared_reactivity.rs:2745 `handed_container` | 6 | false → parameter flow, which opens past FLOW_DEPTH | yes | |
 | upstream_compat/shared_reactivity.rs:2813 | `depth < 6` | semantic (symbol test below the root) | n/a | |
 | upstream_compat/shared_reactivity.rs:1932,2151 `ParameterFlow` | FLOW_DEPTH 6 | `open = true` | yes | |
 | upstream_compat/shared_reactivity.rs:2279 `call_value` | 6 | false → `handed_container` / open | yes | |
-| upstream_compat/shared_reactivity.rs:3488 `named_function_standing` | WINDOW_DEPTH 3 | `Unproven` | yes | |
+| upstream_compat/shared_reactivity.rs:3488 `named_function_standing` | WINDOW_DEPTH 3 | `Unproven` | yes | named: `Unproven(search-depth-limit)` |
 | local_access.rs:3218 `closed_source` | 6 | `None`: the strengthening only | yes | |
 | local_access.rs:5090 `value_reaches` | 4 | false; mixed polarity at its callers (`value_reaches_async_source` both ways) | unverified | open (see "Not fixed") |
 | local_access.rs:3379,3417 `calls_reach` | CALL_WALK_BUDGET 512 | falls back to `value_reaches` 4 | **no** (risk search, SC2009) | true past both |
 | local_access.rs:4948 `span_may_make_computation` | 4 | true | yes | |
-| local_access.rs:2845 `may_run_in_leaf_owner_within` | 3 | false: not in a leaf owner (risk) | **no** (read) | true |
+| local_access.rs:2845 `may_run_in_leaf_owner_within` | 3 | false: not in a leaf owner (risk) | unverified (probe lo-5: U by the general obligation) | open: no crossing input found |
 | local_access.rs:1202 `view_hides_key` | 8 | false: the read stays a read | yes | |
 | local_access.rs:480 `call_builds_view` | VIEW_CALL_DEPTH 8 | false: an alias (the conservative reading) | yes | |
 | source_discovery/props_reactivity.rs:984,1046 | SPREAD_RECEIVER_DEPTH 4 | not proven inert | yes | |
@@ -171,4 +172,5 @@ Covered in B (attribution, primitive proofs, installed members) and the scope no
 ## Progress
 
 - Family A done (ADR 0750): fixture `bounds-search-depth-limit`, process test `diagnostics_process::walks_past_their_depth_limit_are_uncertifiable` (base binary lacks every asserted row). Witnesses 220 of 335, same FAIL list. Corpus 0 moved (`~/EDF/tmp/flipw/bounds/sweep-A.json`, bins `bA`), wall +3%. Coverage: only the new fixture.
-- Next: family B (`handed_value` → true; `is_own_setter` window unproven, upstream-parity skill first; `calls_reach`; `may_run_in_leaf_owner_within`), then D (refresh rounds).
+- Family B done (ADR 0751): fixture `bounds-value-depth-limit`, ownership case `no-store-mutation-outside-setter/setter-alias-limit/001`, process test `value_chains_past_their_limit_are_uncertifiable`. Witnesses 220 same list. Corpus +14 SC9012 handed-member-dispatch (app-game ogl/solid-three/three-examples, probus-hk vehicleArt), each a receiver chain reaching a parameter or `this` one step past the old cut; 0 V moved (`sweep-B.json`, bins `bB`). Upstream: SC2003's store windows are product-owned (eslint-plugin-solid has no such rule).
+- Next: family D (`calls_reach` budget → true under a createOptimistic program; refresh FORWARDING_ROUNDS truncation → obligation).
