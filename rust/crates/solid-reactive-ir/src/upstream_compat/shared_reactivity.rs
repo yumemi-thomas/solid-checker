@@ -1114,21 +1114,32 @@ fn uncalled_accessor(
         if is_called(file, identifier.span) {
             continue;
         }
-        let (position, proven) = if is_argument(file, identifier.span) {
+        let coerced = crate::blockers::ACCESSOR_VALUE_COERCED;
+        let (position, proven, blocker) = if is_argument(file, identifier.span) {
             if !standard_value_argument(file, context, identifier.span) {
                 continue;
             }
-            ("a standard-library value parameter", false)
+            ("a standard-library value parameter", false, coerced)
         } else if let Some(position) = value_position(file, identifier.span) {
             // `(c as any).toString = …`: stringifying no longer gives the
             // source, so the position proves nothing.
-            (position, !member_written(file, context, symbol))
+            (position, !member_written(file, context, symbol), coerced)
         } else if let Some(position) = open_position(file, identifier.span) {
-            (position, false)
+            (position, false, coerced)
         } else if standard_value_argument(file, context, identifier.span) {
-            ("a standard-library value parameter", false)
+            ("a standard-library value parameter", false, coerced)
         } else if erased_loose_equality(file, context, identifier.span) {
-            ("a loose equality", false)
+            ("a loose equality", false, coerced)
+        } else if let Some(position) = type_owned_position(file, identifier.span)
+            && file.tsc_may_be_silent_within(identifier.span)
+        {
+            // ADR 0830: a position TypeScript closes, on a line a directive
+            // may silence or in JavaScript: nothing reports it there.
+            (
+                position,
+                false,
+                crate::blockers::SOLID_CALL_REJECTED_UNCHECKED,
+            )
         } else {
             continue;
         };
@@ -1141,7 +1152,7 @@ fn uncalled_accessor(
             analysis_context: if proven {
                 String::new()
             } else {
-                crate::blockers::ACCESSOR_VALUE_COERCED.to_owned()
+                blocker.to_owned()
             },
             fixes: vec![],
             uncertain: !proven,
@@ -5969,6 +5980,43 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
+}
+
+/// ADR 0830: the positions [`value_position`]'s narrowing gave to TypeScript
+/// (a type-checked native attribute, a class object's value, a computed key)
+/// and the operators that reject a function (arithmetic, bitwise, relational).
+fn type_owned_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+    let ast = &file.ast;
+    for element in &ast.jsx_elements {
+        if !is_lowercase_led(text(file, element.name.span)) {
+            continue;
+        }
+        for attribute in element.attributes.iter().filter(|a| a.namespace.is_none()) {
+            if attribute.expression == Some(span)
+                && super::jsx_name_is_type_checked(text(file, attribute.name))
+            {
+                return Some("a native JSX attribute");
+            }
+            if text(file, attribute.name) == "class"
+                && let Some(object) = attribute.expression
+                && ast
+                    .object_properties
+                    .iter()
+                    .any(|property| property.value == span && object.contains(property.span))
+            {
+                return Some("a class object value");
+            }
+        }
+    }
+    if ast.computed_members.iter().any(|member| {
+        ast.member_at(*member)
+            .is_some_and(|member| member.property == span)
+    }) {
+        return Some("a computed member key");
+    }
+    ast.coercing_operands
+        .contains(&span)
+        .then_some("an arithmetic or bitwise operand")
 }
 
 /// A key written as a plain identifier: ASCII letters, digits, `_` or `$`, not

@@ -214,6 +214,33 @@ Landed on `claude/flip-r2`: `7404519da` (ADR 0826), `a16831776` (0827), `3876b54
 
 **Traps.** zsh: `$R:c` is a modifier, write `${R}:`; `$ids` does not split, use `sh -c`. `git apply --3way` stages part of a patch: save with `git diff HEAD`. verify-delta skips WASM parity for analysis-only paths: run `make verify` before handing a tip on. `chk.sh` renders `App`; grid cases export `C1`.
 
+## R2e, from 2026-11-07
+
+Same branch, worktree and scratch `$S` as R2d. Census merged in (9954cf5e9, from `origin/claude/flip-census` 4c81fcc00).
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P8 landed (ADR 0829), `d8848fd18` | | as R2d's row | tsc-oracle gate gained `checkerByPass` (approved), case 128 split, `nick` appended (141) |
+| Suppressed rejections (ADR 0830), `e528d1841` | one-arg `createEffect`, `createEffect(c, 5)`, `delete store.v!`/`(store.v as T)` under an exact directive or a leading `@ts-nocheck` | `refresh`/`affects` targets, an apply's or `onSettled`'s returned non-cleanup, a two-line block directive, JavaScript: `solid-call-rejected-unchecked` | fuzz 180 FC (d8848) to 0, 180 agree; corpus 0 moved; oracle cases 142-145 (approved); print.mjs `auxLine` on site text (0 of 407,172 programs changed) |
+| Schema 91 + d8-pkg (`a82d5eed3`) | | `d8-pkg-plain-*`: U `value-to-unresolved-callee` by the census | patterns 3 FC (e528) to 0; corpus 0 moved vs the integrator's `sweep-m12a`: 36,314 U, 377 V |
+| SC1005 typed positions, SC7007 arity under a directive (`0a28b067d`, docs `0d4fc51c7`) | | the four SC1005 positions and SC7007's rejected call, `solid-call-rejected-unchecked` | corpus 0 moved; `innerhtml` (runtime writes it as an attribute), draggable (retired), SC9012 invalid call stay silent, reasons in open-work |
+
+### R2e handoff, 2026-11-07
+
+Tip `0d4fc51c7` on `claude/flip-r2`, green: `make verify` 0 on `0a28b067d` (its follow-up is docs only, verify-delta 0). Build `rt2`, sweep `sweep-t2.json` (= `sweep-a82.json`). Note: `ed7a520fd` was amended into `0a28b067d` (the rediscovery entry); the integrator was told to merge `ed7a520fd`: merge `0a28b067d` and `0d4fc51c7` instead. No more amends.
+
+**FileFacts helpers (ADR 0830):** `tsc_silence_at(offset)` (Silent / Maybe / Reports, tsgo's walk and tsc 5's, exact only where both agree), `tsc_may_be_silent_within(span)`, `tsc_may_be_silent_somewhere()`, `line_of`. A V may rest only on Silent at the diagnostic's own line; a U may use `may_be_silent_within`. P8's file-wide `tsc_reports_in` stays as it was (approval needed to narrow it).
+
+**Next, in order:**
+1. Imported compound holder `<Ui.C />` (R2d step 4). Probed on rt2 (`$S/work/uic-open`, `uic-closed`): U `prop-pending-unproven` in both. Only the closed program (ADR 0352, a private manifest) can be proved: an imported holder is exported, and ADR 0823 accepts an exported holder only when `closed`. Plan: `post_rows.rs` `compound_member_value` resolves an imported leftmost segment to the holder file's `const` binding (through the import, a recorded read: `trace::read_path` of the holder file, ir-read-lint counts raw cross-file reads); `props_reactivity.rs` `compound_render_reference` today returns false for any holder reference outside the holder's file (`*other.path != *holder_file.path`): accept an import specifier and a resolved member tag in an importing file. Same-file Chrome truth: ADR 0823's n1, n3-n5. Fuzz: a two-file holder shape (`files`), old fails, new passes.
+2. Coordinator's item (after `<Ui.C />`): R1e's `wd-*` fuzz shapes (claude/flip-r1 at 7788b7295, flip-read.mjs), 72 false cleans: a primitive's slot held across modules (IIFE return, class field, a `let` read, an alias read) in `slots.ts`, used in `App.tsx`. On the census tree each has a U at the holder in `slots.ts` but no row at the `App.tsx` use. The rule: the obligation sits at the use, so every use the census or transport reaches gets its own row (U, or V with proof). First merge `origin/claude/flip-census` 040a01944 into flip-r2 (it must carry both the census and 7788b7295). Then: old build fails, new passes by those ids, rediscovery entry.
+3. Window-realm proof (R2d step 5): `dependency-source-window-realm` under `--runtime-realm window`, 3 V to 3 U in `f2e5f60e0` (open-work). Not started.
+4. Owed, not mine unless asked: the census's V for a store handed to a helper (`value-root-in-helper`, `value-to-unresolved-callee`; open-work).
+
+**Helpers added in `$S`:** `gen1.mjs` (print a generated recall program by id regex), `genall.mjs` (id to program hash for codes, any scripts/fuzz dir: diff two generators), `outc.py` (grid outcomes by variant), `run1.sh` (checker --internal on a prepared project), `add-red.py` (append a rediscovery entry by text). `$S/genhead` is HEAD's scripts at e528 with node_modules linked.
+
+**Traps:** a site text over lines needs `AUX` on the statement's line (flip-read.mjs `AUX`), or every program is `not-fired`. A heredoc'd Python with `\"` inside a JSON string fails: write the script to a file. `run.mjs` copies only `App.tsx` (inline helpers for Chrome). A sweep needs a baseline on the same census state: the integrator's is `/Users/thomas/dev/sc-scratch.noindex/flip-reads/sweep-m12a.json`.
+
 ## R2 handoff, 2026-11-06
 
 For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.
