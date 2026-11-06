@@ -102,6 +102,25 @@ mod tests {
         assert!(memoized(&mut memo, ("a.tsx", 2), |_| false));
     }
 
+    /// The answer `Option<&str>` keeps, with the walk's short circuit: the
+    /// strongest blocker ends the fan-out, a weaker one is kept, and a `None`
+    /// is remembered as an answer, not read as no entry.
+    #[test]
+    fn a_memo_keeps_a_none_as_an_answer() {
+        let mut memo: HashMap<(u32, u32), Option<&'static str>> = HashMap::default();
+        let mut runs = 0;
+        for _ in 0..2 {
+            assert_eq!(
+                memoized(&mut memo, (0, 4), |_| {
+                    runs += 1;
+                    None
+                }),
+                None
+            );
+        }
+        assert_eq!(runs, 1);
+    }
+
     #[test]
     fn a_ladder_of_diamonds_costs_its_rungs_not_its_paths() {
         let (mut runs, memo) = (0, &mut HashMap::default());
