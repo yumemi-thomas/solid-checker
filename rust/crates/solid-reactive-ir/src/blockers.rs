@@ -104,6 +104,10 @@ pub(crate) const VALUE_FORWARDED: &str = "value-forwarded";
 pub(crate) const VALUE_ROOT_IN_HELPER: &str = "value-root-in-helper";
 pub(crate) const VALUE_USE_UNCLASSIFIED: &str = "value-use-unclassified";
 pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-premise";
+/// ADR 0694: a store Get that only leads to a write, in a window no read in
+/// that body is proven in. `via` carries it: the row reads as through this.
+pub(crate) const WRITE_PATH_READ_UNPROVEN: &str = "write-path-read-unproven";
+pub(crate) const WRITE_PATH_VIA: &str = "a write's path";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";
@@ -133,7 +137,9 @@ pub fn with_detail(blocker: &str, context: &str) -> String {
 
 /// The first hole of a read, in the order the rule's proof meets them.
 pub(crate) fn for_read(read: &crate::ReactiveRead) -> &'static str {
-    if read.execution == crate::ExecutionRole::Unknown {
+    if read.via.as_ref() == WRITE_PATH_VIA {
+        WRITE_PATH_READ_UNPROVEN
+    } else if read.execution == crate::ExecutionRole::Unknown {
         FUNCTION_RUN_UNPLACED
     } else if read.host_callback_timing {
         HOST_CALLBACK_TIMING

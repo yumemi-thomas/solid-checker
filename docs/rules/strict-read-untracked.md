@@ -149,6 +149,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 - **Named hand-offs (ADR 0531).** Resolved synchronous standard-library carriers,
   template tags and Function.call/apply place a named reader at the carrier's
   role. Other hand-offs are obligations; reviewed fresh-stack callbacks stay legal.
+- **A Get that only leads to a write is uncertifiable in a dynamic-only body.**
+  In `flush(fn)` in a body only `dynamic()` mounts, `s.a` in `s.a.v = 7` stands
+  for no read of its own: the same write in the body is uncertifiable, so the
+  path claims no more (ADR 0694). A real read there stays a violation.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
   scope only stores has no execution role; a read there is reported as

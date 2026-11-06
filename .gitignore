@@ -823,6 +823,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/undecided-flush-callback/node_modules/**
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/**
+!fixtures/reactive-ir/flush-write-path/node_modules/
+!fixtures/reactive-ir/flush-write-path/node_modules/**
 !fixtures/reactive-ir/write-past-possible-await/node_modules/
 !fixtures/reactive-ir/write-past-possible-await/node_modules/**
 !fixtures/reactive-ir/write-past-layered-await/node_modules/
