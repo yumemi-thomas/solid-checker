@@ -394,7 +394,7 @@ fn an_answer_nobody_reads_still_leaves_what_the_edit_resolved_observed() {
             .filter(|finding| finding["analysisContext"] == "import-unresolved")
             .count()
     };
-    assert!(unresolved(&unread) > 0, "{}", unread.stderr);
+    assert_eq!(unresolved(&unread), 2, "{}", unread.stderr);
     assert_eq!(unresolved(&fresh), 0, "{}", fresh.stderr);
     assert_eq!(count(&fresh), count(&unread) - unresolved(&unread) + 1);
     let retained = project.check(true, None);
