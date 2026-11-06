@@ -102,6 +102,17 @@
    "item": "census",
    "partial": true,
    "note": "ADR 0668 gave this advisory code its first cells: 690 of 3,990 are certified, each a read in tracked JSX with no row, through a module hook, a barrel, a wrapper or a hand-off. The census owns them: a transported read in a render position has no async row today"
+  },
+  {
+   "idPrefix": "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-",
+   "code": "STRICT_READ_UNTRACKED",
+   "variantPrefix": "setter-fn-apply",
+   "contexts": [
+    "effect-apply"
+   ],
+   "outcome": "false-clean",
+   "item": "setter callback in a body arrow",
+   "note": "`const wrapUse = () => { setSw2((d) => { d.n = a1(); }); }`, called in an effect’s apply: certified, Chrome warns STRICT_READ_UNTRACKED. The same body arrow with a plain `a1()` read is V, a `function` declaration U (summary-read-unplaced), the setter call inline in the apply V. 6 of 6 wrapper programs, the same on e918518de and c11f67588 (R3b). SC1001’s setter-callback placement (ADR 0676), local_access.rs, not R3’s file"
   }
  ],
  "patterns": [
