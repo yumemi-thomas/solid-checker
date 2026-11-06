@@ -2,6 +2,26 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
+      "start": 231,
+      "end": 237,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
+      "start": 299,
+      "end": 305,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -19,6 +39,16 @@
       "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
       "start": 367,
       "end": 372,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
+      "start": 367,
+      "end": 373,
       "fixes": 0
     },
     {
@@ -52,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
+      "start": 444,
+      "end": 450,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -69,6 +109,26 @@
       "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
       "start": 555,
       "end": 560,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
+      "start": 555,
+      "end": 561,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/absent-guard-prop/App.tsx",
+      "start": 637,
+      "end": 643,
       "fixes": 0
     },
     {

@@ -71,6 +71,18 @@ export const CREATED_READS = {
   "created-map-array": { ...CREATED, imports: ["mapArray"], text: (o) => `const r = mapArray(() => [${o}()], (x) => x); void r();` },
   "created-repeat": { ...CREATED, imports: ["repeat"], text: (o) => `const r = repeat(() => ${o}(), (i) => i); void r();` },
   "created-memo-call": { ...CREATED, imports: ["createMemo"], text: (o) => `void createMemo(() => ${o}())();` },
+  // ADR 0780: the same from `solid-js/internal`, whose boundaries return their memo too.
+  "created-error-boundary": { ...CREATED, imports: ["createErrorBoundary"], text: (o) => `const r = createErrorBoundary(() => ${o}(), () => 0); void r();` },
+  "created-loading-boundary": { ...CREATED, imports: ["createLoadingBoundary"], text: (o) => `const r = createLoadingBoundary(() => ${o}(), () => 0); void r();` },
+};
+// ADR 0780: `export * as Api from "solid-js"` names every primitive, with no `import * as` of Solid in the project.
+const STAR_AS = { kind: "plain", importLines: ['import { Api } from "./solid-api";'], files: { "solid-api.ts": 'export * as Api from "solid-js";\n' } };
+export const STAR_AS_READS = {
+  "star-as-signal": { ...STAR_AS, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "const [r] = Api.createSignal(1); void r();" },
+  "star-as-memo": { ...STAR_AS, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "const r = Api.createMemo(() => 1); void r();" },
+};
+export const STAR_AS_WRITES = {
+  "star-as-store": { ...STAR_AS, contexts: ["body", "handler"], text: () => "const [r] = Api.createStore({ v: 1 }); r.v = 2;" },
 };
 // ADR 0696: a prop's function, run only behind a prop of the component. A caller that passes it warns; one that leaves it out runs nothing.
 const guarded = (attribute) => (o) => `const K = (p: { r?: () => number; on?: boolean }) => { if (p.on) void p.r!(); return null; }; void children(() => <K ${attribute}r={() => ${o}()} />)();`;
@@ -78,9 +90,63 @@ export const ABSENT_GUARD = {
   "guard-passed": { kind: "plain", contexts: ["body"], imports: ["children"], text: guarded("on ") },
   "guard-absent": { kind: "plain", contexts: [], legal: ["memo"], imports: ["children"], text: guarded("") },
 };
+// ADRs 0770-0772, the handed net (research report section 1). A prop's member past the first step, a value handed to a helper's parameter at a
+// tracked position, a hook no call edge resolves. Each writes, acts or reads through a value no fact resolves; the build before certified each.
+const SET = "const [, w] = createSignal(0);";
+const USE = `const useT = () => { ${SET} return { go: w }; };`;
+const HOST = { kind: "plain", imports: ["createSignal"] };
+const NESTED = { ...HOST, imports: ["children", "createSignal"], contexts: ["body"] };
+const nested = (value) => () => `${SET} const K = (p: { o: { go: (v: number) => void } }) => { p.o.go(1); return null; }; void children(() => <K o={{ go: ${value} }} />)();`;
+const PARAM = { ...HOST, contexts: ["memo", "effect-compute"] };
+const NOT_RUN = { ...HOST, contexts: [], legal: ["memo", "effect-compute"] };
+const run = "const run = (g: (v: number) => void) => { g(1); return 1; };";
+const runMember = "const run = (o: { go: (v: number) => void }) => { o.go(1); return 1; };";
+const HOOK = { ...HOST, imports: ["createMemo", "createSignal"], contexts: ["body", "memo"] };
+const inMemo = "createMemo(() => { t.go(1); return 0; });";
+export const NET_WRITES = {
+  "net-nested": { ...NESTED, text: nested("w") },
+  // Quiet, and no fact at the call says so: uncertifiable, on purpose.
+  "net-nested-plain": { ...NESTED, contexts: [], legal: ["memo"], text: nested("() => {}") },
+  "net-param": { ...PARAM, text: () => `${run} ${SET} run(w);` },
+  "net-param-member": { ...PARAM, text: () => `${runMember} ${SET} run({ go: w });` },
+  "net-param-helper": { ...PARAM, text: () => `${runMember} ${SET} const h = () => run({ go: w }); h();` },
+  "net-param-plain": { ...NOT_RUN, text: () => `${run} run(() => {});` },
+  "net-param-unused": { ...NOT_RUN, text: () => `const keep = (_g: (v: number) => void) => 1; ${SET} keep(w);` },
+  "net-param-later": { ...NOT_RUN, text: () => `const later = (g: (v: number) => void) => () => g(1); ${SET} later(w);` },
+  "net-hook-rebound": { ...HOOK, text: () => `${USE} let hook = (() => ({ go: (_v: number) => {} })) as typeof useT; if (Math.random() >= 0) hook = useT; const t = hook(); ${inMemo}` },
+  "net-hook-computed": { ...HOOK, text: () => `${USE} const hooks = [useT]; const t = hooks[0](); ${inMemo}` },
+  "net-hook-call": { ...HOOK, text: () => `${USE} const t = useT.call(null); ${inMemo}` },
+  "net-hook-bind": { ...HOOK, text: () => `${USE} const t = useT.bind(null)(); ${inMemo}` },
+  "net-hook-chosen": { ...HOOK, text: () => `${USE} const hook = Math.random() >= 0 ? useT : useT; const t = hook(); ${inMemo}` },
+};
+export const NET_READS = {
+  "net-nested-read": { kind: "plain", contexts: ["body"], imports: ["children"], text: (o) => `const K = (p: { o: { go: () => number } }) => { void p.o.go(); return null; }; void children(() => <K o={{ go: ${o} }} />)();` },
+  // ADR 0689's chosen hook: closed on the checker before any shape held it.
+  "net-hook-chosen-read": { kind: "plain", contexts: ["body", "root"], legal: ["memo"], text: (o) => `const useA = () => ({ read: ${o} }); const hook = Math.random() >= 0 ? useA : useA; void hook().read();` },
+};
+export const NET_ACTIONS = {
+  "net-param-action": { ...HOST, imports: ["action"], contexts: ["memo", "effect-compute"], text: () => `const run = (g: () => unknown) => { g(); return 1; }; const act = action(function* () { yield 1; }); run(act);` },
+};
+const PEEK = { kind: "async", contexts: ["jsx", "show"] };
+export const NET_PENDING = {
+  "net-peek": { ...PEEK, text: (o) => `const peek = (g: () => number) => g(); void peek(${o});` },
+  "net-peek-member": { ...PEEK, text: (o) => `const peek = (h: { go: () => number }) => h.go(); void peek({ go: ${o} });` },
+};
+const STORE_CALL = { kind: "store-array", contexts: ["body", "handler"] };
+export const NET_STORE_CALLS = {
+  "net-push-bind": { ...STORE_CALL, text: (o) => `Array.prototype.push.bind(${o})(1);` },
+  "net-push-held": { ...STORE_CALL, text: (o) => `const f = Array.prototype.push.bind(${o}); f(1);` },
+  "net-push-reflect": { ...STORE_CALL, text: (o) => `Reflect.apply(Array.prototype.push, ${o}, [1]);` },
+  "net-push-apply-held": { ...STORE_CALL, text: (o) => `const more = [1]; Array.prototype.push.apply(${o}, more);` },
+};
+
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
+  ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: NET_PENDING,
+  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

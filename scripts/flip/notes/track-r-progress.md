@@ -139,6 +139,14 @@ Patches were cut before the merges: apply with `git apply --3way`, and `git add`
 
 **Traps from this session.** Grid processes read `scripts/fuzz/*.mjs` live: no edit there while a grid runs. A `silenceMeasured` fallback was withdrawn on the owner's word: a finding's line needs its own counter. verify-delta skips `tsc-oracle` unless a path escalates: `8833e6bfa` went out with that gate red. `make coverage` shows one row per fixture: compare snapshots row by row. The commit message of `976e73028` rests on grids from before its last two edits; rerun the whole set after the census.
 
+## R2 (agent), from 2026-11-06
+
+Base `879eca007` reports, branch `claude/flip-r2`, ADRs 0780-0789. Scratch `/tmp/sc-scratch.noindex/flip-r2`: `gate-times.tsv`, helpers `bld.sh`, `sw.sh`, `one.sh`, `ids.mjs` (id manifests for a subset of mx-recall), `defs.py`.
+
+| Family | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| List: 9 programs, 3 no-run | `a11`'s twin confirmed (STRICT_READ_UNTRACKED); `h03` is NO_OWNER_EFFECT, SC4001 stands; `e807` runs | | `e911` (`on:click` is TS2322) and `f08` (the plugin leaves `@dec` in, no way to run it; SC1001 U at its site) deleted |
+| P6, P5, P10 (ADR 0780) | `b05 b06 d7-export-star-as -store`, and `Api.flush()` SC2008, which the new binding found | `h18`, `onLoad` in a control-flow callback | 139 to 130 open |
 ## R3
 
 Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).

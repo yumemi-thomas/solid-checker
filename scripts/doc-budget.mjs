@@ -8,7 +8,11 @@
 // holds that line. Slice reports belong in commit messages, a design decision
 // in docs/decisions.md, an open item in docs/open-work.md.
 //
-//   bun scripts/doc-budget.mjs        check, exit 1 on any violation
+// SUSPENDED during the flip, by the owner, 2026-11-06: a run reports the sizes and
+// what is over a limit, and does not fail. The limits return before #173 merges:
+// restore the `process.exit(1)` below and the test that pins them.
+//
+//   bun scripts/doc-budget.mjs        report sizes against the limits, exit 0
 import { readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -366,6 +370,22 @@ export const DOCS_ALLOWED = [
   "docs/release-audits/",
 ];
 
+const groupTotal = (sizes, group) =>
+  Object.entries(sizes)
+    .filter(([path]) => group.test(path))
+    .reduce((sum, [, bytes]) => sum + bytes, 0);
+
+/** What a suspended run prints: each limit with its size, then every violation. */
+export function report(sizes) {
+  const found = violations(sizes);
+  return [
+    ...Object.entries(FILE_BUDGETS).map(([path, limit]) => `${path}: ${sizes[path] ?? 0} of ${limit} bytes`),
+    ...GROUP_BUDGETS.map((group) => `${group.name} total: ${groupTotal(sizes, group)} of ${group.bytes} bytes`),
+    found.length ? `${found.length} over, suspended (would fail):` : "nothing over",
+    ...found.map((line) => `  ${line}`),
+  ];
+}
+
 /** Every violation for a `{ path: bytes }` map, as sentences. */
 export function violations(sizes) {
   const found = [];
@@ -373,9 +393,7 @@ export function violations(sizes) {
     if ((sizes[path] ?? 0) > limit) found.push(`${path} is ${sizes[path]} bytes (budget ${limit})`);
   }
   for (const group of GROUP_BUDGETS) {
-    const total = Object.entries(sizes)
-      .filter(([path]) => group.test(path))
-      .reduce((sum, [, bytes]) => sum + bytes, 0);
+    const total = groupTotal(sizes, group);
     if (total > group.bytes) found.push(`${group.name} total ${total} bytes (budget ${group.bytes})`);
   }
   for (const [path, bytes] of Object.entries(sizes)) {
@@ -413,14 +431,6 @@ export function measuredSizes(root = ROOT) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  const found = violations(measuredSizes());
-  if (found.length > 0) {
-    console.error(
-      `doc-budget: ${found.length} violation(s):\n  ${found.join("\n  ")}\n` +
-        "Slice reports go in the commit message, a design decision in docs/decisions.md, " +
-        "an open item in docs/open-work.md. Raise a budget only as a deliberate edit to scripts/doc-budget.mjs.",
-    );
-    process.exit(1);
-  }
-  console.log("doc-budget: within budget");
+  // Suspended, see the top of this file: nothing here exits non-zero.
+  console.log(`doc-budget (suspended):\n${report(measuredSizes()).join("\n")}`);
 }

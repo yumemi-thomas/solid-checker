@@ -677,9 +677,10 @@ function render(program, instrument) {
   for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
   packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
-  // rc.21 declares `createOwner` only in `solid-js/internal`.
-  const owner = importNames.includes("createOwner") ? `import { createOwner } from "solid-js/internal";\n` : "";
-  const header = `import { ${importNames.filter((name) => name !== "createOwner").join(", ")} } from "solid-js";\n${owner}${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
+  // rc.21 declares these only in `solid-js/internal`.
+  const internal = ["createErrorBoundary", "createLoadingBoundary", "createOwner"];
+  const owner = importNames.some((name) => internal.includes(name)) ? `import { ${internal.filter((name) => importNames.includes(name)).join(", ")} } from "solid-js/internal";\n` : "";
+  const header = `import { ${importNames.filter((name) => !internal.includes(name)).join(", ")} } from "solid-js";\n${owner}${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");

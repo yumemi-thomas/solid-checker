@@ -585,10 +585,18 @@ impl<'a, 'l> SiteExclusions<'a, 'l> {
                 self.symbol_names,
                 lookup,
             );
-            if crate::execution_role::excluded_role_holds(file, site, role, lookup)
-                || crate::execution_role::await_continuation_decides_nothing(file, site, lookup)
-            {
+            if crate::execution_role::await_continuation_decides_nothing(file, site, lookup) {
                 Exclusion::Always
+            } else if crate::execution_role::excluded_role_holds(file, site, role, lookup) {
+                // ADR 0771: a tracked site's write or async read still
+                // reports, so the call that hands the parameter decides.
+                if crate::execution_role::async_execution_role(file, site, role)
+                    == crate::ExecutionRole::TrackedJsx
+                {
+                    Exclusion::Never
+                } else {
+                    Exclusion::Always
+                }
             } else {
                 Exclusion::Consumer
             }

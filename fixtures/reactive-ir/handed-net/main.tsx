@@ -1,0 +1,21 @@
+import { render } from "@solidjs/web";
+import { App as Aa1 } from "./a1";
+import { App as Aa13 } from "./a13";
+import { App as Aa9 } from "./a9";
+import { App as Ac1 } from "./c1";
+import { App as Ac11 } from "./c11";
+import { App as Ac12 } from "./c12";
+import { App as Ac7 } from "./c7";
+import { App as Ac9 } from "./c9";
+import { App as Ah2 } from "./h2";
+import { App as An1 } from "./n1";
+import { App as An4 } from "./n4";
+import { App as An9 } from "./n9";
+import { App as Apush_apply } from "./push-apply";
+import { App as Ar1 } from "./r1";
+import { App as Arun_local } from "./run-local";
+import { App as As6 } from "./s6";
+import { App as As8 } from "./s8";
+
+const host = document.body;
+for (const app of [Aa1, Aa13, Aa9, Ac1, Ac11, Ac12, Ac7, Ac9, Ah2, An1, An4, An9, Apush_apply, Ar1, Arun_local, As6, As8]) render(app, host);

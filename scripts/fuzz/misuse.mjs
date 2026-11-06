@@ -183,7 +183,7 @@ const DENIED = {
 const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase"];
-const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -271,7 +271,7 @@ export const PAIR_SETS = ["mount-source", "handoff-file", "callback-handoff"];
  * literal, a destructuring default, a nested pattern, an array slot. Callee forms of either: `.bind(null)`, `.call(null, ...)`, an
  * extracted method, an assignment or `||=` callee.
  */
-export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "reexport", "reexport-ns"];
+export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "reexport", "reexport-ns", "reexport-ns-as"];
 /**
  * A hook that returns a function with a body, not the source (`{ useIt: () => w1() }`), by slot form and by how the slot is read. `-written`
  * crosses them with an unrelated object's member of the same name written elsewhere in the program, which turns the resolver's name veto on:
@@ -292,7 +292,7 @@ const api = (name, args = "", { module = "solid-js", locals = false } = {}) => (
 /** A call of a component-scope function (a setter, an accessor, an action). */
 const local = (name, args = "") => ({ kind: "local", name, args });
 /** A statement on a component-scope object (a store write): `text(object)`. */
-const member = (object, text, imports = []) => ({ kind: "member", object, text, imports });
+const member = (object, text, imports = [], { importLines, files } = {}) => ({ kind: "member", object, text, imports, importLines, files });
 
 /**
  * Per code: the variants, the contexts and bindings to draw from, the component-level signals the call needs (`setup`), the call
@@ -666,7 +666,7 @@ for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   spec.setup = (variant, name) => (variants[variant] ? [openSignal(name("a"), variants[variant].kind)] : setup(variant, name));
   // A variant with `text` writes its own site over the source.
   const [call, bindingsFor] = [spec.call, spec.bindingsFor];
-  spec.call = (node, sigs, ...rest) => (variants[node.variant]?.text ? member(sigs[0].name, variants[node.variant].text, variants[node.variant].imports) : call(node, sigs, ...rest));
+  spec.call = (node, sigs, ...rest) => (variants[node.variant]?.text ? member(sigs[0].name, variants[node.variant].text, variants[node.variant].imports, variants[node.variant]) : call(node, sigs, ...rest));
   spec.bindingsFor = (variant) => (variants[variant]?.text ? ["direct", "alias", "wrapper"] : bindingsFor?.(variant) ?? spec.bindings);
   const legal = Object.entries(variants).filter(([, { legal }]) => legal);
   spec.recallLegalVariants = [...(spec.recallLegalVariants ?? []), ...legal.map(([variant]) => variant)];
@@ -1105,6 +1105,8 @@ export function describeUse(node, signals) {
       case "ns-held": out.namespaces.push(module); out.moduleLines.push(`const ${ns}2 = ${ns};`, `const { ${name}: ${local} } = ${ns}2;`); out.text = wrap(local); break;
       case "ns-member": out.namespaces.push(module); out.moduleLines.push(`const ${local} = ${ns}.${name};`); out.text = wrap(local); break;
       case "reexport": out.importLines = [`import { ${name} as ${local} } from "./solid-api";`]; out.files = { "solid-api.ts": `export { ${name} } from "${module}";\n` }; out.text = wrap(local); break;
+      // ADR 0780: the namespace is an export of a module, with no `import * as` of the primitive's module anywhere.
+      case "reexport-ns-as": out.importLines = ['import { Api as R } from "./solid-api";']; out.files = { "solid-api.ts": `export * as Api from "${module}";\n` }; out.text = wrap(`R.${name}`); break;
       case "reexport-ns": out.importLines = ['import * as R from "./solid-api";']; out.files = { "solid-api.ts": `export * from "${module}";\n` }; out.text = wrap(`R.${name}`); break;
       case "bind": importsOf(module).push(name); out.text = `${name}.bind(null)(${args})`; break;
       case "call": importsOf(module).push(name); out.text = `${name}.call${callTypeArguments(name, args)}(null${args ? `, ${args}` : ""})`; break;
@@ -1165,6 +1167,8 @@ export function describeUse(node, signals) {
   }
   // member: a statement on a component-scope object
   out.solid.push(...(target.imports ?? []));
+  if (target.importLines) out.importLines = target.importLines;
+  if (target.files) out.files = target.files;
   switch (node.bind) {
     case "alias": out.preludeLines.push(`const useIt = ${target.object};`); out.text = target.text("useIt"); break;
     case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${target.text(target.object)}; };`); out.text = "wrapUse()"; break;
@@ -1392,6 +1396,11 @@ function deniedContextOf(context, stmts, kit, b) {
         decl(out, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${out})`)),
         expr(domExpr(`queueMicrotask(() => { createRoot((dd) => { ${d} = dd; insert(${out}, () => <Portal><Inner /></Portal>); }); })`, ["insert", "Portal"], ["createRoot"])),
         ...laterRoot(kit, [`${el}.focus()`], `${d}()`)], view: [] };
+    }
+    // ADR 0780: inline in a control-flow callback, a nested handler keeps the denied arm.
+    case "dny-load-for": case "dny-load-show": {
+      const frame = kit.name("r");
+      return { body: [], view: [flowEl(kit.name("v"), context.slice(9), [decl(frame, jsxExpr(button(b, stmts, { tag: "iframe", on: "onLoad" }))), expr(domExpr(`document.body.append(${frame} as Node)`))])] };
     }
     case "dny-load-append": return { body: [decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "iframe", on: "onLoad" })))])), ...laterRoot(kit, [], "document.body.appendChild(Inner() as any)")], view: [] };
     case "dny-flush-popover": return { sigs: [gone], body: laterRoot(kit, [`${el}.showPopover()`, `${gone.setter}(0)`], "1"), view: [button(b, stmts, { tag: "div", on: "onBeforeToggle", attrs: `popover={${gone.name}() ? "auto" : undefined}` })] };

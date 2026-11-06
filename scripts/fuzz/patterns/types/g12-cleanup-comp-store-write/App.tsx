@@ -10,7 +10,7 @@ const [s, setS] = createStore({ a: 1 });
 const own = () => (getOwner() as any)?._name ?? String(getOwner());
 const btn = (b: HTMLButtonElement) => { (globalThis as any).__b = () => b; };
 const click = async () => { (globalThis as any).__b().click(); };
-function Inner() { setS("a", 2); __log("ok", own()); return <i />; }
+function Inner() { setS((d) => { d.a = 2; }); __log("ok", own()); return <i />; }
 export function App() {
   const dispose = createRoot((d) => { onCleanup(() => { createRoot(() => <Inner />); }); return d; });
   return <button ref={btn} onClick={() => { dispose(); }} />;
