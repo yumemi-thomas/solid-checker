@@ -260,3 +260,14 @@ Stopped at the owner's 500k rule. Part 8's order is finished except the census. 
 **Open for the owner.** `flush(fn)` ruling done, ADR 0694; its `rediscovery.json` entry says no old build fails, because the judge rates both answers agree. Item 2 bounds depth, not fan-out: `sites^8` is the worst case left. `verify-delta` should select `repro-causes`: same hole as `tsc-oracle`, not done. `types/p3-cast-*` are R2's listed residual, for the owner.
 
 **Traps from this session.** A merge conflict on `open-defects.json` that takes one side drops the other's entries; `--update` puts them back without their `item` text: restore it. `bld.sh` used to copy a stale binary after a failed build; it refuses now. A task's "exit 0" is the shell's last command: read the `.rc` file. Chain with `&&`: a failed `git switch` let a cherry-pick run on the wrong branch once. A script with `cat` last hides the real exit. `====` in a zsh command line is an error and kills the rest.
+## R1, the handed net
+
+Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget suspended (`235888b82`, owner). All now uncertifiable; nothing proved. Corpus +2,490 U, 0 V moved.
+
+| Family | State | Row counts |
+|---|---|---|
+| Guards | fixture `handed-net-guards`; `n7`, `c15` U on purpose, the rest certified | |
+| N1-N3, `s6`, `s8` | pushed | 738 mx, 144 lg `net-*`: 0 FC, 0 FP. Old build fails, `rm5` fails the chosen hook |
+
+Traps: `excluded_role_holds` has a second caller, `SiteExclusions::at`, which the report missed: the generator found it. A held obligation is decided in `reactive_analysis`, because a result chunk may not read the setter tables unrecorded. `make verify` runs `diagnostics_process`, verify-delta does not unless it escalates. A fresh worktree needs `bun scripts/tsc-oracle.mjs provision --dialect all` and `bun scripts/fuzz/provision.mjs`. `$O/ids.mjs` plus `$O/idrun.sh` run one variant family in seconds, both builds.
+Not measured: N1 against N3 separately. Later proof: a helper's argument whose type holds no function.

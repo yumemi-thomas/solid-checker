@@ -14,6 +14,26 @@
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
+      "start": 1778,
+      "end": 1784,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
+      "start": 1778,
+      "end": 1784,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",

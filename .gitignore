@@ -1067,6 +1067,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-net-guards/node_modules/**
 !fixtures/reactive-ir/handed-net/node_modules/
 !fixtures/reactive-ir/handed-net/node_modules/**
+!fixtures/reactive-ir/handed-carrier-tracked/node_modules/
+!fixtures/reactive-ir/handed-carrier-tracked/node_modules/**
 !fixtures/reactive-ir/created-accessors/node_modules/
 !fixtures/reactive-ir/created-accessors/node_modules/**
 !fixtures/reactive-ir/plain-container-receiver/node_modules/

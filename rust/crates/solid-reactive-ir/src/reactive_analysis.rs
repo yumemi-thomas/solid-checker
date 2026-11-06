@@ -631,6 +631,51 @@ pub(crate) fn collect_project<'facts>(
             solid_facts::core::Span::new(start, end),
         );
     }
+    // ADR 0774: an async read no fact places may run at a tracked position with
+    // no boundary. SC5001's row alone leaves SC5003 nothing to say at the site,
+    // so such a read gets the pair `push_unplaced_async_reads` writes.
+    let tracked = draft
+        .async_reads
+        .iter()
+        .filter(|read| read.execution == crate::ExecutionRole::TrackedJsx)
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    let siblings = draft
+        .async_reads
+        .iter()
+        .filter(|read| {
+            ((read.execution == crate::ExecutionRole::Unknown && read.invocation_context_unproven)
+                || read.component_prop
+                || read.callee_callback_timing)
+                && !read.under_loading
+                && !read.declared_loading
+                && !tracked.contains(&read.location)
+                && analyzed_file(ctx, read.location.path.as_ref()).is_none_or(|file| {
+                    let (Ok(start), Ok(end)) = (
+                        u32::try_from(read.location.start_byte),
+                        u32::try_from(read.location.end_byte),
+                    ) else {
+                        return true;
+                    };
+                    crate::owners::read_loading_cover(
+                        ctx.semantic_lookup,
+                        file,
+                        solid_facts::core::Span::new(start, end),
+                        ctx.symbol_names,
+                    ) != crate::owners::LoadingCover::Covered
+                })
+        })
+        .map(|read| crate::AsyncRead {
+            execution: crate::ExecutionRole::TrackedJsx,
+            invocation_context_unproven: false,
+            component_prop: false,
+            host_callback_timing: false,
+            callee_callback_timing: false,
+            call_attributed: true,
+            ..read.clone()
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(siblings);
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.

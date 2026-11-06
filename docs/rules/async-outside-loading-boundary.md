@@ -147,4 +147,6 @@ a `render()` call, which is the only place the runtime checks (`web.dev.js:536-5
 read a condition may delay, or a component mounted later, is uncertifiable, blocker
 `root-mount-pass-unproven` (ADR 0661). A source really pending at a later mount is quiet.
 
+A named function a carrier provably runs at a tracked position reads there, with the carrier's cover: `[1].map(hf)` with no boundary is proven, `[].map(hf)` reads nothing, and a carrier that may not run leaves it uncertifiable (ADR 0776). A read no fact places, a read at an anonymous function in a tracked position, and a call of a value that may hold a pending source (an alias, a literal member, a hook's value) are uncertifiable; a value that reaches only settled sources stays clean (ADRs 0774, 0775, 0779).
+
 A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). A `Loading` covers what it holds, not what sits beside it (ADR 0668).

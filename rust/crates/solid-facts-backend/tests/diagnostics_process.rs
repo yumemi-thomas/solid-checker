@@ -1176,7 +1176,9 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
         })
         .collect::<Vec<_>>();
     // Three reads, and ADR 0665's SC5003 of the memo over the handed compute.
-    assert_eq!(rows.len(), 4, "{rows:#?}");
+    // ADR 0775: and SC9012 at `options()` of the two wrappers nothing resolves:
+    // what they return may be pending (patterns net/wrapped-later-tracked).
+    assert_eq!(rows.len(), 6, "{rows:#?}");
     for (wrapper, expected) in [
         ("wrapped", None),
         ("wrappedSnapshot", None),

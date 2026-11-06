@@ -10,6 +10,16 @@
       "start": 381,
       "end": 386,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return-wildcard/App.tsx",
+      "start": 430,
+      "end": 437,
+      "fixes": 0
     }
   ]
 }

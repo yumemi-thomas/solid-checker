@@ -27,6 +27,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 572,
+      "end": 578,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
       "start": 593,
       "end": 602,
       "fixes": 0
@@ -66,6 +76,16 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 1396,
+      "end": 1402,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
       "start": 1396,
       "end": 1402,

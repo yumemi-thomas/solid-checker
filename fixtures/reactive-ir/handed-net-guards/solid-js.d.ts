@@ -1,5 +1,5 @@
 declare namespace JSX {
-  interface IntrinsicElements { button: { onClick?: unknown; children?: unknown }; p: { children?: unknown; title?: unknown }; i: { children?: unknown } }
+  interface IntrinsicElements { button: { onClick?: unknown; children?: unknown }; i: { children?: unknown }; div: { children?: unknown; "data-view"?: unknown }; p: { children?: unknown; title?: unknown; "data-view"?: unknown } }
   interface Element {}
 }
 
