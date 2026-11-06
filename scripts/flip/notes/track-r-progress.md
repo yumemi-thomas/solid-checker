@@ -153,3 +153,15 @@ Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/fl
 | Step | State | Moved | Notes |
 |---|---|---|---|
 | 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
+
+## R1, the handed net
+
+Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget suspended (`235888b82`, owner). All now uncertifiable; nothing proved. Corpus +2,490 U, 0 V moved.
+
+| Family | State | Row counts |
+|---|---|---|
+| Guards | fixture `handed-net-guards`; `n7`, `c15` U on purpose, the rest certified | |
+| N1-N3, `s6`, `s8` | pushed | 738 mx, 144 lg `net-*`: 0 FC, 0 FP. Old build fails, `rm5` fails the chosen hook |
+
+Traps: `excluded_role_holds` has a second caller, `SiteExclusions::at`, which the report missed: the generator found it. A held obligation is decided in `reactive_analysis`, because a result chunk may not read the setter tables unrecorded. `make verify` runs `diagnostics_process`, verify-delta does not unless it escalates. A fresh worktree needs `bun scripts/tsc-oracle.mjs provision --dialect all` and `bun scripts/fuzz/provision.mjs`. `$O/ids.mjs` plus `$O/idrun.sh` run one variant family in seconds, both builds.
+Not measured: N1 against N3 separately. Later proof: a helper's argument whose type holds no function.

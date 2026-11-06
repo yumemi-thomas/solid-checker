@@ -10,6 +10,16 @@
       "start": 322,
       "end": 328,
       "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/variants/module-alias-late/App.tsx",
+      "start": 322,
+      "end": 328,
+      "fixes": 0
     }
   ]
 }

@@ -4356,5 +4356,76 @@
   ],
   "rediscovered": "rbase NEW false-clean in the pattern lane, the fix fine",
   "outside": "the value is a cast literal in a parent's attribute: a context cannot write a parent, so the pattern lane holds it"
+ },
+ {
+  "finding": "an async read no fact places, at a `<Dynamic>` body, a tag or depth 16: certified or SC5001 only, Chrome warns the boundary",
+  "found": "census research C6, 288 rows",
+  "fixed": "ADR 0774",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-wrapper-none",
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-wrapper-closure",
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-wrapper-helper"
+  ],
+  "rediscovered": "rm2 false-clean, this build recall-gap, by id: 680 of 680 of the old build's failures across C1, C2, C3, C5, C6, C7"
+ },
+ {
+  "finding": "a tracked call of a value that may be pending, an alias, a literal member, a module hook, a barrel: certified, Chrome warns",
+  "found": "census research C1, 312 rows",
+  "fixed": "ADR 0775",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-let-alias-none",
+   "mx-async-outside-loading-boundary-jsx-x-let-alias-closure",
+   "mx-async-outside-loading-boundary-jsx-x-let-alias-helper"
+  ],
+  "rediscovered": "rm2 false-clean, this build recall-gap; patterns net/c1-let-alias, net/c1-literal-member; guards net/g1a, net/g1c, net/g1d stay certified"
+ },
+ {
+  "finding": "a named function a carrier provably runs at a tracked position, no boundary: certified, Chrome warns. `#199` and `#198` said a context cannot write it; it can, as a `handoff-*` layer",
+  "found": "census research C2, 84 rows; SC9012 research g2d",
+  "fixed": "ADR 0776",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-direct-handoff-foreach",
+   "mx-async-outside-loading-boundary-jsx-x-direct-handoff-map",
+   "mx-async-outside-loading-boundary-jsx-x-direct-handoff-from"
+  ],
+  "rediscovered": "rm2 false-clean, this build agree, a proved SC5003: 64 programs; patterns net/g2d-map-body, -foreach, -apply, -module-hf, net/g2f-sort-two-elements; guards net/g2a, net/g2d-neg-*, net/g2e stay quiet"
+ },
+ {
+  "finding": "a logical-assignment callee and a function an instance holds, in a named handler after an await: certified, Chrome warns",
+  "found": "census research C5, C7",
+  "fixed": "ADR 0777",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-then-named-x-or-assign-none",
+   "mx-untracked-read-after-await-then-named-x-or-assign-closure",
+   "mx-untracked-read-after-await-then-named-x-or-assign-helper"
+  ],
+  "rediscovered": "rm2 false-clean, this build recall-gap: 13 of 13; patterns net/c5-or-assign, net/c7-assign-this; guard net/g5b-or-assign-then-named-plain"
+ },
+ {
+  "finding": "a pending read in a timer, a `.then` or a microtask: an uncaught throw with an empty message and no code, certified",
+  "found": "SC9012 research p03",
+  "fixed": "ADR 0778",
+  "outside": "the runtime gives no code and the judge matches thrown messages, and an empty one claims nothing: no grid row can fail the old build. Fixture handed-net p1-timer, p2-timer and guard p8 hold it; witness cases3-p03"
+ },
+ {
+  "finding": "a read's climb off an anonymous attribute function: certified at the read, Chrome warns",
+  "found": "census research C3",
+  "fixed": "ADR 0779",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-cbp-jsx-destructured-x-direct-none",
+   "mx-async-outside-loading-boundary-cbp-jsx-destructured-x-direct-closure",
+   "mx-async-outside-loading-boundary-cbp-jsx-destructured-x-direct-helper"
+  ],
+  "rediscovered": "rc6b false-clean, this build recall-gap: 14 of 14; patterns net/c3-cbp-wrapper; guards net/g4b, net/g4c stay certified"
  }
 ]

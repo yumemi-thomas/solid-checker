@@ -17,6 +17,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
+      "start": 566,
+      "end": 573,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
       "start": 657,
       "end": 662,
       "fixes": 0
@@ -107,6 +117,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
+      "start": 1689,
+      "end": 1696,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
       "start": 1849,
       "end": 1854,
       "fixes": 0
@@ -139,6 +159,16 @@
       "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
       "start": 2163,
       "end": 2167,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
+      "start": 2194,
+      "end": 2199,
       "fixes": 0
     },
     {

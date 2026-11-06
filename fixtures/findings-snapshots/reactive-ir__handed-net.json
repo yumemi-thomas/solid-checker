@@ -36,6 +36,26 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c1-let.tsx",
+      "start": 198,
+      "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c1-literal.tsx",
+      "start": 209,
+      "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/c1.tsx",
       "start": 417,
       "end": 421,
@@ -69,6 +89,76 @@
       "path": "fixtures/reactive-ir/handed-net/c12.tsx",
       "start": 387,
       "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net/c3-wrapper.tsx",
+      "start": 143,
+      "end": 147,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c3-wrapper.tsx",
+      "start": 143,
+      "end": 147,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c3-wrapper.tsx",
+      "start": 206,
+      "end": 215,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c5.tsx",
+      "start": 227,
+      "end": 238,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c6-tagged.tsx",
+      "start": 247,
+      "end": 251,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c7-this.tsx",
+      "start": 247,
+      "end": 251,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c7-this.tsx",
+      "start": 278,
+      "end": 288,
       "fixes": 0
     },
     {
@@ -129,6 +219,46 @@
       "path": "fixtures/reactive-ir/handed-net/n9.tsx",
       "start": 157,
       "end": 167,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net/p1-timer.tsx",
+      "start": 217,
+      "end": 220,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/p1-timer.tsx",
+      "start": 217,
+      "end": 220,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net/p2-timer.tsx",
+      "start": 217,
+      "end": 220,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/p2-timer.tsx",
+      "start": 217,
+      "end": 220,
       "fixes": 0
     },
     {

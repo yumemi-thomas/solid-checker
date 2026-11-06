@@ -269,6 +269,13 @@ pub(crate) fn handed_value(
     {
         return handed_value(t, file, sequence.tail, depth - 1);
     }
+    // ADR 0777: an assignment's value, as a callee (`(slot ||= r1)()`).
+    let operands = file.ast.composite_callee_references(span);
+    if operands.iter().any(|operand| *operand != span) {
+        return operands
+            .iter()
+            .any(|operand| handed_value(t, file, *operand, depth - 1));
+    }
     // A local literal destructured or indexed later (`const [, f] = [0,
     // ctx.read]`, `const { f } = { f: imported }`): one of its values.
     if let Some(literal) = file.ast.array_literal_at(span) {
@@ -613,6 +620,13 @@ fn class_holds_handed_value(
     let Some(declaration) = file.ast.reference_declaration(callee) else {
         return false;
     };
+    let holds = |value: solid_facts::core::Span| {
+        // ADR 0777: a function an instance holds runs where it is called.
+        file.ast
+            .function_at(file.ast.peel_ts_sugar_span(value))
+            .is_some()
+            || handed_value(t, file, value, depth)
+    };
     file.ast
         .classes
         .iter()
@@ -622,9 +636,20 @@ fn class_holds_handed_value(
                 .as_ref()
                 .is_some_and(|name| name.span == declaration)
         })
-        .flat_map(|class| &class.elements)
-        .filter_map(|element| element.value)
-        .any(|value| handed_value(t, file, value, depth))
+        .any(|class| {
+            class
+                .elements
+                .iter()
+                .filter(|element| element.kind == solid_facts::ast::ClassElementKind::Field)
+                .filter_map(|element| element.value)
+                .any(holds)
+                // `this.m = () => …` in the class.
+                || file.ast.assignments.iter().any(|assignment| {
+                    class.span.contains(assignment.target)
+                        && file.ast.member_at(file.ast.peel_ts_sugar_span(assignment.target)).is_some_and(|member| file.source_text(member.object) == Some("this"))
+                        && holds(assignment.value_span)
+                })
+        })
 }
 
 /// Do not apply an incoming-prop witness to a replaced or escaping root.
@@ -2574,14 +2599,17 @@ impl LocalAccessContext<'_, '_> {
         let Some(accessor) = self.accessors.get(symbol) else {
             return;
         };
-        if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
-            return;
-        }
         // ADR 0674: a named function no call edge enters, handed by name to a
         // carrier (`[1].map(h)`): a carrier that provably runs it places the
         // read, and one that may not leaves it unplaced. SC1001's zero-run
         // trade is not extended to this arm.
-        let handed = handed_async_read_role(
+        // ADR 0776: a pending source is also a claim at a tracked carrier.
+        let pending = self.async_sources.contains(symbol);
+        let handed = (if pending {
+            handed_pending_read_role
+        } else {
+            handed_async_read_role
+        })(
             file,
             call.callee,
             allowed,
@@ -2590,6 +2618,14 @@ impl LocalAccessContext<'_, '_> {
             self.lookup,
         );
         let key = (mention.path.clone(), mention.start_byte, mention.end_byte);
+        if pending
+            && self.place_pending_read(file, call, symbol, accessor, handed, &key, result, seen)
+        {
+            return;
+        }
+        if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
+            return;
+        }
         if let Some((role, Some(carrier))) = handed
             && role.reports_untracked_read()
             && seen.insert(key.clone())
@@ -2609,6 +2645,48 @@ impl LocalAccessContext<'_, '_> {
         {
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
         }
+    }
+
+    /// ADR 0776, ADR 0778: the row of a pending source's read in a named
+    /// function, where [`handed_pending_read_role`] decides it. True when it did.
+    #[allow(clippy::too_many_arguments)]
+    fn place_pending_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        accessor: &(SymbolId, Location),
+        handed: Option<(ExecutionRole, Option<solid_facts::core::Span>)>,
+        key: &(Arc<str>, u64, u64),
+        result: &mut LocalAccessResult,
+        seen: &mut HashSet<(Arc<str>, u64, u64)>,
+    ) -> bool {
+        let (execution, carrier) = match handed {
+            Some((ExecutionRole::TrackedJsx, Some(carrier))) => {
+                (ExecutionRole::TrackedJsx, Some(carrier))
+            }
+            Some((ExecutionRole::DeferredCallback, None)) => {
+                (ExecutionRole::DeferredCallback, None)
+            }
+            Some((ExecutionRole::Unknown, _)) => {
+                if seen.insert(key.clone()) {
+                    self.push_accessor_read(
+                        file,
+                        call,
+                        symbol,
+                        accessor,
+                        ExecutionRole::Unknown,
+                        result,
+                    );
+                }
+                return true;
+            }
+            _ => return false,
+        };
+        if seen.insert(key.clone()) {
+            self.push_async_read(file, call, symbol, accessor, execution, carrier, result);
+        }
+        true
     }
 
     /// ADR 0676: the role of a read in a callback an exact setter runs on its
@@ -3019,6 +3097,24 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         let key = (mention.path.clone(), mention.start_byte, mention.end_byte);
+        // ADR 0776: a pending source is also a claim at a tracked carrier.
+        if let Some(accessor) = self.accessors.get(symbol)
+            && self.async_sources.contains(symbol)
+            && (inside_non_component_function(file, call.callee, self.lookup)
+                || nested_named_function(file, call.callee, self.lookup))
+        {
+            let handed = handed_pending_read_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            );
+            if self.place_pending_read(file, call, symbol, accessor, handed, &key, result, seen) {
+                return;
+            }
+        }
         // ADR 0531: a read written in a named function the program hands by
         // name to a carrier that runs it before returning (`[1].forEach(f)`,
         // `` tag`x` ``, `f.call(null)`, `Reflect.apply(f, …)`) runs at the
@@ -3503,6 +3599,7 @@ impl LocalAccessContext<'_, '_> {
             || execution.reports_untracked_read()
             || execution.reports_unplaced()
             || self.may_run_in_leaf_owner(file, call.callee)
+            || self.tracked_read_may_suspend(file, call, execution)
         {
             result.dispatch_obligations.push(crate::StaticDefect {
                 kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
@@ -3522,6 +3619,41 @@ impl LocalAccessContext<'_, '_> {
                 uncertain: true,
             });
         }
+    }
+
+    /// ADR 0775: a read is legal at a tracked position, and there SC5003 asks
+    /// about a pending source: whether this call may reach one, past no
+    /// boundary. A value that reaches only settled sources does not (`g1c`).
+    fn tracked_read_may_suspend(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        execution: ExecutionRole,
+    ) -> bool {
+        async_execution_role(file, call.callee, execution) == ExecutionRole::TrackedJsx
+            && read_loading_cover(self.lookup, file, call.span, self.symbol_names)
+                != crate::owners::LoadingCover::Covered
+            && self.pending_value(file, call.callee)
+    }
+
+    /// [`handed_value`] with an accessor counted only if it may be pending.
+    fn pending_value(&self, file: &solid_facts::FileFacts, span: solid_facts::core::Span) -> bool {
+        handed_value(
+            &HandedTables {
+                lookup: self.lookup,
+                entities: self.entities,
+                prop_sources: self.prop_sources,
+                source_kinds: self.source_kinds,
+                accessors: self.accessors,
+                setters: self.setters,
+                actions: self.actions,
+                props_reactivity: self.props_reactivity,
+                async_only: Some(self.async_sources),
+            },
+            file,
+            span,
+            HANDED_DEPTH - 1,
+        )
     }
 
     /// Whether `span` is inside a leaf owner's callback (`onSettled`,
@@ -4745,22 +4877,14 @@ impl LocalAccessContext<'_, '_> {
         let Some(call) = file.ast.call_at(call) else {
             return true;
         };
-        let tables = HandedTables {
-            lookup: self.lookup,
-            entities: self.entities,
-            prop_sources: self.prop_sources,
-            source_kinds: self.source_kinds,
-            accessors: self.accessors,
-            setters: self.setters,
-            actions: self.actions,
-            props_reactivity: self.props_reactivity,
-            async_only: Some(self.async_sources),
-        };
         // One step down: at the full depth `handed_value` leaves a bare
         // source name to the row its own call has.
+        // ADR 0775: a withheld literal member's callee holds it too.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
         call.arguments
             .iter()
-            .any(|argument| handed_value(&tables, file, argument.span, HANDED_DEPTH - 1))
+            .any(|argument| self.pending_value(file, argument.span))
+            || (file.ast.member_at(callee).is_some() && self.pending_value(file, callee))
     }
 
     /// Calls whose callee accessor transport resolves to a setter or an
@@ -4842,7 +4966,7 @@ impl LocalAccessContext<'_, '_> {
                 let handed = (inside_non_component_function(file, call.callee, self.lookup)
                     || nested_named_function(file, call.callee, self.lookup))
                 .then(|| {
-                    handed_async_read_role(
+                    handed_pending_read_role(
                         file,
                         call.callee,
                         &allowed,
@@ -4853,7 +4977,7 @@ impl LocalAccessContext<'_, '_> {
                 })
                 .flatten();
                 if let Some((role, Some(carrier))) = handed
-                    && role.reports_untracked_read()
+                    && (role.reports_untracked_read() || role == ExecutionRole::TrackedJsx)
                 {
                     self.push_async_read(
                         file,
@@ -5221,10 +5345,11 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
+                let lexical = async_execution_role(file, position, execution);
                 let execution = async_read_role(
                     file,
                     position,
-                    async_execution_role(file, position, execution),
+                    lexical,
                     self.entities,
                     self.symbol_names,
                     self.lookup,
@@ -5323,6 +5448,28 @@ impl LocalAccessContext<'_, '_> {
                     continue;
                 }
                 if execution != ExecutionRole::TrackedJsx && !unsuspendable {
+                    // ADR 0779: an anonymous function in a tracked position,
+                    // which no binding climbs out of (`<K run={() => h()} />`):
+                    // it may run there, past no boundary.
+                    if lexical == ExecutionRole::TrackedJsx
+                        && read_loading_cover(self.lookup, file, position, self.symbol_names)
+                            != LoadingCover::Covered
+                        && function_binding_name(
+                            file,
+                            containing_ast_function(&file.ast, position).unwrap_or(function),
+                        )
+                        .is_none()
+                    {
+                        self.push_unplaced_async_reads(
+                            file,
+                            read,
+                            name,
+                            declaration,
+                            &options,
+                            result,
+                        );
+                        continue;
+                    }
                     // The call may itself sit in a named local function a
                     // rendered call runs.
                     sites.push((anchor, depth + 1, every && !carrier, first && !carrier));
@@ -6189,7 +6336,8 @@ impl LocalAccessContext<'_, '_> {
                 } else {
                     async_read_role(
                         file,
-                        call.callee,
+                        // ADR 0776: a carrier's role is the carrier's.
+                        placed_at.unwrap_or(call.callee),
                         async_execution,
                         self.entities,
                         self.symbol_names,
@@ -6213,7 +6361,7 @@ impl LocalAccessContext<'_, '_> {
             let throws_under_untrack = async_provenance
                 && async_execution == ExecutionRole::UntrackedRendering
                 && execution != ExecutionRole::UntrackedRendering;
-            let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
+            let cover = read_loading_cover(self.lookup, file, timing_at, self.symbol_names);
             // ADR 0504: the proof climbs from the read to the apply itself, so a
             // read in a closure the apply calls (its own role the body's) is
             // placed there too.
@@ -6240,6 +6388,20 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
                 CARRIED_LEAF_DEPTH,
             );
+            // ADR 0778: a pending read on a later task throws with no code, and
+            // whether the source has settled by then is unknown. The projector
+            // takes no such role: the read is unplaced, as a handler's is. A
+            // leaf owner's callback has its own rule.
+            let async_execution = if async_provenance
+                && async_execution == ExecutionRole::DeferredCallback
+                && leaf_owner.is_none()
+                && !async_options.declared_loading
+                && !file.ast.any_jsx_containing(call.callee)
+            {
+                ExecutionRole::Unknown
+            } else {
+                async_execution
+            };
             result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!("{name}()").into(),
                 location: location(file.path.shared(), call.span),
@@ -8905,6 +9067,44 @@ pub(crate) fn handed_async_read_role(
         |at| read_execution_role(file, at, allowed, entities, symbol_names, lookup),
         ExecutionRole::reports_untracked_read,
     )
+}
+
+/// ADR 0776: [`handed_async_read_role`] for a source that may be pending: a
+/// tracked carrier places it too, where SC5003 asks about it.
+pub(crate) fn handed_pending_read_role(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
+    handed_role(
+        file,
+        span,
+        lookup,
+        true,
+        |at| {
+            if empty_literal_carrier(file, at) {
+                return ExecutionRole::DiscardedRendering;
+            }
+            async_execution_role(
+                file,
+                at,
+                read_execution_role(file, at, allowed, entities, symbol_names, lookup),
+            )
+        },
+        |role| role.reports_untracked_read() || role == ExecutionRole::TrackedJsx,
+    )
+}
+
+/// `[].map(f)`: the carrier at `at` is a method of an empty array literal.
+fn empty_literal_carrier(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
+    let ast = &file.ast;
+    ast.call_at(at)
+        .and_then(|call| ast.member_at(ast.peel_ts_sugar_span(call.callee)))
+        .and_then(|member| ast.array_literal_at(ast.peel_ts_sugar_span(member.object)))
+        .is_some_and(|literal| literal.elements.is_empty())
 }
 
 /// ADR 0535: a write or an action call in a named function handed by name

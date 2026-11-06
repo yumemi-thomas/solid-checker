@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-apply.tsx",
+      "start": 121,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-map.tsx",
+      "start": 121,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-module.tsx",
+      "start": 93,
+      "end": 96,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2f-sort.tsx",
+      "start": 199,
+      "end": 203,
+      "fixes": 0
+    }
+  ]
+}

@@ -72,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 1230,
+      "end": 1236,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -146,6 +156,16 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 1703,
+      "end": 1709,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
       "start": 1703,
       "end": 1709,

@@ -142,6 +142,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 1137,
+      "end": 1144,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -149,6 +159,16 @@
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
       "start": 1363,
       "end": 1369,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 1391,
+      "end": 1398,
       "fixes": 0
     },
     {

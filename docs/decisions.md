@@ -1951,6 +1951,30 @@ The forwarding loop stops after 8 rounds: `o.read()` forwarded through 12 helper
 ## ADR 0773 — Every Function.prototype hand-off of a reactive value is an obligation
 `Array.prototype.sort.bind(st.a)()`, `Reflect.apply(sort, st.a, [])` and `.apply(st.a, list)` with a list no fact shows certified; Chrome warns. `push_function_call_target_obligation` took `.call` and a provable `.apply`. It now takes `.bind`, held or not, `Reflect.apply`, and any `.apply`: a dispatch that may not run is still no proof it does not. The root of the argument is walked through every member step.
 
+<a id="adr-0774"></a>
+## ADR 0774 — An unplaced async read also asks SC5003
+An async read no fact places had only an SC5001 row, so at a `<Dynamic>` body, a callback prop, a tag or depth 16 SC5003 had nothing to say; Chrome warns. A post-pass gives an `Unknown` row with `invocation_context_unproven`, a component prop's row and a callback-timing row a `TrackedJsx` sibling with `call_attributed`, uncertifiable, where no `Loading` covers it. Under a cover, or with a declared value, no sibling.
+
+<a id="adr-0775"></a>
+## ADR 0775 — A tracked call of a value that may be pending is an obligation
+The handed net asked the roles SC1001 reports, and a tracked read is legal there, but it is exactly SC5003's position: `let useIt = a1`, `box.useIt()` and a hook's accessor in JSX certified; Chrome warns. The obligation now also stands at a tracked position outside `Loading` when `handed_value`, counting only accessors that may be pending, says so. A value that reaches only settled sources stays certified (`g1c`, `g1d`), so this holds the sync half of the report's C1b: the proved V for a never-rewritten alias is not built. `g1e` (`as any` options) and `g1f` (rebound) are uncertifiable and quiet in Chrome, which is right: no fact decides them.
+
+<a id="adr-0776"></a>
+## ADR 0776 — A tracked carrier places a pending read
+`[1].map(hf)`, `hf.call(null)` and `hf` handed at a tracked position certified; Chrome warns (`g2d`). `handed_pending_read_role` lets a tracked carrier place a source that may be pending, a proved SC5003, and only such a source: a settled read there stays legal. The carrier decides the cover and the role, not the function (`g2a`, the trap), and an empty literal runs nothing (`g2b`). A carrier that may not run leaves it unplaced (`g2e`).
+
+<a id="adr-0777"></a>
+## ADR 0777 — A logical-assignment callee and a function an instance holds are handed
+`(slot ||= r1)()` in a named `.then` handler, and `new HK().m?.()` with `this.m = () => r1()`, certified; Chrome warns after the await. `handed_value` follows an assignment's operands, and a class holds a function in a field or a `this.x =` in its body. Only a function value counts, so a class of plain methods does not open.
+
+<a id="adr-0778"></a>
+## ADR 0778 — A pending read on a later task is unplaced
+`a()` on an async memo in a timer, a `.then` or a microtask throws uncaught with an empty message and no code; certified. Selection takes no `DeferredCallback`, and the projector panics on it, so `push_async_read` answers `Unknown` with `invocation_context_unproven`, as a handler's read. A named function a timer runs takes the same row. A timer after the source settled is uncertifiable too. A declared source and a sync memo stay certified. The fuzzer's judge cannot see a throw with no code, so a fixture and a witness hold this.
+
+<a id="adr-0779"></a>
+## ADR 0779 — A read's climb stops at an anonymous tracked function
+`<K run={() => { wrapUse(); }} />` with `K` running `run` in JSX: `async_read_role` turned tracked into `Unknown`, the climb went on, and the arrow has no binding. It now pushes the unplaced pair there, with the cover computed (`g4b`). An event handler is no tracked position (`g4c`).
+
 <a id="adr-0780"></a>
 ## ADR 0780 — Boundary accessors, `export * as` of Solid, a nested denied handler
 `createErrorBoundary` and `createLoadingBoundary` (`solid-js/internal`) return a memo's accessor, so they are sources (ADR 0690): proved violation in a body. `export * as Solid from "solid-js"` names every primitive, as `import * as Solid` does: proved violation. `Solid.flush()` through such a named import also needed the property's symbol, which only a namespace import demanded: a member callee of a named import now demands it, and `declaring_file` follows the export (proved SC2008). An inline `onLoad` in a control-flow callback took `deferred-callback` before the denied arm: now uncertifiable `function-run-unplaced`, as in a body. Fixtures `boundary-accessors`, `export-star-as-solid`, `control-flow-denied-handler`.

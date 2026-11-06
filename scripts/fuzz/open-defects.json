@@ -35,17 +35,6 @@
    "note": "80 of the 152: 4 variants, `direct` and `alias` bindings, 5 layers, 2 contexts. Layer `none` and `wrapper` bindings are open, so the ref's role is right; a site in a function nested in the ref answers DeferredCallback from `callee_roles.named-callback-untracked` (logged on ref-named; ref-factory by count only)"
   },
   {
-   "idPrefix": "mx-untracked-read-after-await-then-named-",
-   "code": "UNTRACKED_READ_AFTER_AWAIT",
-   "contexts": [
-    "then-named"
-   ],
-   "outcome": "false-clean",
-   "item": "census",
-   "partial": true,
-   "note": "ADR 0669's named handler reaches a read with no row through `handoff-assign-*` (14) and an `or-assign` binding (6): an accessor held by assignment. The census owns the position"
-  },
-  {
    "idPrefix": "mx-pending-async-untracked-read-",
    "code": "PENDING_ASYNC_UNTRACKED_READ",
    "source": "async-value-member",
@@ -53,14 +42,6 @@
    "item": "member-tag getter",
    "partial": true,
    "note": "`<ui.C a={a()} />`: a pending getter handed through a member tag sets no `async_getter` on the prop, so the child's read has no pending row. 48 on mx-src, 23 on mx-combo, the same programs on the build before ADR 0665"
-  },
-  {
-   "idPrefix": "mx-async-outside-loading-boundary-",
-   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
-   "outcome": "false-clean",
-   "item": "census",
-   "partial": true,
-   "note": "ADR 0668 gave this advisory code its first cells: 690 of 3,990 are certified, each a read in tracked JSX with no row, through a module hook, a barrel, a wrapper or a hand-off. The census owns them: a transported read in a render position has no async row today"
   }
  ],
  "patterns": [
@@ -283,15 +264,6 @@
   {
    "id": "census/a22-object-values",
    "item": "section-4 census:a",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "census/e24-class-ctor-assign",
-   "item": "section-4 census:e",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
