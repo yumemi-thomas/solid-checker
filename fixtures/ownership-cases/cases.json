@@ -3660,6 +3660,42 @@
     ]
    },
    "note": "ADR 0790: before it, the first write was a violation: the root's entity named `st`, the conditional's first token. Chrome is silent on both writes: each lands on a fresh literal."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/delete-computed-required/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: 1 });\nexport function Remove() {\n  delete store[\"req\"];\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "span": {
+       "marker": "store[\"req\"]"
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2790",
+         "span": {
+          "marker": "store[\"req\"]"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "ADR 0791: a computed-key delete reaches the same `deleteProperty` trap, and for a required literal key TypeScript speaks (TS2790), so the checker is silent. Type Facts answers no optionality for an element access, so an optional computed key is a known miss for now (docs/open-work.md), and making it uncertifiable would report this case too. Upstream 0.14.5 has no delete arm; the rule is product-owned (ADR 0461)."
   }
  ]
 }

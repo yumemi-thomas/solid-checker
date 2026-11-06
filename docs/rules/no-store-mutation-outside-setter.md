@@ -142,18 +142,22 @@ function this does not know, leaves it uncertifiable. Fixture
 Not reported, deliberately:
 
 - `delete` of a required or readonly property: tsc reports TS2790 (under
-  strictNullChecks) or TS2704. A non-optional property typed `T | undefined`
-  stays silent too (TS2790 under `exactOptionalPropertyTypes`). Only a property
-  the checker marks optional and not readonly (`v?: T`, `Partial<T>`) is
-  reported, through the Type Fact `writableOptionalProperty`. A type
+  strictNullChecks) or TS2704. Only a property the checker marks optional and
+  not readonly (`v?: T`, `Partial<T>`) is reported, through the Type Fact
+  `writableOptionalProperty`. Where that fact is false, which is no claim (an
+  element access `store["v"]` or `store.rec[k]`, an index signature, a
+  non-optional `T | undefined`, which tsc accepts without
+  `exactOptionalPropertyTypes`, an `unknown`), the rule is silent: an open
+  miss, since Type Facts cannot tell those from TS2790 (docs/open-work.md). A type
   assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
   TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
   is TS18048/TS18047: both silent. Any other chain past the root
   (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
-  proves nothing at run time. An element access, an optional chain and a
-  cast root are refused; an exact `const` alias of the store is the store
+  proves nothing at run time. An optional chain may skip the delete:
+  uncertifiable (ADR 0791). A cast root is the store (ADR 0790); an exact `const` alias of the store is the store
   (ADR 0463), for an assignment and a `delete` alike. Pinned in the tsc oracle and ownership cases
-  `…/delete-required-property/001`, `…/delete-optional-property/001`; fixture
+  `…/delete-required-property/001`, `…/delete-optional-property/001`,
+  `…/delete-computed-required/001`; fixture
   `store-delete`.
 - Reassigning an accessor binding (`count = 2`, this rule's former
   accessor-binding arm). On rc.17 a `const` binding is TS2588 and a `let`

@@ -113,6 +113,8 @@ export const SUB_VALUE_WRITES = {
   // patterns api/v09-store-write-nullish and values/d6-comma: a `??` and a comma whose value is the store (root writes).
   "sw-coalesce": { ...SUB_WRITE, text: (o) => `(((((): any => null)()) as typeof ${o} | null) ?? ${o}).v = 7;` },
   "sw-comma": { ...SUB_WRITE, text: (o) => `(Math.random(), ${o}).v = 7;` },
+  // ADR 0791: a delete behind an optional chain, tsc-clean, warns.
+  "sw-delete-optional-chain": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}?.v;` },
   // Quiet in Chrome: a fresh literal written at its own property, and the frame's plain argument. The build before reported the first
   // a violation: the conditional's entity named its first token, the store in its test.
   "sw-fresh-test": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `(${o}.v > 0 ? { v: 1 } : { v: 2 }).v = 7;` },

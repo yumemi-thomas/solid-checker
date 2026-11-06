@@ -4404,5 +4404,16 @@
    "mx-store-write-outside-setter-handler-sw-let-direct-none"
   ],
   "rediscovered": "r3base (80db411e5) false-clean on all 108 programs of sw-coalesce, sw-comma, sw-let (handler, timer); the fix agree on 36 (sw-coalesce) and recall-gap on 72; same id set in the sc VM. The pattern lane at 3b4e446bc: the three patterns certified false clean on 80db411e5, fine on bfd336ce8"
+ },
+ {
+  "finding": "a delete behind an optional chain, `delete st?.a`, `delete st.o?.c`, on a property Type Facts proves optional: certified, tsc-clean, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "R3's probes p9, p10 (step 3, P8's neighbours)",
+  "fixed": "ADR 0791: uncertifiable, store-operation-may-not-write",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-delete-optional-chain-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 36 sw-delete-optional-chain programs (handler, timer), the fix recall-gap on 36; same id set in the sc VM"
  }
 ]

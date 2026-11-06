@@ -26,9 +26,11 @@ through a projection result, through a `const` alias of the store (ADR
 `STORE_WRITE_OUTSIDE_SETTER` for all three).
 
 Silent: inside the store's own setter callback (commits, rc.17 probe), on the
-setter's draft, on a plain object, through a shadowing parameter. Refused, also
-silent: a non-optional property whose type includes `undefined`, a computed
-key and an optional chain. A cast root (`delete (store as { v?: number }).v`) is
+setter's draft, on a plain object, through a shadowing parameter. Silent, an
+open miss (Chrome warns, `tsc` accepts both here; Type Facts cannot tell
+them from TS2790, docs/open-work.md): a non-optional property whose type
+includes `undefined` and a computed key. Uncertifiable since ADR 0791: an
+optional chain, which may skip the delete. A cast root (`delete (store as { v?: number }).v`) is
 reported since ADR 0790: the flow reads it as the store (Chrome, rc.21, warns).
 
 `Rejected.tsx` is TypeScript's and silent: `delete store.v!` and `delete

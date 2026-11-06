@@ -83,9 +83,11 @@ export function Alias() {
   delete alias.v;
 }
 
-// Refused (silent): a property whose type includes `undefined` but is not
-// optional (TS2790 under `exactOptionalPropertyTypes`), a computed key, an
-// optional chain. Reported (ADR 0790): the cast root.
+// Silent, an open miss (P8, a producer answer owed): a property whose type
+// includes `undefined` but is not optional (tsc accepts it without
+// `exactOptionalPropertyTypes`) and a computed key; Type Facts cannot tell
+// them from TS2790. Uncertifiable (ADR 0791): an optional chain, which may
+// not run. Reported (ADR 0790): the cast root. Chrome (rc.21) warns on each.
 export function Refused(key: string) {
   delete store.nick;
   delete store.rec[key];

@@ -5703,6 +5703,9 @@ fn no_store_delete(
         let Some(member) = file.peel_parentheses(target) else {
             continue;
         };
+        // A computed key reaches the same trap, but Type Facts answers no
+        // optionality for an element access, so whether TypeScript rejects
+        // it (TS2790) is open: silent until the producer answers (P8).
         if file.ast.member_at(member).is_none()
             || file.ast.computed_members.binary_search(&member).is_ok()
         {
@@ -5715,18 +5718,17 @@ fn no_store_delete(
         // no `?.` (which may skip the delete) and no wrapper between links.
         // The walk ends at the root `member_root` found: a member alias root
         // (ADR 0482) is itself a member, and its own links are not the chain's.
+        // ADR 0791: an optional link (`delete store?.v`, `store.o?.c`) may skip
+        // the delete: an operation that may not write, not silence.
         let mut link = member;
-        let mut plain = true;
+        let mut optional = false;
         while link != root
             && let Some(current) = file.ast.member_at(link)
         {
-            if file.ast.optional_members.binary_search(&link).is_ok() {
-                plain = false;
-                break;
-            }
+            optional |= file.ast.optional_members.binary_search(&link).is_ok();
             link = current.object;
         }
-        if !plain || link != root {
+        if link != root {
             continue;
         }
         // ADR 0790: a root that is no bare identifier (a call's result, a
@@ -5734,7 +5736,7 @@ fn no_store_delete(
         if !bare_root(file, root) {
             let sink = SinkWrite {
                 member,
-                may_not_write: false,
+                may_not_write: optional,
                 delete: true,
                 linked: false,
             };
@@ -5756,7 +5758,7 @@ fn no_store_delete(
             if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
                 let sink = SinkWrite {
                     member,
-                    may_not_write: false,
+                    may_not_write: optional,
                     delete: true,
                     linked: false,
                 };
@@ -5786,15 +5788,20 @@ fn no_store_delete(
                 Some(past_root) => past_root,
             },
         };
+        let analysis_context = if optional {
+            crate::blockers::STORE_OPERATION_MAY_NOT_WRITE
+        } else {
+            standing.blocker().unwrap_or_default()
+        };
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), member),
-            analysis_context: standing.blocker().unwrap_or_default().to_owned(),
+            analysis_context: analysis_context.to_owned(),
             fixes: vec![],
-            uncertain: uncertain || typed_store.is_some() || standing.unproven(),
+            uncertain: uncertain || optional || typed_store.is_some() || standing.unproven(),
         });
     }
 }
