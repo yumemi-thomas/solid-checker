@@ -47,7 +47,9 @@ const lines = (positions) => (positions ?? []).map((position) => position.line);
 export function runtimeEvents(runtime) {
   const rows = [];
   for (const diagnostic of runtime.diagnostics ?? []) {
-    rows.push({ code: diagnostic.code, source: "diagnostic", message: diagnostic.message ?? null, positions: diagnostic.positions ?? [] });
+    // `loc` (`App.tsx:L:C`, the compiler's `_loc` of the render effect that raised it) is kept beside the stack positions, never in them:
+    // a placeless code's stack is the flush's, and its `loc` is the only authored place it has (matrix.mjs `holeLine`).
+    rows.push({ code: diagnostic.code, source: "diagnostic", message: diagnostic.message ?? null, positions: diagnostic.positions ?? [], loc: diagnostic.loc ?? null });
   }
   for (const error of runtime.errors ?? []) {
     const code = codeOfThrown(error.message) ?? codeOfThrown(error.cause);
