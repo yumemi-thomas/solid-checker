@@ -813,11 +813,21 @@ fn runs_in_disposal_uncached(
                 return match lookup.function_component_status(file, function) {
                     ComponentStatus::Proven => component_mount_reach(file, function, lookup, depth),
                     // ADR 0782: a handler literal is no component, whatever it
-                    // renders (`onClick={() => { createRoot(() => <Inner />); }}`),
-                    // and a user's event runs it outside any disposal whatever
-                    // else dispatches: `NotIn` needs that one run.
-                    ComponentStatus::Uncertain if is_delivered_handler_literal(file, function) => {
+                    // renders (`onClick={() => { createRoot(() => <Inner />); }}`).
+                    ComponentStatus::Uncertain if is_event_handler_literal(file, function) => {
                         DisposalReach::NotIn
+                    }
+                    ComponentStatus::Uncertain | ComponentStatus::No
+                        if let Some(element) = jsx_child_callback_element(file, function)
+                            && !returns_effect_cleanup(file, function, lookup) =>
+                    {
+                        // A row or a branch runs where the element around it
+                        // mounts, and again on its own schedule, which `Only`
+                        // cannot read: the climb goes on, as for a timing
+                        // unknown.
+                        timing_unknown = true;
+                        at = element;
+                        continue;
                     }
                     ComponentStatus::Uncertain => DisposalReach::Unplaced,
                     // On a release whose guard stands down in a disposal, an
@@ -838,7 +848,7 @@ fn runs_in_disposal_uncached(
                     ComponentStatus::No
                         if returned_by_rerunning_effect(file, function, lookup)
                             || event_only_entries(file, function, lookup)
-                            || is_event_handler_literal(file, function, lookup)
+                            || is_event_handler_literal(file, function)
                             || stored_function_called_only_by_events(file, function, lookup) =>
                     {
                         DisposalReach::NotIn
@@ -849,6 +859,24 @@ fn runs_in_disposal_uncached(
         }
     }
     DisposalReach::Unplaced
+}
+
+/// The element whose child expression holds `function`, the innermost:
+/// `<For each={xs}>{() => <Row />}</For>`.
+fn jsx_child_callback_element(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<Span> {
+    file.ast
+        .jsx_containing(function.span)
+        .filter(|element| {
+            element
+                .children
+                .iter()
+                .any(|child| child.contains(function.span))
+        })
+        .min_by_key(|element| element.span.end - element.span.start)
+        .map(|element| element.span)
 }
 
 /// Where a proven component's body runs (ADR 0782), from its mount sites: any
@@ -879,7 +907,13 @@ fn component_mount_reach_uncached(
     depth: usize,
 ) -> DisposalReach {
     let sites = lookup.function_call_sites(file.path.as_str(), function.span);
-    if sites.is_empty() {
+    // A recursive tag runs under a mount this already asks about: it adds no
+    // entry, and following it only spends the depth.
+    let outside = sites
+        .iter()
+        .filter(|(caller, site)| caller.path != file.path || !function.span.contains(*site))
+        .count();
+    if outside == 0 {
         return DisposalReach::NotIn;
     }
     if depth >= 4 {
@@ -891,6 +925,9 @@ fn component_mount_reach_uncached(
         DisposalReach::Unplaced
     };
     for (caller, site) in sites {
+        if caller.path == file.path && function.span.contains(site) {
+            continue;
+        }
         match runs_in_disposal_within(caller, site, lookup, depth + 1) {
             DisposalReach::NotIn => return DisposalReach::NotIn,
             DisposalReach::Only => {}
@@ -953,18 +990,10 @@ fn inside_disposal_callback(
 }
 
 /// Whether `function` is a literal the compiler reads as an event handler (a
-/// JSX attribute's value on an element): the event delivers it, and no
-/// synchronous dispatch can deliver it inside a cleanup.
+/// JSX attribute's value on an element) of an event only the host delivers. A
+/// user's event runs it outside any disposal, whatever else dispatches:
+/// `NotIn` needs that one run (ADR 0782).
 fn is_event_handler_literal(
-    file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    !lookup.synchronous_event_dispatch_present() && is_delivered_handler_literal(file, function)
-}
-
-/// Whether `function` is the literal handler of an event only the host delivers.
-fn is_delivered_handler_literal(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
 ) -> bool {
@@ -2399,11 +2428,14 @@ pub(super) fn write_role_walk<'f>(
         let guard = lookup.dialect.write_guard_in_disposal();
         let reach = (guard != Guard::Rejects)
             .then(|| {
+                // The innermost: a component written in another's body mounts
+                // where its own tags say.
                 functions_around(file, span)
                     .into_iter()
-                    .find(|function| {
+                    .filter(|function| {
                         lookup.function_component_status(file, function) == ComponentStatus::Proven
                     })
+                    .min_by_key(|function| function.span.end - function.span.start)
                     .map(|component| component_mount_reach(file, component, lookup, 0))
             })
             .flatten();

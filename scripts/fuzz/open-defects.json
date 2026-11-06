@@ -614,15 +614,6 @@
    "certified": false
   },
   {
-   "id": "types/e703-cleanup-component-write",
-   "item": "T-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
-  },
-  {
    "id": "types/e713-rwo-in-cleanup-read",
    "item": "T-D1",
    "outcome": "false-clean",
@@ -648,15 +639,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "types/g12-cleanup-comp-store-write",
-   "item": "T-D1",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "no-write-in-pure-computation"
-   ]
   },
   {
    "id": "types/h08-setter-as-cb",
