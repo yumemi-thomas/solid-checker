@@ -2252,6 +2252,19 @@ impl LocalAccessContext<'_, '_> {
                 Arc::make_mut(read).callback_invocation_unproven = true;
             }
         }
+        // ADR 0835: a read whose call-attributed walk stopped at its bound,
+        // with no async row of its own anywhere in the file's rows, is
+        // unplaced, never silent.
+        let placed = result
+            .async_reads
+            .iter()
+            .map(|existing| existing.location.clone())
+            .collect::<Vec<_>>();
+        for row in std::mem::take(&mut result.bounded_async_reads) {
+            if !placed.contains(&row.location) {
+                result.async_reads.push(row);
+            }
+        }
         result
     }
 
@@ -5329,12 +5342,19 @@ impl LocalAccessContext<'_, '_> {
         // written before the site, so nothing there throws first.
         let mut sites = vec![(read.span, 0_usize, true, true)];
         let mut visited = HashSet::<solid_facts::core::Span>::default();
+        // ADR 0835: a walk cut at its bound proves no place; if it placed no
+        // row either, the read is unplaced, not silent.
+        let rows_before = result.async_reads.len();
+        let mut bounded = false;
         while let Some((site, depth, every, first)) = sites.pop() {
             let Some(function) = containing_ast_function(&file.ast, site) else {
                 continue;
             };
-            if depth >= CALL_ATTRIBUTED_DEPTH
-                || !visited.insert(function.span)
+            if depth >= CALL_ATTRIBUTED_DEPTH {
+                bounded = true;
+                continue;
+            }
+            if !visited.insert(function.span)
                 || function.generator
                 || self.lookup.function_may_be_component(file, function)
                 || !site_runs_during_local_call(file, function, site)
@@ -5633,6 +5653,11 @@ impl LocalAccessContext<'_, '_> {
                     invocation_context_unproven: under_untrack == ExecutionRole::Unknown,
                 }));
             }
+        }
+        if bounded && result.async_reads.len() == rows_before {
+            let mut held = LocalAccessResult::default();
+            self.push_unplaced_async_reads(file, read, name, declaration, &options, &mut held);
+            result.bounded_async_reads.extend(held.async_reads);
         }
     }
 
@@ -8097,6 +8122,9 @@ pub(crate) fn append_local_access_result(
     target
         .async_reads
         .extend(source.async_reads.iter().cloned());
+    target
+        .bounded_async_reads
+        .extend(source.bounded_async_reads.iter().cloned());
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations
@@ -8136,6 +8164,9 @@ pub(crate) fn append_local_access_result_owned(
     target.writes.extend(source.writes);
     target.action_invocations.extend(source.action_invocations);
     target.async_reads.extend(source.async_reads);
+    target
+        .bounded_async_reads
+        .extend(source.bounded_async_reads);
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations

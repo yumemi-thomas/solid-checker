@@ -186,12 +186,24 @@ pub(crate) fn collect_project<'facts>(
         reads,
         writes,
         action_invocations,
-        async_reads,
+        mut async_reads,
+        bounded_async_reads,
         strict_read_obligations,
         write_action_obligations,
         dispatch_obligations,
         static_violations,
     } = local_access.result;
+    // ADR 0835: `discover` keeps these per file; any left here are kept the
+    // same way, never dropped.
+    let placed = async_reads
+        .iter()
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    async_reads.extend(
+        bounded_async_reads
+            .into_iter()
+            .filter(|read| !placed.contains(&read.location)),
+    );
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())

@@ -76,7 +76,7 @@ One more answered a violation from a partial path (`is_own_setter`, a measured f
 | interproc/result_reads.rs:80,82 `local_dispatch_exclusion_depth` | 32 | `None`: no exclusion (a discharge) | yes | |
 | local_access.rs:8262 `first_rejection` | HELPER_WRITE_DEPTH 8 | `None` → paths followed → unplaced (ADR 0560) | yes | |
 | local_access.rs:8428 `helper_call_write_execution` | HELPER_WRITE_DEPTH 8 | `unplaced = true` | yes | |
-| local_access.rs:4255 `push_call_attributed_async_reads` | CALL_ATTRIBUTED_DEPTH 4 | no row; the read's own row stays (probe c5003-09 U) | yes | |
+| local_access.rs:4255 `push_call_attributed_async_reads` | CALL_ATTRIBUTED_DEPTH 4 | no row; the read's own row stays (probe c5003-09 U) | **no**: a read in a named helper has no own row (W's `settled` wrapper chain-5, certified) | fixed (R2f, ADR 0835): a walk cut at the bound that placed no row leaves the read's unplaced rows, kept where the file has no async row at the read |
 | local_access.rs:7313,7347 `carried_leaf_owner`, `gated_leaf_calls` | CARRIED_LEAF_DEPTH 4 | own position answers (probe c5006-09 U) | yes, measured | |
 | owners/creation_pass.rs:68,168 `creator_of`, `runs_in_pass` | CREATION_DEPTH 6 | `None` / false: no creating-pass proof (V needs it) | yes | |
 
