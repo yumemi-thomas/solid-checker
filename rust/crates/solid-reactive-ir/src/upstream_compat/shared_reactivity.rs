@@ -1418,7 +1418,7 @@ fn no_direct_mutation(
         // expression shape entity facts may skip (see the field doc on
         // `source_reference_index`).
         let root = member_root(file, written).unwrap_or(written);
-        let Some(symbol) = source_symbol_at(context, file, root).filter(|symbol| {
+        let Some(symbol) = root_symbol(context, file, root).filter(|symbol| {
             context.accessors.contains_key(*symbol)
                 || context.prop_sources.contains_key(*symbol)
                 || typed_store_name(context, symbol).is_some()
@@ -1697,10 +1697,10 @@ fn push_unproven_container_write(
         member_root(file, peeled).map_or(peeled, |inner| file.ast.peel_ts_sugar_span(inner))
     };
     if !bare_root(file, root) {
-        // ADR 0720: a call's result may be a store value.
-        if file.ast.call_at(root).is_some() {
-            push_parameter_store_flow(file, context, site, root, sink, defects);
-        }
+        // ADR 0720: a call's result may be a store value. ADR 0790: so may
+        // any other root (`(c ? s.a : x)`, `[s.a][0]`, `(await p)`): the
+        // flow judges its sub-values.
+        push_parameter_store_flow(file, context, site, root, sink, defects);
         return;
     }
     if !handed_container(file, context, root, 6) {
@@ -1732,6 +1732,21 @@ fn push_unproven_container_write(
     });
 }
 
+/// ADR 0790: the source a write's chain root names, only when the root,
+/// past TypeScript wrappers, is a bare identifier or a `const` member alias.
+/// The entity at any other expression's span names its first token: the `st`
+/// of `(st.a.n > 0 ? x : y)` is no value of the conditional, so its root is
+/// judged by the flow ([`push_unproven_container_write`]).
+fn root_symbol<'a>(
+    context: &'a UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    root: Span,
+) -> Option<&'a crate::SymbolId> {
+    bare_root(file, file.ast.peel_ts_sugar_span(root))
+        .then(|| source_symbol_at(context, file, root))
+        .flatten()
+}
+
 /// The write a sink performs, for [`push_parameter_store_flow`]: the member
 /// whose chain the write reads past its root, whether the operation is
 /// proven to write when it runs (ADRs 0716, 0718), and whether it is a
@@ -1760,6 +1775,9 @@ impl SinkWrite {
 const FLOW_DEPTH: usize = 6;
 /// How many call sites one sink's flow reads before it answers open.
 const FLOW_CALLS: usize = 64;
+/// How many values one sink's flow reads before it answers open (ADR 0790:
+/// the sub-values of a root no row describes branch).
+const FLOW_STEPS: usize = 512;
 
 /// ADR 0719: a write at `site` through the plain parameter `root` asks where
 /// the parameter's value came from, sink-driven: each call site of its
@@ -1794,14 +1812,16 @@ fn push_parameter_store_flow(
     let mut flow = ParameterFlow {
         context,
         calls: 0,
+        steps: 0,
         seen: Vec::new(),
         store: None,
         open: false,
+        inside_return: false,
     };
     if let Some((function, index)) = plain_parameter_at(file, root) {
         let in_place = function_runs_in_place(file, function, site);
         let linked = sink.linked || past_root || parameter_reassigned(file, function, index);
-        flow.parameter(file, function, index, in_place, linked, FLOW_DEPTH);
+        flow.parameter(file, function, index, false, in_place, linked, FLOW_DEPTH);
     } else {
         // ADR 0720: a local root, a call's result or a loop's element, is
         // judged at the sink itself.
@@ -1911,18 +1931,26 @@ struct FlowFrame<'f> {
 struct ParameterFlow<'w, 'c> {
     context: &'w UpstreamCompatContext<'c>,
     calls: usize,
+    steps: usize,
     seen: Vec<(String, Span, usize)>,
     store: Option<FlowStore>,
     open: bool,
+    /// ADR 0790: the walk reads a callee's returned value, where `at` is in
+    /// the callee, not at the call: a store found there is not proven. A
+    /// value handed by the call's own arguments is read at the call again.
+    inside_return: bool,
 }
 
 impl<'c> ParameterFlow<'_, 'c> {
-    /// Where parameter `index` of `function` (in `file`) gets its value.
+    /// Where parameter `index` of `function` (in `file`) gets its value; with
+    /// `rest`, the rest parameter, which holds every argument from `index`.
+    #[allow(clippy::too_many_arguments)]
     fn parameter<'f>(
         &mut self,
         file: &'f FileFacts,
         function: &'f solid_facts::ast::FunctionFact,
         index: usize,
+        rest: bool,
         in_place: bool,
         linked: bool,
         depth: usize,
@@ -1933,7 +1961,11 @@ impl<'c> ParameterFlow<'_, 'c> {
             self.open = true;
             return;
         }
-        let key = (file.path.as_str().to_owned(), function.span, index);
+        let key = (
+            file.path.as_str().to_owned(),
+            function.span,
+            index + usize::from(rest),
+        );
         if self.seen.contains(&key) {
             return;
         }
@@ -1947,11 +1979,20 @@ impl<'c> ParameterFlow<'_, 'c> {
                     file.ast.peel_ts_sugar_span(call.arguments[*position].span) == function.span
                 })
         {
-            self.callback(file, call, position, index, in_place, linked, depth);
+            self.callback(file, call, position, index, rest, in_place, linked, depth);
             return;
         }
-        // ADR 0720: a `For` row's element is an element of its `each`.
-        match for_row(file, self.context, function, index) {
+        // ADR 0720: a `For` row's element is an element of its `each`. Its
+        // callback takes no rest parameter this walk follows.
+        if rest && !matches!(for_row(file, self.context, function, 0), ForRow::NotRow) {
+            self.open = true;
+            return;
+        }
+        match if rest {
+            ForRow::NotRow
+        } else {
+            for_row(file, self.context, function, index)
+        } {
             ForRow::NotRow => {}
             // The accessor itself is a function: only its call's value is
             // the element ([`Self::call_value`]).
@@ -2019,11 +2060,11 @@ impl<'c> ParameterFlow<'_, 'c> {
                 self.open = true;
                 continue;
             }
-            if let Some(argument) = call.arguments.get(index) {
+            for argument in slot_arguments(call, index, rest).unwrap_or_default() {
                 self.value(
                     caller,
                     call.span,
-                    argument.span,
+                    argument,
                     None,
                     in_place,
                     linked,
@@ -2043,6 +2084,7 @@ impl<'c> ParameterFlow<'_, 'c> {
         call: &'f solid_facts::ast::CallFact,
         position: usize,
         index: usize,
+        rest: bool,
         in_place: bool,
         linked: bool,
         depth: usize,
@@ -2104,30 +2146,24 @@ impl<'c> ParameterFlow<'_, 'c> {
                 self.open = true;
                 continue;
             };
-            if inner
-                .arguments
-                .iter()
-                .take(index + 1)
-                .any(|argument| argument.spread)
-            {
+            let Some(arguments) = slot_arguments(inner, index, rest) else {
                 self.open = true;
-                continue;
-            }
-            let Some(argument) = inner.arguments.get(index) else {
                 continue;
             };
             let in_place = in_place
                 && function_runs_in_place(callee_file, callee, inner.span)
                 && reached(callee_file, inner.span, lookup);
-            self.value(
-                callee_file,
-                inner.span,
-                argument.span,
-                Some(frame),
-                in_place,
-                linked,
-                depth - 1,
-            );
+            for argument in arguments {
+                self.value(
+                    callee_file,
+                    inner.span,
+                    argument,
+                    Some(frame),
+                    in_place,
+                    linked,
+                    depth - 1,
+                );
+            }
         }
     }
 
@@ -2148,7 +2184,8 @@ impl<'c> ParameterFlow<'_, 'c> {
     ) where
         'c: 'f,
     {
-        if depth == 0 {
+        self.steps += 1;
+        if depth == 0 || self.steps > FLOW_STEPS {
             self.open = true;
             return;
         }
@@ -2177,47 +2214,75 @@ impl<'c> ParameterFlow<'_, 'c> {
                 }
             }
             // The literal's callee's own parameter holds the handing call's
-            // argument; any other function's, its callers'.
-            if let Some((function, index)) = plain_parameter_at(file, root) {
-                let in_place = in_place
+            // argument; any other function's, its callers'. ADR 0790: a
+            // binding of a destructured parameter, or the rest parameter,
+            // holds a part of its arguments: read past, never proven.
+            if let Some((function, index, slot)) = parameter_slot_at(file, root) {
+                let plain = slot == ParameterSlot::Plain;
+                let rest = slot == ParameterSlot::Rest;
+                let in_place = plain
+                    && in_place
                     && function_runs_in_place(file, function, at)
                     && reached(file, at, context.lookup);
-                let linked = linked || parameter_reassigned(file, function, index);
+                let linked = linked || !plain || parameter_reassigned(file, function, index);
                 match frame {
                     Some(frame)
                         if frame.callee_file.path == file.path
                             && frame.callee.span == function.span =>
                     {
-                        if frame
-                            .call
-                            .arguments
-                            .iter()
-                            .take(index + 1)
-                            .any(|argument| argument.spread)
-                        {
-                            self.open = true;
-                        } else if let Some(argument) = frame.call.arguments.get(index) {
-                            let in_place =
-                                in_place && reached(frame.file, frame.call.span, context.lookup);
-                            self.value(
-                                frame.file,
-                                frame.call.span,
-                                argument.span,
-                                None,
-                                in_place,
-                                linked,
-                                depth - 1,
-                            );
+                        match slot_arguments(frame.call, index, rest) {
+                            None => self.open = true,
+                            Some(arguments) => {
+                                let in_place = in_place
+                                    && reached(frame.file, frame.call.span, context.lookup);
+                                let inside_return =
+                                    std::mem::replace(&mut self.inside_return, false);
+                                for argument in arguments {
+                                    self.value(
+                                        frame.file,
+                                        frame.call.span,
+                                        argument,
+                                        None,
+                                        in_place,
+                                        linked,
+                                        depth - 1,
+                                    );
+                                }
+                                self.inside_return = inside_return;
+                            }
                         }
                     }
-                    _ => self.parameter(file, function, index, in_place, linked, depth - 1),
+                    _ => self.parameter(file, function, index, rest, in_place, linked, depth - 1),
                 }
                 return;
             }
             let declaration = file.ast.reference_declaration(root).unwrap_or(root);
-            // ADR 0720: a `for (const x of e)` binding holds an element of `e`.
+            // ADR 0720: a `for (const x of e)` binding holds an element of `e`;
+            // ADR 0790: so does a binding of a destructured one, a part of it.
             if let Some(operand) = for_of_operand(file, declaration) {
                 self.value(file, at, operand, frame, in_place, true, depth - 1);
+                return;
+            }
+            // ADR 0790: a binding of a destructured declarator holds a part of
+            // its initializer, and a mutable one whatever is assigned to it:
+            // read past, or not proven to hold one value, never proven.
+            if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+                binding.names.iter().any(|name| name.span == declaration)
+                    && !(binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.immutable)
+            }) {
+                let pattern = binding.shape != solid_facts::ast::BindingShape::Identifier;
+                let mut values: Vec<(Span, bool)> = binding
+                    .initializer
+                    .map(|initializer| (initializer, pattern))
+                    .into_iter()
+                    .collect();
+                if !binding.immutable {
+                    values.extend(assigned_values(file, declaration));
+                }
+                for (value, part) in values {
+                    self.value(file, at, value, frame, false, linked || part, depth - 1);
+                }
                 return;
             }
             // An exact `const` alias: its initializer. A call's result is a
@@ -2246,9 +2311,292 @@ impl<'c> ParameterFlow<'_, 'c> {
                 }
             }
         }
+        // ADR 0790: a conditional is one of its branches, a `||` or `??` either
+        // operand, a `&&` its right one (its left, when it is the value, is
+        // falsy: no object). Each is the value itself, at this place.
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == expression)
+        {
+            for branch in [conditional.consequent, conditional.alternate] {
+                self.value(file, at, branch, frame, in_place, linked, depth - 1);
+            }
+            return;
+        }
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == expression)
+        {
+            if logical.operator != solid_facts::ast::LogicalOperatorKind::And {
+                self.value(file, at, logical.left, frame, in_place, linked, depth - 1);
+            }
+            self.value(file, at, logical.right, frame, in_place, linked, depth - 1);
+            return;
+        }
+        // ADR 0790: an object or array literal written at its own property is
+        // a fresh object, whatever it holds.
+        if !linked
+            && (file.ast.array_literal_at(expression).is_some()
+                || file
+                    .source_text(expression)
+                    .is_some_and(|text| text.starts_with('{')))
+        {
+            return;
+        }
         if handed_container(file, context, expression, 6) {
             self.open = true;
+            return;
         }
+        self.sub_values(file, at, expression, root, frame, in_place, linked, depth);
+    }
+
+    /// ADR 0790: a root no row describes (`c ? s.a : x`, `[s.a][0]`, `await
+    /// p`, a call with no row) may be any value its own references and calls
+    /// hold, outside the functions written in it. A store, a parameter or a
+    /// hook there is open, never proven. A call declared in the DOM's library
+    /// returns no store proxy: rc.21 wraps only plain objects and arrays.
+    #[allow(clippy::too_many_arguments)]
+    fn sub_values<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        expression: Span,
+        root: Span,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        let lookup = self.context.lookup;
+        if let Some(call) = file.ast.call_at(root) {
+            if lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_some_and(|declaration| dom_library(&declaration.source_file))
+            {
+                return;
+            }
+            // `snapshot` returns the unwrapped value: no proxy at any depth.
+            if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Snapshot)
+            {
+                return;
+            }
+            // A context read hands out what a provider passed, as
+            // [`handed_container`] says of a binding of one.
+            if lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    self.context
+                        .dialect
+                        .name_of(primitive)
+                        .and_then(|name| self.context.dialect.context_role(name))
+                        == Some(solid_dialect::ContextRole::Read)
+                })
+            {
+                self.open = true;
+                return;
+            }
+        }
+        // A call no row describes: its callee's returns; a standard call's
+        // result written at its own property is a fresh copy (read past, the
+        // default arm of [`Self::call_value`] answered); any other callee's
+        // result may be what it was handed, as an argument or its receiver.
+        if let Some(call) = file.ast.call_at(root) {
+            // A `new` object written at its own property is fresh.
+            if call.construct && !linked {
+                return;
+            }
+            if self.returned_values(file, call, frame, in_place, linked, depth) {
+                return;
+            }
+            if lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_some()
+            {
+                return;
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let handed: Vec<Span> = call
+                .arguments
+                .iter()
+                .map(|argument| argument.span)
+                .filter(|argument| file.ast.functions_within(*argument).next().is_none())
+                .chain(file.ast.member_at(callee).map(|member| member.object))
+                .collect();
+            self.probe(file, at, &handed, frame, depth - 1);
+            return;
+        }
+        // Any other root: the references and calls it may evaluate to, not
+        // those inside a function, a call (the call counts whole), a
+        // computed key or a conditional's test written in it. Each is the
+        // value itself or a part of it, so it is never proven here: a part
+        // of a literal counts only read past (the literal is fresh), and an
+        // `await`'s operand is read past (the awaited value is what it holds).
+        let calls: Vec<Span> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| expression.contains(call.span))
+            .map(|call| call.span)
+            .collect();
+        let keys: Vec<Span> = file
+            .ast
+            .members_within(expression)
+            .filter(|member| {
+                file.ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_ok()
+            })
+            .map(|member| member.property)
+            .collect();
+        let inside = |span: Span| {
+            file.ast
+                .functions_within(expression)
+                .any(|function| function.span.contains(span))
+                || calls
+                    .iter()
+                    .any(|call| *call != span && call.contains(span))
+                || keys.iter().any(|key| key.contains(span))
+                || file
+                    .ast
+                    .conditional_tests
+                    .iter()
+                    .any(|test| expression.contains(*test) && test.contains(span))
+        };
+        let in_literal = |span: Span| {
+            file.ast.array_literals.iter().any(|literal| {
+                *literal != expression && expression.contains(*literal) && literal.contains(span)
+            }) || file.ast.object_get_shapes.iter().any(|shape| {
+                shape.span != expression
+                    && expression.contains(shape.span)
+                    && shape.span.contains(span)
+            })
+        };
+        let awaited = |span: Span| {
+            file.ast
+                .await_operands
+                .iter()
+                .any(|operand| expression.contains(*operand) && operand.contains(span))
+        };
+        let parts: Vec<Span> = file
+            .ast
+            .identifiers_within(expression)
+            .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
+            .map(|identifier| identifier.span)
+            .chain(calls.iter().copied())
+            .filter(|part| *part != expression && !inside(*part))
+            .collect();
+        for part in parts {
+            let (literal, awaited) = (in_literal(part), awaited(part));
+            if literal && !awaited && !linked {
+                continue;
+            }
+            self.value(
+                file,
+                at,
+                part,
+                frame,
+                false,
+                linked || literal || awaited,
+                depth - 1,
+            );
+            if self.open && self.store.is_some() {
+                return;
+            }
+        }
+    }
+
+    /// ADR 0790: the values a project function `call` resolves to may
+    /// return: each own `return` and, for a generator, each `yield`, read
+    /// with this call as the frame. One straight-line return of a function
+    /// with no frame above keeps the stack; anything else (more returns, a
+    /// generator, an async function, a frame already open) is never proven,
+    /// because [`FlowFrame`] holds one call and a walk past it would read
+    /// every caller of the outer function. `false`: no project function.
+    #[allow(clippy::too_many_arguments)]
+    fn returned_values<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        call: &'f solid_facts::ast::CallFact,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) -> bool
+    where
+        'c: 'f,
+    {
+        if call.construct {
+            // A constructor's object is no return this walk reads.
+            return false;
+        }
+        let lookup = self.context.lookup;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some((callee_file, function, exact)) = called_function(file, call, callee, lookup)
+        else {
+            return false;
+        };
+        if !exact {
+            self.open = true;
+            return true;
+        }
+        let (values, single) = returned_expressions(callee_file, function);
+        let frame_here = FlowFrame {
+            callee_file,
+            callee: function,
+            file,
+            call,
+        };
+        let keeps = in_place && single && frame.is_none();
+        let inside_return = std::mem::replace(&mut self.inside_return, true);
+        for value in values {
+            self.value(
+                callee_file,
+                value,
+                value,
+                Some(frame_here),
+                keeps,
+                linked || !keeps,
+                depth - 1,
+            );
+        }
+        self.inside_return = inside_return;
+        true
+    }
+
+    /// ADR 0790: read `sources` past (a standard-library call no row
+    /// describes, a callback's result): a store there is open.
+    fn probe<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        sources: &[Span],
+        frame: Option<FlowFrame<'f>>,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        let mut probe = ParameterFlow {
+            context: self.context,
+            calls: self.calls,
+            steps: self.steps,
+            seen: self.seen.clone(),
+            store: None,
+            open: false,
+            inside_return: self.inside_return,
+        };
+        for source in sources {
+            probe.value(file, at, *source, frame, false, true, depth);
+        }
+        self.calls = probe.calls;
+        self.steps = probe.steps;
+        self.open |= probe.store.is_some() || probe.open;
     }
 
     /// ADR 0720: the result of `call` as a value reaching the sink, when a row
@@ -2313,6 +2661,20 @@ impl<'c> ParameterFlow<'_, 'c> {
                 .or_else(|| qualified.strip_prefix("ReadonlyArray."));
             let sources: Vec<Span> = match (method, qualified) {
                 (Some("find" | "findLast" | "at"), _) => receiver.into_iter().collect(),
+                // ADR 0790: an element taken out of the receiver, a `Map`'s or
+                // a `WeakRef`'s value, a property read by reflection, and the
+                // object `seal`, `freeze` and `preventExtensions` hand back.
+                (Some("pop" | "shift"), _)
+                | (_, "Map.get" | "ReadonlyMap.get" | "WeakMap.get" | "WeakRef.deref") => {
+                    receiver.into_iter().collect()
+                }
+                (
+                    _,
+                    "Reflect.get"
+                    | "ObjectConstructor.seal"
+                    | "ObjectConstructor.freeze"
+                    | "ObjectConstructor.preventExtensions",
+                ) => argument(0).into_iter().collect(),
                 (Some("filter" | "slice" | "toSorted" | "toReversed"), _) if linked => {
                     receiver.into_iter().collect()
                 }
@@ -2326,6 +2688,24 @@ impl<'c> ParameterFlow<'_, 'c> {
                         .collect()
                 }
                 (_, "ObjectConstructor.values") if linked => argument(0).into_iter().collect(),
+                // ADR 0790: an entry's value, and a record built from entries,
+                // are their source's values.
+                (_, "ObjectConstructor.entries" | "ObjectConstructor.fromEntries") if linked => {
+                    argument(0).into_iter().collect()
+                }
+                // ADR 0790: `Object.assign` returns its target; read past, the
+                // sources' values too.
+                (_, "ObjectConstructor.assign") => {
+                    if call.arguments.iter().any(|argument| argument.spread) {
+                        self.open = true;
+                    }
+                    let take = if linked { call.arguments.len() } else { 1 };
+                    call.arguments
+                        .iter()
+                        .take(take)
+                        .map(|argument| argument.span)
+                        .collect()
+                }
                 (_, "ArrayConstructor.from") if linked && call.arguments.len() == 1 => {
                     argument(0).into_iter().collect()
                 }
@@ -2335,17 +2715,23 @@ impl<'c> ParameterFlow<'_, 'c> {
                     {
                         // What the callback returns for a store element is
                         // not followed: a store there is open.
-                        let mut probe = ParameterFlow {
-                            context,
-                            calls: self.calls,
-                            seen: self.seen.clone(),
-                            store: None,
-                            open: false,
-                        };
-                        probe.value(file, at, receiver, frame, false, true, depth - 1);
-                        self.calls = probe.calls;
-                        self.open |= probe.store.is_some() || probe.open;
+                        self.probe(file, at, &[receiver], frame, depth - 1);
                     }
+                    return true;
+                }
+                // ADR 0790: read past, any other standard call's result may
+                // be what it was handed (`flat`, `sort`, `Array.of`, a `Map`'s
+                // values, a promise's): a store handed to it is open. The
+                // DOM's library returns no store proxy.
+                _ if linked && !dom_library(&declaration.source_file) => {
+                    let handed: Vec<Span> = call
+                        .arguments
+                        .iter()
+                        .map(|argument| argument.span)
+                        .filter(|argument| file.ast.functions_within(*argument).next().is_none())
+                        .chain(receiver)
+                        .collect();
+                    self.probe(file, at, &handed, frame, depth - 1);
                     return true;
                 }
                 _ => return false,
@@ -2444,11 +2830,12 @@ impl<'c> ParameterFlow<'_, 'c> {
             },
             symbol,
         );
-        if standing == WriteStanding::Exempt && in_place {
+        if standing == WriteStanding::Exempt && in_place && !self.inside_return {
             return;
         }
         let proven = standing == WriteStanding::Dropped
             && in_place
+            && !self.inside_return
             && !linked
             && typed_store.is_none()
             && !context.dialect.store_root_properties_are_readonly()
@@ -2467,14 +2854,12 @@ impl<'c> ParameterFlow<'_, 'c> {
 }
 
 /// ADR 0720: the iterated operand of the `for (const x of operand)` whose
-/// single identifier binding `declaration` declares (no initializer, `of`
-/// exactly between the binding and the operand).
+/// binding declares `declaration` (no initializer, `of` exactly between the
+/// binding and the operand). ADR 0790: the binding may be a pattern
+/// (`for (const { p } of operand)`), whose names hold parts of an element.
 fn for_of_operand(file: &FileFacts, declaration: Span) -> Option<Span> {
     let binding = file.ast.bindings.iter().find(|binding| {
-        binding.shape == solid_facts::ast::BindingShape::Identifier
-            && binding.initializer.is_none()
-            && binding.names.len() == 1
-            && binding.names[0].span == declaration
+        binding.initializer.is_none() && binding.names.iter().any(|name| name.span == declaration)
     })?;
     file.ast.iterated_operands.iter().copied().find(|operand| {
         operand.start >= binding.pattern.end
@@ -2486,6 +2871,205 @@ fn for_of_operand(file: &FileFacts, declaration: Span) -> Option<Span> {
                 statement.contains(binding.pattern) && statement.contains(*operand)
             })
     })
+}
+
+/// How a parameter binding receives its value ([`parameter_slot_at`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ParameterSlot {
+    /// The plain identifier parameter: the argument itself.
+    Plain,
+    /// A name of a destructured parameter: a part of the argument.
+    Pattern,
+    /// A name of the rest parameter: every argument from its index.
+    Rest,
+}
+
+/// ADR 0790: the function, parameter index and slot of the parameter whose
+/// binding the reference `root` names, any shape: a plain identifier, a name
+/// in a destructuring pattern, or the rest parameter (index: the parameter
+/// count, the first argument it absorbs).
+fn parameter_slot_at(
+    file: &FileFacts,
+    root: Span,
+) -> Option<(&solid_facts::ast::FunctionFact, usize, ParameterSlot)> {
+    let declaration = file.ast.reference_declaration(root).unwrap_or(root);
+    file.ast.functions_containing(root).find_map(|function| {
+        if let Some(index) = function
+            .parameters
+            .iter()
+            .position(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+        {
+            let parameter = &function.parameters[index];
+            let plain = parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.names.len() == 1;
+            return Some((
+                function,
+                index,
+                if plain {
+                    ParameterSlot::Plain
+                } else {
+                    ParameterSlot::Pattern
+                },
+            ));
+        }
+        function
+            .rest_parameter_names
+            .iter()
+            .any(|name| name.span == declaration)
+            .then_some((function, function.parameters.len(), ParameterSlot::Rest))
+    })
+}
+
+/// The arguments of `call` a parameter slot receives: the one at `index`, or,
+/// for a rest parameter, every one from it. `None`: a spread before the slot
+/// (or at it, for a plain slot) moves what lands there.
+fn slot_arguments(
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    rest: bool,
+) -> Option<Vec<Span>> {
+    let fixed = if rest { index } else { index + 1 };
+    if call
+        .arguments
+        .iter()
+        .take(fixed)
+        .any(|argument| argument.spread)
+    {
+        return None;
+    }
+    Some(if rest {
+        call.arguments
+            .iter()
+            .skip(index)
+            .map(|argument| argument.span)
+            .collect()
+    } else {
+        call.arguments
+            .get(index)
+            .map(|argument| argument.span)
+            .into_iter()
+            .collect()
+    })
+}
+
+/// ADR 0790: the values assigned to the mutable binding `declaration`: each
+/// plain assignment's value, a destructuring assignment's source (a part of
+/// it, `true`), and the operand of a `for (x of operand)` head that writes it
+/// (an element, `true`). Every assignment counts, wherever it runs.
+fn assigned_values(file: &FileFacts, declaration: Span) -> Vec<(Span, bool)> {
+    let names = |span: Span| {
+        file.ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(span))
+            == Some(declaration)
+    };
+    let mut values: Vec<(Span, bool)> = file
+        .ast
+        .assignments
+        .iter()
+        .filter_map(|assignment| {
+            if names(assignment.target) {
+                Some((assignment.value_span, false))
+            } else {
+                file.ast
+                    .destructuring_assignment_leaves(assignment)
+                    .into_iter()
+                    .any(names)
+                    .then_some((assignment.value_span, true))
+            }
+        })
+        .collect();
+    for head in &file.ast.iteration_targets {
+        if !file
+            .ast
+            .write_targets
+            .iter()
+            .any(|target| head.contains(*target) && names(*target))
+        {
+            continue;
+        }
+        if let Some(operand) = file.ast.iterated_operands.iter().copied().find(|operand| {
+            operand.start >= head.end
+                && file
+                    .source
+                    .get(head.end as usize..operand.start as usize)
+                    .is_some_and(|between| between.trim() == "of")
+        }) {
+            values.push((operand, true));
+        }
+    }
+    values
+}
+
+/// ADR 0790: what a call of `function` may return: its expression body, each
+/// own `return`'s value and, for a generator, each own `yield`'s operand.
+/// `true` with the values: one straight-line return of a plain function,
+/// the value on every normal completion.
+fn returned_expressions(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> (Vec<Span>, bool) {
+    let plain = !function.r#async && !function.generator;
+    if let Some(returned) = &function.expression_return {
+        return (returned.argument.into_iter().collect(), plain);
+    }
+    let own = |span: Span| {
+        function.body.contains(span)
+            && crate::owners::owning_function(&file.ast, span)
+                .is_some_and(|owner| owner.span == function.span)
+    };
+    let returns: Vec<&solid_facts::ast::ReturnFact> = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| own(returned.span))
+        .collect();
+    let single = plain && returns.len() == 1 && returns[0].straight_line;
+    let mut values: Vec<Span> = returns
+        .iter()
+        .filter_map(|returned| returned.argument)
+        .collect();
+    if function.generator {
+        values.extend(
+            file.ast
+                .yields
+                .iter()
+                .filter(|yielded| own(yielded.span))
+                .filter_map(|yielded| yielded.operand),
+        );
+    }
+    (values, single)
+}
+
+/// ADR 0790: the project function `call` runs, and whether its arguments
+/// land on its parameters by position (no spread, the exact callee): a
+/// function literal called in place, or the function the callee resolves to.
+fn called_function<'a, 'l: 'a>(
+    file: &'a FileFacts,
+    call: &solid_facts::ast::CallFact,
+    callee: Span,
+    lookup: &crate::indexes::SemanticLookup<'l>,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact, bool)> {
+    let spread = call.arguments.iter().any(|argument| argument.spread);
+    if let Some(function) = file.ast.function_at(callee) {
+        return Some((file, function, !spread));
+    }
+    let (callee_file, function) = lookup.function_called_at(file.path.as_str(), callee)?;
+    let exact = matches!(
+        crate::execution_role::project_callee_at_parameter(file, call, 0, lookup),
+        Some((exact_file, exact, true))
+            if exact_file.path == callee_file.path && exact.span == function.span
+    );
+    Some((callee_file, function, exact && !spread))
+}
+
+/// ADR 0790: whether a standard-library declaration is the DOM's (`lib.dom*`):
+/// its calls return nodes, events and primitives, never a store proxy, which
+/// rc.21 makes only of plain objects and arrays.
+fn dom_library(source_file: &str) -> bool {
+    source_file
+        .rsplit(['/', '\\'])
+        .next()
+        .is_some_and(|name| name.starts_with("lib.dom"))
 }
 
 /// ADR 0720: the index of the plain parameter `function` returns on every
@@ -4574,7 +5158,7 @@ fn no_store_mutator_call(
         let Some(root) = member_root(file, callee) else {
             continue;
         };
-        let source = source_symbol_at(context, file, root);
+        let source = root_symbol(context, file, root);
         let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
         let proven = source.and_then(|symbol| {
             context
@@ -4678,7 +5262,7 @@ fn no_store_method_write(
         let Some(root) = member_root(file, callee).filter(|_| writes_this) else {
             continue;
         };
-        let Some(symbol) = source_symbol_at(context, file, root) else {
+        let Some(symbol) = root_symbol(context, file, root) else {
             continue;
         };
         let Some((name, _)) = context
@@ -4899,7 +5483,7 @@ fn no_store_standard_library_write(
         };
         let target = file.ast.peel_ts_sugar_span(argument.span);
         let root = member_root(file, target).unwrap_or(target);
-        let source = source_symbol_at(context, file, root);
+        let source = root_symbol(context, file, root);
         let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
         let proven = source.and_then(|symbol| {
             context
@@ -5071,10 +5655,22 @@ fn no_store_delete(
             }
             link = current.object;
         }
-        if !plain || link != root || !bare_root(file, root) {
+        if !plain || link != root {
             continue;
         }
-        let source = source_symbol_at(context, file, root);
+        // ADR 0790: a root that is no bare identifier (a call's result, a
+        // conditional) may hold a store: the flow judges it.
+        if !bare_root(file, root) {
+            let sink = SinkWrite {
+                member,
+                may_not_write: false,
+                delete: true,
+                linked: false,
+            };
+            push_unproven_container_write(file, context, member, root, sink, defects);
+            continue;
+        }
+        let source = root_symbol(context, file, root);
         let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
         let proven = source.and_then(|symbol| {
             context

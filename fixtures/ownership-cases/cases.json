@@ -3573,6 +3573,93 @@
     ]
    },
    "note": "ADR 0671: a value captured once is no read at this position."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/sub-value-flow/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// ADR 0790: a root no row of the flow describes. Upstream's `noWrite` sees none of these.\ntype N = { n: number };\nconst [st] = createStore({ a: { n: 1 } as N, ls: [{ p: { n: 1 } as N }], m: { k: { n: 1 } as N } as Record<string, N> });\nconst id = <T,>(x: T): T => x;\nconst outer = <T,>(y: T): T => id(y);\nexport function Flow() {\n  return <button onClick={() => {\n    outer(st).a = { n: 2 };\n    for (const { p } of st.ls) p.n = 2;\n    for (const [, v] of Object.entries(st.m)) v.n = 4;\n  }}>{st.a.n}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "outer(st).a"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "p.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "v.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.14.5 (6d3bc311): upstream's `noWrite` reports only a write through a tracked props or store identifier, so a store reached through a nested identity, a destructured loop binding or an entry's value is silent there. rc.21 drops each write with STORE_WRITE_OUTSIDE_SETTER (Chrome, witnessed). The frame binds `y` to `st` at this call, so the first write is proven; the others read past a link (ADR 0476) and stay obligations."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/sub-value-flow/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// ADR 0790: the entity at an expression names its first token; `st` here is the test, not the value.\nconst [st] = createStore({ a: { n: 1 } });\nexport function Quiet() {\n  return <button onClick={() => {\n    (st.a.n > 0 ? { n: 1 } : { n: 2 }).n = 3;\n    (Math.random() > 0.5 ? { ...st.a } : { n: 0 }).n = 4;\n  }}>{st.a.n}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "ADR 0790: before it, the first write was a violation: the root's entity named `st`, the conditional's first token. Chrome is silent on both writes: each lands on a fresh literal."
   }
  ]
 }

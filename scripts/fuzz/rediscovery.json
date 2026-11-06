@@ -4146,5 +4146,40 @@
    "mx-strict-read-untracked-ref-named-store-dstr-assign-direct-closure"
   ],
   "rediscovered": "rm5 false-clean, the fix recall-gap: all 152 by id"
+ },
+ {
+  "finding": "SC2003 silent past its flow's rows: a destructured loop binding, declarator or parameter, the rest, a nested identity, a function literal called in place, Object.entries and fromEntries, a conditional, array or awaited root, a let, a delete through a call, .then, Map.get: certified, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "research-sc9012.md section 2 (W's leftovers and 17 more), R3's probes",
+  "fixed": "ADR 0790",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-loop-pattern-alias-iife",
+   "mx-store-write-outside-setter-handler-sw-nested-identity-direct-none",
+   "mx-store-write-outside-setter-handler-sw-called-literal-direct-closure-helper",
+   "mx-store-write-outside-setter-handler-sw-entries-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-from-entries-alias-iife",
+   "mx-store-write-outside-setter-handler-sw-conditional-direct-none",
+   "mx-store-write-outside-setter-handler-sw-array-root-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-let-direct-none",
+   "mx-store-write-outside-setter-handler-sw-param-pattern-alias-closure-helper",
+   "mx-store-write-outside-setter-handler-sw-rest-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-delete-call-direct-none",
+   "mx-store-write-outside-setter-handler-sw-await-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-then-alias-closure",
+   "mx-store-write-outside-setter-handler-sw-map-get-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 168 programs of the 14 shapes, certified; the fix agree on 36 (nested identity, called literal, conditional) and recall-gap on 132; same id set in the sc VM, both builds. sw-decl-pattern was a recall gap on both"
+ },
+ {
+  "finding": "SC2003 violation on a write to a fresh literal chosen by a store test: `(s.v > 0 ? { v: 1 } : { v: 2 }).v = 7`, Chrome quiet. The entity at the conditional's span named its first token, the store",
+  "found": "R3, fixture store-sub-value-flow while authoring ADR 0790",
+  "fixed": "ADR 0790: a write root names a store only when it is a bare identifier",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-sw-fresh-test-direct-none"
+  ],
+  "rediscovered": "r3base false-positive on 36 lg-recall and 12 mx-recall programs, Chrome confirmed 36 of 36; the fix clean and not-fired; sw-fresh-spread and sw-fresh-frame clean on both"
  }
 ]

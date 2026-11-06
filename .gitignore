@@ -1049,6 +1049,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-parameter-flow/node_modules/**
 !fixtures/reactive-ir/store-element-flow/node_modules/
 !fixtures/reactive-ir/store-element-flow/node_modules/**
+!fixtures/reactive-ir/store-sub-value-flow/node_modules/
+!fixtures/reactive-ir/store-sub-value-flow/node_modules/**
 !fixtures/reactive-ir/absent-guard-prop/node_modules/
 !fixtures/reactive-ir/absent-guard-prop/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/

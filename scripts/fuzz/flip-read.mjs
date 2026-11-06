@@ -78,9 +78,36 @@ export const ABSENT_GUARD = {
   "guard-passed": { kind: "plain", contexts: ["body"], imports: ["children"], text: guarded("on ") },
   "guard-absent": { kind: "plain", contexts: [], legal: ["memo"], imports: ["children"], text: guarded("") },
 };
+// ADR 0790: a store write through a root no row of SC2003's flow described, on `createStore({ v, a: { v }, items })`. Each warns
+// STORE_WRITE_OUTSIDE_SETTER in Chrome (rc.21); the build before certified each. In a handler or a timer: no strict read beside it.
+const SUB_WRITE = { kind: "store-nested", contexts: ["handler", "timer"] };
+const SUB_IDS = "const swId = <T,>(x: T): T => x; const swOuter = <T,>(y: T): T => swId(y);";
+export const SUB_VALUE_WRITES = {
+  "sw-loop-pattern": { ...SUB_WRITE, text: (o) => `for (const { a } of [${o}]) a.v = 7;` },
+  "sw-decl-pattern": { ...SUB_WRITE, text: (o) => `const { a } = ${o}; a.v = 7;` },
+  "sw-nested-identity": { ...SUB_WRITE, text: (o) => `${SUB_IDS} swOuter(${o}).v = 7;` },
+  "sw-called-literal": { ...SUB_WRITE, text: (o) => `((x: typeof ${o}) => x)(${o}).v = 7;` },
+  "sw-entries": { ...SUB_WRITE, text: (o) => `for (const [, x] of Object.entries({ k: ${o}.a })) x.v = 7;` },
+  "sw-from-entries": { ...SUB_WRITE, text: (o) => `Object.fromEntries(Object.entries({ k: ${o}.a })).k.v = 7;` },
+  "sw-conditional": { ...SUB_WRITE, text: (o) => `(Math.random() >= 0 ? ${o} : { v: 0, a: { v: 0 }, items: [] }).v = 7;` },
+  "sw-array-root": { ...SUB_WRITE, text: (o) => `[${o}.a][0].v = 7;` },
+  "sw-let": { ...SUB_WRITE, text: (o) => `let r = { v: 0 }; r = ${o}.a; r.v = 7;` },
+  "sw-param-pattern": { ...SUB_WRITE, text: (o) => `const w = ({ a }: { a: { v: number } }) => { a.v = 7; }; w(${o});` },
+  "sw-rest": { ...SUB_WRITE, text: (o) => `const w = (...xs: { v: number }[]) => { xs[0].v = 7; }; w(${o}.a);` },
+  "sw-delete-call": { ...SUB_WRITE, text: (o) => `${SUB_IDS} delete (swId(${o}.a) as { v?: number }).v;` },
+  "sw-await": { ...SUB_WRITE, text: (o) => `void (async () => { (await Promise.resolve(${o}.a)).v = 7; })();` },
+  "sw-then": { ...SUB_WRITE, text: (o) => `void Promise.resolve(${o}.a).then((x) => { x.v = 7; });` },
+  "sw-map-get": { ...SUB_WRITE, text: (o) => `new Map([[1, ${o}.a]]).get(1)!.v = 7;` },
+  // Quiet in Chrome: a fresh literal written at its own property, and the frame's plain argument. The build before reported the first
+  // a violation: the conditional's entity named its first token, the store in its test.
+  "sw-fresh-test": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `(${o}.v > 0 ? { v: 1 } : { v: 2 }).v = 7;` },
+  "sw-fresh-spread": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `(Math.random() >= 0 ? { ...${o}.a } : { v: 0 }).v = 7;` },
+  "sw-fresh-frame": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `${SUB_IDS} swOuter({ v: 1 }).v = 7; void swOuter(${o});` },
+};
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD },
+  STORE_WRITE_OUTSIDE_SETTER: SUB_VALUE_WRITES,
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

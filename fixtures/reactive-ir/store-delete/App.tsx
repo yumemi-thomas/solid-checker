@@ -85,7 +85,7 @@ export function Alias() {
 
 // Refused (silent): a property whose type includes `undefined` but is not
 // optional (TS2790 under `exactOptionalPropertyTypes`), a computed key, an
-// optional chain and a cast root.
+// optional chain. Reported (ADR 0790): the cast root.
 export function Refused(key: string) {
   delete store.nick;
   delete store.rec[key];

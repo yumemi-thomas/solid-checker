@@ -1114,6 +1114,60 @@ fn emit_span_demands(
     Ok(())
 }
 
+/// ADR 0790: the calls a written chain is rooted at (an assignment target's,
+/// a `delete` operand's, an in-place array method's callee's, a standard
+/// write's target), and each call a demanded call's member callee reads its
+/// receiver from. Spelling decides nothing here: the demand only requests a
+/// fact.
+fn write_root_calls(file: &FileFacts) -> HashSet<Span> {
+    let ast = &file.ast;
+    let root_of = |span: Span| {
+        let mut current = ast.peel_ts_sugar_span(span);
+        while let Some(member) = ast.member_at(current) {
+            current = ast.peel_ts_sugar_span(member.object);
+        }
+        current
+    };
+    let mutated = ast.calls.iter().filter_map(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let member = ast.member_at(callee)?;
+        ARRAY_MUTATOR_NAMES
+            .contains(&file.source_text(member.property)?)
+            .then_some(member.object)
+    });
+    // The target of a standard write by its spelling (SC2003's
+    // `STANDARD_LIBRARY_WRITES`: `Object.assign`, `Reflect.set`, …).
+    let written_arguments = ast.calls.iter().filter_map(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let name = file.source_text(ast.member_at(callee)?.property)?;
+        matches!(name, "assign" | "set" | "defineProperty" | "deleteProperty")
+            .then(|| call.arguments.first().map(|argument| argument.span))
+            .flatten()
+    });
+    let mut pending: Vec<Span> = ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(ast.deleted_targets.iter().copied())
+        .chain(mutated)
+        .chain(written_arguments)
+        .map(root_of)
+        .collect();
+    let mut roots = HashSet::new();
+    while let Some(span) = pending.pop() {
+        let Some(call) = ast.call_at(span) else {
+            continue;
+        };
+        if !roots.insert(call.span) {
+            continue;
+        }
+        if let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) {
+            pending.push(root_of(member.object));
+        }
+    }
+    roots
+}
+
 /// Whether the callee is an identifier, or a plain member chain rooted at one,
 /// that no declaration the parser saw binds: a global such as `Promise` or
 /// `Math`. Its declaration decides what the call may run.
@@ -1171,6 +1225,7 @@ fn plan_call_demands(
         })
         .collect::<Vec<_>>();
     extend_leaf_demand_regions(file, &mut leaf_callbacks);
+    let write_roots = write_root_calls(file);
     for call in &file.ast.calls {
         let callee = file_location(path, call.callee);
         let property = callee_property_location(&file.source, &callee);
@@ -1329,8 +1384,13 @@ fn plan_call_demands(
                     .operand
                     .is_some_and(|operand| file.ast.peel_ts_sugar_span(operand) == call.span)
             });
+        // ADR 0790: SC2003's flow asks which standard method a written
+        // chain's root call is (`store.items.slice().push(1)`), and so of
+        // each receiver call beneath it; with no resolved call it is open.
+        let argumentless_write_root = call.arguments.is_empty() && write_roots.contains(&call.span);
         planned.resolved_call = !call.arguments.is_empty()
             || argumentless_array_mutator
+            || argumentless_write_root
             || argumentless_dispatch
             || argumentless_before_suspension
             || argumentless_yield_operand
