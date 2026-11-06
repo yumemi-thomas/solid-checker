@@ -592,6 +592,7 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
         runtime_identity: "".into(),
         declared_keys: None,
         writable_optional_property: false,
+        delete_operand_rejected: false,
     };
     let old = typescript_table(
         1,
@@ -746,6 +747,7 @@ fn exact_index_patch_adds_and_removes_an_alias_like_a_rebuild() {
         library_types: None,
         declared_keys: None,
         writable_optional_property: false,
+        delete_operand_rejected: false,
         reference_space: None,
         runtime_identity: "".into(),
     };
@@ -910,6 +912,7 @@ fn exact_index_patch_refuses_a_retained_id_that_gains_or_loses_an_alias() {
         library_types: None,
         declared_keys: None,
         writable_optional_property: false,
+        delete_operand_rejected: false,
         reference_space: None,
         runtime_identity: "".into(),
     };

@@ -648,15 +648,6 @@
    "certified": true
   },
   {
-   "id": "values/d6-delete-computed",
-   "item": "V-D6",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d6-proxy-wrap",
    "item": "V-D6",
    "outcome": "false-clean",

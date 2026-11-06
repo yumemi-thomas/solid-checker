@@ -138,6 +138,10 @@ export const SUB_VALUE_WRITES = {
   "sw-comma": { ...SUB_WRITE, text: (o) => `(Math.random(), ${o}).v = 7;` },
   // ADR 0791: a delete behind an optional chain, tsc-clean, warns.
   "sw-delete-optional-chain": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}?.v;` },
+  // ADR 0829: a computed key, an array index, an open key: tsc-clean, warn; the build before certified each (P8).
+  "sw-delete-computed": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}["v"];` },
+  "sw-delete-index": { ...SUB_WRITE, text: (o) => `delete ${o}.items[0];` },
+  "sw-delete-open-key": { ...SUB_WRITE, text: (o) => `const k: number = 0; delete ${o}.items[k];` },
   // ADR 0790, research-sc9012.md section 2's t5, t13, t22, t33, dl8: roots no row described, each U now.
   "sw-object-root": { ...SUB_WRITE, text: (o) => `({ s: ${o}.a }).s.v = 7;` },
   "sw-generator": { ...SUB_WRITE, text: (o) => `function* swGen() { yield ${o}.a; } for (const x of swGen()) x.v = 7;` },

@@ -15,8 +15,8 @@ use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tsrs_ast::{
-    Node, Symbol, SymbolFlags, get_source_file_of_node, is_module_block, is_module_declaration,
-    is_private_identifier, is_property_access_expression, is_source_file,
+    Node, Symbol, SymbolFlags, get_source_file_of_node, is_access_expression, is_module_block,
+    is_module_declaration, is_private_identifier, is_property_access_expression, is_source_file,
 };
 use tsrs_checker::types::{
     ElementFlags, LiteralValue, ObjectFlags, SignatureKind, Type, TypeExt, TypeFlags,
@@ -784,6 +784,56 @@ pub fn writable_optional_property_at(checker: &mut Checker, node: P<Node>) -> bo
         .flags()
         .contains(SymbolFlags::Property | SymbolFlags::Optional)
         && !checker.is_readonly_symbol_exported(symbol)
+}
+
+/// ADR 0829: whether `delete node` is a TypeScript error under this
+/// program's options. It mirrors `check_delete_expression`
+/// (`checker.go:11004`) on an access expression: a private name (TS18011), a
+/// readonly resolved property (TS2704), or, under `strictNullChecks`, a
+/// non-optional one (TS2790: with `exactOptionalPropertyTypes` the `?` flag,
+/// else a type that admits `undefined`; `any`, `unknown` and `never` pass).
+/// The symbol is the one that function reads, the access's resolved symbol,
+/// recorded when the access is checked. `true` is that proof; `false` is no
+/// claim (no resolved symbol, as for an index signature or an open key, or
+/// one that is no plain property).
+pub fn delete_operand_rejected_at(checker: &mut Checker, node: P<Node>) -> bool {
+    if !is_access_expression(node) {
+        return false;
+    }
+    if is_property_access_expression(node) && node.name().is_some_and(is_private_identifier) {
+        return true;
+    }
+    let _ = checker.get_type_at_location(node);
+    let Some(symbol) = checker.symbol_node_links.get(node).resolved_symbol.get() else {
+        return false;
+    };
+    if symbol.addr() == checker.unknown_symbol.addr()
+        || !symbol.flags().intersects(SymbolFlags::Property)
+        || symbol
+            .flags()
+            .intersects(SymbolFlags::ExportValue | SymbolFlags::Alias)
+    {
+        return false;
+    }
+    if checker.is_readonly_symbol_exported(symbol) {
+        return true;
+    }
+    if !checker.strict_null_checks {
+        return false;
+    }
+    let value = checker.get_type_of_symbol_exported(symbol);
+    if value
+        .flags()
+        .intersects(TypeFlags::AnyOrUnknown | TypeFlags::Never)
+    {
+        return false;
+    }
+    let optional = if checker.exact_optional_property_types {
+        symbol.flags().intersects(SymbolFlags::Optional)
+    } else {
+        checker.has_type_facts(value, tsrs_checker::TypeFacts::IsUndefined)
+    };
+    !optional
 }
 
 /// Whether `value` is an instantiation of a top-level type alias whose type

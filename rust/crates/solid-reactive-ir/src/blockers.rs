@@ -129,6 +129,11 @@ pub(crate) const PRIMITIVE_IDENTITY_UNPROVEN: &str = "primitive-identity-unprove
 /// missing module, an export its target lacks): what the value is, and so
 /// what any call, read, tag or write through it does, is unknown.
 pub(crate) const IMPORT_UNRESOLVED: &str = "import-unresolved";
+/// ADR 0829: a store `delete` whose operand is neither proven optional and
+/// writable nor proven rejected by TypeScript (a computed or index key, a
+/// required `T | undefined`, `unknown`): whether `tsc` accepts it, and so
+/// whether it is this rule's, is open.
+pub(crate) const DELETE_OPERAND_UNPROVEN: &str = "delete-operand-unproven";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";

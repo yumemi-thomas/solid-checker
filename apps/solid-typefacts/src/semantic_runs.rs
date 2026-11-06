@@ -36,9 +36,9 @@ use crate::resolved_calls::{CallCaches, CallDemand, CallRun};
 use crate::runtime_facts::{runtime_binding_kind, runtime_identity};
 use crate::type_facts::{
     DescriptorMemo, array_shape_at, callability_of_type, constructability_of_type,
-    declared_keys_at, library_types_at, primitive_literal_candidates_of_type,
-    primitive_value_domain_of_type, runtime_value_domain_of_type, tuple_shape_at,
-    writable_optional_property_at,
+    declared_keys_at, delete_operand_rejected_at, library_types_at,
+    primitive_literal_candidates_of_type, primitive_value_domain_of_type,
+    runtime_value_domain_of_type, tuple_shape_at, writable_optional_property_at,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -442,6 +442,7 @@ pub fn run(
             && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
         {
             entity.writable_optional_property = writable_optional_property_at(env.checker, node);
+            entity.delete_operand_rejected = delete_operand_rejected_at(env.checker, node);
         }
         note_unported(demand, unavailable);
         if demand.resolved_call {

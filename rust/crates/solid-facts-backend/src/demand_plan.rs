@@ -126,9 +126,8 @@ fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut
         let Some(member) = file.peel_parentheses(target) else {
             continue;
         };
-        if file.ast.member_at(member).is_none()
-            || file.ast.computed_members.binary_search(&member).is_ok()
-        {
+        // ADR 0829: a computed operand too, for the rejection proof.
+        if file.ast.member_at(member).is_none() {
             continue;
         }
         spans.writable_optional_property_spans.insert(member);
