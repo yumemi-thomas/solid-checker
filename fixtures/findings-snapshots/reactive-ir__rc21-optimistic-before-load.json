@@ -102,6 +102,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1595,
+      "end": 1603,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1605,
+      "end": 1610,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "uncertifiable",

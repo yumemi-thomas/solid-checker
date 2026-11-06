@@ -17,8 +17,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1258,
+      "end": 1259,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
       "start": 1304,
       "end": 1315,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1312,
+      "end": 1313,
       "fixes": 0
     },
     {

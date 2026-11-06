@@ -67,8 +67,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 1617,
+      "end": 1619,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
       "start": 1669,
       "end": 1674,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 1827,
+      "end": 1829,
       "fixes": 0
     },
     {
@@ -109,6 +129,16 @@
       "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
       "start": 2248,
       "end": 2249,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 2284,
+      "end": 2286,
       "fixes": 0
     },
     {

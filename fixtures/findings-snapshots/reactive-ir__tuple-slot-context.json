@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
+      "start": 206,
+      "end": 211,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -19,6 +29,16 @@
       "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
       "start": 277,
       "end": 284,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
+      "start": 297,
+      "end": 302,
       "fixes": 0
     },
     {

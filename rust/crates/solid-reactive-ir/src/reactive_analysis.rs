@@ -317,80 +317,6 @@ pub(crate) fn collect_project<'facts>(
         .filter_map(|callee| Some((analyzed_file(ctx, callee.path.as_ref())?, callee)))
         .collect::<Vec<_>>();
     handed.extend(local_access_context.open_array_member_obligations(&open_members));
-    // The census: every reference of a proven source is followed, or an
-    // obligation naming where it went.
-    let mut callables = ctx
-        .accessors
-        .keys()
-        .chain(ctx.setters.keys())
-        .chain(ctx.actions.keys())
-        .chain(ctx.prop_sources.keys())
-        .collect::<Vec<_>>();
-    callables.sort_unstable();
-    callables.dedup();
-    let mut census = crate::value_use::Census::new(
-        ctx.semantic_lookup,
-        ctx.entities,
-        ctx.symbol_names,
-        callables.iter().map(|symbol| symbol.as_ref()).collect(),
-        &interprocedural.source_call_targets,
-    );
-    for symbol in callables.iter().copied() {
-        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
-            let root = ctx.prop_sources.contains_key(symbol)
-                || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);
-            let open = if root {
-                census.root_use(&reference)
-            } else {
-                census.callable_use(&reference)
-            };
-            let Some(blocker) = open else {
-                continue;
-            };
-            handed.push(crate::StaticDefect {
-                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: ctx
-                        .symbol_names
-                        .get(symbol)
-                        .map_or_else(|| "this value".to_owned(), ToString::to_string),
-                    member: None,
-                },
-                location: reference,
-                analysis_context: blocker.to_owned(),
-                fixes: vec![],
-                uncertain: true,
-            });
-        }
-    }
-    // P13: a source with no name has no reference to start from.
-    for file in ctx.semantic_lookup.files() {
-        for call in &file.ast.calls {
-            let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
-                continue;
-            };
-            if !ctx.dialect.creates_reactive_source(primitive) {
-                continue;
-            }
-            let Some(blocker) = census.created_use(
-                file,
-                call.span,
-                ctx.dialect.returns_store(primitive),
-                ctx.dialect.returns_reactive_tuple(primitive),
-            ) else {
-                continue;
-            };
-            handed.push(crate::StaticDefect {
-                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: "this value".to_owned(),
-                    member: None,
-                },
-                location: call.span.location(file.path.as_str()),
-                analysis_context: blocker.to_owned(),
-                fixes: vec![],
-                uncertain: true,
-            });
-        }
-    }
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.source_call_targets = interprocedural.source_call_targets.clone();
     draft.strict_read_obligations += interprocedural.reads.len();
@@ -438,6 +364,91 @@ pub(crate) fn collect_project<'facts>(
             let mut kept = obligation.clone();
             kept.analysis_context = context.to_owned();
             draft.push_defect(kept);
+        }
+    }
+    // The census: every reference of a proven source is followed, or an
+    // obligation naming where it went.
+    let mut callables = ctx
+        .accessors
+        .keys()
+        .chain(ctx.setters.keys())
+        .chain(ctx.actions.keys())
+        .chain(ctx.prop_sources.keys())
+        .collect::<Vec<_>>();
+    callables.sort_unstable();
+    callables.dedup();
+    let mut census = crate::value_use::Census::new(
+        ctx.semantic_lookup,
+        ctx.entities,
+        ctx.symbol_names,
+        callables.iter().map(|symbol| symbol.as_ref()).collect(),
+        &interprocedural.source_call_targets,
+        draft
+            .reads
+            .iter()
+            .map(|read| &read.location)
+            .chain(draft.writes.iter().map(|write| &write.location))
+            .chain(
+                draft
+                    .action_invocations
+                    .iter()
+                    .map(|action| &action.location),
+            ),
+    );
+    for symbol in callables.iter().copied() {
+        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
+            let root = ctx.prop_sources.contains_key(symbol)
+                || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);
+            let open = if root {
+                census.root_use(&reference)
+            } else {
+                census.callable_use(&reference, ctx.accessors.contains_key(symbol))
+            };
+            let Some(blocker) = open else {
+                continue;
+            };
+            handed.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: ctx
+                        .symbol_names
+                        .get(symbol)
+                        .map_or_else(|| "this value".to_owned(), ToString::to_string),
+                    member: None,
+                },
+                location: reference,
+                analysis_context: blocker.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+    // P13: a source with no name has no reference to start from.
+    for file in ctx.semantic_lookup.files() {
+        for call in &file.ast.calls {
+            let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            if !ctx.dialect.creates_reactive_source(primitive) {
+                continue;
+            }
+            let Some(blocker) = census.created_use(
+                file,
+                call.span,
+                ctx.dialect.returns_store(primitive),
+                ctx.dialect.returns_reactive_tuple(primitive),
+            ) else {
+                continue;
+            };
+            handed.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: "this value".to_owned(),
+                    member: None,
+                },
+                location: call.span.location(file.path.as_str()),
+                analysis_context: blocker.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
         }
     }
     // A row any other producer placed over the call (a read, a write, an

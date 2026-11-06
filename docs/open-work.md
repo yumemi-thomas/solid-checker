@@ -8,7 +8,9 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
-Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `may_run_in_leaf_owner_within` (3), `value_reaches` (4). `typed_sources` views (8) and `context_origin` rest on the census.
+Value-use census (ADR 0692), accepted trade: a hook's object or tuple handed on past one hop (`value-forwarded`, `value-to-unresolved-callee`, `value-in-carrier`) is uncertifiable, 1,221 corpus sites. Reopen: follow holders through a second hop and through `Object.keys`-style calls that read no value.
+
+Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `may_run_in_leaf_owner_within` (3), `value_reaches` (4). `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
@@ -236,7 +238,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 - SC1001, SC5001 and SC5003 of a source with an open compute (ADR 0665) are uncertifiable, so `search()` from TanStack `useSearch` loses its true SC1001 (`probus-hk` Plan.tsx, 4 sites): its memo returns `res as TSelected` from a caller-supplied `select`, a bare type parameter, and ADRs 0266 and 0300 close no return. Moved past the plan's stop condition (true violation, no local proof): the owner decides. A parameter compute (`createMemo(options)`) is open too, though its declared type may close it.
 - SC5003 of a read in tracked JSX: the 690 programs of ADR 0668 are closed (ADRs 0774-0776, 0779). An alias, a literal member, a hook's value and an unplaced read are uncertifiable, and only a carrier's named function is proved. Later proof: a never-rewritten `let` or a closed literal over an async source.
 
-- SC5001 of a pending getter handed through a member tag (`<ui.C a={a()} />`) has no row (71 programs, `open-defects.json`). SC1003 of a store destructure in a `ref` in a row, by name or from a factory certifies (152, ADR 0670). SC1002 of a named handler reading an accessor held by assignment has no row (20, ADR 0669). SC1002 `c05`, a `Map`-held accessor, until the census.
+- SC5001 of a pending getter handed through a member tag (`<ui.C a={a()} />`) has no row (71 programs, `open-defects.json`). SC1003 of a store destructure in a `ref` in a row, by name or from a factory certifies (152, ADR 0670). SC1002 of a named handler reading an accessor held by assignment has no row (20, ADR 0669). SC1002 `c05`, a `Map`-held accessor, is now uncertifiable through the census (ADR 0692).
 
 ## 4. Open questions and live approximations
 

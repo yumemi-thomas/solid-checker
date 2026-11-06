@@ -57,6 +57,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
+      "start": 195,
+      "end": 230,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
       "start": 241,
       "end": 349,
       "fixes": 0
@@ -67,8 +77,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
+      "start": 311,
+      "end": 346,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
       "start": 616,
       "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
+      "start": 716,
+      "end": 751,
       "fixes": 0
     },
     {
@@ -209,6 +239,16 @@
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/RoutedMembers.tsx",
       "start": 1446,
       "end": 1453,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/wrappers.ts",
+      "start": 177,
+      "end": 201,
       "fixes": 0
     }
   ]

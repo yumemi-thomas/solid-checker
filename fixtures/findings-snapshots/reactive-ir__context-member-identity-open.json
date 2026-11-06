@@ -27,8 +27,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 364,
+      "end": 370,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 372,
+      "end": 383,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
       "start": 635,
       "end": 650,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 981,
+      "end": 985,
       "fixes": 0
     },
     {

@@ -7,6 +7,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/transported-member-stability-key/App.tsx",
+      "start": 197,
+      "end": 201,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability-key/App.tsx",
       "start": 763,
       "end": 773,
       "fixes": 0

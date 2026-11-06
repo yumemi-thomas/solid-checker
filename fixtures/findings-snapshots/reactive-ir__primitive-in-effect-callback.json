@@ -102,6 +102,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1321,
+      "end": 1346,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -119,6 +129,16 @@
       "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
       "start": 1520,
       "end": 1530,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1520,
+      "end": 1539,
       "fixes": 0
     },
     {
@@ -152,6 +172,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 2231,
+      "end": 2250,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -169,6 +199,16 @@
       "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
       "start": 2349,
       "end": 2361,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 2373,
+      "end": 2398,
       "fixes": 0
     },
     {

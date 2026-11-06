@@ -62,6 +62,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1906,
+      "end": 1910,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1978,
+      "end": 1982,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -69,6 +89,16 @@
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
       "start": 2156,
       "end": 2165,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 2398,
+      "end": 2402,
       "fixes": 0
     },
     {

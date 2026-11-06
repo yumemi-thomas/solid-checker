@@ -7,6 +7,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/computed-call.tsx",
+      "start": 273,
+      "end": 288,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/computed-call.tsx",
+      "start": 290,
+      "end": 305,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/computed-call.tsx",
       "start": 351,
       "end": 360,
       "fixes": 0
@@ -217,6 +237,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-destructured.tsx",
+      "start": 766,
+      "end": 771,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-destructured.tsx",
       "start": 795,
       "end": 822,
       "fixes": 0
@@ -369,6 +399,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-member.tsx",
       "start": 690,
       "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-callee.ts",
+      "start": 430,
+      "end": 436,
       "fixes": 0
     },
     {
@@ -559,6 +599,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-forwarded.tsx",
       "start": 840,
       "end": 857,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-mutation-client.tsx",
+      "start": 907,
+      "end": 912,
       "fixes": 0
     },
     {
@@ -907,6 +957,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/primitive-result-method.tsx",
+      "start": 273,
+      "end": 308,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/primitive-result-method.tsx",
       "start": 330,
       "end": 339,
       "fixes": 0
@@ -939,6 +999,26 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/returned-callable.tsx",
       "start": 687,
       "end": 701,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/returned-callable.tsx",
+      "start": 858,
+      "end": 863,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/returned-callable.tsx",
+      "start": 865,
+      "end": 874,
       "fixes": 0
     },
     {
@@ -1039,6 +1119,26 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx",
       "start": 587,
       "end": 597,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-store.ts",
+      "start": 444,
+      "end": 449,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-store.ts",
+      "start": 451,
+      "end": 459,
       "fixes": 0
     }
   ]

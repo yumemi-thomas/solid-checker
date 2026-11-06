@@ -60,6 +60,36 @@
       "start": 878,
       "end": 896,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-nested-read/hook.ts",
+      "start": 1138,
+      "end": 1143,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-nested-read/hook.ts",
+      "start": 1262,
+      "end": 1267,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-nested-read/hook.ts",
+      "start": 1386,
+      "end": 1391,
+      "fixes": 0
     }
   ]
 }

@@ -7,6 +7,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-phase-windows/App.tsx",
+      "start": 632,
+      "end": 651,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-windows/App.tsx",
+      "start": 2052,
+      "end": 2071,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-windows/App.tsx",
       "start": 2503,
       "end": 2508,
       "fixes": 0

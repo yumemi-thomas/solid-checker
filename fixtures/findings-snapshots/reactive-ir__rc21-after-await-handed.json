@@ -30,6 +30,16 @@
       "start": 974,
       "end": 979,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-after-await-handed/App.tsx",
+      "start": 982,
+      "end": 987,
+      "fixes": 0
     }
   ]
 }

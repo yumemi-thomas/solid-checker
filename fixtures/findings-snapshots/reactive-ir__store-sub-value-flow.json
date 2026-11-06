@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 688,
+      "end": 690,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -39,6 +49,16 @@
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 714,
       "end": 741,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 736,
+      "end": 738,
       "fixes": 0
     },
     {
@@ -52,6 +72,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 785,
+      "end": 787,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 790,
+      "end": 792,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -59,6 +99,26 @@
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 816,
       "end": 828,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 817,
+      "end": 819,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 823,
+      "end": 825,
       "fixes": 0
     },
     {
@@ -119,6 +179,16 @@
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 1251,
       "end": 1257,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 1276,
+      "end": 1278,
       "fixes": 0
     },
     {

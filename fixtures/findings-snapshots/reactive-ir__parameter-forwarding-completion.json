@@ -27,8 +27,78 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 633,
+      "end": 637,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 761,
+      "end": 765,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
       "start": 781,
       "end": 786,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 891,
+      "end": 895,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1013,
+      "end": 1017,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1293,
+      "end": 1297,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1427,
+      "end": 1431,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1557,
+      "end": 1561,
       "fixes": 0
     }
   ]

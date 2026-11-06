@@ -10,6 +10,16 @@
       "start": 41,
       "end": 71,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-package-call-error/App.tsx",
+      "start": 140,
+      "end": 145,
+      "fixes": 0
     }
   ]
 }

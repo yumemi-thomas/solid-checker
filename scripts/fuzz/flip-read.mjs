@@ -218,10 +218,56 @@ export const SETTER_READS = {
   "setter-fn-apply": { ...SETTER_STORE, kind: "plain", contexts: ["effect-apply"], text: (o) => `setSw2((d) => { d.n = ${o}(); });` },
 };
 
+// ADR 0692: the census. Each hands the accessor to a position no row followed, then reads it. The generated program's component is an
+// `export function`: at module scope a test would prove nothing about the export arm, whose span is the whole statement.
+const USE_READ = { kind: "plain", contexts: ["body", "effect-apply", "root"] };
+export const VALUE_USES = {
+  "use-let": { ...USE_READ, text: (o) => `let h = ${o}; void h();` },
+  "use-member": { ...USE_READ, text: (o) => `const b: { h?: () => number } = {}; b.h = ${o}; void b.h();` },
+  "use-logical": { ...USE_READ, text: (o) => `const h = ${o} || ${o}; void h();` },
+  "use-comma": { ...USE_READ, text: (o) => `const h = (void 0, ${o}); void h();` },
+  "use-class": { ...USE_READ, text: (o) => `class H { t = ${o}; } void new H().t();` },
+  "use-new": { ...USE_READ, text: (o) => `class H { t: () => number; constructor(t: () => number) { this.t = t; } } void new H(${o}).t();` },
+  "use-default": { ...USE_READ, text: (o) => `const f = (h = ${o}) => h(); void f();` },
+  "use-map": { ...USE_READ, text: (o) => `const m = new Map([["k", ${o}]]); void m.get("k")!();` },
+  "use-array-at": { ...USE_READ, text: (o) => `const a = [${o}]; void a.at(0)!();` },
+  "use-bound": { ...USE_READ, text: (o) => `const b = ${o}.bind(null); void b();` },
+  "use-tagged": { ...USE_READ, text: (o) => `const t = (_: TemplateStringsArray, h: () => number) => h(); void t\`\${${o}}\`;` },
+  "use-spread": { ...USE_READ, text: (o) => `((h: () => number) => void h())(...([${o}] as [() => number]));` },
+  "use-iife": { ...USE_READ, text: (o) => `const h = (() => ${o})(); void h();` },
+  "use-nested": { ...USE_READ, text: (o) => `const w = { v: { v: ${o} } }; void w.v.v();` },
+  "use-forward": { ...USE_READ, text: (o) => `const f0 = (g: () => number) => g(); const f1 = (g: () => number) => f0(g); void f1(${o});` },
+  "use-root": { ...USE_READ, imports: ["createRoot"], text: (o) => `const h = createRoot(() => ${o}); void h();` },
+  "use-untrack": { ...USE_READ, imports: ["untrack"], text: (o) => `const h = untrack(() => ${o}); void h();` },
+  "use-yield": { ...USE_READ, text: (o) => `function* g() { yield ${o}; } void g().next().value!();` },
+  "use-yield-delegate": { ...USE_READ, text: (o) => `function* g() { yield ${o}; } function* g2() { yield* g(); } void g2().next().value!();` },
+  "use-chosen": { ...USE_READ, text: (o) => `const useA = () => ({ read: ${o} }); const hook = Math.random() >= 0 ? useA : useA; void hook().read();` },
+  // The default, reached by no table: 1c's forms.
+  "use-throw": { ...USE_READ, text: (o) => `try { throw ${o}; } catch (e) { void (e as () => number)(); }` },
+  "use-throw-operand": { ...USE_READ, text: (o) => `try { void (1 + (() => { throw ${o}; })()); } catch (e) { void (e as () => number)(); }` },
+  "use-throw-hook": { ...USE_READ, text: (o) => `const u = () => ${o}; try { throw u(); } catch (e) { void (e as () => number)(); }` },
+  "use-throw-created": { ...USE_READ, imports: ["createMemo"], text: (o) => `void ${o}; try { throw createMemo(() => 1); } catch (e) { void (e as () => number)(); }` },
+  // A `Followed` that was no proof: no binding or row names the call or the tag.
+  "use-class-return": { ...USE_READ, text: (o) => `class K { f() { return ${o}; } } void new K().f()();` },
+  "use-pattern-hop": { ...USE_READ, text: (o) => `const v = { c: ${o} }; const { c: h } = v; void h();` },
+  "use-slot-return": { ...USE_READ, text: (o) => `const v = { f: () => ${o} }; void v.f()();` },
+  "use-fn-alias": { ...USE_READ, text: (o) => `const f = () => ${o}; const g = f; void g()();` },
+  "use-tag": { ...USE_READ, text: (o) => `const H = ${o} as unknown as () => null; void (<H />);` },
+  // P13: no binding, so no reference starts the walk.
+  "use-created-values": { ...USE_READ, imports: ["createMemo"], text: (o) => `void ${o}; void (Object.values({ a: createMemo(() => 1) })[0] as () => number)();` },
+  "use-created-json": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; void JSON.stringify(createStore({ a: 1 })[0]);` },
+};
+const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
+export const VALUE_WRITES = {
+  "use-write-throw": { ...USE_WRITE, text: () => `${SET} try { throw w; } catch (e) { (e as (v: number) => void)(1); }` },
+  "use-write-let": { ...USE_WRITE, text: () => `${SET} let g = w; g(1);` },
+  "use-write-map": { ...USE_WRITE, text: () => `${SET} new Map([["k", w]]).get("k")!(1);` },
+};
+
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS },
-  REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: NET_PENDING,
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES },

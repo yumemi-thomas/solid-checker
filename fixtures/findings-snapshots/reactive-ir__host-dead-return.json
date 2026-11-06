@@ -140,6 +140,16 @@
       "start": 539,
       "end": 548,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/factories.ts",
+      "start": 611,
+      "end": 618,
+      "fixes": 0
     }
   ]
 }

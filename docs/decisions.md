@@ -1871,6 +1871,18 @@ None of them was a source, so `const r = children(fn); r()` in a body certified 
 ## ADR 0691 — A destructure takes the read's role
 `may_snapshot_at_setup` asked the semantic role, which answers a `ref`'s layers and rows with a deferred callback before any `ref` arm, so a store destructure there certified and Chrome warns: 152 false cleans. It asks the read's role now. Uncertifiable, all of them.
 
+<a id="adr-0692"></a>
+## ADR 0692 — The value-use census
+What a program does with a reference of a proven source was decided nowhere: a form no table named was a silent clean, so `try { throw c; } catch (e) { (e as () => number)(); }` certified with Chrome warning. `value_use.rs` walks every reference of an accessor, setter, action, store root or props root, and every creating call with no binding, to a position the analysis follows, or answers an SC9012 uncertifiable naming that position. The default is the obligation: a form no table holds is `value-use-unclassified`.
+
+Item 1c of the end-stage report is confirmed: an export's span is its whole statement, so the draft's arm answered "followed" for every position in an `export function`, and `throw c` there certified while the same form in a plain function was open. `exported_directly` takes only `export { c }` and `export default c`. The fixture holds each form at module scope, in a plain function and in the three export forms. Measured with the old arm rebuilt: `throw c` certified at all three exports, Chrome warned at all three.
+
+A `Followed` answer needs a proof, and the probes found five that had none: a method's or a slot's returned value (no reference names its callers), a call reached through a pattern over a holder (`const { c: h } = o; h()`: no row read it), a JSX tag (`<H />` calls what `H` holds), a helper reading `arguments`, a helper destructuring a root. A walked call now needs a read, write or action row, or a tracked position for an accessor, so the census runs after rows merge. Exported holders are walked in other files. A context handed on (`useCtx(Ctx)`) is open. `createRoot` answers its callback's value (`returned_callback_value`), so a memo a module root returns is followed.
+
+Facts schema 90: `inert_operands`, a statement's value and the operands of `void`, `typeof`, `===`, `!==`. A plain assignment's target holds no value. Positions met twice on one walk answer what they answered; only a position met while it is being answered is a cycle.
+
+Proved: nothing new is a violation. Now uncertifiable: rc.21 corpus 27,229 to 28,654 U, 377 V unchanged, +1,221 sites (app-game 517, donegeon-client 256, kui 69, viviana-ui-web 61, compass-ui 55, inferay 48, solid-groove 44, probus-hk 30, ai-memory-ui 27, jandibat-web 22). Most are hook results `return { a, b }` whose callers hand the object on; the blocker names the position. Open patterns 90 to 8. Fuzz, 1,782 `use-*` programs: 772 certified false cleans on the old build, 0 on this one, 1,706 runtime-confirmed answers uncertifiable.
+
 <a id="adr-0693"></a>
 ## ADR 0693 — A `new Map()` is no subclass instance
 ADR 0683 withheld a method a project subclass replaces, unless the receiver is an array literal. A `new` of the global container itself, on the spot or in a binding nothing rebinds, is as local a fact, and the array literal counts through such a binding too. A subclass, an alias of it, a shadowing name and a rebound `let` keep the veto. Fixture `plain-container-receiver`.

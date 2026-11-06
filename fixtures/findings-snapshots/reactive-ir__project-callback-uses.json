@@ -542,6 +542,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 185,
+      "end": 201,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -549,6 +559,26 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 432,
       "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 544,
+      "end": 562,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 720,
+      "end": 736,
       "fixes": 0
     },
     {
@@ -629,6 +659,16 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 2515,
       "end": 2525,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2625,
+      "end": 2630,
       "fixes": 0
     },
     {

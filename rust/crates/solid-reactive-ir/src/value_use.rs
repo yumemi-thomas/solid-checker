@@ -47,6 +47,12 @@ pub(crate) enum Position {
     Open(&'static str),
 }
 
+/// An argument of a call.
+struct CallSlot {
+    span: Span,
+    index: usize,
+}
+
 /// What holds an expression, one row per table of `solid-facts` that names it.
 #[derive(Clone, Copy, Debug)]
 enum Holder {
@@ -223,8 +229,18 @@ impl FileIndex {
                 add(operand, Holder::Yielded);
             }
         }
+        // `const [a] = v`: the pattern's own iteration is the binding's row.
+        let unpacked = ast
+            .bindings
+            .iter()
+            .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Array)
+            .filter_map(|binding| binding.initializer)
+            .map(peel)
+            .collect::<HashSet<_>>();
         for operand in &ast.iterated_operands {
-            add(*operand, Holder::Iterated);
+            if !unpacked.contains(&peel(*operand)) {
+                add(*operand, Holder::Iterated);
+            }
         }
         for property in &ast.object_properties {
             if let Some(declaration) = property.shorthand_binding {
@@ -262,6 +278,10 @@ pub(crate) struct Census<'l, 'a> {
     sources: HashSet<&'l str>,
     /// The calls transport resolved to a source: each has its row.
     resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
+    /// Where each file has a read, write or action row.
+    rows: HashMap<&'l str, Vec<(u64, u64)>>,
+    /// The walk carries an accessor: a call of it reads, and writes nothing.
+    reading: bool,
     steps: usize,
     parameter_hops: usize,
     /// Prop and context hops: a call of what they put in a name has its row at
@@ -277,7 +297,14 @@ impl<'l, 'a> Census<'l, 'a> {
         symbol_names: &'l HashMap<crate::SymbolId, crate::SymbolId>,
         sources: HashSet<&'l str>,
         resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
+        located: impl Iterator<Item = &'l Location>,
     ) -> Self {
+        let mut rows = HashMap::<&'l str, Vec<(u64, u64)>>::default();
+        for location in located {
+            rows.entry(location.path.as_ref())
+                .or_default()
+                .push((location.start_byte, location.end_byte));
+        }
         Self {
             lookup,
             entities,
@@ -286,6 +313,8 @@ impl<'l, 'a> Census<'l, 'a> {
             walked: HashMap::default(),
             sources,
             resolved,
+            rows,
+            reading: false,
             steps: 0,
             parameter_hops: 0,
             prop_hops: 0,
@@ -294,12 +323,18 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     /// The obligation one reference of an accessor, setter or action owes.
-    pub(crate) fn callable_use(&mut self, reference: &Location) -> Option<&'static str> {
+    pub(crate) fn callable_use(
+        &mut self,
+        reference: &Location,
+        reading: bool,
+    ) -> Option<&'static str> {
+        self.reading = reading;
         self.reference_use(reference, Mode::Value)
     }
 
     /// The obligation one reference of a store or props root owes.
     pub(crate) fn root_use(&mut self, reference: &Location) -> Option<&'static str> {
+        self.reading = false;
         self.reference_use(reference, Mode::Root)
     }
 
@@ -317,13 +352,16 @@ impl<'l, 'a> Census<'l, 'a> {
         let named = self.holders(file, call).iter().any(|row| match row {
             Holder::Binding(binding) => {
                 !tuple
-                    || file.ast.bindings[*binding].shape != solid_facts::ast::BindingShape::Identifier
+                    || file.ast.bindings[*binding].shape
+                        != solid_facts::ast::BindingShape::Identifier
             }
             _ => false,
         });
         if named {
             return None;
         }
+        // A tuple holds a setter too.
+        self.reading = !tuple;
         self.walked.clear();
         self.steps = 0;
         let mode = match (store, tuple) {
@@ -432,6 +470,7 @@ impl<'l, 'a> Census<'l, 'a> {
         Position::Open(blockers::VALUE_USE_UNCLASSIFIED)
     }
 
+    #[deny(clippy::wildcard_enum_match_arm)]
     fn through(&mut self, file: &'a FileFacts, at: Span, row: Holder, mode: Mode) -> Position {
         let ast = &file.ast;
         match row {
@@ -443,6 +482,7 @@ impl<'l, 'a> Census<'l, 'a> {
                     && self.parameter_hops == 0
                     && self.prop_hops == 0
                     && !self.has_row(file, ast.calls[call].callee)
+                    && !(self.reading && self.tracked(file, ast.calls[call].callee))
                 {
                     // Walked into a name no row reads: `const { c: h } = o; h()`.
                     Position::Open(blockers::VALUE_HELD_IN_BINDING)
@@ -530,12 +570,32 @@ impl<'l, 'a> Census<'l, 'a> {
     /// transport resolved it to one.
     fn has_row(&self, file: &FileFacts, callee: Span) -> bool {
         let callee = file.ast.peel_ts_sugar_span(callee);
+        let (start, end) = (u64::from(callee.start), u64::from(callee.end));
         self.resolved
             .contains_key(&callee.location(file.path.as_str()))
             || self
                 .lookup
                 .callee_symbol(file, callee)
                 .is_some_and(|symbol| self.sources.contains(symbol))
+            || self.rows.get(file.path.as_str()).is_some_and(|rows| {
+                rows.iter().any(|(row_start, row_end)| {
+                    (*row_start <= start && end <= *row_end)
+                        || (start <= *row_start && *row_end <= end)
+                })
+            })
+    }
+
+    /// Whether a read at `callee` runs where no strict-read rule speaks.
+    fn tracked(&self, file: &FileFacts, callee: Span) -> bool {
+        let role = crate::execution_role::read_execution_role(
+            file,
+            callee,
+            &crate::execution_role::allowed_callback_spans(file, self.lookup),
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        role != crate::ExecutionRole::Unknown && !role.reports_untracked_read()
     }
 
     fn member(&mut self, file: &'a FileFacts, at: Span, member: usize, mode: Mode) -> Position {
@@ -746,8 +806,12 @@ impl<'l, 'a> Census<'l, 'a> {
             return Position::Open(blockers::VALUE_HELD_IN_BINDING);
         }
         let identifier = binding.shape == solid_facts::ast::BindingShape::Identifier;
-        // A pattern over a root is SC1003's; its slots hold links.
-        if !identifier && matches!(mode, Mode::Root | Mode::RootParameter) {
+        // A pattern over a root is SC1003's; its slots hold links. Over a root a
+        // helper received, no row sees it.
+        if !identifier && mode == Mode::RootParameter {
+            return Position::Open(blockers::VALUE_ROOT_IN_HELPER);
+        }
+        if !identifier && mode == Mode::Root {
             return Position::Followed;
         }
         let each = match mode {
@@ -798,12 +862,23 @@ impl<'l, 'a> Census<'l, 'a> {
         let primitive_callback = file
             .ast
             .arguments_containing(function)
-            .any(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+            .find(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function
                     && self.lookup.primitive_at_call(file, call.span).is_some()
+            })
+            .map(|(call, index)| CallSlot {
+                span: call.span,
+                index,
             });
-        if primitive_callback {
-            Position::Open(blockers::VALUE_FROM_PRIMITIVE_CALLBACK)
+        if let Some(call) = primitive_callback {
+            // `createRoot` answers what its callback answers.
+            let primitive = self.lookup.primitive_at_call(file, call.span);
+            match primitive
+                .and_then(|primitive| self.lookup.dialect.returned_callback_value(primitive))
+            {
+                Some(slot) if slot == call.index => self.position(file, call.span, mode),
+                _ => Position::Open(blockers::VALUE_FROM_PRIMITIVE_CALLBACK),
+            }
         } else if file.ast.calls_with_peeled_callee(function).next().is_some() {
             // An IIFE: its call has no row.
             Position::Open(blockers::VALUE_HELD_IN_BINDING)
@@ -827,19 +902,25 @@ impl<'l, 'a> Census<'l, 'a> {
         if crate::owners::own_method_name(file, fact).is_some() {
             return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         }
-        let Some(local) = crate::local_access::function_reference_hand_offs(file, fact, self.lookup)
+        let Some(local) =
+            crate::local_access::function_reference_hand_offs(file, fact, self.lookup)
         else {
             return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         };
         let foreign = crate::local_access::foreign_reference_hand_offs(file, fact, self.lookup);
         if local.iter().any(|(_, hand_off)| *hand_off != HandOff::Call)
-            || foreign.iter().any(|(_, _, hand_off)| *hand_off != HandOff::Call)
+            || foreign
+                .iter()
+                .any(|(_, _, hand_off)| *hand_off != HandOff::Call)
         {
             return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         }
         self.return_hops += 1;
         let mut answer = Position::Followed;
-        for (caller, callee) in self.lookup.function_call_sites(file.path.as_str(), function) {
+        for (caller, callee) in self
+            .lookup
+            .function_call_sites(file.path.as_str(), function)
+        {
             let calls = caller
                 .ast
                 .calls
@@ -912,8 +993,7 @@ impl<'l, 'a> Census<'l, 'a> {
                 .lookup
                 .entity_at(file.path.as_str(), call.arguments[index].span)
                 .and_then(|entity| entity.callability);
-            return match crate::runtime_semantics::argument_behavior(&resolved, callability, index)
-            {
+            return match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
                 Some(RuntimeArgumentBehavior::FreshStackCallback) => Position::Followed,
                 Some(RuntimeArgumentBehavior::ValueOnly)
                     if matches!(mode, Mode::Value)
@@ -1003,10 +1083,9 @@ fn enclosing_literal(file: &FileFacts, row: Span) -> Option<Span> {
 }
 
 fn literal_reads_this(file: &FileFacts, literal: Span) -> bool {
-    file.ast
-        .members
-        .iter()
-        .any(|member| literal.contains(member.span) && file.source_text(member.object) == Some("this"))
+    file.ast.members.iter().any(|member| {
+        literal.contains(member.span) && file.source_text(member.object) == Some("this")
+    })
 }
 
 /// `arguments` reads what no parameter's references show.
@@ -1026,7 +1105,11 @@ fn jsx_name(file: &FileFacts, at: Span) -> bool {
 
 /// A reference that holds a value: not a type query, not a declaration.
 fn is_value_reference(file: &FileFacts, span: Span) -> bool {
-    !file.ast.type_queries.iter().any(|query| query.contains(span))
+    !file
+        .ast
+        .type_queries
+        .iter()
+        .any(|query| query.contains(span))
         && (file.ast.identifiers_within(span).any(|identifier| {
             identifier.span == span && identifier.role == IdentifierRole::Reference
         }) || file
@@ -1034,4 +1117,148 @@ fn is_value_reference(file: &FileFacts, span: Span) -> bool {
             .object_properties
             .iter()
             .any(|property| property.shorthand_binding.is_some() && property.value == span))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
+    use solid_facts::core::{Generation, SourceHash, SourcePath};
+    use std::sync::Arc;
+
+    fn facts(source: &str) -> FileFacts {
+        FileFacts {
+            generation: Generation::new(1).unwrap(),
+            path: SourcePath::new("app.tsx").unwrap(),
+            source_hash: SourceHash::of(source),
+            source: Arc::from(source),
+            ast: Arc::new(solid_facts::ast::extract("app.tsx", source).unwrap()),
+            compiler: Arc::new(ExecutionMap {
+                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
+                tracked_regions: Vec::new(),
+                untracked_regions: Vec::new(),
+                discarded_regions: Vec::new(),
+                ownership_regions: Vec::new(),
+                callback_roles: Vec::new(),
+                jsx_operations: Vec::new(),
+            }),
+        }
+    }
+
+    fn span_of(source: &str, needle: &str) -> Span {
+        let start = source.find(needle).expect("needle occurs in source");
+        Span::new(
+            u32::try_from(start).unwrap(),
+            u32::try_from(start + needle.len()).unwrap(),
+        )
+    }
+
+    const PLACEMENTS: &[&str] = &[
+        "$\n",
+        "function inner() { $ }\n",
+        "export function App() { $ }\n",
+        "export default function App() { $ }\n",
+        "export const App = () => { $ };\n",
+    ];
+
+    /// 1c: an export's span is its whole statement, so a position inside one
+    /// is no export. Each form is one no table holds; placed at module scope
+    /// alone, this test would prove nothing about the export arm.
+    #[test]
+    fn a_form_no_table_holds_reaches_the_default_at_every_placement() {
+        for form in [
+            "throw HELD;",
+            "void { [HELD]: 1 };",
+            "void o[HELD];",
+            "class A extends HELD {}",
+        ] {
+            for placement in PLACEMENTS {
+                let source = placement.replace('$', form);
+                let file = facts(&source);
+                let at = span_of(&source, "HELD");
+                let index = FileIndex::of(&file);
+                assert!(!index.holders.contains_key(&at), "{source}");
+                assert!(!exported_directly(&file, at), "{source}");
+                assert!(!jsx_name(&file, at), "{source}");
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_direct_export_is_an_export() {
+        for (source, exported) in [
+            ("const HELD = 1;\nexport { HELD };\n", true),
+            ("const HELD = 1;\nexport default HELD;\n", true),
+            ("const HELD = 1;\nexport const a = [HELD];\n", false),
+            (
+                "const HELD = 1;\nexport function f() { return HELD; }\n",
+                false,
+            ),
+            (
+                "const HELD = 1;\nexport default function f() { throw HELD; }\n",
+                false,
+            ),
+        ] {
+            let file = facts(source);
+            let at = source.rfind("HELD").unwrap();
+            let at = Span::new(
+                u32::try_from(at).unwrap(),
+                u32::try_from(at + "HELD".len()).unwrap(),
+            );
+            assert_eq!(exported_directly(&file, at), exported, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_value_nothing_takes_is_inert_and_a_coerced_one_is_not() {
+        for (source, inert) in [
+            ("HELD;\n", true),
+            ("void HELD;\n", true),
+            ("typeof HELD;\n", true),
+            ("if (HELD === other) {}\n", true),
+            ("if (other !== HELD) {}\n", true),
+            ("if (HELD == other) {}\n", false),
+            ("const a = () => HELD;\n", false),
+            ("const a = HELD;\n", false),
+        ] {
+            let file = facts(source);
+            let at = span_of(source, "HELD");
+            let rows = FileIndex::of(&file);
+            let found = rows
+                .holders
+                .get(&at)
+                .is_some_and(|rows| rows.iter().any(|row| matches!(row, Holder::Inert)));
+            assert_eq!(found, inert, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_type_query_holds_no_value() {
+        for source in [
+            "const c = 1;\nlet x: ReturnType<typeof HELD>;\n",
+            "const p = { a: 1 };\nlet x: typeof HELD.a;\n",
+        ] {
+            let file = facts(source);
+            assert!(
+                !is_value_reference(&file, span_of(source, "HELD")),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_function_may_read_its_arguments_past_its_parameters() {
+        let source = "function f(a) { return arguments[0]; }\nfunction g(a) { return a; }\n";
+        let file = facts(source);
+        assert!(reads_arguments(
+            &file,
+            span_of(source, "function f(a) { return arguments[0]; }")
+        ));
+        assert!(!reads_arguments(
+            &file,
+            span_of(source, "function g(a) { return a; }")
+        ));
+    }
 }
