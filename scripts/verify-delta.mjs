@@ -147,6 +147,29 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
+  // Both read what the checker says about real typings, so a change anywhere that can move a finding can
+  // turn them red: `8833e6bfa` went out with `tsc-oracle-gate` red because no row selected it. Provisioning
+  // is idempotent and refuses a drifted install, as `make tsc-oracle` does.
+  "tsc-oracle-gate": {
+    commands: [
+      ["bun", "scripts/tsc-oracle.mjs", "provision", "--dialect", "all"],
+      ["bun", "scripts/tsc-oracle-gate.mjs"],
+    ],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
+  "obligation-audit": {
+    commands: [
+      ["bun", "scripts/tsc-oracle.mjs", "provision", "--dialect", "all"],
+      ["bun", "scripts/obligation-audit.mjs"],
+    ],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
   // ADR 0446: the reproduction set's budget, and each case's cause.
   "repro-budget": {
     commands: [
@@ -300,6 +323,13 @@ export const UNIVERSAL = [
 ];
 
 /**
+ * Every gate that reads the checker's findings. A path that can move a finding
+ * selects all of them: `scripts/verify.sh`'s gates lane runs them together, and
+ * selecting only some is how a red gate reached a push.
+ */
+export const FINDING_GATES = ["coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit"];
+
+/**
  * One row of the mapping, as a prefix test.
  *
  * Prefixes are matched longest-first, so `rust/crates/solid-facts-backend/`
@@ -316,17 +346,17 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-facts/",
     owner: "solid-facts (AST, normalized facts)",
-    checks: ["facts-lib", "wasm-compile"],
+    checks: ["facts-lib", ...FINDING_GATES, "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "write-walk-strategies", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
+    checks: ["ir-lib", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
     owner: "solid-facts-backend process/diagnostics",
-    checks: ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ir-edit-fuzz"],
+    checks: ["backend-process", "backend-staleness", "write-walk-strategies", ...FINDING_GATES, "ir-edit-fuzz"],
   },
   // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
   // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
@@ -337,18 +367,24 @@ export const ROWS = [
   {
     prefix: "rust/dialects/",
     owner: "dialects at the process boundary",
-    checks: ["dialects-process"],
+    checks: ["dialects-process", ...FINDING_GATES],
   },
   {
     prefix: "rust/dialects/solid-v2/rules/",
     owner: "the Solid 2 rules crate (analysis only)",
-    checks: ["dialects-process", "wasm-compile"],
+    checks: ["dialects-process", ...FINDING_GATES, "wasm-compile"],
   },
   {
     prefix: "fixtures/",
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
+  // The cases the two oracle gates read.
+  ...["fixtures/tsc-oracle/", "fixtures/obligation-cases/"].map((prefix) => ({
+    prefix,
+    owner: "the tsc oracle's and the obligation audit's cases",
+    checks: [...FINDING_GATES],
+  })),
   {
     prefix: "fixtures/uncertifiable-repro/",
     owner: "the uncertifiable reproduction set (ADR 0446)",
@@ -370,7 +406,7 @@ export const ROWS = [
   {
     prefix: "apps/solid-typefacts/",
     owner: "the Type Facts producer (separate workspace; the default producer)",
-    checks: ["typefacts", "backend-staleness", "coverage", "ownership-gate", "ir-edit-fuzz", "wasm-parity"],
+    checks: ["typefacts", "backend-staleness", ...FINDING_GATES, "ir-edit-fuzz", "wasm-parity"],
   },
   {
     prefix: "apps/solid-typefacts/tests/",
@@ -488,7 +524,7 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = ["coverage", "ownership-gate", "repro-causes", "ir-edit-fuzz"].some((check) => selected.has(check));
+  const needsChecker = [...FINDING_GATES, "repro-causes", "ir-edit-fuzz"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
@@ -502,7 +538,7 @@ export function planFor(paths) {
     ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
-    ...["coverage", "ownership-gate", "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
+    ...[...FINDING_GATES, "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
@@ -714,6 +750,8 @@ export const LANES = {
   typefacts: "typefacts",
   coverage: "gates",
   "ownership-gate": "gates",
+  "tsc-oracle-gate": "gates",
+  "obligation-audit": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the

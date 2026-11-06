@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { test } from "vitest";
 
 import {
+  FINDING_GATES,
+  ROOT,
   BASIS_CAVEATS,
   CHECKS,
   LANES,
@@ -43,19 +45,19 @@ test("every check a row or the universal set names actually exists", () => {
 
 test("each table row claims its own owner's paths", () => {
   const expected = [
-    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
-    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "wasm-compile"]],
-    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process"]],
+    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
+    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "wasm-compile"]],
+    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit"]],
     [
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
-      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ir-edit-fuzz"],
+      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "ir-edit-fuzz"],
     ],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
     [
       "apps/solid-typefacts/src/session.rs",
-      ["typefacts", "backend-staleness", "coverage", "ownership-gate", "ir-edit-fuzz", "wasm-parity"],
+      ["typefacts", "backend-staleness", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "ir-edit-fuzz", "wasm-parity"],
     ],
     ["apps/solid-typefacts/tests/process.rs", ["typefacts"]],
     ["apps/solid-typefacts/testdata/forms/tsconfig.json", ["typefacts"]],
@@ -77,10 +79,10 @@ test("the longest matching prefix wins, so no row swallows another's directory",
     "backend-process",
     "backend-staleness",
     "write-walk-strategies",
-    "coverage",
+    ...FINDING_GATES,
     "ir-edit-fuzz",
   ]);
-  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib", "wasm-compile"]);
+  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib", ...FINDING_GATES, "wasm-compile"]);
 });
 
 test("a mapped change set runs preflight checks before building and testing", () => {
@@ -101,6 +103,8 @@ test("a mapped change set runs preflight checks before building and testing", ()
     "write-walk-strategies",
     "coverage",
     "ownership-gate",
+    "tsc-oracle-gate",
+    "obligation-audit",
     "ir-read-lint",
     "ir-edit-fuzz",
     "wasm-compile",
@@ -109,9 +113,35 @@ test("a mapped change set runs preflight checks before building and testing", ()
   assert.equal(plan.checks.filter((check) => check === "coverage").length, 1);
 });
 
+test("a path that can move a finding selects every gate that reads findings", () => {
+  // `8833e6bfa`: a merge moved an SC2003 finding, verify-delta selected no gate that read that case, and a red
+  // gate was pushed. Each of these paths changes what the checker answers, so none may select a subset.
+  for (const path of [
+    "rust/crates/solid-facts/src/ast.rs",
+    "rust/crates/solid-reactive-ir/src/local_access.rs",
+    "rust/crates/solid-facts-backend/src/diagnostics.rs",
+    "rust/dialects/solid-v2/rules/src/lib.rs",
+    "rust/dialects/solid-v2/compiler/src/lib.rs",
+    "apps/solid-typefacts/src/session.rs",
+    "fixtures/tsc-oracle/rule-cases.json",
+    "fixtures/obligation-cases/cases.json",
+  ]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    for (const gate of FINDING_GATES) assert.ok(plan.checks.includes(gate), `${path} must select ${gate}`);
+    assert.ok(plan.checks.includes("build-debug"), `${path} must rebuild the checker the gates run`);
+  }
+  // scripts/verify.sh's gates lane is the authority: a gate it runs on findings is listed here too.
+  const lane = readFileSync(join(ROOT, "scripts/verify.sh"), "utf8");
+  for (const script of ["coverage.mjs", "ownership-gate.mjs", "tsc-oracle-gate.mjs", "obligation-audit.mjs"]) {
+    assert.ok(lane.includes(script), script);
+  }
+  assert.equal(FINDING_GATES.length, 4);
+});
+
 test("a change that needs no checker skips the debug build", () => {
-  const plan = planFor(["rust/crates/solid-facts/src/ast.rs"]);
-  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib", "wasm-compile"]);
+  const plan = planFor(["packages/cli/launcher.mjs"]);
+  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "bun-test-cli"]);
   assert.ok(!plan.checks.includes("build-debug"));
 });
 
