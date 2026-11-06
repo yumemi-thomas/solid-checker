@@ -235,3 +235,5 @@ An unresolved package boundary remains uncertifiable.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — a reactive read is proven to execute untracked
+
+A Get of a value a selected package makes where the walk over its source ends (an accessor installed at run time, a class getter, a proxy, a call nothing resolves) is `dependency-value-unfollowed`, and importing a package that installs a function that may read a source on a global is `dependency-global-read` (ADR 0822).

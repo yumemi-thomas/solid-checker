@@ -164,7 +164,16 @@ Branch `claude/flip-r2`, worktree `t3-7c67e91b`, ADRs 0820-0829. Baseline on the
 
 | Family | Proved | Now uncertifiable | Rows |
 |---|---|---|---|
+| P7 (ADRs 0821, 0822) | `export const` copy of a signal or store, read or written elsewhere; `d8-pkg-types-lie-plain` | a package's Get the walk does not close, `dependency-value-unfollowed`; a global a package installs, `dependency-global-read` | export-copy 108 FC to 108 V, legal 72 clean. Lane: 15 d8 closed, 3 `d8-pkg-plain-*` stay open. Corpus +361 U, 0 V |
 | P9, `f02` (ADR 0820) | read after an `await` in an async generator a `for await` in the compute steps: `f02`, `f1`, `f6`, `f8`, `f13`, `f16` | past a `yield`, a wrapper, `next()`, `yield*`, an inline generator, a sync generator across an await, blocker `generator-stepped` | 1,488 ids: old 1,092 FC, new 0 FC, 0 FP, 200 V, 1,288 U. Legal 0 FP of 1,316. Corpus 0 moved. Patterns 89 open |
+
+## R2c, from 2026-11-06
+
+Same branch and worktree, scratch `$S` as R2. Baseline: build `rp9e`, sweep `sweep-p9e.json` (= `sweep-m1.json`, 0 moved).
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P7 landed (ADRs 0821, 0822) | as R2b's row | as R2b's row; `WindowQuery` in `dependency-source-proxy-store` (was silent) | build `p7i`: +361 U, -1 U, 0 V; witnesses 300 of 336, same 36 census ids as `p9e` |
 
 ## R2 handoff, 2026-11-06
 

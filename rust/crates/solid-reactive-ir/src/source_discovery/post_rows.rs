@@ -364,6 +364,17 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             if exact {
                 exact_rows.insert(binding.names[0].span);
             }
+            // ADR 0821: an exported `const` copy of a `const` holds it too:
+            // the fact leaves it out for its reference census, and this row
+            // asks only what the binding holds.
+            let exact = exact
+                || (binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| const_variable(file, identifier.span)));
             let import = !exact
                 && binding.immutable
                 && binding.shape == solid_facts::ast::BindingShape::Identifier
@@ -861,6 +872,17 @@ pub(super) fn typed_rows(
         }
     }
     rows
+}
+
+/// ADR 0821: `span` is a reference to a `const` variable of `file`.
+fn const_variable(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .reference_declaration(file.ast.peel_ts_sugar_span(span))
+        .is_some_and(|declaration| {
+            file.ast.bindings.iter().any(|binding| {
+                binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+            })
+        })
 }
 
 /// ADR 0511: `span` is a reference to a named, runtime (not type-only)

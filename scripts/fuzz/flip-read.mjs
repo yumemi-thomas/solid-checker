@@ -221,13 +221,27 @@ export const SETTER_READS = {
   "setter-fn-apply": { ...SETTER_STORE, kind: "plain", contexts: ["effect-apply"], text: (o) => `setSw2((d) => { d.n = ${o}(); });` },
 };
 
+// ADR 0821: a `const` copy of a source another module exports. Every reference to it is outside the file that holds the source.
+const EXPORT_COPY = {
+  kind: "plain",
+  importLines: ['import { copied, copiedStore } from "./export-copy";'],
+  files: { "export-copy.ts": 'import { createSignal, createStore } from "solid-js";\nconst [c] = createSignal(1);\nconst [st] = createStore({ v: 1 });\nexport const copied = c;\nexport const copiedStore = st;\n' },
+};
+export const EXPORT_COPY_READS = {
+  "export-copy-signal": { ...EXPORT_COPY, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "void copied();" },
+  "export-copy-store": { ...EXPORT_COPY, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "void copiedStore.v;" },
+};
+export const EXPORT_COPY_WRITES = {
+  "export-copy-write": { ...EXPORT_COPY, contexts: ["body", "handler"], text: () => "copiedStore.v = 2;" },
+};
+
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...EXPORT_COPY_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: NET_PENDING,
-  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES },
+  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

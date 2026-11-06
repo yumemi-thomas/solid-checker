@@ -1091,3 +1091,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
 !fixtures/reactive-ir/generator-stepped/node_modules/
 !fixtures/reactive-ir/generator-stepped/node_modules/**
+!fixtures/reactive-ir/exported-const-copy/node_modules/
+!fixtures/reactive-ir/exported-const-copy/node_modules/**
+!fixtures/reactive-ir/dependency-value-unfollowed/node_modules/
+!fixtures/reactive-ir/dependency-value-unfollowed/node_modules/**

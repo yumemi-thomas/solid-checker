@@ -4635,5 +4635,60 @@
    "mx-untracked-read-after-await-gen-sync-loop-x-direct-closure"
   ],
   "rediscovered": "flip-read.mjs gen-*, id subset gen1.json of 1,488 programs: rbase (c6677ddac) 1,092 false-clean, 396 recall-gap, the fix 0 false-clean, 0 false-positive (200 agree, 1,288 recall-gap, withholding). Legal gen-prefix, gen-drain on the fix: 0 false-positive of 1,316"
+ },
+ {
+  "finding": "A `const` copy of a source, exported: `export const read = c`, `export const api = st`, read or written in another module. Certified, Chrome warns: the alias row needed a local fact, and that fact leaves out an exported local. In a package it is `d8-pkg-types-lie-plain`",
+  "found": "P7, values/d8-pkg-types-lie-plain, R2's probes t1, t2, t4 (ai-memory-ui `export const useLocale = localeSignal`)",
+  "fixed": "ADR 0821",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-export-copy-signal-direct-none",
+   "mx-strict-read-untracked-body-export-copy-store-direct-none",
+   "mx-strict-read-untracked-root-export-copy-signal-direct-none",
+   "mx-strict-read-untracked-root-export-copy-store-direct-none",
+   "mx-strict-read-untracked-body-export-copy-signal-direct-helper",
+   "mx-strict-read-untracked-body-export-copy-signal-direct-closure-helper",
+   "mx-strict-read-untracked-body-export-copy-signal-direct-module-helper"
+  ],
+  "rediscovered": "flip-read.mjs export-copy-*: rbase 108 of 108 false-clean, the fix 108 agree, 0 false-positive. Legal memo and effect-compute twins 72 clean, 0 false-positive"
+ },
+ {
+  "finding": "The write side of the exported `const` copy above: `copiedStore.v = 2` through `export const copiedStore = st`, in another module. Certified where Chrome reports STORE_WRITE_OUTSIDE_SETTER: the same missing alias row",
+  "found": "P7, with the read entry above",
+  "fixed": "ADR 0821",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-export-copy-write-direct-none",
+   "mx-store-write-outside-setter-handler-export-copy-write-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs export-copy-write, counted in the 108 of the read entry above"
+ },
+ {
+  "finding": "A Get of a value a selected package makes where the walk over its source ends: `Object.defineProperty`, `defineProperties`, `Reflect.defineProperty`, a class getter, a `Proxy`, `Object.create`, a store a function returns. Certified, Chrome warns. And a side-effect import of a package that installs a reading function on a global: the package was not even selected",
+  "found": "P7, values/d8-pkg-getter-export, values/d8-pkg-side-effect-import, R2's probes a1-a7, a12, g1-g3",
+  "fixed": "ADR 0822",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/d8-pkg-getter-export",
+   "values/d8-pkg-side-effect-import",
+   "values/d8-pkg-types-lie-plain",
+   "values/d8-pkg-define-properties",
+   "values/d8-pkg-reflect-define",
+   "values/d8-pkg-class-getter",
+   "values/d8-pkg-proxy",
+   "values/d8-pkg-object-create",
+   "values/d8-pkg-factory-define",
+   "values/d8-pkg-fn-returns-store",
+   "values/d8-pkg-store-copy",
+   "values/d8-pkg-store-copy-write",
+   "values/d8-pkg-signal-copy",
+   "values/d8-pkg-window-read",
+   "values/d8-pkg-global-named-fn"
+  ],
+  "rediscovered": "rbase NEW false-clean in the pattern lane on 12, 3 held, the fix fine on all 15. Negatives d8-pkg-define-other-key, -define-value, -global-plain stay clean",
+  "outside": "a package's source is a directory the grid's variants do not write; the pattern lane holds them"
  }
 ]

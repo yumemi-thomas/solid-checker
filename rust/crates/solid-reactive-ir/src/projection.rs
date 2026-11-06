@@ -797,6 +797,18 @@ pub fn project_findings(
         program.execution_paths.apply_deferred_mount(finding);
         !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
     });
+    // ADR 0822: a Get a violation proves needs no open row for its value.
+    let proved = findings
+        .iter()
+        .filter(|finding| finding.kind == "violation")
+        .map(|finding| finding.primary_location.clone())
+        .collect::<crate::HashSet<_>>();
+    findings.retain(|finding| {
+        !finding
+            .analysis_context
+            .starts_with(crate::blockers::DEPENDENCY_VALUE_UNFOLLOWED)
+            || !proved.contains(&finding.primary_location)
+    });
     // ADR 0680: after every step that may make a row uncertifiable.
     for finding in &mut findings {
         if finding.kind == "uncertifiable" && !crate::blockers::named(&finding.analysis_context) {

@@ -702,8 +702,26 @@
    "certified": true
   },
   {
-   "id": "values/d8-pkg-getter-export",
-   "item": "V-D8",
+   "id": "values/r2-hook-store-member",
+   "item": "P12",
+   "outcome": "false-clean",
+   "codes": [
+    "STRICT_READ_UNTRACKED"
+   ],
+   "certified": true
+  },
+  {
+   "id": "values/r2-hook-store-module",
+   "item": "P12",
+   "outcome": "false-clean",
+   "codes": [
+    "STRICT_READ_UNTRACKED"
+   ],
+   "certified": true
+  },
+  {
+   "id": "values/r2-export-let-copy",
+   "item": "P12",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
@@ -730,24 +748,6 @@
   },
   {
    "id": "values/d8-pkg-plain-store-handoff",
-   "item": "V-D8",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d8-pkg-side-effect-import",
-   "item": "V-D8",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d8-pkg-types-lie-plain",
    "item": "V-D8",
    "outcome": "false-clean",
    "codes": [

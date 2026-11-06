@@ -78,6 +78,7 @@ mod result_reads;
 mod transport_reads;
 pub(crate) use result_reads::*;
 pub(crate) use transport_reads::{AccessorTable, SourceKindTable, TransportReads};
+mod dependency_values;
 mod node_index;
 mod reads;
 mod refresh;

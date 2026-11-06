@@ -190,6 +190,9 @@
     "symbol_names-scan": 1,
     "hashmap-iteration": 1
   },
+  "rust/crates/solid-reactive-ir/src/interproc/dependency_values.rs": {
+    "facts.files": 1
+  },
   "rust/crates/solid-reactive-ir/src/interproc/obligations.rs": {
     "hashmap-iteration": 2
   },

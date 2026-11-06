@@ -1289,19 +1289,18 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
         return;
     };
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (fixture, expected, kind, code, flags) in [
+    // ADR 0822: `WindowQuery`'s `typeof window` branch is live, so the walk
+    // over dep-query ends at its Proxy: SC9012 U, never silent. `FoldedQuery`
+    // stays the proved SC1001 V.
+    for (fixture, expected, flags) in [
         (
             "returned-store-proxy",
-            4,
-            "uncertifiable",
-            "SC9012",
+            vec![("uncertifiable", "SC9012"); 4],
             Vec::new(),
         ),
         (
             "dependency-source-proxy-store",
-            1,
-            "violation",
-            "SC1001",
+            vec![("uncertifiable", "SC9012"), ("violation", "SC1001")],
             vec![
                 "--runtime-target",
                 "browser",
@@ -1335,13 +1334,23 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
             .collect::<Vec<_>>();
-        assert_eq!(reads.len(), expected, "{fixture}: {rows:#?}");
-        assert!(
-            reads
-                .iter()
-                .all(|row| row["kind"] == kind && row["id"] == code),
-            "{fixture}: {rows:#?}"
-        );
+        let mut found = reads
+            .iter()
+            .map(|row| (row["kind"].as_str().unwrap(), row["id"].as_str().unwrap()))
+            .collect::<Vec<_>>();
+        found.sort_unstable();
+        assert_eq!(found, expected, "{fixture}: {rows:#?}");
+        for row in reads
+            .iter()
+            .filter(|row| fixture == "dependency-source-proxy-store" && row["id"] == "SC9012")
+        {
+            assert!(
+                row["analysisContext"]
+                    .as_str()
+                    .is_some_and(|context| context.starts_with("dependency-value-unfollowed")),
+                "{fixture}: {row:#?}"
+            );
+        }
     }
 }
 

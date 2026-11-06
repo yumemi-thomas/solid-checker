@@ -111,6 +111,13 @@ pub(crate) const WRITE_PATH_VIA: &str = "a write's path";
 /// ADR 0820: a generator's body past its first suspension, on a stepping the
 /// walk does not prove.
 pub(crate) const GENERATOR_STEPPED: &str = "generator-stepped";
+/// ADR 0822: a Get of a value a selected package produces where the walk over
+/// its source ends: a class, a proxy, a call nothing resolves, an accessor
+/// installed at run time.
+pub(crate) const DEPENDENCY_VALUE_UNFOLLOWED: &str = "dependency-value-unfollowed";
+/// ADR 0822: importing a package installs a function on a global, and that
+/// function may read a source wherever it is called.
+pub(crate) const DEPENDENCY_GLOBAL_READ: &str = "dependency-global-read";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";
