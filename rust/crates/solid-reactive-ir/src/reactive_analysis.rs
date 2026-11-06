@@ -400,6 +400,10 @@ pub(crate) fn collect_project<'facts>(
         .collect::<Vec<_>>();
     callables.sort_unstable();
     callables.dedup();
+    // ADR 0811: a store member write SC2003 decides is that use's row
+    // (`holder.store.count = 5`); its pass runs after this one.
+    let member_writes = upstream_compat::MemberWrites::new(ctx);
+    let decided_writes = |file: &solid_facts::FileFacts| member_writes.decided(file);
     let mut census = crate::value_use::Census::new(
         ctx.semantic_lookup,
         ctx.entities,
@@ -424,7 +428,8 @@ pub(crate) fn collect_project<'facts>(
             )
             .chain(handed.iter().map(|obligation| &obligation.location))
             .chain(draft.static_defects.iter().map(|defect| &defect.location)),
-    );
+    )
+    .with_member_writes(&decided_writes);
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)

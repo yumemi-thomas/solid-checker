@@ -1400,6 +1400,30 @@ fn no_direct_mutation(
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
+    direct_mutations(file, context, defects, &mut Vec::new());
+}
+
+/// Open-work [79]/[80]: the member writes [`no_direct_mutation`] decided in
+/// this file, for the census, which runs before this pass: a write it gives a
+/// row, and a plain write it proves legal (the store's own setter, a raw or
+/// shallow value, a `createMutable` proxy) or TypeScript's. A write that also
+/// reads its target (`+=`, `??=`) is decided only where it has a row: the
+/// read is not this rule's. Reports nothing.
+pub(super) fn examined_member_writes(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+) -> Vec<Span> {
+    let mut decided = Vec::new();
+    direct_mutations(file, context, &mut Vec::new(), &mut decided);
+    decided
+}
+
+fn direct_mutations(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+    decided: &mut Vec<Span>,
+) {
     // Every leaf of a destructuring pattern is a written member of its own
     // (ADR 0526). ADR 0716: so is every leaf of a `for (… of …)` or
     // `for (… in …)` head, which writes only if the loop iterates: `Some`
@@ -1411,7 +1435,7 @@ fn no_direct_mutation(
         .flat_map(|assignment| {
             assignment_write_targets(file, assignment)
                 .into_iter()
-                .map(|written| (written, None, assignment.logical))
+                .map(|written| (written, None, assignment.logical, assignment.reads_target))
         })
         .chain(file.ast.iteration_targets.iter().flat_map(|head| {
             let iterates = iteration_head_proven_nonempty(file, *head);
@@ -1419,10 +1443,17 @@ fn no_direct_mutation(
                 .write_targets
                 .iter()
                 .filter(move |target| head.contains(**target))
-                .map(move |target| (*target, Some(iterates), None))
+                .map(move |target| (*target, Some(iterates), None, false))
         }))
         .collect::<Vec<_>>();
-    for (written, head, logical) in written_members {
+    for (written, head, logical, reads_target) in written_members {
+        let pushed = defects.len();
+        // A row stands for the write, or the plain write is proven.
+        let mut decide = |defects: &Vec<StaticDefect>, proven: bool| {
+            if defects.len() > pushed || (proven && !reads_target) {
+                decided.push(written);
+            }
+        };
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
         // the same reference-index fallback `uncalled-accessor` uses: an
@@ -1443,6 +1474,7 @@ fn no_direct_mutation(
                     linked: false,
                 };
                 push_unproven_container_write(file, context, written, root, sink, defects);
+                decide(defects, false);
             }
             continue;
         };
@@ -1514,6 +1546,7 @@ fn no_direct_mutation(
                 linked: false,
             };
             push_unproven_container_write(file, context, written, root, sink, defects);
+            decide(defects, false);
             continue;
         }
         // `createMutable` is the one Solid 1.x source whose proxy is designed
@@ -1526,6 +1559,7 @@ fn no_direct_mutation(
                 .get(symbol)
                 .is_some_and(|primitive| primitive.as_str() == "createMutable")
         {
+            decide(defects, true);
             continue;
         }
         // Rebinding the container itself (`count = 2` on a signal accessor,
@@ -1562,6 +1596,7 @@ fn no_direct_mutation(
             // ADR 0509: the caller may have passed a store for the prop.
             let sink = SinkWrite::writes(written);
             push_unproven_container_write(file, context, written, root, sink, defects);
+            decide(defects, false);
             continue;
         }
         // A member written on an accessor function (`memo.a = 1`) is not a
@@ -1597,12 +1632,29 @@ fn no_direct_mutation(
             WriteStanding::Dropped
         };
         if standing == WriteStanding::Exempt {
+            // A root write TypeScript rejects is decided only where it reports.
+            let tsc_owned = store
+                && readonly_root_write(
+                    file,
+                    context,
+                    StoreWriteSite {
+                        span: written,
+                        member: written,
+                        root,
+                    },
+                );
+            decide(defects, !tsc_owned || tsc_reports_at(file, written));
             continue;
         }
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
         // TypeScript's where a link may be nullish, and unproven otherwise.
         let past_root = if store {
             let Some(past_root) = chain_links_verdict(file, context, written, root) else {
+                // A shallow store's write lands; a nullish link is TypeScript's.
+                decide(
+                    defects,
+                    shallow_store_root(file, context, root) || tsc_reports_at(file, written),
+                );
                 continue;
             };
             past_root
@@ -1618,6 +1670,7 @@ fn no_direct_mutation(
             _ => Some(true),
         };
         if writes == Some(false) {
+            decide(defects, true);
             continue;
         }
         let may_not_write = head == Some(false) || writes.is_none();
@@ -1645,6 +1698,7 @@ fn no_direct_mutation(
                 || standing.unproven()
                 || may_not_write,
         });
+        decide(defects, false);
     }
 }
 
@@ -3581,13 +3635,7 @@ fn store_write_standing(
     site: StoreWriteSite,
     symbol: &crate::SymbolId,
 ) -> WriteStanding {
-    if context.dialect.store_root_properties_are_readonly()
-        && file
-            .ast
-            .member_at(site.member)
-            .is_some_and(|member| member.object == site.root)
-        && bare_root(file, site.root)
-    {
+    if readonly_root_write(file, context, site) {
         return WriteStanding::Exempt;
     }
     // ADR 0630: a write through a `merge` of several sources meets the view's
@@ -3621,6 +3669,21 @@ fn store_write_standing(
         }
         standing => standing,
     }
+}
+
+/// A write to the root record's own property where the dialect's store type
+/// is `Readonly` there: TS2540, TypeScript's ([`store_write_standing`]).
+fn readonly_root_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    site: StoreWriteSite,
+) -> bool {
+    context.dialect.store_root_properties_are_readonly()
+        && file
+            .ast
+            .member_at(site.member)
+            .is_some_and(|member| member.object == site.root)
+        && bare_root(file, site.root)
 }
 
 /// How many named functions [`write_window_standing`] follows from a write to
@@ -5011,6 +5074,14 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
 /// (`AstFacts::typescript_directive_comment`, from the parser's comments; a
 /// conservative veto: a directive anywhere withholds the premise for the
 /// whole file).
+/// ADR 0811: whether `tsc` reports at `span`: a checked TypeScript file and
+/// no directive that may silence a line of it (ADR 0830).
+fn tsc_reports_at(file: &FileFacts, span: Span) -> bool {
+    tsc_reports_in(file)
+        && file.ast.typescript_check_pragma != Some(false)
+        && !file.tsc_may_be_silent_within(span)
+}
+
 fn tsc_reports_in(file: &FileFacts) -> bool {
     let path = file.path.as_str();
     let javascript = [".js", ".jsx", ".mjs", ".cjs"]

@@ -311,6 +311,10 @@ pub(crate) struct Census<'l, 'a> {
     resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
     /// Where each file has a read, write or action row, or an obligation.
     rows: BTreeMap<String, Vec<(u64, u64)>>,
+    /// ADR 0811: the store member writes SC2003 decides in a file, asked
+    /// once per file the walk reaches a root's member in.
+    member_writes: &'l dyn Fn(&FileFacts) -> Vec<Span>,
+    decided_writes: HashMap<String, Vec<Span>>,
     /// What a call of the walked value does.
     carried: Carried,
     steps: usize,
@@ -352,6 +356,8 @@ impl<'l, 'a> Census<'l, 'a> {
             sources,
             resolved,
             rows,
+            member_writes: &no_member_writes,
+            decided_writes: HashMap::default(),
             carried: Carried::Either,
             steps: 0,
             parameter_hops: 0,
@@ -707,6 +713,27 @@ impl<'l, 'a> Census<'l, 'a> {
             })
     }
 
+    /// ADR 0811: where the census asks which store member writes SC2003
+    /// decides in a file. Without it, none.
+    pub(crate) fn with_member_writes(
+        mut self,
+        member_writes: &'l dyn Fn(&FileFacts) -> Vec<Span>,
+    ) -> Self {
+        self.member_writes = member_writes;
+        self
+    }
+
+    /// ADR 0811: whether a store member write SC2003 decided stands on the
+    /// chain of `member`.
+    fn write_decided(&mut self, file: &FileFacts, member: Span) -> bool {
+        let member_writes = self.member_writes;
+        self.decided_writes
+            .entry(file.path.to_string())
+            .or_insert_with(|| member_writes(file))
+            .iter()
+            .any(|written| written.start == member.start && written.end >= member.end)
+    }
+
     /// Whether the call at `callee` runs where the rules of what it may do do
     /// not speak: an accessor's read, a setter's or an action's write. No row
     /// says so at a call the walk reached through a name.
@@ -746,7 +773,7 @@ impl<'l, 'a> Census<'l, 'a> {
                 let rowed = self.rows.get(file.path.as_str()).is_some_and(|rows| {
                     rows.iter()
                         .any(|(row_start, row_end)| *row_start == start && *row_end >= end)
-                });
+                }) || self.write_decided(file, member.span);
                 return if rowed {
                     Position::Followed
                 } else {
@@ -1415,6 +1442,10 @@ fn intrinsic(file: &FileFacts, element: usize) -> bool {
             .source_text(element.name.span)
             .and_then(|tag| tag.chars().next())
             .is_some_and(char::is_lowercase)
+}
+
+fn no_member_writes(_: &FileFacts) -> Vec<Span> {
+    Vec::new()
 }
 
 /// The literal a property or array holder row names.

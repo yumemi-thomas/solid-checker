@@ -910,7 +910,47 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
     } else {
         ReactiveReadIndex::default()
     };
-    let mut context = UpstreamCompatContext {
+    let mut context = compat_context(ctx, reactive_reads, prefer_for_enabled, prefer_show_enabled);
+    context.forwarded_uncaptured =
+        shared_reactivity::ForwardedUncaptured::build(&ctx.facts.files, &context);
+    for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
+        draft.static_violations.extend(diagnostics.violations);
+        draft.static_defects.extend(diagnostics.defects);
+    }
+}
+
+/// ADR 0811: the member writes SC2003's ported loop decides in one file, a
+/// row or a proof each (`shared_reactivity::examined_member_writes`), for the
+/// census, which runs before [`check_project`] and asks only of the files it
+/// walks into. Reports nothing: the same loop reports in [`check_project`].
+pub(crate) struct MemberWrites<'c, 'a> {
+    ctx: &'c AnalysisContext<'a>,
+    context: std::cell::OnceCell<UpstreamCompatContext<'a>>,
+}
+
+impl<'c, 'a> MemberWrites<'c, 'a> {
+    pub(crate) fn new(ctx: &'c AnalysisContext<'a>) -> Self {
+        Self {
+            ctx,
+            context: std::cell::OnceCell::new(),
+        }
+    }
+
+    pub(crate) fn decided(&self, file: &FileFacts) -> Vec<Span> {
+        let context = self
+            .context
+            .get_or_init(|| compat_context(self.ctx, ReactiveReadIndex::default(), false, false));
+        shared_reactivity::examined_member_writes(file, context)
+    }
+}
+
+fn compat_context<'a>(
+    ctx: &AnalysisContext<'a>,
+    reactive_reads: ReactiveReadIndex,
+    prefer_for_enabled: bool,
+    prefer_show_enabled: bool,
+) -> UpstreamCompatContext<'a> {
+    UpstreamCompatContext {
         dialect: ctx.dialect,
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
@@ -933,12 +973,6 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         prefer_show_enabled,
         forwarded_uncaptured: shared_reactivity::ForwardedUncaptured::default(),
         strict_null_checks: ctx.facts.typescript.strict_null_checks(),
-    };
-    context.forwarded_uncaptured =
-        shared_reactivity::ForwardedUncaptured::build(&ctx.facts.files, &context);
-    for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
-        draft.static_violations.extend(diagnostics.violations);
-        draft.static_defects.extend(diagnostics.defects);
     }
 }
 

@@ -13,7 +13,7 @@ Value-use census, owed proof: a store or props root handed to a function (a proj
 
 Census, later proof (coordinator, 2026-11-07): `refresh(t)` and `affects(t, k?)` read only `t[$REFRESH]` or `t[$TARGET]` (rc.21 `@solidjs/signals` dev.js:3636, :10018), and a computed key coerces a function without calling it, so these positions could be followed instead of `value-in-carrier` / `value-use-unclassified`. Not done: show a store proxy's `$REFRESH` Get is untracked, and measure in Chrome. Until then they stay uncertifiable (tsc-oracle cases [4], [6], [21] carry them as distinct findings).
 
-Census, missing proofs (U today): ownership cases [79] hook-member-write and [80] hook-member-write-in-setter open at `store` (value-held-in-binding). The census runs before upstream_compat, and SC2003 leaves no row it can read: [79]'s is a static violation, [80]'s write is legal in the setter. Proof: surface the member writes SC2003 examined, without changing what it reports (upstream-parity skill), and run the census after it.
+Census, owed proof (U today): a mutator call or `delete` through a hook holder's store member (`delete holder.opt.v`, fixture local-alias-member-reads) stays `value-held-in-binding` at the store: ADR 0811 surfaces only SC2003's member assignments. Proof: surface `no_store_mutator_call`'s and `no_store_delete`'s decisions the same way.
 
 Not checked (PLAN.md, kept here when it goes): SC7007 at runtime (no host compiles `"use server"`); SC7006's `export let` edit on a server; every `continue` in `cleanup.rs` read line by line; `effect_phase.rs` `None` arms beyond the method path.
 

@@ -171,7 +171,7 @@
   "SC9012 value-exported-unnamed": 3,
   "SC9012 value-forwarded": 140,
   "SC9012 value-from-primitive-callback": 19,
-  "SC9012 value-held-in-binding": 82,
+  "SC9012 value-held-in-binding": 76,
   "SC9012 value-held-in-member": 7,
   "SC9012 value-in-carrier": 168,
   "SC9012 value-in-class-field": 5,
@@ -189,6 +189,18 @@
   "SC9015 compiler-facts": 4,
   "SC9016 suppression-comments": 4
  },
- "drops": [],
+ "drops": [
+  {
+   "key": "SC9012 value-held-in-binding",
+   "from": 82,
+   "to": 76,
+   "adr": "ADR 0811",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs::examined_member_writes",
+   "fixtures": {
+    "proved": "reactive-ir/store-write-literal-links",
+    "open": "reactive-ir/local-alias-member-reads"
+   }
+  }
+ ],
  "renames": []
 }
