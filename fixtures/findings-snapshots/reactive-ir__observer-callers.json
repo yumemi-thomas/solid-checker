@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "no-await-primitive-in-tracked-scope",
@@ -15,8 +15,7 @@
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/observer-callers/App.tsx",
       "start": 907,

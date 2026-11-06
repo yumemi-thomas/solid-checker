@@ -5589,5 +5589,17 @@
    "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-module-helper"
   ],
   "rediscovered": "setter-fn ids (18, Chrome confirmed): build fl1 (4787f08e1) 6 certified false cleans (wrapper, every layer), alias and direct agree; ADR 0833 0 (wrapper recall-gap, SC1001 U function-run-unplaced at the read), alias and direct agree. Fixture reactive-ir/setter-callback-in-helper (InHelper U; fl1 silent there)"
+ },
+ {
+  "finding": "an async memo read through a helper chain an IIFE runs in a JSX expression of a `For` row (`<For>{() => <p>{(() => { hc4(); })()}</p>}</For>`, `wrapUse` reading the memo) certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY: a site in a nested function of the row took the row's deferred handler answer",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md), rerun uncached in Chrome",
+  "fixed": "ADR 0834",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-for-x-wrapper-chain-5",
+   "mx-async-outside-loading-boundary-for-x-wrapper-chain-13"
+  ],
+  "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY flow-context ids (1,568, Chrome confirmed): build sf1 (58d14e945) 2 certified false cleans; ADR 0834 0 (recall-gap, SC5003 U), no other id moved; legal twins (3,868) unchanged. Fixture reactive-ir/flow-iife-tracked PendingInRow (sf1 silent) and ResolveInRow (U to a Chrome-confirmed V)"
  }
 ]
