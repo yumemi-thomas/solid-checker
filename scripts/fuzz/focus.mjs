@@ -230,7 +230,14 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
   }
 
   /** The grids' host: every core, the Chrome fast host on the Rust executor (audit.mjs runs its oracle grids on the same). */
-  export const hostArgs = (options = {}) => ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
+  /** The most any one pool takes by default. A run shares the machine: every core is `--all-cores`, by name, on a machine that is free. */
+  export const HOST_LIMIT = 6;
+  export const hostLimits = (options = {}, cores = cpus().length) => {
+    if (options.allCores) return ["--all-cores"];
+    const limit = String(Math.min(HOST_LIMIT, cores));
+    return ["--concurrency", limit, "--workers", limit, "--chrome-concurrency", limit];
+  };
+  export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
 
   export function parse(argv) {
     const split = argv.indexOf("--");
@@ -239,7 +246,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-      if (key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
+      if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
       if (!["cover", "coverSeed", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
