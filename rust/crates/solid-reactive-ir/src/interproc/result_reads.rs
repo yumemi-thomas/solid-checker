@@ -330,9 +330,31 @@ fn call_result_reads(
     // ADR 0771: that holds of reads. A write or an async read a helper makes
     // through its parameter still reports at a tracked position, so what this
     // call's arguments hold decides: `reactive_analysis`, which has the tables.
-    if (excluded && !continuation && execution == ExecutionRole::TrackedJsx)
+    let write_reports = || {
+        let write = crate::execution_role::semantic_write_execution_role(
+            file,
+            call.callee,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            crate::execution_role::RootBodyGuard::Rejects,
+        );
+        write.reports_disallowed_write() || write.reports_unplaced()
+    };
+    if (excluded
+        && !continuation
+        && (crate::execution_role::async_execution_role(file, call.callee, execution)
+            == ExecutionRole::TrackedJsx
+            || write_reports()))
         || (helper_excluded
-            && reaches_tracked_caller(file, call.callee, allowed, lookup, &mut HashSet::default()))
+            && !runs_only_outside_tracking(
+                file,
+                call.callee,
+                allowed,
+                lookup,
+                &mut HashSet::default(),
+            ))
     {
         for defect in &mut dispatch_obligations[obligations_before..] {
             hold_at_tracked_call(defect, call.span);
@@ -553,10 +575,11 @@ fn call_result_reads(
     }
 }
 
-/// Whether code at `span` runs at a tracked position, itself or through the
-/// local helpers around it, every one of whose callers
+/// Whether code at `span` runs only where a write is legal and an async read
+/// reports nothing (an event, a deferred callback, deleted code), itself or
+/// through the local functions around it, every one of whose callers
 /// [`local_dispatch_exclusion_depth`] has censused.
-fn reaches_tracked_caller(
+fn runs_only_outside_tracking(
     file: &solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],
@@ -571,7 +594,12 @@ fn reaches_tracked_caller(
         lookup.symbol_names(),
         lookup,
     );
-    if role == ExecutionRole::TrackedJsx {
+    if matches!(
+        crate::execution_role::async_execution_role(file, span, role),
+        ExecutionRole::EventCallback
+            | ExecutionRole::DeferredCallback
+            | ExecutionRole::DiscardedRendering
+    ) {
         return true;
     }
     let Some(helper) = containing_ast_function(&file.ast, span) else {
@@ -581,16 +609,20 @@ fn reaches_tracked_caller(
         return false;
     }
     let Some(binding) = function_binding_name(file, helper) else {
-        return false;
+        return runs_only_outside_tracking(file, helper.span, allowed, lookup, following);
     };
-    file.ast
+    let mut references = file
+        .ast
         .identifiers
         .iter()
         .filter(|id| {
             id.role == solid_facts::ast::IdentifierRole::Reference
                 && file.ast.reference_declaration(id.span) == Some(binding.span)
         })
-        .any(|id| reaches_tracked_caller(file, id.span, allowed, lookup, following))
+        .peekable();
+    references.peek().is_some()
+        && references
+            .all(|id| runs_only_outside_tracking(file, id.span, allowed, lookup, following))
 }
 
 /// Marks an obligation held at a tracked call, before its context: decided
