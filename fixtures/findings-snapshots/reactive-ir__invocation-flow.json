@@ -1,6 +1,16 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 525,
+      "end": 530,
+      "fixes": 0
+    },
     {
       "rule": "missing-owner",
       "code": "SC4001",
@@ -22,13 +32,33 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 917,
+      "end": 922,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 1156,
+      "end": 1161,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 1438,
-      "end": 1445,
+      "end": 1443,
       "fixes": 0
     },
     {
@@ -52,13 +82,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 1712,
-      "end": 1719,
+      "end": 1717,
       "fixes": 0
     },
     {
@@ -72,13 +102,23 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 1927,
+      "end": 1932,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 2142,
-      "end": 2149,
+      "end": 2147,
       "fixes": 0
     },
     {
@@ -92,53 +132,53 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 2319,
-      "end": 2326,
+      "end": 2324,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 2505,
-      "end": 2512,
+      "end": 2510,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 2772,
-      "end": 2779,
+      "end": 2777,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 3088,
-      "end": 3095,
+      "end": 3093,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 3305,
-      "end": 3312,
+      "end": 3310,
       "fixes": 0
     },
     {
@@ -162,13 +202,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 758,
-      "end": 765,
+      "end": 763,
       "fixes": 0
     },
     {
@@ -192,23 +232,33 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 1311,
-      "end": 1318,
+      "end": 1316,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 2090,
-      "end": 2097,
+      "end": 2095,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 2109,
+      "end": 2116,
       "fixes": 0
     },
     {
@@ -224,21 +274,31 @@
     {
       "rule": "prefer-show",
       "code": "SC8015",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 2153,
       "end": 2187,
-      "fixes": 1
+      "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 2153,
+      "end": 2157,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 2687,
-      "end": 2694,
+      "end": 2692,
       "fixes": 0
     },
     {
@@ -262,13 +322,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 3131,
-      "end": 3138,
+      "end": 3136,
       "fixes": 0
     },
     {
@@ -282,13 +342,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 3764,
-      "end": 3771,
+      "end": 3769,
       "fixes": 0
     },
     {
@@ -302,13 +362,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 4104,
-      "end": 4111,
+      "end": 4109,
       "fixes": 0
     },
     {
@@ -322,13 +382,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 4442,
-      "end": 4449,
+      "end": 4447,
       "fixes": 0
     },
     {
@@ -352,13 +412,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 4750,
-      "end": 4757,
+      "end": 4755,
       "fixes": 0
     },
     {
@@ -382,13 +442,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 5068,
-      "end": 5075,
+      "end": 5073,
       "fixes": 0
     },
     {
@@ -402,13 +462,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 5429,
-      "end": 5436,
+      "end": 5434,
       "fixes": 0
     },
     {
@@ -419,6 +479,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 5461,
       "end": 5469,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 5964,
+      "end": 5969,
       "fixes": 0
     },
     {
@@ -442,13 +512,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 6171,
-      "end": 6178,
+      "end": 6176,
       "fixes": 0
     },
     {
@@ -472,13 +542,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 6546,
-      "end": 6553,
+      "end": 6551,
       "fixes": 0
     },
     {
@@ -492,13 +562,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 6815,
-      "end": 6822,
+      "end": 6820,
       "fixes": 0
     },
     {
@@ -522,13 +592,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 7498,
-      "end": 7505,
+      "end": 7503,
       "fixes": 0
     },
     {
@@ -542,13 +612,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 7910,
-      "end": 7917,
+      "end": 7915,
       "fixes": 0
     },
     {

@@ -1151,6 +1151,8 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
+    /// ADR 0803: slots source discovery withdrew (`SourceDiscovery`).
+    pub(crate) withdrawn_array_slots: &'a HashSet<SymbolId>,
 }
 
 /// Whether a `parameter-member` argument is proven not to be a reactive
@@ -2149,6 +2151,7 @@ impl LocalAccessContext<'_, '_> {
         let mut result = LocalAccessResult::default();
         let mut seen = HashSet::default();
         let allowed = allowed_callback_spans(file, self.lookup);
+        self.push_withdrawn_slot_obligations(file, &mut result);
         for call in &file.ast.calls {
             self.push_function_call_target_obligation(file, call, &mut result);
             self.discover_call(file, call, &allowed, &mut result, &mut seen);
@@ -2302,6 +2305,55 @@ impl LocalAccessContext<'_, '_> {
     /// to it reaches code nothing here reads: an obligation, never silence.
     /// ADR 0773: so do `.bind(store)()` and `Reflect.apply(sort, store, [])`,
     /// and an `.apply` whose argument list no fact shows.
+    /// ADR 0803: each reference of a slot withdrawn because the program
+    /// writes the array iterator: what it holds is not the primitive's own.
+    fn push_withdrawn_slot_obligations(
+        &self,
+        file: &solid_facts::FileFacts,
+        result: &mut LocalAccessResult,
+    ) {
+        if self.withdrawn_array_slots.is_empty() {
+            return;
+        }
+        // TypeFacts' references of each withdrawn slot in this file, which an
+        // import or a non-callee position (`{ k: set }`) does not resolve to.
+        let referenced = self
+            .withdrawn_array_slots
+            .iter()
+            .flat_map(|symbol| self.lookup.symbol_references(symbol.as_str()))
+            .filter(|reference| reference.path.as_ref() == file.path.as_str())
+            .filter_map(|reference| {
+                Some(solid_facts::core::Span::new(
+                    u32::try_from(reference.start_byte).ok()?,
+                    u32::try_from(reference.end_byte).ok()?,
+                ))
+            })
+            .collect::<HashSet<_>>();
+        for identifier in &file.ast.identifiers {
+            // A reference outside callee position (`{ k: set }`, `[0, set]`)
+            // has no callee symbol: its declaration's entity names it.
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || !(referenced.contains(&identifier.span)
+                    || self
+                        .lookup
+                        .callee_symbol(file, identifier.span)
+                        .is_some_and(|symbol| self.withdrawn_array_slots.contains(symbol))
+                    || file
+                        .ast
+                        .reference_declaration(identifier.span)
+                        .and_then(|declaration| {
+                            self.lookup.entity_at(file.path.as_str(), declaration)
+                        })
+                        .is_some_and(|entity| self.withdrawn_array_slots.contains(&*entity.symbol)))
+            {
+                continue;
+            }
+            result
+                .dispatch_obligations
+                .push(withdrawn_slot_obligation(file, identifier.span));
+        }
+    }
+
     fn push_function_call_target_obligation(
         &self,
         file: &solid_facts::FileFacts,
@@ -4971,7 +5023,11 @@ impl LocalAccessContext<'_, '_> {
             })
             .chain(reads.iter().filter_map(|(callee, target)| match target {
                 // The read row is the summaries'; the async read is made here.
-                Callable::Accessor(symbol) if self.async_sources.contains(symbol.as_str()) => {
+                // ADR 0803: a withdrawn slot's read is held here too.
+                Callable::Accessor(symbol)
+                    if self.async_sources.contains(symbol.as_str())
+                        || self.withdrawn_array_slots.contains(symbol.as_str()) =>
+                {
                     Some((callee, symbol))
                 }
                 _ => None,
@@ -4997,6 +5053,15 @@ impl LocalAccessContext<'_, '_> {
             else {
                 continue;
             };
+            // ADR 0803: transport carried a slot pass 0 withdrew (a hook's
+            // object, a member, a destructure, a default export): what the
+            // call reaches is not the primitive's own, so the call is held.
+            if self.withdrawn_array_slots.contains(symbol.as_str()) {
+                result
+                    .dispatch_obligations
+                    .push(withdrawn_slot_obligation(file, call.callee));
+                continue;
+            }
             if inside_known_value_function_argument(file, call.callee, self.lookup) {
                 continue;
             }
@@ -10019,4 +10084,22 @@ pub(crate) fn unreached_write_may_run(
             crate::execution_role::SiteReach::new(lookup).site(file, span),
             crate::execution_role::Reach::Unreached(_)
         )
+}
+
+/// ADR 0803: the obligation at `span`, a reference or a transported call of a
+/// slot withdrawn because the program writes the array iterator.
+fn withdrawn_slot_obligation(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> crate::StaticDefect {
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: file.source_text(span).unwrap_or("this value").to_owned(),
+            member: None,
+        },
+        location: location(file.path.shared(), span),
+        analysis_context: crate::blockers::TUPLE_ITERATION_WRITTEN.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    }
 }

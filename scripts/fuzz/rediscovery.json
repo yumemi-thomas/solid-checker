@@ -4706,5 +4706,33 @@
   "found": "R1c, diagnostics_process returned_tuple_iteration_mutations_withdraw_only_the_proven_read (case intact), then fixture snapshots",
   "fixed": "ADR 0801 (R1c)",
   "outside": "a grid judges each site's outcome, and a second row of the same read at the same site changes none. Fixtures tuple-accessor-slots body-read (once) and helper-read; 6 snapshots each lost one duplicate row (local-alias-literal-slots, project-callback-uses, read-in-place-layers-summary, root-window-reads, tuple-accessor-slots, use-site-role)"
+ },
+ {
+  "finding": "a primitive's own destructured setter (`const [s, set] = createSignal(1)`) was taken as exact beside a visible write to array iteration (`Array.prototype[Symbol.iterator] = f`, `IP.next = f`, `Reflect.set(AP, Symbol.iterator, f)`, `AP[k] = f`, `Object.assign(IP, src)`): SC2001 V where Chrome is silent, the patched iterator handing back a no-op",
+  "found": "R1c, patterns types/s04-local-setter-iteration-written; R1d probes i1-i13 (Chrome and tsc)",
+  "fixed": "ADR 0803",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-next-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-alias-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-next-src-signal-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs iter-* (12 contexts, layers none, 2,280 programs): 0818e258a and 7c733a10a 916 false-positive each (Chrome-confirmed), ADR 0803 0 false-positive, 0 disturbed. patterns types/s04 FIXED; types/s05-local-setter-alias-key-next and s06-local-setter-alias-key-iterator (alias with a key no literal names) fail on 7c733a10a and pass here"
+ },
+ {
+  "finding": "ADR 0803's withdrawal before its references were all held: a withdrawn slot used outside callee position (`{ k: set }`, `[0, set]`, a hook's returned object, a barrel or default-export import) had no row and the program certified while Chrome warns",
+  "found": "R1d, flip-read.mjs iter-same (the iterator written back unchanged) on the work-in-progress builds",
+  "fixed": "ADR 0803, before landing",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-iter-same-signal-destructured-none",
+   "mx-reactive-write-in-owned-scope-iter-same-signal-tuple-none",
+   "mx-reactive-write-in-owned-scope-iter-same-signal-destructured-none-s-module-barrel",
+   "mx-reactive-write-in-owned-scope-iter-same-signal-direct-none-s-module-default-hook"
+  ],
+  "rediscovered": "iter-same (REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED, 3,624 programs): work-in-progress builds 492, 72 then 24 false-clean (references, then imports, then transported calls); 7c733a10a 0 (proved V); ADR 0803 0 false-clean, 0 false-positive"
  }
 ]

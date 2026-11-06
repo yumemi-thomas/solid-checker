@@ -85,6 +85,7 @@ pub(crate) fn collect_project<'facts>(
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
+        withdrawn_array_slots: &source.withdrawn_array_slots,
     };
     let references_by_source = references_for_sources(
         &ctx.facts.typescript,

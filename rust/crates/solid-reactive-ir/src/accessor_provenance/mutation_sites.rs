@@ -89,6 +89,117 @@ pub(super) fn separate_iteration_target(file: &FileFacts, span: Span, depth: usi
         .is_some_and(|initializer| separate_iteration_target(file, initializer, depth - 1))
 }
 
+/// ADR 0803: whether the value at `span` is exactly `Array.prototype` or the
+/// array iterator's prototype (`Object.getPrototypeOf([][Symbol.iterator]())`),
+/// through the alias walk [`separate_iteration_target`] takes: an immutable
+/// identifier binding no write reaches, to its initializer.
+pub(crate) fn iteration_intrinsic_target(file: &FileFacts, span: Span, depth: usize) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    let global_member = |span: Span, keys: &[&str], globals: &[&str]| {
+        file.ast
+            .member_at(file.ast.peel_ts_sugar_span(span))
+            .is_some_and(|member| {
+                member_key(file, member).is_some_and(|key| keys.contains(&key))
+                    && global_name(file, file.ast.peel_ts_sugar_span(member.object))
+                        .is_some_and(|name| globals.contains(&name))
+            })
+    };
+    if global_member(span, &["prototype"], &["Array"]) {
+        return true;
+    }
+    let array_iterator = |span: Span| {
+        file.ast
+            .call_at(file.ast.peel_ts_sugar_span(span))
+            .is_some_and(|call| {
+                call.arguments.is_empty()
+                    && file
+                        .ast
+                        .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                        .is_some_and(|member| {
+                            file.ast
+                                .array_literals
+                                .contains(&file.ast.peel_ts_sugar_span(member.object))
+                                && (matches!(
+                                    member_key(file, member),
+                                    Some("values" | "keys" | "entries")
+                                ) || file
+                                    .source_text(member.property)
+                                    .is_some_and(|text| text.trim() == "Symbol.iterator"))
+                        })
+            })
+    };
+    if let Some(call) = file.ast.call_at(span)
+        && global_member(call.callee, &["getPrototypeOf"], &["Object", "Reflect"])
+        && let [argument] = call.arguments.as_slice()
+        && !argument.spread
+        && array_iterator(argument.span)
+    {
+        return true;
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declaration
+                && !iteration_binding_written(file, declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| iteration_intrinsic_target(file, initializer, depth - 1))
+}
+
+/// ADR 0803: a write to `Array.prototype` or the array iterator's prototype,
+/// resolved as [`iteration_intrinsic_target`], under a key no literal names:
+/// `IP[k] = f` at `target`.
+pub(crate) fn intrinsic_unknown_key_write(file: &FileFacts, target: Span) -> bool {
+    file.ast
+        .member_at(file.ast.peel_ts_sugar_span(target))
+        .is_some_and(|member| {
+            file.ast.computed_members.contains(&member.span)
+                && member_key(file, member).is_none()
+                && iteration_intrinsic_target(file, member.object, 24)
+        })
+}
+
+/// ADR 0803: a reflective `method` whose target is `Array.prototype` or the
+/// array iterator's prototype and whose key no literal names: a key argument
+/// that is not a string literal, or a source that is not a closed object
+/// literal.
+pub(crate) fn intrinsic_unknown_key_call(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    method: &str,
+) -> bool {
+    let Some(target) = call.arguments.first() else {
+        return false;
+    };
+    if target.spread || !iteration_intrinsic_target(file, target.span, 24) {
+        return false;
+    }
+    match method {
+        "assign" | "defineProperties" => call.arguments.iter().skip(1).any(|source| {
+            let span = file.ast.peel_ts_sugar_span(source.span);
+            source.spread
+                || !file
+                    .ast
+                    .object_get_shapes
+                    .iter()
+                    .any(|shape| shape.span == span && shape.closed)
+        }),
+        _ => call.arguments.get(1).is_none_or(|key| {
+            key.spread || !matches!(key.literal_value, ast::ArgumentLiteralFact::String(_))
+        }),
+    }
+}
+
 pub(super) fn iteration_binding_written(file: &FileFacts, declaration: Span) -> bool {
     file.ast
         .write_targets

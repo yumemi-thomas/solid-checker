@@ -265,6 +265,9 @@ pub(crate) struct SourceDiscoveryContribution {
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
     pub(crate) value_form_stores: Vec<SymbolId>,
+    /// ADR 0803: the sources and setters a primitive's array pattern names
+    /// (`const [s, set] = createSignal(1)`), exact only while iteration is.
+    pub(crate) array_slot_sources: Vec<SymbolId>,
 }
 
 #[derive(Clone)]

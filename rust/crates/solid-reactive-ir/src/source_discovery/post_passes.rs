@@ -235,6 +235,27 @@ pub(super) struct KeptPasses {
     uses: KeyedFold<(Arc<str>, Span), RowAt, Arc<Vec<RowAt>>>,
 }
 
+/// ADR 0803: drops a primitive's array-pattern slots from the runtime tables,
+/// so they are what their types say (pass 2), never the primitive's own.
+fn withdraw_array_slots(tables: &mut SourceTables) {
+    let slots = std::mem::take(&mut tables.array_slot_sources);
+    for symbol in &slots {
+        tables.accessors.remove(symbol);
+        tables.accessor_origins.remove(symbol);
+        tables.setters.remove(symbol);
+        tables.source_kinds.remove(symbol);
+        tables.source_primitives.remove(symbol);
+        tables.source_phases.remove(symbol);
+        tables.returned_source_symbols.remove(symbol);
+        tables.summary_source_symbols.remove(symbol);
+        tables.source_owned_write.remove(symbol);
+        tables.async_sources.remove(symbol);
+        tables.source_async_options.remove(symbol);
+        tables.value_form_stores.remove(symbol);
+    }
+    tables.array_slot_sources = slots;
+}
+
 /// What the passes read that no row set records: a change empties the kept
 /// state.
 fn domain(ctx: &StageContext<'_>) -> u64 {
@@ -593,6 +614,13 @@ pub(super) fn run(
     }
     let rows = rows_in_order(state, &keys);
     timer.lap("rows");
+    // ADR 0803: a primitive's array pattern names its own slots only while
+    // the array iterator is the built-in. Past a visible write to it (spelled,
+    // and kept by ADR 0282's census), those bindings are no runtime source:
+    // pass 2 holds them by their types.
+    if lookup.array_slots_withdrawn() {
+        withdraw_array_slots(tables);
+    }
     // Pass 0's runtime sources and kinds, which passes 1 and 2 read.
     let runtime0 = tables.accessors.keys().cloned().collect::<HashSet<_>>();
     // Pass 1: withdrawn tuple candidates, under the tuple-iteration veto.

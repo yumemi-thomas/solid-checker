@@ -46,6 +46,30 @@ const CASTS = {
   "cast-held-then": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(`${t} as unknown as Promise<void>`))], callee: `${q}.then` }),
 };
 const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
+// ADR 0803: the iterator written back unchanged. The tripwires fire and the write still runs (Chrome warns): never a silent clean.
+const ITER_SAME = { "iter-same": "Array.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];" };
+
+// ADR 0803: each spelling patches array iteration at module scope, before the component, so `const [v, set] = createX()` binds a no-op as
+// `set` and the write in the body never runs (Chrome is quiet). The primitive's own slots are then uncertifiable, never a violation.
+// Only while a generated component runs (`C<n>` on the stack): the host page's own code keeps the built-in behaviour.
+const ITER_IN = '/\\bC\\d+\\b/.test(new Error().stack ?? "")';
+const ITER_PAIR = `function (this: unknown[]) { return itO.call(this.length === 2 && typeof this[1] === "function" && (this[1] as Function).name !== "noop" && ${ITER_IN} ? [this[0], function noop() {}] : this); }`;
+const ITER_NEXT = `function (this: object) { const r = itN.call(this); const k = itSeen.get(this) ?? 0; itSeen.set(this, k + 1); if (!r.done && k === 1 && typeof r.value === "function" && r.value.name !== "noop" && ${ITER_IN}) return { value: function noop() {}, done: false }; return r; }`;
+const ITER_IP = "const itIP = Object.getPrototypeOf([][Symbol.iterator]()); const itN = itIP.next; const itSeen = new WeakMap<object, number>();";
+const ITER_PATCHES = {
+  "iter-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; (Array.prototype as any)[itKs[0]] = ${ITER_PAIR};`,
+  "iter-assign-src": `const itO = Array.prototype[Symbol.iterator]; const itSrc: object = { [Symbol.iterator]: ${ITER_PAIR} }; Object.assign(Array.prototype, itSrc);`,
+  "iter-define-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; Object.defineProperty(Array.prototype, itKs[0], { value: ${ITER_PAIR}, configurable: true, writable: true });`,
+  "iter-reflect-set": `const itO = Array.prototype[Symbol.iterator]; Reflect.set(Array.prototype, Symbol.iterator, ${ITER_PAIR});`,
+  "iter-alias": `const itAP = Array.prototype; const itO = itAP[Symbol.iterator]; itAP[Symbol.iterator] = ${ITER_PAIR};`,
+  "iter-alias-reflect": `const itAP = Array.prototype; const itO = itAP[Symbol.iterator]; Reflect.set(itAP, Symbol.iterator, ${ITER_PAIR});`,
+  "iter-next": `${ITER_IP} itIP.next = ${ITER_NEXT};`,
+  "iter-next-assign": `${ITER_IP} Object.assign(itIP, { next: ${ITER_NEXT} });`,
+  "iter-next-define": `${ITER_IP} Object.defineProperty(itIP, "next", { value: ${ITER_NEXT}, configurable: true, writable: true });`,
+  "iter-next-key": `${ITER_IP} const itKs: PropertyKey[] = ["ne" + "xt"]; itIP[itKs[0]] = ${ITER_NEXT};`,
+  "iter-next-src": `${ITER_IP} const itSrc: object = { next: ${ITER_NEXT} }; Object.assign(itIP, itSrc);`,
+  "iter-alias-key": `const itAP: any = Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[Symbol.iterator]; itAP[itKs[0]] = ${ITER_PAIR};`,
+};
 
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
@@ -55,8 +79,8 @@ export const FLIP_READ_CONTEXTS = {
   // ADR 0669: a memo's promise chain with a handler handed by name.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named"],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
-  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING],
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING, ...Object.keys(ITER_SAME)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, ...Object.keys(ITER_SAME)],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
@@ -67,7 +91,8 @@ export const FLIP_READ_LEGAL = {
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach"],
+  // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
@@ -313,6 +338,8 @@ export function flipReadContext(context, stmts, kit) {
     const h = kit.name("f");
     return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
   }
+  const iterPatch = ITER_PATCHES[context] ?? ITER_SAME[context];
+  if (iterPatch) return { top: [expr(domExpr(iterPatch))], body: stmts, view: [] };
   if (context === "cast-late-foreach") {
     const t = kit.name("t");
     const h = kit.name("f");
