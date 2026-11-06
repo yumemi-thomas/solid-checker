@@ -204,3 +204,21 @@ Pushed to `origin/claude/flip-r3`. Tree clean. Context ran out; next agent: star
 - `patterns.mjs --only` takes one substring before the merge at `8ff25dca5`, and a comma list after it.
 - Corpus sweeps on macOS: about a minute each. Baselines: `sweep-r3base.json` (21,674 U, 377 V), `sweep-m3.json` (merge, 24,659 U, 377 V).
 - Probes: scratch `tools/probe.mjs <dir> --bin <checker> [--chrome]` (tsc + checker + Chrome) and `tools/one.sh` (one case).
+
+### R3b, steps 4 and 5 (2026-11-06)
+
+Branch `claude/flip-r3`, pushed. Commits `a98bc8e58` (step 4, no checker change) and `f1ed5195d` (step 5, ADR 0792, wording only). Scratch `~/EDF/tmp/flipr3/s4` (`cases/` hand probes, `ids/` manifests, `vm*.sh`, `tab.mjs <dir> <tag...>` tabulates programs.jsonl across builds, `tools/redisc-edit.mjs` edits rediscovery.json by text). Nothing on flip-reads to merge at either step.
+
+| Step | State | Moved | Notes |
+|---|---|---|---|
+| 4, `outside` entries | `a98bc8e58` | 0 (no Rust) | 202, 214, 215, 217, 218, 219 carry ids now; new entries for ADR 0790's five roots and ADR 0773's sort bind/reflect; 15 reasons rewritten; two fused objects split; 48 `outside` of 250 left |
+| 5, SC2001/SC4002 wording | `f1ed5195d`, ADR 0792 | 3 coverage rows, message only; sweep 24,659 U, 377 V unchanged | SC4002's open read claimed "no default; a provider exists" for every open key |
+
+- Old builds in the VM (worktree `wt-<sha>p`, target `tgt-<sha>p` under /mnt/lima-colima/sc): `1232p` (1dd911b95, before ADR 0716: has none of 0688, 0716-0720, 0773), `79b99b4fbp`, `343bc76bbp`, `8f24d0154p`, `a92553232p`. The producer source is unchanged since each, so HEAD's `bin/solid-typefacts` serves them; not for ADR 0613 (ae9f51456^), which needs its own producer.
+- 217's neighbours `.bind(st.a)()` and `Reflect.apply(sort, …)` were already uncertifiable at the start: R1's c129b2c29 (ADR 0773, merged at 8ff25dca5). The prep notes' "certified today" was r3base. No code in shared_reactivity.rs was needed.
+- 174, 175 stay `outside`: their legal twins give no violation on the build before (0 of 1,512; 0 of 756). 185 stays: a parameter-after-await text variant is not-fired in Chrome (36 of 36), removed again.
+- New live false clean: STRICT_READ_UNTRACKED `setter-fn-apply` with the `wrapper` binding, a store setter's callback read inside a body arrow an effect's apply calls (6 programs, same on e918518de). open-defects.json, open-work.md. Cause in SC1001's setter-callback placement (local_access.rs): not R3's file.
+- Blocked: 198/199 (g2d) on local_access.rs `handed_role`.
+- Same doubled clause left in SC1001's unplaced read message (findings.rs:467), out of step 5's scope.
+- One mx-census smoke row moves better on every build since the merge (memo-shared false-clean to recall-gap): not R3b's, listed.
+- `python3` heredocs hang in this shell; use node.
