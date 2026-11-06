@@ -56,7 +56,10 @@ impl<'a> SemanticLookup<'a> {
 
     /// ADR 0349: no analyzed file visibly writes to the array iterator.
     pub(crate) fn array_iteration_intact(&self) -> bool {
-        self.intrinsics_view().array_iteration
+        // Review a9fc #2: ADR 0349's spelling misses a write through
+        // `Object.getPrototypeOf([])` under a key no literal names; whatever
+        // withdraws a tuple's slots (ADR 0803) breaks this premise too.
+        self.intrinsics_view().array_iteration && !self.array_slots_withdrawn()
     }
 
     /// ADR 0803: whether a primitive's array pattern may not hold the

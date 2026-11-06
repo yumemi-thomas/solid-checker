@@ -5551,5 +5551,26 @@
    "lg-reactive-write-in-owned-scope-iter-handed-proto-signal-direct-none"
   ],
   "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, contexts iter-fn-escaped, iter-fn-new, iter-handed-proto, layers none (570 programs): 7788b7295 234 false-positive (78 per context, each Chrome-confirmed), item 3 0 false-positive, 0 disturbed. Patterns s02, s03 and values/d3-new-function now uncertifiable"
+ },
+ {
+  "finding": "review a9fc #1, #2: a write to Array.prototype under a key no literal names, reached through `Object.getPrototypeOf([])`, `([] as any).__proto__`, `[].constructor.prototype`, a global alias (`const g = globalThis; g.Array.prototype`) or a destructured `getPrototypeOf`, left a primitive's own setter exact: SC2001 V where Chrome is quiet (the patch hands back a no-op setter)",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md items 1, 2); R1e, flip-read.mjs iter-gpo-key and the alias spellings",
+  "fixed": "ADR 0803 (review a9fc); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-gpo-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-proto-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-ctor-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-global-alias-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-gpo-destructure-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, these five contexts, layers none: 7788b7295 78 false-positive each (Chrome-confirmed); item 3 before the review fixes (0228b92e3) 0 for gpo/proto/ctor-key and 78 each for global-alias and gpo-destructure; this build 0. The hook-slot form (#1) is fixture iteration-written-slots/global-alias-hook: on 7788b7295 and 0228b92e3 `now()` had no row"
+ },
+ {
+  "finding": "review a9fc #7: ADR 0803's hold covered reads, writes and async reads only; upstream_compat's uncalled-accessor arm proved SC1005 V on `${c}` of a withdrawn slot, and a store write on a withdrawn store slot stayed SC2003 V",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md item 7)",
+  "fixed": "ADR 0803 (review a9fc, hold_withdrawn_static_rows); now uncertifiable",
+  "outside": "no runtime code claims SC1005, so no grid judges it; fixture iteration-written-slots/uncalled-accessor (SC1005 V on 7788b7295 and 0228b92e3, uncertifiable here) and uncalled-accessor-intact (proved V)"
  }
 ]

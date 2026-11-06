@@ -76,6 +76,13 @@ const ITER_PATCHES = {
   "iter-fn-escaped": `const itF: unknown = globalThis.Function; const itRun = (make: (code: string) => () => void) => { make(${JSON.stringify(ITER_CODE)})(); }; itRun(itF as (code: string) => () => void);`,
   "iter-fn-new": `new Function(${JSON.stringify(ITER_CODE)})();`,
   "iter-handed-proto": `const itSet = (p: any, k: PropertyKey, f: unknown) => { p[k] = f; }; const itO = Array.prototype[Symbol.iterator]; itSet(Array.prototype, Symbol.iterator, ${ITER_PAIR});`,
+  // Review a9fc #1, #2: Array.prototype spelled through an array literal, a global alias, or a destructured getter, then written under a
+  // key no literal names.
+  "iter-gpo-key": `const itAP: any = Object.getPrototypeOf([]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-proto-key": `const itAP: any = ([] as any).__proto__; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-ctor-key": `const itAP: any = [].constructor.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-global-alias": `const itG: any = globalThis; const itAP = itG.Array.prototype; const itKs: PropertyKey[] = [itG.Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-gpo-destructure": `const { getPrototypeOf: itGp } = Object; const itAP: any = itGp([]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
 };
 
 export const FLIP_READ_CONTEXTS = {

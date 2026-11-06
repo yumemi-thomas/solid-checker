@@ -110,6 +110,39 @@ pub(crate) fn iteration_intrinsic_target(file: &FileFacts, span: Span, depth: us
     if global_member(span, &["prototype"], &["Array"]) {
         return true;
     }
+    // Review a9fc #2: each of these is exactly `Array.prototype`.
+    let array_literal = |span: Span| {
+        file.ast
+            .array_literals
+            .contains(&file.ast.peel_ts_sugar_span(span))
+    };
+    if let Some(member) = file.ast.member_at(span) {
+        let key = member_key(file, member);
+        // `[].__proto__`
+        if key == Some("__proto__") && array_literal(member.object) {
+            return true;
+        }
+        // `[].constructor.prototype`
+        if key == Some("prototype")
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(member.object))
+                .is_some_and(|inner| {
+                    member_key(file, inner) == Some("constructor") && array_literal(inner.object)
+                })
+        {
+            return true;
+        }
+    }
+    // `Object.getPrototypeOf([])`
+    if let Some(call) = file.ast.call_at(span)
+        && global_member(call.callee, &["getPrototypeOf"], &["Object", "Reflect"])
+        && let [argument] = call.arguments.as_slice()
+        && !argument.spread
+        && array_literal(argument.span)
+    {
+        return true;
+    }
     let array_iterator = |span: Span| {
         file.ast
             .call_at(file.ast.peel_ts_sugar_span(span))
@@ -422,7 +455,7 @@ pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
         .chain(&file.ast.deleted_targets)
         .map(|target| file.ast.peel_ts_sugar_span(*target))
         .collect::<HashSet<_>>();
-    let handed = |span: Span, function: bool| handed_on(file, span, function, HANDED_BUDGET);
+    let handed = |span: Span, kind: Obtained| handed_on(file, span, kind, HANDED_BUDGET);
     file.ast.members.iter().any(|member| {
         // A write is the visible side's (`visible_iteration_write`).
         if writes.contains(&member.span) {
@@ -432,39 +465,75 @@ pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
         match key {
             // What these reach is a prototype or a constructor: an intrinsic
             // when the receiver is an array, `Function` through `.constructor`.
-            Some("__proto__") => return handed(member.span, false),
+            Some("__proto__") => return handed(member.span, Obtained::Intrinsic),
             Some("getPrototypeOf") => {
                 // Called, its result; held as a value, the function itself.
-                return callees
-                    .get(&member.span)
-                    .map_or_else(|| handed(member.span, false), |call| handed(*call, false));
+                return callees.get(&member.span).map_or_else(
+                    || handed(member.span, Obtained::Intrinsic),
+                    |call| handed(*call, Obtained::Intrinsic),
+                );
             }
-            Some("constructor") => return handed(member.span, true),
+            Some("constructor") => return handed(member.span, Obtained::Function),
             _ => {}
         }
         match global_name(file, file.ast.peel_ts_sugar_span(member.object)) {
-            Some("globalThis" | "window" | "self" | "global") => match key {
-                Some("Array") => handed(member.span, false),
-                Some("Function" | "eval") | None => handed(member.span, true),
+            Some(name) if GLOBAL_OBJECTS.contains(&name) => match key {
+                Some("Array") => handed(member.span, Obtained::Intrinsic),
+                // `globalThis.globalThis.Array`: the global object again.
+                Some("Function" | "eval" | "Reflect" | "Object") | None => {
+                    handed(member.span, Obtained::Function)
+                }
+                Some(key) if GLOBAL_OBJECTS.contains(&key) => handed(member.span, Obtained::Global),
                 Some(_) => false,
             },
             Some("Array") => match key {
                 // `Array[k]` may be `Array.constructor`, which is `Function`.
-                None => handed(member.span, true),
+                None => handed(member.span, Obtained::Function),
                 Some("prototype") => {
-                    !reflective_target(file, member.span) && handed(member.span, false)
+                    !reflective_target(file, member.span)
+                        && handed(member.span, Obtained::Intrinsic)
                 }
                 Some(_) => false,
             },
             _ => false,
         }
     }) || file.ast.identifiers.iter().any(|identifier| {
+        // Review a9fc #1: the global object as a value (`const g = globalThis;
+        // g.Array`, `Reflect.get(globalThis, "Array")`) reaches every global.
+        global_name(file, identifier.span).is_some_and(|name| GLOBAL_OBJECTS.contains(&name))
+            && identifier.role == ast::IdentifierRole::Reference
+            && !file.ast.type_names.contains(&identifier.span)
+            && !objects.contains(&identifier.span)
+            && handed(identifier.span, Obtained::Global)
+    }) || file.ast.bindings.iter().any(|binding| {
+        // A pattern that takes an intrinsic or a prototype getter out by key
+        // (`const { getPrototypeOf } = Object`, `const { constructor: F } =
+        // f`, `const { Array: A } = globalThis`), or destructures the global
+        // object at all.
+        binding.shape == ast::BindingShape::Object
+            && (binding.object_slots.iter().any(|slot| {
+                matches!(
+                    slot.property.as_str(),
+                    "getPrototypeOf" | "constructor" | "__proto__" | "Array" | "Function" | "eval"
+                ) || GLOBAL_OBJECTS.contains(&slot.property.as_str())
+            }) || binding.initializer.is_some_and(|initializer| {
+                global_name(file, file.ast.peel_ts_sugar_span(initializer))
+                    .is_some_and(|name| GLOBAL_OBJECTS.contains(&name))
+            }))
+    }) || file.ast.identifiers.iter().any(|identifier| {
         let name = global_name(file, identifier.span);
         matches!(name, Some("Array" | "Function"))
             && !file.ast.type_names.contains(&identifier.span)
             && !objects.contains(&identifier.span)
             && !callees.contains_key(&identifier.span)
-            && handed(identifier.span, name == Some("Function"))
+            && handed(
+                identifier.span,
+                if name == Some("Function") {
+                    Obtained::Function
+                } else {
+                    Obtained::Intrinsic
+                },
+            )
     }) || file
         .ast
         .identifiers
@@ -485,24 +554,59 @@ pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
         })
 }
 
+/// The global object's own names.
+const GLOBAL_OBJECTS: &[&str] = &["globalThis", "window", "self", "global"];
+
+/// What an obtained value may be, for [`handed_on`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Obtained {
+    /// `Array`, `Array.prototype`, a prototype: no code of its own.
+    Intrinsic,
+    /// Possibly `Function` or `eval`: called, it runs a string.
+    Function,
+    /// The global object: every global, `Array` and `Function` among them.
+    Global,
+}
+
 /// How many bindings [`handed_on`] follows before it answers yes.
 const HANDED_BUDGET: usize = 8;
 
-/// ADR 0803, item 3: whether the value at `span`, an array intrinsic or (when
-/// `function`) possibly `Function`, may reach code the checker does not see.
+/// ADR 0803, item 3: whether the value at `span`, an array intrinsic, possibly
+/// `Function`, or the global object (`kind`), may reach code the checker does
+/// not see.
 /// Not handed on: compared or tested, a discarded statement, read through
 /// (`Array.prototype.slice`), a class heritage, an argument of a read-only
 /// built-in (`Object.keys`), and a `const`/`let` or assigned binding whose
 /// uses are each one of these and which is not exported. Called: an array
 /// intrinsic is no code; `Function` called runs a string. Anything else,
 /// passed to another call, stored, returned or spread, is handed on.
-fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> bool {
+fn handed_on(file: &FileFacts, span: Span, kind: Obtained, budget: usize) -> bool {
     let span = file.ast.peel_ts_sugar_span(span);
     if budget == 0 {
         return true;
     }
-    if only_compared(file, span) || tested(file, span) || discarded(file, span) {
+    if only_compared(file, span)
+        || tested(file, span)
+        || discarded(file, span)
+        || file.ast.key_probed_operands.contains(&span)
+        || file.ast.inert_operands.contains(&span)
+    {
         return false;
+    }
+    // An operand of `||`, `??`, `&&`, or a branch of `?:`: the value goes on
+    // as the whole expression's. A conditional's test goes nowhere.
+    if let Some(logical) = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|logical| logical.left == span || logical.right == span)
+    {
+        return handed_on(file, logical.span, kind, budget - 1);
+    }
+    if let Some(conditional) = file.ast.conditional_expressions.iter().find(|conditional| {
+        conditional.test == span || conditional.consequent == span || conditional.alternate == span
+    }) {
+        return conditional.test != span && handed_on(file, conditional.span, kind, budget - 1);
     }
     if let Some(member) = file
         .ast
@@ -524,15 +628,28 @@ fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> boo
             .chain(&file.ast.deleted_targets)
             .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span);
         if written {
-            return key.is_none_or(|key| matches!(key, "next" | "return" | "__proto__"));
+            // A write to the global object replaces a global, never what
+            // array literals iterate with.
+            return kind != Obtained::Global
+                && key.is_none_or(|key| matches!(key, "next" | "return" | "__proto__"));
         }
-        return match key {
+        let next = |kind: Obtained| handed_on(file, member.span, kind, budget - 1);
+        return match (kind, key) {
+            // The global object again, or one of its intrinsics by name.
+            (Obtained::Global, Some("Array")) => next(Obtained::Intrinsic),
+            (Obtained::Global, Some("Function" | "eval" | "Reflect" | "Object")) => {
+                next(Obtained::Function)
+            }
+            (Obtained::Global, Some(key)) if GLOBAL_OBJECTS.contains(&key) => {
+                next(Obtained::Global)
+            }
+            (Obtained::Global, None) => next(Obtained::Global),
             // A value that may be `Function` or `eval`, invoked through
             // `call`, `apply` or `bind`: code from a string.
-            Some("call" | "apply" | "bind") if function => true,
-            Some("prototype" | "__proto__") => handed_on(file, member.span, false, budget - 1),
-            Some("constructor") | None => handed_on(file, member.span, true, budget - 1),
-            Some(_) => false,
+            (Obtained::Function, Some("call" | "apply" | "bind")) => true,
+            (_, Some("prototype" | "__proto__")) => next(Obtained::Intrinsic),
+            (_, Some("constructor") | None) => next(Obtained::Function),
+            (_, Some(_)) => false,
         };
     }
     if file
@@ -541,7 +658,7 @@ fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> boo
         .iter()
         .any(|call| file.ast.peel_ts_sugar_span(call.callee) == span)
     {
-        return function;
+        return kind != Obtained::Intrinsic;
     }
     if file.ast.classes.iter().any(|class| {
         class
@@ -555,6 +672,13 @@ fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> boo
             .iter()
             .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == span)
     }) {
+        // The global object handed to a call: whether the callee is code the
+        // checker sees is a cross-file question this per-file census cannot
+        // read (ADR 0803's premise: an intrinsic reached through a parameter
+        // in seen code is outside the model). Not counted here.
+        if kind == Obtained::Global {
+            return false;
+        }
         let first = call.arguments.first().is_some_and(|argument| {
             !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == span
         });
@@ -606,7 +730,11 @@ fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> boo
                 })
         });
     let Some(declaration) = declaration else {
-        return true;
+        // Stored, returned, spread: handed on. The global object handed on
+        // like this, as to a call, is followed only where the receiving code
+        // is known not to be seen (a project-level question, not this
+        // per-file census's).
+        return kind != Obtained::Global;
     };
     let exported = file.ast.exports.iter().any(|export| {
         export
@@ -625,7 +753,7 @@ fn handed_on(file: &FileFacts, span: Span, function: bool, budget: usize) -> boo
                     .write_targets
                     .iter()
                     .any(|target| file.ast.peel_ts_sugar_span(*target) == identifier.span)
-                && handed_on(file, identifier.span, function, budget - 1)
+                && handed_on(file, identifier.span, kind, budget - 1)
         })
 }
 
@@ -665,14 +793,12 @@ fn read_only_builtin(file: &FileFacts, call: &ast::CallFact) -> bool {
     match global_name(file, file.ast.peel_ts_sugar_span(member.object)) {
         Some("Object") => matches!(
             property,
+            // Names and tests only: `values`, `entries` and the descriptor
+            // getters return what the object holds.
             "getPrototypeOf"
                 | "keys"
-                | "values"
-                | "entries"
                 | "getOwnPropertyNames"
                 | "getOwnPropertySymbols"
-                | "getOwnPropertyDescriptor"
-                | "getOwnPropertyDescriptors"
                 | "isFrozen"
                 | "isSealed"
                 | "isExtensible"
@@ -681,7 +807,7 @@ fn read_only_builtin(file: &FileFacts, call: &ast::CallFact) -> bool {
         ),
         Some("Reflect") => matches!(
             property,
-            "getPrototypeOf" | "ownKeys" | "has" | "getOwnPropertyDescriptor" | "isExtensible"
+            "getPrototypeOf" | "ownKeys" | "has" | "isExtensible"
         ),
         Some("Array") => property == "isArray",
         _ => false,
