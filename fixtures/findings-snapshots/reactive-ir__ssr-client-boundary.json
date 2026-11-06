@@ -5,6 +5,7 @@
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
       "severity": "error",
       "path": "fixtures/reactive-ir/ssr-client-boundary/App.tsx",
       "start": 907,

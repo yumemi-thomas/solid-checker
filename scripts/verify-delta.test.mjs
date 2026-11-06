@@ -53,8 +53,8 @@ test("each table row claims its own owner's paths", () => {
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
       ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz"],
     ],
-    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
-    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
+    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "guard-count"]],
+    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "guard-count"]],
     [
       "apps/solid-typefacts/src/session.rs",
       ["typefacts", "backend-staleness", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz", "wasm-parity"],
@@ -98,6 +98,7 @@ test("a mapped change set runs preflight checks before building and testing", ()
     // binary would hide the source change under test.
     "build-typefacts",
     ...UNIVERSAL,
+    "guard-count",
     "build-debug",
     "ir-lib",
     "write-walk-strategies",
@@ -384,7 +385,7 @@ test("a real non-ASCII path git has to escape is read, not thrown on", () => {
     }
     // ...and every one of them lands on the fixtures row rather than escalating.
     for (const name of names) {
-      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate"], name);
+      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "guard-count"], name);
     }
   });
 });

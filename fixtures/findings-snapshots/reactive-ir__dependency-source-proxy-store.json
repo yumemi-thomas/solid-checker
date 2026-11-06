@@ -15,6 +15,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "dependency-value-unfollowed",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-proxy-store/App.tsx",
       "start": 484,

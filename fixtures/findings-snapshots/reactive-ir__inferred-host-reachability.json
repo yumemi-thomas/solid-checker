@@ -5,6 +5,7 @@
       "rule": "server-function-rich-argument",
       "code": "SC7007",
       "kind": "uncertifiable",
+      "blocker": "server-function-rich-argument-unresolved",
       "severity": "error",
       "path": "fixtures/reactive-ir/inferred-host-reachability/src/main.tsx",
       "start": 388,

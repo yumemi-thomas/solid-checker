@@ -15,6 +15,7 @@
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/reactivity-group-key/variants/member-wins-group-listed-first/App.tsx",
       "start": 732,

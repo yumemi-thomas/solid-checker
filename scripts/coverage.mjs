@@ -273,6 +273,11 @@ function comparable(finding, keepWording) {
     rule: finding.rule,
     code: finding.id,
     kind: finding.kind,
+    // The blocker an uncertifiable row names (ADR 0680), without its detail:
+    // the one-way count reads it (scripts/guard/count.mjs).
+    ...(finding.kind === "uncertifiable"
+      ? { blocker: String(finding.analysisContext ?? "").split(":")[0] }
+      : {}),
     severity: finding.severity,
     path: location.path ? rebase(location.path) : null,
     start: location.startByte ?? null,

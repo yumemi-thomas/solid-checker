@@ -35,6 +35,7 @@
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "uncertifiable",
+      "blocker": "effect-returned-function-run-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
       "start": 873,

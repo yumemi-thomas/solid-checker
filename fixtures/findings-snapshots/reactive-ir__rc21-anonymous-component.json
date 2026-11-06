@@ -5,6 +5,7 @@
       "rule": "components-return-once",
       "code": "SC1004",
       "kind": "uncertifiable",
+      "blocker": "component-identity-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-anonymous-component/App.tsx",
       "start": 133,

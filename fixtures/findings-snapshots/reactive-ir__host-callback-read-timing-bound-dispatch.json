@@ -5,6 +5,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/host-callback-read-timing/variants/bound-dispatch/App.tsx",
       "start": 140,

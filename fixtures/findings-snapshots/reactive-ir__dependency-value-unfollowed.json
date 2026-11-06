@@ -5,6 +5,7 @@
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",
+      "blocker": "package-source-unavailable",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-unfollowed/App.tsx",
       "start": 0,

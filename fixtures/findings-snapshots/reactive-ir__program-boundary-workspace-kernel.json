@@ -5,6 +5,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/program-boundary-workspace/variants/kernel/store.ts",
       "start": 267,
