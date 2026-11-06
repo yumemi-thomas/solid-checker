@@ -707,7 +707,23 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
             primitive_value_domain_spans.insert(initializer);
         }
     }
+    // ADR 0781: which key a computed write to a standard object names.
+    for assignment in &file.ast.assignments {
+        let target = file.ast.peel_ts_sugar_span(assignment.target);
+        if file.ast.computed_members.binary_search(&target).is_ok()
+            && let Some(member) = file.ast.member_at(target)
+            && file.standard_root(member.object).is_some()
+        {
+            add_symbol(member.property, false);
+            constant_value_spans.insert(member.property);
+        }
+    }
     for call in &file.ast.calls {
+        // ADR 0781: what the value under an assertion really is.
+        if let Some(value) = file.asserted_call_value(call.callee) {
+            add_symbol(value, false);
+            library_type_spans.insert(value);
+        }
         for argument in &call.arguments {
             match argument.value {
                 solid_facts::ast::ArgumentValueKind::Identifier => {

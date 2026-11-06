@@ -551,6 +551,17 @@ pub enum JoinError {
     SpanWidth(Span),
 }
 
+/// An object whose members the standard library's calls read (ADR 0781).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StandardRoot {
+    /// `globalThis`, `window`, `self`, `global`.
+    Global,
+    /// `Name.prototype`.
+    Prototype(String),
+    /// `Name`, bound nowhere in the file.
+    Constructor(String),
+}
+
 impl FileFacts {
     pub fn new(
         generation: Generation,
@@ -614,6 +625,125 @@ impl FileFacts {
             value = wrapper.inner;
         }
         Some(value)
+    }
+
+    /// The value under a type assertion (`as`, `<T>`) written on `span`, past
+    /// every other wrapper; `None` when none is. `satisfies` and `!` assert
+    /// nothing about what the value is.
+    #[must_use]
+    pub fn asserted_value(&self, span: Span) -> Option<Span> {
+        let mut value = span;
+        let mut asserted = false;
+        while let Ok(index) = self
+            .ast
+            .transparent_wrappers
+            .binary_search_by_key(&value, |wrapper| wrapper.span)
+        {
+            let wrapper = &self.ast.transparent_wrappers[index];
+            if wrapper.inner == value {
+                break;
+            }
+            let after = self
+                .source_text(Span {
+                    start: wrapper.inner.end,
+                    end: value.end,
+                })
+                .unwrap_or_default()
+                .trim_start();
+            asserted |= after
+                .strip_prefix("as")
+                .is_some_and(|rest| rest.starts_with(|c: char| c.is_whitespace()))
+                || self.source.as_bytes().get(value.start as usize) == Some(&b'<');
+            value = wrapper.inner;
+        }
+        asserted.then_some(value)
+    }
+
+    /// The asserted value a call's written type rests on (ADR 0781): an
+    /// assertion on the callee, on a member callee's receiver, or in the
+    /// initializer of a binding that holds either.
+    #[must_use]
+    pub fn asserted_call_value(&self, callee: Span) -> Option<Span> {
+        if let Some(value) = self.asserted_value(callee) {
+            return Some(value);
+        }
+        let peeled = self.ast.peel_ts_sugar_span(callee);
+        let mut value = self
+            .ast
+            .member_at(peeled)
+            .map_or(peeled, |member| member.object);
+        // A chain of aliases ends where a binding holds no identifier, and an
+        // alias of itself is a program `tsc` rejects, so the bound is no limit
+        // on any real program.
+        for _ in 0..16 {
+            if let Some(inner) = self.asserted_value(value) {
+                return Some(inner);
+            }
+            let declaration = self
+                .ast
+                .reference_declaration(self.ast.peel_ts_sugar_span(value))?;
+            value = self
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.shape == crate::ast::BindingShape::Identifier
+                        && binding.names.iter().any(|name| name.span == declaration)
+                })?
+                .initializer?;
+        }
+        None
+    }
+
+    /// What the value at `span` is when it is an object the standard library's
+    /// calls read (ADR 0781), through assertions and bindings that hold it.
+    #[must_use]
+    pub fn standard_root(&self, span: Span) -> Option<StandardRoot> {
+        const GLOBAL_ROOTS: [&str; 4] = ["globalThis", "window", "self", "global"];
+        let ast = &self.ast;
+        let mut value = ast.peel_ts_sugar_span(span);
+        for _ in 0..16 {
+            let Some(declaration) = ast.reference_declaration(value) else {
+                break;
+            };
+            value = ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.shape == crate::ast::BindingShape::Identifier
+                        && binding.names.iter().any(|name| name.span == declaration)
+                })?
+                .initializer
+                .map(|initializer| ast.peel_ts_sugar_span(initializer))?;
+        }
+        let mut root = value;
+        while let Some(member) = ast.member_at(root) {
+            root = ast.peel_ts_sugar_span(member.object);
+        }
+        if ast.reference_declaration(root).is_some() {
+            return None;
+        }
+        let text = self.source_text(value)?.trim();
+        let text = GLOBAL_ROOTS
+            .iter()
+            .find_map(|name| text.strip_prefix(name)?.strip_prefix('.'))
+            .unwrap_or(text);
+        if GLOBAL_ROOTS.contains(&text) {
+            return Some(StandardRoot::Global);
+        }
+        let plain = |name: &str| {
+            name != "this"
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+        };
+        match text.split_once('.') {
+            Some((name, "prototype")) if plain(name) => {
+                Some(StandardRoot::Prototype(name.to_owned()))
+            }
+            None if plain(text) => Some(StandardRoot::Constructor(text.to_owned())),
+            _ => None,
+        }
     }
 
     /// The spans of this file's calls whose callee, past transparent

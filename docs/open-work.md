@@ -276,6 +276,9 @@ Known false-positive shapes left open (fire today, wanted gone):
 - ADR 0550 trade: an SC3001 operation in an action's step called from a leaf is an obligation, not a violation, after a plain `yield`, behind a helper, a control-flow layer or a hand-off inside the step, or in an action another module holds (fuzzer action-from-settled/-tracked: 707 of 1,316 at a 0.2 sample).
 - ADR 0541 trade: a primitive or `flush` in a render effect's apply, or in the cleanup an apply returns, is an obligation, never a violation (the first run, or a disposal, is outside the effect phase); a reaction bundle's `effect` member is not walked.
 
+- ADR 0781, an assertion away from the receiver: `run(t as any)` into a `Promise<void>` parameter, a field or a return holding an assertion raises nothing, so the written type is trusted and the program certifies where Chrome warns. Held in `scripts/fuzz/patterns/types/p3-cast-*`, listed in `open-defects.json`. It needs value flow from the assertion to the receiver.
+- ADR 0781, an unknown key on a global (`globalThis[key] = v`) vetoes standard functions and constructors, not instance methods: `x.push` stays proved though `key` could name `Array`. A project-wide veto of every method was +751 rows, from a test helper and a build plugin.
+
 ## What the server build does (ADR 0659)
 
 Measured on rc.21; the input to `claims_client_runtime` and `ExecutionPaths`.

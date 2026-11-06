@@ -20,16 +20,6 @@
       "start": 368,
       "end": 375,
       "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/object-member-freeze-write/App.tsx",
-      "start": 421,
-      "end": 438,
-      "fixes": 0
     }
   ]
 }

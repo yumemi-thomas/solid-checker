@@ -1081,3 +1081,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/boundary-accessors/node_modules/**
 !fixtures/reactive-ir/control-flow-denied-handler/node_modules/
 !fixtures/reactive-ir/control-flow-denied-handler/node_modules/**
+!fixtures/reactive-ir/lying-assertion/node_modules/
+!fixtures/reactive-ir/lying-assertion/node_modules/**
+!fixtures/reactive-ir/standard-patches/node_modules/
+!fixtures/reactive-ir/standard-patches/node_modules/**

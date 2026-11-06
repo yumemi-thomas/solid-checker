@@ -97,6 +97,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 937,
+      "end": 974,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
       "start": 995,
       "end": 1000,
       "fixes": 0

@@ -31,6 +31,22 @@ export const STORE_DESTRUCTURES = {
   "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v } = merge(${o}, { w: 1 }); void v;` },
 };
 
+// ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.
+const SYNC_THEN = "{ then(f: () => void) { f(); } }";
+const PATCHES = {
+  "patch-global": ["(globalThis as any).setTimeout = (f: () => void) => { f(); return 0; };", "setTimeout"],
+  "patch-window": ["window.setTimeout = ((f: () => void) => { f(); return 0; }) as any;", "setTimeout"],
+  "patch-define": ['Object.defineProperty(globalThis, "setTimeout", { value: (f: () => void) => { f(); return 0; } });', "setTimeout"],
+  "patch-proto": ["Promise.prototype.then = function (this: any, f: any) { f(); return this; } as any;", "Promise.resolve().then"],
+  "patch-proto-alias": ["const proto = Promise.prototype; proto.then = function (this: any, f: any) { f(); return this; } as any;", "Promise.resolve().then"],
+};
+const CASTS = {
+  "cast-then": (t) => ({ held: [decl(t, domExpr(SYNC_THEN))], callee: `(${t} as unknown as Promise<void>).then` }),
+  "cast-any-then": (t) => ({ held: [decl(t, domExpr(`${SYNC_THEN} as any`))], callee: `(${t} as Promise<void>).then` }),
+  "cast-held-then": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(`${t} as unknown as Promise<void>`))], callee: `${q}.then` }),
+};
+const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
@@ -39,7 +55,8 @@ export const FLIP_READ_CONTEXTS = {
   // ADR 0669: a memo's promise chain with a handler handed by name.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named"],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
-  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach"],
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
@@ -48,8 +65,9 @@ export const FLIP_READ_LEGAL = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach"],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag"],
+  // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach"],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
@@ -195,6 +213,21 @@ export function flipReadContext(context, stmts, kit) {
       case "root-named-foreach": return { body: [held, expr(domExpr(`[1].forEach(${h})`))], view: [] };
       default: return { body: [held], view: [button(kit.name("b"), [expr(call(ref(h)))]), button(kit.name("b"), [expr(call(ref(h)))])] };
     }
+  }
+  if (CASTS[context]) {
+    const { held, callee } = CASTS[context](kit.name("t"), kit.name("q"));
+    const h = kit.name("f");
+    return { body: [...held, decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
+  }
+  if (PATCHES[context]) {
+    const [patch, callee] = PATCHES[context];
+    const h = kit.name("f");
+    return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
+  }
+  if (context === "cast-late-foreach") {
+    const t = kit.name("t");
+    const h = kit.name("f");
+    return { body: [decl(t, domExpr("{ forEach(f: () => void) { queueMicrotask(f); } }")), decl(h, fn(stmts)), expr(domExpr(`(${t} as unknown as number[]).forEach(${h})`))], view: [] };
   }
   // ADR 0681: `createEffect`'s apply has no owner, so this cleanup never registers and `K` never mounts.
   if (context === "apply-cleanup-mount") {
