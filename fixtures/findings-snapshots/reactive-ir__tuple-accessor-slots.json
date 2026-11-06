@@ -32,16 +32,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/tuple-accessor-slots/body-read.tsx",
-      "start": 178,
-      "end": 181,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -49,6 +39,16 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
       "start": 297,
       "end": 298,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/helper-read.tsx",
+      "start": 216,
+      "end": 224,
       "fixes": 0
     },
     {

@@ -77,7 +77,6 @@ project_tables! {
     39 intrinsics: IntrinsicsTripwires,
     40 string_code: StringCodeVeto,
     41 tuple_iteration: TupleIterationVeto,
-    59 tuple_slot_iteration: TupleSlotIterationVeto,
     42 function_bind: FunctionBindPatched,
     43 objects_assigned_into: ObjectsAssignedInto,
     44 router_params: RouterParams,
@@ -359,21 +358,6 @@ whole_program! {
         ctx.memo::<StringCodeVeto>(&())?;
         Ok(ctx.project(|lookup| {
             crate::interproc::accessor_provenance::tuple_iteration_write(lookup)
-        }))
-    }
-}
-
-whole_program! {
-    /// ADR 0801: whether a hook's accessor slot may not be what the literal
-    /// holds.
-    TupleSlotIterationVeto, 59, tuple_slot_iteration, "tuple_slot_iteration_veto", bool,
-    cycle: true,
-    direct: |lookup| {
-            crate::interproc::accessor_provenance::tuple_slot_iteration_write(lookup)
-        },
-    |ctx| {
-        Ok(ctx.project(|lookup| {
-            crate::interproc::accessor_provenance::tuple_slot_iteration_write(lookup)
         }))
     }
 }

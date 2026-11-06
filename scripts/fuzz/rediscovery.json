@@ -4700,5 +4700,11 @@
    "mx-caught-reactive-read-effect-compute-caught-chain-5-direct-none"
   ],
   "rediscovered": "rm0 false-clean 72 of 72, this build 0, 72 recall-gap; fixture value-walk-chain, past the budget too"
+ },
+ {
+  "finding": "one read, two rows: ADR 0801's slot transport and ADR 0222's returned source both claimed the read at 'const [read] = makeTuple(); read()' (SC1001 V twice, SC5003 U twice)",
+  "found": "R1c, diagnostics_process returned_tuple_iteration_mutations_withdraw_only_the_proven_read (case intact), then fixture snapshots",
+  "fixed": "ADR 0801 (R1c)",
+  "outside": "a grid judges each site's outcome, and a second row of the same read at the same site changes none. Fixtures tuple-accessor-slots body-read (once) and helper-read; 6 snapshots each lost one duplicate row (local-alias-literal-slots, project-callback-uses, read-in-place-layers-summary, root-window-reads, tuple-accessor-slots, use-site-role)"
  }
 ]

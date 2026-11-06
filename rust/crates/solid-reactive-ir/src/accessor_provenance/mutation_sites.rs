@@ -218,8 +218,9 @@ fn only_compared(file: &FileFacts, span: Span) -> bool {
 /// `Array` global as a value, `Array.prototype` with no plain member after it, a
 /// global object's `Array`, `__proto__`, `getPrototypeOf`, `.constructor`. Code
 /// from a string: `eval`, `Function`, a timer's string. A script element or a
-/// frame is outside the model.
-pub(super) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
+/// frame is outside the model. Per file, reading only the file: the base
+/// layer's [`crate::base::Hazard::ArrayIntrinsicObtained`].
+pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
     let callees = file
         .ast
         .calls
@@ -297,9 +298,10 @@ pub(super) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
 /// census at all. What this asks is whether anything can reach that protocol:
 /// a program that never obtains an intrinsic cannot change it, whatever it
 /// writes. [`tuple_iteration_write`] refuses every call it cannot name, which
-/// any callback prop is, and every computed write.
+/// any callback prop is, and every computed write. Both answers are hazard
+/// probes, so a reuse records which files' hazards it read.
 pub(crate) fn tuple_slot_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
-    lookup.program_has_eval() || lookup.files().iter().any(array_intrinsic_obtained)
+    lookup.program_has_eval() || lookup.hazard_present(crate::base::Hazard::ArrayIntrinsicObtained)
 }
 
 pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {

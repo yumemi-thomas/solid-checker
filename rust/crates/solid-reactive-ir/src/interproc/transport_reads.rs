@@ -265,6 +265,22 @@ pub(super) fn transported_read(
     provenance.read(symbol, file, span)
 }
 
+/// ADR 0801 beside ADR 0222: whether the callee at `callee`, which transport
+/// resolves to `symbol`, is itself a source discovery accessor, so local access
+/// reads it at the call and a transported read would be the same read twice.
+pub(super) fn source_in_own_right(
+    provenance: &accessor_provenance::Resolver<'_, '_>,
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    symbol: &SymbolId,
+) -> bool {
+    lookup
+        .callee_symbol(file, file.ast.peel_ts_sugar_span(callee))
+        .map(SymbolId::from)
+        .is_some_and(|own| own != *symbol && accessor(provenance.accessors, &own).is_some())
+}
+
 /// Source discovery's accessor entry of `symbol`, recorded.
 pub(super) fn accessor<'m>(
     accessors: &'m HashMap<SymbolId, (SymbolId, Location)>,

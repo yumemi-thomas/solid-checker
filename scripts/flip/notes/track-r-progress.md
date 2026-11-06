@@ -236,3 +236,14 @@ Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget 
 
 Traps: `excluded_role_holds` has a second caller, `SiteExclusions::at`, which the report missed: the generator found it. A held obligation is decided in `reactive_analysis`, because a result chunk may not read the setter tables unrecorded. `make verify` runs `diagnostics_process`, verify-delta does not unless it escalates. A fresh worktree needs `bun scripts/tsc-oracle.mjs provision --dialect all` and `bun scripts/fuzz/provision.mjs`. `$O/ids.mjs` plus `$O/idrun.sh` run one variant family in seconds, both builds.
 Not measured: N1 against N3 separately. Later proof: a helper's argument whose type holds no function.
+
+## R1c, landing R1b's batch (2026-11-06)
+
+Worktree t3-b3846b2a, branch `claude/flip-r1-wip` on `add797a82`, work uncommitted until the coordinator answers the test-pin question. Scratch `/Users/thomas/dev/sc-scratch.noindex/flip-r1` (`tools/`, `cases/c2-c6`, builds `rd1-rd3`, `rdbg6`, `rdbg7`).
+
+- open-defects.json: 35 FIXED rows were stale merge carry-overs, all fine on `rm0` (0818e258a) and already gone on flip-reads with their rediscovery entries here; removed by text. The 3 `p3-cast-*` rows were missing here: copied from flip-reads (owner: open until W's cast research).
+- ir-read-lint: ADR 0801's `files()` scan moved to a per-file base hazard `ArrayIntrinsicObtained` (memo 59 removed); the two `file_by_path` in `open_compute.rs` stay (it is the recorded hand-out; answers live per analysis in `OpenComputes`).
+- Doubled rows: ADR 0801's slot transport and ADR 0222's returned source both claimed one read; `transport_reads::source_in_own_right` keeps one at call sites (result reads). Not in helper summaries: that dropped a proof.
+- Tried and withdrawn on the coordinator's challenge: accepting ADR 0282's census for an accessor slot. `cases/c3 p1` (Function handed to a parameter, called with a string) is certified then, Chrome warns. It also shows a pre-existing false positive on setter slots: pattern `types/s02-setter-slot-function-escaped`, open, held.
+- A fixture stub that types the accessor as `() => T` certifies a helper read the real typings hold (`handed-member-read`): `tuple-slot-function-obtained` has no helper case for that reason.
+- Pending the coordinator: 3 diagnostics_process pins (scratch `tools/diag-pins.diff`), then `make verify` and the landing commit. Catch-all test: belongs to the census module (`value_use.rs`, flip-census), not on this branch.

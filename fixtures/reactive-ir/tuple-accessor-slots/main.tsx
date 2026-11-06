@@ -7,6 +7,7 @@ import { Covered } from "./covered";
 import { AsyncSlot } from "./async-slot";
 import { AsyncOfMixed } from "./async-of-mixed";
 import { BodyRead } from "./body-read";
+import { HelperRead } from "./helper-read";
 import { TwoReturns } from "./two-returns";
 import { HeldThenWritten } from "./held-then-written";
-render(() => <><SettledInterval /><Settled /><SyncOfMixed /><Hole /><Covered /><AsyncSlot /><AsyncOfMixed /><BodyRead /><TwoReturns /><HeldThenWritten /></>, document.body);
+render(() => <><SettledInterval /><Settled /><SyncOfMixed /><Hole /><Covered /><AsyncSlot /><AsyncOfMixed /><BodyRead /><HelperRead /><TwoReturns /><HeldThenWritten /></>, document.body);

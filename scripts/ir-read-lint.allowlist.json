@@ -1,6 +1,6 @@
 {
   "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
-    "files()": 6,
+    "files()": 5,
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/projection_helpers.rs": {
