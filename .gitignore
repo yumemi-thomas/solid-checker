@@ -1095,3 +1095,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/exported-const-copy/node_modules/**
 !fixtures/reactive-ir/dependency-value-unfollowed/node_modules/
 !fixtures/reactive-ir/dependency-value-unfollowed/node_modules/**
+!fixtures/reactive-ir/compound-member-tag/node_modules/
+!fixtures/reactive-ir/compound-member-tag/node_modules/**

@@ -38,24 +38,6 @@
    "note": "ADR 0669's named handler reaches a read with no row through `handoff-assign-*` (14) and an `or-assign` binding (6): an accessor held by assignment. The census owns the position"
   },
   {
-   "idPrefix": "mx-pending-async-untracked-read-",
-   "code": "PENDING_ASYNC_UNTRACKED_READ",
-   "source": "async-value-member",
-   "outcome": "false-clean",
-   "item": "member-tag getter",
-   "partial": true,
-   "note": "`<ui.C a={a()} />`: a pending getter handed through a member tag sets no `async_getter` on the prop, so the child's read has no pending row. 48 on mx-src, 23 on mx-combo, the same programs on the build before ADR 0665"
-  },
-  {
-   "idPrefix": "mx-pending-async-forbidden-scope-",
-   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
-   "source": "async-value-member",
-   "outcome": "false-clean",
-   "item": "member-tag getter",
-   "partial": true,
-   "note": "The same cause for this code: `<ui1.C1 a1={a1()} />` with a pending memo, read in the child's tracked effect or onSettled. 12 on mx-src (settled, tracked), 3 on mx-combo, measured by id on 80db411e5 and bfd336ce8 alike (R3, smoke refresh)"
-  },
-  {
    "idPrefix": "mx-resolve-in-reactive-scope-",
    "code": "RESOLVE_IN_REACTIVE_SCOPE",
    "contexts": [

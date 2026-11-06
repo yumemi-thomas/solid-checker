@@ -6632,15 +6632,34 @@ impl LocalAccessContext<'_, '_> {
                 pending_open = !uncertain;
                 uncertain = true;
             }
-            if exact_root
+            let async_passed = exact_root
                 && backing == PropUse::Reactive
-                && (execution != ExecutionRole::TrackedJsx
-                    || self.may_run_in_leaf_owner(file, member.span))
                 && property.is_some_and(|property| {
                     self.props_reactivity
                         .async_getter(prop_declaration, property)
-                })
+                });
+            // ADR 0823: in a leaf owner (createTrackedEffect, onSettled) a
+            // pending read is the runtime's PENDING_ASYNC_FORBIDDEN_SCOPE.
+            // Unless every caller is enumerated and none may pass a pending
+            // getter, an unseen or unclassified caller may: an obligation.
+            let context = if async_passed
+                && (execution != ExecutionRole::TrackedJsx
+                    || self.may_run_in_leaf_owner(file, member.span))
             {
+                Some("async-prop-getter")
+            } else if !async_passed
+                && !(exact_root
+                    && property.is_some_and(|property| {
+                        self.props_reactivity
+                            .pending_excluded(prop_declaration, property)
+                    }))
+                && self.may_run_in_leaf_owner(file, member.span)
+            {
+                Some(crate::blockers::PROP_PENDING_UNPROVEN)
+            } else {
+                None
+            };
+            if let Some(context) = context {
                 result.dispatch_obligations.push(crate::StaticDefect {
                     kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
                         callee: file
@@ -6650,7 +6669,7 @@ impl LocalAccessContext<'_, '_> {
                         member: None,
                     },
                     location: location(file.path.shared(), member.span),
-                    analysis_context: "async-prop-getter".to_owned(),
+                    analysis_context: context.to_owned(),
                     fixes: vec![],
                     uncertain: true,
                 });

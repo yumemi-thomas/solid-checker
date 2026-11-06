@@ -371,3 +371,5 @@ named function handed to a carrier that provably runs in a body takes the carrie
 (ADR 0676). A key on a `reconcile` held elsewhere is uncertifiable. Under a scheduler a window-inheriting call reports nothing (ADR 0675). In a named function it answers from where that function runs: its direct calls, or a scheduler that takes it (ADR 0679).
 
 A function every reference of which lies in an `isServer` arm never runs on a client: silent. One only a build constant, a `clientOnly` or resumed `lazy` body by call, or a `<NoHydration>` subtree in a hydrating project reaches is uncertifiable (ADR 0677). `render(Local, el)` calls `Local` with no strict window, so a read there is silent where `<Local />` warns (ADR 0678). A callback handed to a standard method a project subclass overrides is not proven in place: uncertifiable (ADR 0683).
+
+A member tag of a same-file `const` holder ADR 0342 accounts is one of the stored component's call sites (ADR 0823): `<Ui.Card title={label()} />` with `Card` reading `props.title` in its body is proved; an imported or escaping holder keeps the component's callers open.
