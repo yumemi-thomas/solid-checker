@@ -5627,5 +5627,18 @@
    "mx-pending-async-forbidden-scope-tracked-rerun-x-wrapper-chain-5"
   ],
   "rediscovered": "deep-layer ids of PENDING_ASYNC_FORBIDDEN_SCOPE, PENDING_ASYNC_UNTRACKED_READ, ASYNC_OUTSIDE_LOADING_BOUNDARY (1,372, Chrome confirmed): build fp3 (e5589a4aa) settled wrapper chain-5 certified false clean, tracked and tracked-rerun false clean under another rule; ADR 0835 all three recall-gap, nothing else moved. Fixture reactive-ir/walk-bounds reads0 (silent there before)"
+ },
+ {
+  "finding": "a named helper's pending read called in an anonymous closure handed down forwarding helpers in a tracked insert (`<p>{(() => { hc1(() => { wrapUse(); }); return 1; })()}</p>`) had no row of the missing-boundary rule while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY: ADR 0462's walk ended at a position with no role and no binding",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md)",
+  "fixed": "ADR 0837",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-wrapper-forward-2",
+   "mx-async-outside-loading-boundary-show-x-wrapper-forward-13",
+   "mx-async-outside-loading-boundary-portal-jsx-x-wrapper-forward-2"
+  ],
+  "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY ids and the deep-layer ids of the pending codes (5,740, Chrome confirmed): build pf3 (fa46bab30) 6 false cleans (jsx, show, portal-jsx wrapper forward-2/13); ADR 0837 0, nothing else moved. Fixture reactive-ir/handed-closure-pending-read (pf3: no SC5003 row)"
  }
 ]
