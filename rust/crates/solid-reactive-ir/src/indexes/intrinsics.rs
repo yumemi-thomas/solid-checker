@@ -42,6 +42,12 @@ pub(crate) struct Intrinsics {
     /// `Array.prototype[Symbol.iterator]` and the array iterator are the
     /// built-ins.
     pub(crate) array_iteration: bool,
+    /// No write spells an iterator member (`next`, `return`) and no
+    /// reflective call spells one, or the array words, past its target: the
+    /// spellings `array_iteration` leaves to an alias (`IP.next = f`,
+    /// `Reflect.set(AP, Symbol.iterator, f)`). Read only for a primitive's
+    /// array-pattern slots.
+    pub(crate) iterator_members: bool,
 }
 
 impl<'a> SemanticLookup<'a> {
@@ -54,6 +60,15 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn array_iteration_intact(&self) -> bool {
         self.intrinsics_view().array_iteration
     }
+
+    /// ADR 0803: whether a primitive's array pattern may not hold the
+    /// primitive's own slots. Both must fire: a spelled write, and ADR 0282's
+    /// exact census, which clears a write to another prototype or to a literal
+    /// key that is not iteration's.
+    pub(crate) fn array_slots_withdrawn(&self) -> bool {
+        let view = self.intrinsics_view();
+        !(view.array_iteration && view.iterator_members) && self.tuple_iteration_may_be_mutated()
+    }
 }
 
 impl SemanticLookup<'_> {
@@ -61,11 +76,12 @@ impl SemanticLookup<'_> {
     /// memo built once per build.
     fn intrinsics_view(&self) -> &Intrinsics {
         self.intrinsics.get_or_init(|| {
-            let (promise, array_iteration) =
+            let (promise, array_iteration, iterator_members) =
                 self.whole_program_answer::<super::project_memos::IntrinsicsTripwires>();
             Intrinsics {
                 promise,
                 array_iteration,
+                iterator_members,
             }
         })
     }
@@ -75,6 +91,7 @@ pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
     let mut found = Intrinsics {
         promise: true,
         array_iteration: true,
+        iterator_members: true,
     };
     for file in lookup.files() {
         for target in file
@@ -92,6 +109,15 @@ pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
             if array_spelled(text) {
                 found.array_iteration = false;
             }
+            if file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(*target))
+                .and_then(|member| file.source_text(member.property))
+                .is_some_and(iterator_member_spelled)
+                || crate::interproc::accessor_provenance::intrinsic_unknown_key_write(file, *target)
+            {
+                found.iterator_members = false;
+            }
         }
         for class in &file.ast.classes {
             let heritage = class
@@ -104,9 +130,17 @@ pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
         }
         for call in &file.ast.calls {
             let name = member_name(file, file.ast.peel_ts_sugar_span(call.callee));
-            let reflective =
-                crate::interproc::accessor_provenance::mutation_builtin(file, call, lookup)
-                    .is_some();
+            let builtin =
+                crate::interproc::accessor_provenance::mutation_builtin(file, call, lookup);
+            let reflective = builtin.is_some();
+            if builtin.is_some_and(|method| {
+                iterator_key_written(file, call, method)
+                    || crate::interproc::accessor_provenance::intrinsic_unknown_key_call(
+                        file, call, method,
+                    )
+            }) {
+                found.iterator_members = false;
+            }
             if !reflective && name != Some("setPrototypeOf") {
                 continue;
             }
@@ -137,6 +171,47 @@ fn member_name(file: &FileFacts, span: Span) -> Option<&str> {
 
 fn promise_spelled(text: &str) -> bool {
     PROMISE_WORDS.iter().any(|word| mentions_word(text, word))
+}
+
+/// Whether a reflective mutator writes an iterator key: the key argument of
+/// `defineProperty`, `set` or `deleteProperty`, or a key of an object literal
+/// `assign` or `defineProperties` copies. A key no literal names is the
+/// residual premise, unless the target is exactly the intrinsic (ADR 0803).
+fn iterator_key_written(file: &FileFacts, call: &solid_facts::ast::CallFact, method: &str) -> bool {
+    let iterator_key = |key: &str| matches!(key, "next" | "return");
+    let literal_keys = |argument: &solid_facts::ast::ArgumentFact| {
+        let span = file.ast.peel_ts_sugar_span(argument.span);
+        file.ast
+            .object_get_shapes
+            .iter()
+            .find(|shape| shape.span == span)
+            .is_some_and(|shape| {
+                shape
+                    .properties
+                    .iter()
+                    .any(|property| iterator_key(&property.key))
+                    || (!shape.closed
+                        && file
+                            .source_text(span)
+                            .is_some_and(|text| text.contains("Symbol.iterator")))
+            })
+    };
+    match method {
+        "assign" | "defineProperties" => call.arguments.iter().skip(1).any(literal_keys),
+        _ => call.arguments.get(1).is_some_and(|key| {
+            matches!(&key.literal_value, solid_facts::ast::ArgumentLiteralFact::String(key) if iterator_key(key))
+                || file
+                    .source_text(file.ast.peel_ts_sugar_span(key.span))
+                    .is_some_and(|text| text.trim() == "Symbol.iterator")
+        }),
+    }
+}
+
+/// Whether `text` names a member of the array iterator.
+fn iterator_member_spelled(text: &str) -> bool {
+    ["next", "return"]
+        .iter()
+        .any(|word| mentions_word(text, word))
 }
 
 fn array_spelled(text: &str) -> bool {

@@ -1939,7 +1939,7 @@ function buildOne(kit, plan = {}) {
     : placed.loading ? [loadingView(held.name, [child(kit.name("v"), read(heldAsync.name))]), ...placed.view, button(kit.name("b"), [expr(write(held.name, 2))])]
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
-    sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}),
+    sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}), ...(placed.top ? { top: placed.top } : {}),
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
     misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
   };

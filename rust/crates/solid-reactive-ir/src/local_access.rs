@@ -1151,6 +1151,8 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
+    /// ADR 0803: slots source discovery withdrew (`SourceDiscovery`).
+    pub(crate) withdrawn_array_slots: &'a HashSet<SymbolId>,
 }
 
 /// Whether a `parameter-member` argument is proven not to be a reactive
@@ -1256,11 +1258,17 @@ impl LocalAccessContext<'_, '_> {
         let mut reused_files = 0;
         let mut recomputed_files = 0;
         if let Some(cache) = cache {
-            let exact_typescript_delta = typescript_unchanged || source_discovery_delta.is_some();
             // The symbols whose source-discovery entries moved since the
             // files were last checked, by value: whichever file's discovery
             // or project pass moved them (ADR 0397).
             let sources = self.sources();
+            // ADR 0803: a moved withdrawal reaches references no dependency
+            // names (`{ k: set }`): every chunk is recomputed.
+            let withdrawal_unchanged = cache.sources.as_ref().is_none_or(|previous| {
+                previous.withdrawn_array_slots == sources.withdrawn_array_slots
+            });
+            let exact_typescript_delta =
+                (typescript_unchanged || source_discovery_delta.is_some()) && withdrawal_unchanged;
             let mut candidate_dependencies = match &cache.sources {
                 Some(previous) => previous.changed_symbols(&sources),
                 None => cache.dependency_states.keys().cloned().collect(),
@@ -1417,6 +1425,7 @@ impl LocalAccessContext<'_, '_> {
             source_async_options: self.source_async_options.clone(),
             source_kinds: self.source_kinds.clone(),
             server_rendering: self.server_rendering,
+            withdrawn_array_slots: self.withdrawn_array_slots.clone(),
         }
     }
 
@@ -2149,6 +2158,7 @@ impl LocalAccessContext<'_, '_> {
         let mut result = LocalAccessResult::default();
         let mut seen = HashSet::default();
         let allowed = allowed_callback_spans(file, self.lookup);
+        self.push_withdrawn_slot_obligations(file, &mut result);
         for call in &file.ast.calls {
             self.push_function_call_target_obligation(file, call, &mut result);
             self.discover_call(file, call, &allowed, &mut result, &mut seen);
@@ -2302,6 +2312,55 @@ impl LocalAccessContext<'_, '_> {
     /// to it reaches code nothing here reads: an obligation, never silence.
     /// ADR 0773: so do `.bind(store)()` and `Reflect.apply(sort, store, [])`,
     /// and an `.apply` whose argument list no fact shows.
+    /// ADR 0803: each reference of a slot withdrawn because the program
+    /// writes the array iterator: what it holds is not the primitive's own.
+    fn push_withdrawn_slot_obligations(
+        &self,
+        file: &solid_facts::FileFacts,
+        result: &mut LocalAccessResult,
+    ) {
+        if self.withdrawn_array_slots.is_empty() {
+            return;
+        }
+        // TypeFacts' references of each withdrawn slot in this file, which an
+        // import or a non-callee position (`{ k: set }`) does not resolve to.
+        let referenced = self
+            .withdrawn_array_slots
+            .iter()
+            .flat_map(|symbol| self.lookup.symbol_references(symbol.as_str()))
+            .filter(|reference| reference.path.as_ref() == file.path.as_str())
+            .filter_map(|reference| {
+                Some(solid_facts::core::Span::new(
+                    u32::try_from(reference.start_byte).ok()?,
+                    u32::try_from(reference.end_byte).ok()?,
+                ))
+            })
+            .collect::<HashSet<_>>();
+        for identifier in &file.ast.identifiers {
+            // A reference outside callee position (`{ k: set }`, `[0, set]`)
+            // has no callee symbol: its declaration's entity names it.
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || !(referenced.contains(&identifier.span)
+                    || self
+                        .lookup
+                        .callee_symbol(file, identifier.span)
+                        .is_some_and(|symbol| self.withdrawn_array_slots.contains(symbol))
+                    || file
+                        .ast
+                        .reference_declaration(identifier.span)
+                        .and_then(|declaration| {
+                            self.lookup.entity_at(file.path.as_str(), declaration)
+                        })
+                        .is_some_and(|entity| self.withdrawn_array_slots.contains(&*entity.symbol)))
+            {
+                continue;
+            }
+            result
+                .dispatch_obligations
+                .push(withdrawn_slot_obligation(file, identifier.span));
+        }
+    }
+
     fn push_function_call_target_obligation(
         &self,
         file: &solid_facts::FileFacts,
@@ -4933,7 +4992,11 @@ impl LocalAccessContext<'_, '_> {
             })
             .chain(reads.iter().filter_map(|(callee, target)| match target {
                 // The read row is the summaries'; the async read is made here.
-                Callable::Accessor(symbol) if self.async_sources.contains(symbol.as_str()) => {
+                // ADR 0803: a withdrawn slot's read is held here too.
+                Callable::Accessor(symbol)
+                    if self.async_sources.contains(symbol.as_str())
+                        || self.withdrawn_array_slots.contains(symbol.as_str()) =>
+                {
                     Some((callee, symbol))
                 }
                 _ => None,
@@ -4959,6 +5022,15 @@ impl LocalAccessContext<'_, '_> {
             else {
                 continue;
             };
+            // ADR 0803: transport carried a slot pass 0 withdrew (a hook's
+            // object, a member, a destructure, a default export): what the
+            // call reaches is not the primitive's own, so the call is held.
+            if self.withdrawn_array_slots.contains(symbol.as_str()) {
+                result
+                    .dispatch_obligations
+                    .push(withdrawn_slot_obligation(file, call.callee));
+                continue;
+            }
             if inside_known_value_function_argument(file, call.callee, self.lookup) {
                 continue;
             }
@@ -5582,6 +5654,7 @@ impl LocalAccessContext<'_, '_> {
         let origin = self.accessor_origins.get(symbol);
         let display_name = call.static_callee(&file.source).unwrap_or(name);
         result.reads.push(Arc::new(ReactiveRead {
+            withdrawn_slot: false,
             pending_open: false,
             summary_attributed: false,
             transported: false,
@@ -6884,8 +6957,10 @@ impl LocalAccessContext<'_, '_> {
                 pending_open = !uncertain;
                 uncertain = true;
             }
+            // ADR 0803: an unknown backing keeps the obligation too (a
+            // getter calling a withdrawn async slot is neither proven).
             let async_passed = exact_root
-                && backing == PropUse::Reactive
+                && backing != PropUse::Static
                 && property.is_some_and(|property| {
                     self.props_reactivity
                         .async_getter(prop_declaration, property)
@@ -7033,6 +7108,7 @@ impl LocalAccessContext<'_, '_> {
                 })
         };
         ReactiveRead {
+            withdrawn_slot: false,
             summary_attributed: false,
             transported: false,
             kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -7283,6 +7359,7 @@ impl LocalAccessContext<'_, '_> {
                 }
             }
             result.reads.push(Arc::new(ReactiveRead {
+                withdrawn_slot: false,
                 pending_open: false,
                 summary_attributed: false,
                 transported: false,
@@ -7537,6 +7614,7 @@ impl LocalAccessContext<'_, '_> {
             };
         }
         result.reads.push(Arc::new(ReactiveRead {
+            withdrawn_slot: false,
             pending_open: false,
             summary_attributed: false,
             transported: false,
@@ -7718,6 +7796,7 @@ impl LocalAccessContext<'_, '_> {
                 {
                     let call_location = location(file.path.shared(), call.span);
                     result.reads.push(Arc::new(ReactiveRead {
+                        withdrawn_slot: false,
                         pending_open: false,
                         summary_attributed: false,
                         transported: false,
@@ -10065,4 +10144,22 @@ fn may_run_in_leaf_owner_within(
         }
     }
     false
+}
+
+/// ADR 0803: the obligation at `span`, a reference or a transported call of a
+/// slot withdrawn because the program writes the array iterator.
+fn withdrawn_slot_obligation(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> crate::StaticDefect {
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: file.source_text(span).unwrap_or("this value").to_owned(),
+            member: None,
+        },
+        location: location(file.path.shared(), span),
+        analysis_context: crate::blockers::TUPLE_ITERATION_WRITTEN.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    }
 }

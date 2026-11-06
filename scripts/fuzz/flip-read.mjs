@@ -46,6 +46,30 @@ const CASTS = {
   "cast-held-then": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(`${t} as unknown as Promise<void>`))], callee: `${q}.then` }),
 };
 const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
+// ADR 0803: the iterator written back unchanged. The tripwires fire and the write still runs (Chrome warns): never a silent clean.
+const ITER_SAME = { "iter-same": "Array.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];" };
+
+// ADR 0803: each spelling patches array iteration at module scope, before the component, so `const [v, set] = createX()` binds a no-op as
+// `set` and the write in the body never runs (Chrome is quiet). The primitive's own slots are then uncertifiable, never a violation.
+// Only while a generated component runs (`C<n>` on the stack): the host page's own code keeps the built-in behaviour.
+const ITER_IN = '/\\bC\\d+\\b/.test(new Error().stack ?? "")';
+const ITER_PAIR = `function (this: unknown[]) { return itO.call(this.length === 2 && typeof this[1] === "function" && (this[1] as Function).name !== "noop" && ${ITER_IN} ? [this[0], function noop() {}] : this); }`;
+const ITER_NEXT = `function (this: object) { const r = itN.call(this); const k = itSeen.get(this) ?? 0; itSeen.set(this, k + 1); if (!r.done && k === 1 && typeof r.value === "function" && r.value.name !== "noop" && ${ITER_IN}) return { value: function noop() {}, done: false }; return r; }`;
+const ITER_IP = "const itIP = Object.getPrototypeOf([][Symbol.iterator]()); const itN = itIP.next; const itSeen = new WeakMap<object, number>();";
+const ITER_PATCHES = {
+  "iter-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; (Array.prototype as any)[itKs[0]] = ${ITER_PAIR};`,
+  "iter-assign-src": `const itO = Array.prototype[Symbol.iterator]; const itSrc: object = { [Symbol.iterator]: ${ITER_PAIR} }; Object.assign(Array.prototype, itSrc);`,
+  "iter-define-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; Object.defineProperty(Array.prototype, itKs[0], { value: ${ITER_PAIR}, configurable: true, writable: true });`,
+  "iter-reflect-set": `const itO = Array.prototype[Symbol.iterator]; Reflect.set(Array.prototype, Symbol.iterator, ${ITER_PAIR});`,
+  "iter-alias": `const itAP = Array.prototype; const itO = itAP[Symbol.iterator]; itAP[Symbol.iterator] = ${ITER_PAIR};`,
+  "iter-alias-reflect": `const itAP = Array.prototype; const itO = itAP[Symbol.iterator]; Reflect.set(itAP, Symbol.iterator, ${ITER_PAIR});`,
+  "iter-next": `${ITER_IP} itIP.next = ${ITER_NEXT};`,
+  "iter-next-assign": `${ITER_IP} Object.assign(itIP, { next: ${ITER_NEXT} });`,
+  "iter-next-define": `${ITER_IP} Object.defineProperty(itIP, "next", { value: ${ITER_NEXT}, configurable: true, writable: true });`,
+  "iter-next-key": `${ITER_IP} const itKs: PropertyKey[] = ["ne" + "xt"]; itIP[itKs[0]] = ${ITER_NEXT};`,
+  "iter-next-src": `${ITER_IP} const itSrc: object = { next: ${ITER_NEXT} }; Object.assign(itIP, itSrc);`,
+  "iter-alias-key": `const itAP: any = Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[Symbol.iterator]; itAP[itKs[0]] = ${ITER_PAIR};`,
+};
 
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
@@ -56,9 +80,9 @@ export const FLIP_READ_CONTEXTS = {
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop"],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
-  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING],
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING, ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, "cleanup-mount-mixed", "handler-mount"],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
@@ -72,7 +96,8 @@ export const FLIP_READ_LEGAL = {
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount"],
+  // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
@@ -345,12 +370,46 @@ export const SUPPRESSED_EFFECTS = {
   "one-arg-ts-ignore": { ...SUPPRESSED_EFFECT, text: () => `// @ts-ignore\n${AUX}createEffect(() => 1);` },
   "one-arg-expect-error": { ...SUPPRESSED_EFFECT, text: () => `// @ts-expect-error\n${AUX}createEffect(() => 1);` },
 };
+// ADR 0803: a slot a write to array iteration withdrew, held in another module (`slots.ts`) and used in App.tsx through the holders the
+// corpus spells (an IIFE's tuple, a `let`, a `const` alias, a hook's object, an object or class instance, a prop's value). The iterator is
+// written back unchanged (`iter-same`), so the use runs and Chrome warns; f11b000cd had no row at the use (corpus list m11, 35 lines).
+const SLOT = "const [a, b] = createSignal(1);";
+const SLOT_HOLDERS = {
+  iife: { file: 'export const [r, setR] = (() => { const [r, setR] = createSignal(1); return [r, setR] as const; })();', names: ["r", "setR"], read: "r()", write: "setR(2)" },
+  let: { file: `${SLOT}\nexport let r = a;\nexport let setR = b;`, names: ["r", "setR"], read: "r()", write: "setR(2)" },
+  alias: { file: `${SLOT}\nexport const r = a;\nexport const setR = b;`, names: ["r", "setR"], read: "r()", write: "setR(2)" },
+  hook: { file: "export function useR() {\n  const [r, setR] = createSignal(1);\n  return { r, setR };\n}", names: ["useR"], read: "useR().r()", write: "useR().setR(2)", held: "const h = useR();", heldRead: "h.r()", heldWrite: "h.setR(2)" },
+  object: { file: `${SLOT}\nexport const box = { r: a, setR: b };`, names: ["box"], read: "box.r()", write: "box.setR(2)" },
+  class: { file: `${SLOT}\nclass Box {\n  r = a;\n  setR = b;\n}\nexport const box = new Box();`, names: ["box"], read: "box.r()", write: "box.setR(2)" },
+};
+const slotHost = (holder, store = false) => ({
+  kind: "plain",
+  contexts: ["iter-same"],
+  importLines: [`import { ${holder.names.join(", ")} } from "./slots";`],
+  files: { "slots.ts": `import { ${store ? "createStore" : "createSignal"} } from "solid-js";\n\n${holder.file}\n` },
+});
+const SLOT_READS = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([name, holder]) => [
+  [`wd-${name}-read`, { ...slotHost(holder), text: () => `void ${holder.read};` }],
+  ...(holder.held ? [[`wd-${name}-held-read`, { ...slotHost(holder), text: () => `${holder.held} void ${holder.heldRead};` }]] : []),
+]));
+// A prop whose value reads the slot, read in the child's body (its strict window): a signal's accessor, and a store's key.
+const propRead = (value) => () => `const K = (p: { v: number }) => { void p.v; return null; }; void children(() => <K v={${value}} />)();`;
+SLOT_READS["wd-prop-read"] = { ...slotHost(SLOT_HOLDERS.alias), imports: ["children"], text: propRead("r()") };
+SLOT_READS["wd-prop-store-read"] = {
+  ...slotHost({ file: "export const [st, setSt] = createStore({ v: 1 });", names: ["st"] }, true),
+  imports: ["children"],
+  text: propRead("st.v"),
+};
+const SLOT_WRITES = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([name, holder]) => [
+  [`wd-${name}-write`, { ...slotHost(holder), text: () => `${holder.write};` }],
+  ...(holder.held ? [[`wd-${name}-held-write`, { ...slotHost(holder), text: () => `${holder.held} ${holder.heldWrite};` }]] : []),
+]));
 
 export const FLIP_READ_VARIANTS = {
   MISSING_EFFECT_FN: SUPPRESSED_EFFECTS,
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS },
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
   CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
@@ -422,6 +481,8 @@ export function flipReadContext(context, stmts, kit) {
     const root = decl(d, domExpr(`createRoot((r) => { onCleanup(() => { ${mount}; }); return r; })`, undefined, ["createRoot", "onCleanup"]));
     return { body: [holder, root, ...(context === "cleanup-mount-mixed" ? [expr(domExpr(mount))] : [])], view: [button(b, [expr(domExpr(`${d}()`))])] };
   }
+  const iterPatch = ITER_PATCHES[context] ?? ITER_SAME[context];
+  if (iterPatch) return { top: [expr(domExpr(iterPatch))], body: stmts, view: [] };
   if (context === "cast-late-foreach") {
     const t = kit.name("t");
     const h = kit.name("f");

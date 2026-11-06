@@ -71,6 +71,15 @@
    "rules": [
     "no-write-in-pure-computation"
    ]
+  },
+  {
+   "id": "types/s03-local-setter-function-escaped",
+   "item": "R1c: a primitive's own destructured setter (`const [s, set] = createSignal(1)`) is taken as exact while a Function held in a parameter patches iteration (premise question, with the owner; the same on 0818e258a)",
+   "outcome": "false-positive",
+   "codes": [],
+   "rules": [
+    "no-write-in-pure-computation"
+   ]
   }
  ],
  "notGenerated": [

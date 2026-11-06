@@ -30,6 +30,7 @@ pub(super) struct SourceTables {
     pub(super) typed_sources: HashMap<SymbolId, TypedSource>,
     pub(super) prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) uncertain_prop_sources: HashSet<SymbolId>,
+    pub(super) array_slot_sources: Vec<SymbolId>,
 }
 
 impl SourceTables {
@@ -48,6 +49,7 @@ impl SourceTables {
             async_sources: &mut self.async_sources,
             source_async_options: &mut self.source_async_options,
             value_form_stores: &mut self.value_form_stores,
+            array_slot_sources: &mut self.array_slot_sources,
         }
     }
 }
@@ -135,7 +137,14 @@ pub(crate) fn discover_sources(
             typed_sources,
             prop_sources,
             uncertain_prop_sources,
+            array_slot_sources,
         } = tables;
+        // ADR 0803: what pass 0 withdrew; each of its references is held.
+        let withdrawn_array_slots = if ctx.semantic_lookup.array_slots_withdrawn() {
+            array_slot_sources.into_iter().collect()
+        } else {
+            HashSet::default()
+        };
         clock.finish(
             build_timings,
             ReactiveIrStage::PropPropagationAndControlFlow,
@@ -159,6 +168,7 @@ pub(crate) fn discover_sources(
             uncertain_prop_sources,
             props_reactivity,
             unchanged_paths,
+            withdrawn_array_slots,
         }
     };
     store.derived().solver::<super::post_passes::KeptPasses, _>(

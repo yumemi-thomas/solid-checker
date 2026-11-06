@@ -66,6 +66,7 @@ fn catalog_prose_program() -> Program {
     Program {
         reads: vec![ReactiveRead {
             pending_open: false,
+            withdrawn_slot: false,
             summary_attributed: false,
             transported: false,
             kind: "signal".into(),

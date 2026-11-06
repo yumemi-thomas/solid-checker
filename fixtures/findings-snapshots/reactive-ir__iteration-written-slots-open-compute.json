@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/open-compute/body-write.tsx",
+      "start": 153,
+      "end": 158,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/open-compute/body-write.tsx",
+      "start": 180,
+      "end": 189,
+      "fixes": 0
+    }
+  ]
+}

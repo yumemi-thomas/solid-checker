@@ -826,6 +826,12 @@ pub(super) fn run(
     timer.lap("writtenSet");
     // Pass 10: component props from their callers.
     let props_reactivity = if lookup.dialect.props_require_caller_proof() {
+        // ADR 0803: the slots a visible write to array iteration withdrew.
+        let withdrawn = if lookup.array_slots_withdrawn() {
+            tables.array_slot_sources.iter().cloned().collect()
+        } else {
+            HashSet::default()
+        };
         let inputs = ComponentInputs {
             files: &facts.files,
             accessors: &tables.accessors,
@@ -838,6 +844,7 @@ pub(super) fn run(
             uses: state.uses.values(),
             slots: &slots,
             exported: state.exports.values(),
+            withdrawn: &withdrawn,
             attached: std::sync::OnceLock::new(),
         };
         let final_state = |key: &StateKey| inputs.answer(key);
