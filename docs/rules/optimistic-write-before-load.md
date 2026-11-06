@@ -23,6 +23,7 @@ A setter handed to a component as a prop value (`<K s={setO} />`, a branch of `?
 `optimistic-reach-unresolved` (ADR 0712): the component's `props.s(…)` is a call no row
 places, since prop value flow is not followed. Chrome throws when the component runs it before
 the answer. A setter a hook or context carries to a call is an obligation there too.
+A call whose reach the walk cannot finish (512 nodes) is uncertifiable too (ADR 0752).
 
 ## How to fix
 

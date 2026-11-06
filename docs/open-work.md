@@ -8,6 +8,8 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
+Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `dynamic_component_entry` (32), `may_run_in_leaf_owner_within` (3), `value_reaches` (4), `derived_objects` (24).
+
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
 - Fuzzer async family (ADR 0612): a thrown code past an async compute's await is reported by nothing (README, Not built).
@@ -152,11 +154,11 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
 - `server-function-rich-argument` (SC7007, ADR 0707): open from the SSR audit: D5 (a compute's first run under SSR or hydration calls the function in process), dynamic `import()` carriers, and `enableRichArguments()` in a client-reached file that is not the entry (uncertifiable).
 - SC3001 identity (ADR 0711): a primitive renamed through a project barrel is an obligation (only the importer's binder is read).
-- SC6002 unplaced (ADR 0710): an exported hook or helper creating a computation is an obligation (an unseen caller may run it from an apply), as are static initializers and constructor-time fields.
-- SC2008 unplaced (ADR 0709): the same net for an apply's flush; a handler held by value, a replaceable `let` helper and a click-only member are obligations too.
-- SC2006 unplaced (ADR 0708): a `flush()` in a member, slot, tag or handed function is an obligation whenever the project names `action` (no call graph through members and hidden calls).
+- SC6002 unplaced (ADR 0710): an exported hook or helper creating a computation is an obligation, as are static initializers and constructor-time fields.
+- SC2008 unplaced (ADR 0709): the same net for an apply's flush; a handler held by value, a `let` helper and a click-only member too.
+- SC2006 unplaced (ADR 0708): a `flush()` in a member, slot, tag or handed function is an obligation whenever the project names `action`.
 - DOM dispatch list (ADR 0705): `History.go` delivers `beforeunload` only for a cross-document traversal, which the checker cannot tell: the router's `history.go` withholds the veto and listener-reach proofs.
-- `http-response-after-flush` (SC7005, ADR 0703): shell content is not proven, so a head in the root component a render entry renders is an obligation; the proof needs the render entry's identity and every caller.
+- `http-response-after-flush` (SC7005, ADR 0703): shell content is not proven, so a head in the root component is an obligation (needs the render entry's identity and every caller).
 - `http-response-after-flush` (SC7005, ADR 0596) reports by placement only: a boundary child's declaration before its pending read, under a boundary with no pending source, or below a `deferStream` source created outside it is applied at runtime (the SSR host's `l-*` templates) and stays an obligation.
 - `missing-owner` (ADR 0534): unplaced callbacks, object members and module declarations are uncertain when `SiteReach` cannot prove dormancy.
 - A summary consumer's call inside a class member's body (`wrapUse()` or a hook's returned accessor in a constructor or method) is an uncertifiable `strict-read-untracked` wherever the class is constructed or called, in the body (rc.17 warns) as in a handler or a tracked attribute (rc.17 silent): the construction and member call are followed by nothing (ADRs 0516, 0522).
@@ -221,8 +223,8 @@ Known false-positive shapes left open (fire today, wanted gone):
 - SC2001/SC2002 unplaced (ADRs 0715, 0721): a setter, `refresh` or action call no edge reaches is an obligation unless proven unreached, also in a handler or apply inside it (no inner-carrier proof), or only a handler runs it.
 - SC2003 flows (ADRs 0719, 0720): a parameter whose callers are not all enumerated (open export, method, value use, escaping namespace) is uncertifiable: 1,549 corpus rows, mostly app-game math helpers; so is a store element (no wrap fact). Not followed (silent): a destructured or rest parameter or loop binding, a literal in JSX or an object slot, an effect apply's value, a nested identity, `Object.entries`, a `delete` through a call; a declaration's identity is only uncertifiable.
 - SC2003 V-D1 (ADR 0718): `sort`/`reverse`/`fill`/`copyWithin` on a store are uncertifiable (no length proof); so is a logical assignment where the store's literal is not proven held.
-- SC4001 unowned run (ADR 0714): proven only by a call on every run of its function or module; `f?.()`, a guard's or local function's branch, a module `try` are obligations (Chrome warns).
-- SC2009 hand-off (ADR 0712): a setter handed as a prop is an obligation at the prop (no prop value flow).
+- SC4001 unowned run (ADR 0714): proven only by a call on every run of its function or module; `f?.()`, a guard's branch, a module `try` are obligations.
+- SC2009 hand-off (ADR 0712): a setter handed as a prop is an obligation at the prop.
 - Dispatch veto (ADRs 0356, 0639, 0640): a created element is no delivery only while the program has no listener the guard cannot rule out. `source.addEventListener(name, …)` on a project interface keeps kui's shell withheld, and its `download` is reached through a callback prop. Decided by an assignability Type Fact, or by dispatch-veto site placement through component props.
 - Flush veto: `flush()` under a test runner no review covers (`bun:test`) stays an obligation while a dispatch has no placed caller; a handler a dispatch cannot reach needs receiver-to-listener resolution.
 - `SC5003`, `SC5005` under a `catch`: kept uncertifiable; whether the leaf warning needs the throw to escape is unmeasured. SC5001 is not: its diagnostic comes first (ADR 0640).

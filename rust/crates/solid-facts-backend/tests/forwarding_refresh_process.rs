@@ -209,3 +209,52 @@ fn a_forwarding_chain_follows_mid_chain_edits_like_a_fresh_build() {
         "back to the first chain"
     );
 }
+
+/// A chain of `n` links, `l1` to `ln`, the last invoking its parameter's
+/// member; with `cut`, link 6 hands a fresh object on instead of its own.
+fn long_chain(n: usize, cut: bool) -> String {
+    let mut source = format!("export function l{n}(p: {{ run(): void }}) {{\n  p.run();\n}}\n");
+    for link in (1..n).rev() {
+        let next = link + 1;
+        let argument = if cut && link == 6 {
+            "{ run() {} }"
+        } else {
+            "p"
+        };
+        source.push_str(&format!(
+            "export function l{link}(p: {{ run(): void }}) {{\n  l{next}({argument});\n}}\n"
+        ));
+    }
+    source
+}
+
+const LONG_APP: &str = "import { createSignal } from \"solid-js\";\nimport { l1 } from \"./long\";\nconst [count, setCount] = createSignal(0);\nexport function App() {\n  l1({ run() { setCount(count() + 1); } });\n  return <div />;\n}\n";
+
+/// ADR 0752: a chain longer than the loop's 8 rounds widens its owners with
+/// an unmodeled use; the replayed loop and its widening answer as a fresh
+/// build across an edit that cuts the chain below the cap and one that
+/// restores it.
+#[test]
+fn a_forwarding_chain_past_the_round_cap_widens_like_a_fresh_build() {
+    let long = long_chain(12, false);
+    let Some(mut project) = Project::scratch("long", &[("App.tsx", LONG_APP), ("long.ts", &long)])
+    else {
+        return;
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    let widened = retained_is_fresh(&mut builder, &first, "chain past the cap");
+    let cut_source = long_chain(12, true);
+    let cut = project.edit(&[("long.ts", Some(&cut_source))]);
+    let cut_program = retained_is_fresh(&mut builder, &cut, "chain cut below the cap");
+    assert!(
+        first_difference(&widened, &cut_program).is_some(),
+        "the cut must drop the widened invocation"
+    );
+    let restored = project.edit(&[("long.ts", Some(&long))]);
+    let restored_program = retained_is_fresh(&mut builder, &restored, "chain restored");
+    assert!(
+        first_difference(&widened, &restored_program).is_none(),
+        "back to the widened chain"
+    );
+}

@@ -4,7 +4,7 @@ Question per bound: when the search stops at its limit, what does it answer? Pas
 answer must be an uncertifiable with a named blocker, never a clean and never a violation from the partial path.
 
 Scope: `rust/crates/solid-reactive-ir/src` and `rust/dialects/solid-v2/rules/src` (the rules crate has no bound: `lib.rs`
-and `rules.rs` only word and project rows). Not counted: semantic arity (`take(index + 1)`, `take(handlers)`, executor
+and `rules.rs` only word and project rows). Not counted (not bounds): semantic arity (`take(index + 1)`, `take(handlers)`, executor
 `take(2)`), quote and literal-length tests, `len() > 1` ambiguity tests, worker and shard limits, table id ranges, owner-bit
 flags, timing samples. Fixpoints bounded by their own size (`symbols.rs` `0..=targets.len()` ×5, `owners/bindings.rs:272`,
 `lib.rs:2167` `0..summaries.len()`, a shortest-path relaxation) terminate at the fixed point: sound, one row each below.
@@ -19,15 +19,19 @@ follows), `search-budget-exhausted` (a work budget, a site cap or a round cap ra
 
 ## Summary
 
-| Family | Bounds | Unsound before | Fixed | ADR |
+Counted per site (a row listing `:61,119,125` is three).
+
+| Family | Sites | Answered clean or partial before | Fixed | ADR |
 |---|---:|---:|---:|---|
-| A. Static stack and phase walks (calls, promise chains, layers) | 29 | 9 | 8 | 0750 |
-| B. Value, alias and member chains | 53 | 6 | 2 (+1 named) | 0751 |
-| C. Caller, site and holder walks | 22 | 1 | | |
-| D. Work budgets and round caps | 14 | 2 | | 0752 |
-| E. Write-role climbs (ADR 0532, 16/32 layers) | 13 | 0 | no change | |
-| F. Proof-only searches (attribution, primitive proofs, identity) | 24 | 0 | no change | |
-| G. Size and syntax guards | 6 | 0 | no change | |
+| A. Static stack and phase walks (calls, promise chains, layers) | 36 | 9 | 8 | 0750 |
+| B. Value, alias and member chains (incl. proof-only searches) | 73 | 4 (+3 unverified) | 3 (`calls_reach` under 0752) | 0751, 0752 |
+| C. Caller, site and holder walks | 12 | 0 | no change | |
+| D. Work budgets and round caps | 19 | 1 | 1 | 0752 |
+| E. Write-role climbs (ADR 0532) and size-bounded fixpoints | 17 | 0 | no change | |
+| Total | 157 | 14 | 12 | |
+
+One more answered a violation from a partial path (`is_own_setter`, a measured false positive), counted in B. Open: 2 known
+(`dynamic_component_entry`, `derived_objects`) plus the unverified ones below.
 
 ## Measured
 
@@ -90,7 +94,7 @@ follows), `search-budget-exhausted` (a work budget, a site cap or a round cap ra
 | upstream_compat/shared_reactivity.rs:3488 `named_function_standing` | WINDOW_DEPTH 3 | `Unproven` | yes | named: `Unproven(search-depth-limit)` |
 | local_access.rs:3218 `closed_source` | 6 | `None`: the strengthening only | yes | |
 | local_access.rs:5090 `value_reaches` | 4 | false; mixed polarity at its callers (`value_reaches_async_source` both ways) | unverified | open (see "Not fixed") |
-| local_access.rs:3379,3417 `calls_reach` | CALL_WALK_BUDGET 512 | falls back to `value_reaches` 4 | **no** (risk search, SC2009) | true past both |
+| local_access.rs:3379,3417 `calls_reach` | CALL_WALK_BUDGET 512 | falls back to `value_reaches` 4 | **no** (risk search, SC2009) | fixed: past the budget it may reach (SC2009 U, `optimistic-reach-unresolved`); `discover_optimistic_reach` now returns early with no async optimistic source |
 | local_access.rs:4948 `span_may_make_computation` | 4 | true | yes | |
 | local_access.rs:2845 `may_run_in_leaf_owner_within` | 3 | false: not in a leaf owner (risk) | unverified (probe lo-5: U by the general obligation) | open: no crossing input found |
 | local_access.rs:1202 `view_hides_key` | 8 | false: the read stays a read | yes | |
@@ -145,7 +149,7 @@ follows), `search-budget-exhausted` (a work budget, a site cap or a round cap ra
 
 | Site | Bound | At the limit | Sound | Action |
 |---|---|---|---|---|
-| interproc/refresh.rs:48,93,573 forwarding loop | FORWARDING_ROUNDS 8 | chains past 8 truncated ("retained, not fixed") | **no** (probe pm-12) | owners still growing: obligation |
+| interproc/refresh.rs:48,93,573 forwarding loop | FORWARDING_ROUNDS 8 | chains past 8 truncated ("retained, not fixed") | **no** (probe pm-12) | fixed: `widen_truncated_forwarding` (parameter_use.rs), unmodeled use on owners still growing and their forwarders, fixed point, both loops; SC9012 `parameter-use-unmodeled` |
 | execution_role/write_components.rs:72,79,126,141,323 | STEP_BUDGET 2^20, WALK_STEP_BOUND 2^16 | `Unknown` (ADR 0560) | yes | |
 | local_access.rs:7984 `exhausted` | walk bound | `Unknown` climb | yes | |
 | execution_role/invocation_flow.rs:17,584,765; event_literals.rs:196,223,699 | FLOW_BUDGET 800 | nothing proven (flow_memos doc) | yes | |
@@ -161,16 +165,31 @@ the bound each answers no proof (`Unplaced`, `true` = a root or unread, `Unrun`,
 `owners/bindings.rs:272`, `symbols.rs` ×5, `lib.rs:2167` (fixpoints bounded by their size). Probes c2001-70, d2002-20,
 d3002-20: U. No change.
 
-## F, G
-
-Covered in B (attribution, primitive proofs, installed members) and the scope note.
-
 ## Not fixed (open)
 
-(filled per family)
+Listed in docs/open-work.md section 1.
+
+- `execution_role.rs:598` `dynamic_component_entry` (32 climbs, partial path). The fix is `Some(false)` past the loop (an
+  Unknown read role; `None` would keep `UntrackedRendering`). Not built: no crossing input (probe `dyn-34` never reaches it).
+- `local_access.rs:2845` `may_run_in_leaf_owner_within` (3): a risk search cut to false; probe `lo-5` is already uncertifiable
+  through the general dispatch obligation, so no crossing input shows it.
+- `local_access.rs:5090` `value_reaches` (4): callers use it both ways (`value_reaches_async_source` with `&&` and `!`); a fix
+  needs a tri-state at each caller (R's async-read code).
+- `accessor_provenance/resolver_dependencies.rs:328` `derived_objects` (24): fewer getter obligations past 24 hops.
+- Unverified, low reach: `typed_sources.rs:73` (8 views), `resolver_values.rs:522` (`context_origin`), `route_components.rs:564`
+  (32 nested routes), `interproc/obligations.rs:630` (64 members), `read_context.rs:472`.
+
+Also seen, not bounds: `cleanup.rs:224` drops the UnresolvedCallback obligation when the call has no validity fact (a missing
+fact answers silent); `effect_phase.rs` `instance_of`/`follow_export` `Unknown` for an unresolved hop answers silent (only
+the depth arm is now undecided); after_await `expand` returns silently for an unresolved or non-standard call.
 
 ## Progress
 
 - Family A done (ADR 0750): fixture `bounds-search-depth-limit`, process test `diagnostics_process::walks_past_their_depth_limit_are_uncertifiable` (base binary lacks every asserted row). Witnesses 220 of 335, same FAIL list. Corpus 0 moved (`~/EDF/tmp/flipw/bounds/sweep-A.json`, bins `bA`), wall +3%. Coverage: only the new fixture.
 - Family B done (ADR 0751): fixture `bounds-value-depth-limit`, ownership case `no-store-mutation-outside-setter/setter-alias-limit/001`, process test `value_chains_past_their_limit_are_uncertifiable`. Witnesses 220 same list. Corpus +14 SC9012 handed-member-dispatch (app-game ogl/solid-three/three-examples, probus-hk vehicleArt), each a receiver chain reaching a parameter or `this` one step past the old cut; 0 V moved (`sweep-B.json`, bins `bB`). Upstream: SC2003's store windows are product-owned (eslint-plugin-solid has no such rule).
-- Next: family D (`calls_reach` budget → true under a createOptimistic program; refresh FORWARDING_ROUNDS truncation → obligation).
+- Family D done (ADR 0752): fixture `bounds-budget-limit`, process tests `searches_past_their_budget_are_uncertifiable` and
+  `backend_process::forwarding_refresh_process::a_forwarding_chain_past_the_round_cap_widens_like_a_fresh_build` (kept vs fresh).
+  Witnesses 220 same list. Corpus +258 SC2009 U, all inferay `ui` (its store uses createOptimistic; calls in test files whose
+  reach passes 512 nodes); first cut without the async-optimistic-source guard gave +365 across 5 projects that never use
+  createOptimistic (the primitive check passes on the typings). Forwarding widening moved nothing in the corpus. Wall 135 s.
+- All families done. Remaining open items above.

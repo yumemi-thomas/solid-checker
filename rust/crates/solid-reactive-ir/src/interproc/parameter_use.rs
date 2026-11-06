@@ -734,6 +734,75 @@ pub(super) fn forward_through(
     }
 }
 
+/// ADR 0752: the forwarding loop stops at its round cap with chains still
+/// growing. An owner the next round would extend, and every owner that
+/// forwards one of its parameters there, may invoke members no round
+/// recorded: each gains an unmodeled use of the forwarded parameter (no call
+/// site can resolve it), to the fixed point of that closure, which needs no
+/// cap (an owner gains at most one entry per forwarding site). The gains are
+/// appended sorted, so the fresh loop and the replayed one agree.
+pub(super) fn widen_truncated_forwarding(
+    edges: &[(usize, usize, &Forwarding)],
+    members: &mut [Vec<ParameterMemberInvocation>],
+) {
+    let unmodeled = |edge: &Forwarding| ParameterMemberInvocation {
+        parameter: edge.parameter,
+        path: Vec::new(),
+        in_owner_body: edge.in_owner_body,
+        site: edge.site,
+        primitive_builtin: false,
+        dispatch_read_excluded: edge.excluded,
+        unmodeled: true,
+    };
+    let mut gained = std::collections::BTreeMap::<usize, Vec<ParameterMemberInvocation>>::new();
+    let gain = |gained: &mut std::collections::BTreeMap<usize, Vec<ParameterMemberInvocation>>,
+                members: &[Vec<ParameterMemberInvocation>],
+                owner: usize,
+                entry: ParameterMemberInvocation| {
+        let list = gained.entry(owner).or_default();
+        if members[owner].contains(&entry) || list.contains(&entry) {
+            return false;
+        }
+        list.push(entry);
+        true
+    };
+    for (owner, target, edge) in edges {
+        let mut added = Vec::new();
+        forward_through(edge, &members[*target], &members[*owner], &mut added);
+        if !added.is_empty() {
+            gain(&mut gained, members, *owner, unmodeled(edge));
+        }
+    }
+    loop {
+        let mut grew = false;
+        for (owner, target, edge) in edges {
+            let reaches = gained.get(target).is_some_and(|entries| {
+                entries
+                    .iter()
+                    .any(|entry| entry.parameter == edge.index && !entry.dispatch_read_excluded)
+            });
+            if reaches {
+                grew |= gain(&mut gained, members, *owner, unmodeled(edge));
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    for (owner, mut entries) in gained {
+        entries.sort_by_key(|entry| {
+            (
+                entry.site.start,
+                entry.site.end,
+                entry.parameter,
+                entry.in_owner_body,
+                entry.dispatch_read_excluded,
+            )
+        });
+        members[owner].extend(entries);
+    }
+}
+
 pub(super) fn equivalent_member_invocations(
     left: &[ParameterMemberInvocation],
     right: &[ParameterMemberInvocation],

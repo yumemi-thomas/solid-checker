@@ -410,6 +410,18 @@ fn kept_refresh(
             members[keys[key]].clone_from(value);
         }
     }
+    // ADR 0752: as the fresh loop, past the round cap.
+    let keys = &keys;
+    let edges = definitions
+        .iter()
+        .flat_map(|(owner, definition)| {
+            definition
+                .preds
+                .iter()
+                .map(move |(target, forwarding)| (keys[owner], keys[target], forwarding))
+        })
+        .collect::<Vec<_>>();
+    widen_truncated_forwarding(&edges, members);
     state.definitions = definitions;
     true
 }
@@ -584,4 +596,10 @@ fn fresh_refresh(
             members[owner].extend(added);
         }
     }
+    // ADR 0752: the cap cut a chain still growing.
+    let edges = edges
+        .iter()
+        .map(|(owner, target, forwarding)| (*owner, *target, forwarding))
+        .collect::<Vec<_>>();
+    widen_truncated_forwarding(&edges, members);
 }
