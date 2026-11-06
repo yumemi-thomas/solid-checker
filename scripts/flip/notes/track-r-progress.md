@@ -266,3 +266,22 @@ Worktree t3-b3846b2a, branch `claude/flip-r1-wip`, scratch `/Users/thomas/dev/sc
 - Judge reads App.tsx only (coordinator: keep); the checker holds the use instead: `transported_writes` gives a call transport carried from a withdrawn slot its own U.
 - Item 3 next: probe branch `claude/flip-r1-premise-probe`, measured against this commit's sweep.
 - Open, with item 3: `types/s02-setter-slot-function-escaped` and `types/s03-local-setter-function-escaped` (held false positives).
+
+### R1d handoff (context limit), 2026-11-07
+
+Landed: `f11b000cd` (ADR 0803) on `claude/flip-r1`. Local branches, none pushed:
+- `claude/flip-r1-premise-probe` `429479d83`: item 3 measurement probe (R1D_VARIANT, R1D_SPELL). Numbers sent to the coordinator.
+- `claude/flip-r1-item3-wip` `b74a9ff88`: item 3 as decided (pv visible side; ADR 0801 census as the hidden side; `only_compared` learns `x = getPrototypeOf(y)` and `x === Array.prototype`; `reflective_target` for discarded Object.assign/defineProperty/defineProperties and Reflect set/defineProperty/deleteProperty, approved). Debug: 13 probes U, s02 s03 U, control and both negatives V, the two assign-result negatives U; unit test `only_a_value_of_an_array_intrinsic_reaches_iteration` passes. No release sweep or gates yet. Rebase it onto the false-clean fix below.
+- `claude/flip-r1-0803fix-wip` (this commit): the coordinator's priority fix of f11b000cd's false clean (35 corpus lines with no row; list `flip-reads/m11/adr0803-uses-without-row.tsv`). Pass 0 no longer removes withdrawn slots from the source tables. `reactive_analysis::hold_withdrawn_slot_rows` instead holds each row whose declaration (or `origin`) is a withdrawn slot: a read stays, `uncertain` and `withdrawn_slot` (new `ReactiveRead` field; `upstream_compat` treats it as not proven), and a write or async read becomes SC9012 U `tuple-iteration-written` at its own location. Release f2 (scratch `rf2`, `sweep-f2.json`): 34 of the 35 lines have rows again (the 35th, solid-three store.ts:240, carries the census module's `value-to-unresolved-callee` and has no row on 7c733a10a here either; it needs the merge with flip-census). iter-same 0 FC, 0 FP; legal iter-* 0 FP.
+- Not green: V 330 -> 336. Six SC1001 prop reads whose backing is a parent's withdrawn slot are V again (PointerDebugOverlay x2, SolidDockingExample:552, kui TopicListPage, viviana ColorControl and ColorKnob `createSignal(props.value)`). Their backing comes from `props_reactivity` (caller enumeration of attribute values), not `origin` or `prop_sources`. Next: when the props reactivity of a declaration rests on a withdrawn slot, give that read `withdrawn_slot` (or make the props backing unproven, as f11b000cd did by not having the source), then sweep f2 against e9: V must be 330 with no new V, and the 35 lines must keep their rows.
+- Still owed for the fix: fuzz shapes for the six use shapes (IIFE tuple, `let`, alias, hook object, object/instance, prop). The misuse judge reads App.tsx only and counts a U at the slot's reference in App.tsx as `remote` (recall-gap), so the old build fails only when the slot lives in another module (helpers.ts). Then coverage, patterns, check.mjs, ir-read-lint, ir-edit-fuzz, make verify, and a rediscovery entry.
+- Then item 4 (casts): W's report is read (scratch `research-w-lying-casts.md`). No code started.
+
+## R1e (2026-11-07)
+
+Worktree t3-b3846b2a, scratch `/Users/thomas/dev/sc-scratch.noindex/flip-r1` (`cases/x1` prop probes, `cases/x2` holder probes and controls, `cases/x2chrome`, `tools/{emptied,slotuse,near,wdtab}.cjs`, builds `rg1-rg3`, `rh1`).
+
+- ADR 0803 fix landed as one commit on f11b000cd (it folds R1d's 7c8f7db07). Props reactivity holds a withdrawn slot (unknown, no exact source, no accessor value; `StateKey::Withdrawn`), an unknown backing keeps `async-prop-getter`, open computes take a withdrawn slot as open, and the withdrawn set keys the local-access cache (a shadow mismatch in `returned_tuple_iteration_edits_match_cold_in_both_directions` otherwise).
+- flip-read.mjs `wd-*` (iter-same, slot in `slots.ts`): f11b000cd 96 false-clean, this build 72. The 72 (cross-module IIFE, class, let-read, alias-read) certify on 7c733a10a with no iteration write too (Chrome warns); the census build r3d gives each a row. Not ADR 0803's; closed by the merge with flip-census.
+- solid-three store.ts:240 needs the census's `value-to-unresolved-callee`: to confirm on the merged tree.
+- Next: item 3 replayed onto this commit (`claude/flip-r1-item3-wip` b74a9ff88), then casts.

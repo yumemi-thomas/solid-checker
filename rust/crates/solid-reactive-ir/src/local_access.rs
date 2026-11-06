@@ -1258,11 +1258,17 @@ impl LocalAccessContext<'_, '_> {
         let mut reused_files = 0;
         let mut recomputed_files = 0;
         if let Some(cache) = cache {
-            let exact_typescript_delta = typescript_unchanged || source_discovery_delta.is_some();
             // The symbols whose source-discovery entries moved since the
             // files were last checked, by value: whichever file's discovery
             // or project pass moved them (ADR 0397).
             let sources = self.sources();
+            // ADR 0803: a moved withdrawal reaches references no dependency
+            // names (`{ k: set }`): every chunk is recomputed.
+            let withdrawal_unchanged = cache.sources.as_ref().is_none_or(|previous| {
+                previous.withdrawn_array_slots == sources.withdrawn_array_slots
+            });
+            let exact_typescript_delta =
+                (typescript_unchanged || source_discovery_delta.is_some()) && withdrawal_unchanged;
             let mut candidate_dependencies = match &cache.sources {
                 Some(previous) => previous.changed_symbols(&sources),
                 None => cache.dependency_states.keys().cloned().collect(),
@@ -1419,6 +1425,7 @@ impl LocalAccessContext<'_, '_> {
             source_async_options: self.source_async_options.clone(),
             source_kinds: self.source_kinds.clone(),
             server_rendering: self.server_rendering,
+            withdrawn_array_slots: self.withdrawn_array_slots.clone(),
         }
     }
 
@@ -5685,6 +5692,7 @@ impl LocalAccessContext<'_, '_> {
         let origin = self.accessor_origins.get(symbol);
         let display_name = call.static_callee(&file.source).unwrap_or(name);
         result.reads.push(Arc::new(ReactiveRead {
+            withdrawn_slot: false,
             pending_open: false,
             summary_attributed: false,
             transported: false,
@@ -6987,8 +6995,10 @@ impl LocalAccessContext<'_, '_> {
                 pending_open = !uncertain;
                 uncertain = true;
             }
+            // ADR 0803: an unknown backing keeps the obligation too (a
+            // getter calling a withdrawn async slot is neither proven).
             if exact_root
-                && backing == PropUse::Reactive
+                && backing != PropUse::Static
                 && (execution != ExecutionRole::TrackedJsx
                     || self.may_run_in_leaf_owner(file, member.span))
                 && property.is_some_and(|property| {
@@ -7117,6 +7127,7 @@ impl LocalAccessContext<'_, '_> {
                 })
         };
         ReactiveRead {
+            withdrawn_slot: false,
             summary_attributed: false,
             transported: false,
             kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -7367,6 +7378,7 @@ impl LocalAccessContext<'_, '_> {
                 }
             }
             result.reads.push(Arc::new(ReactiveRead {
+                withdrawn_slot: false,
                 pending_open: false,
                 summary_attributed: false,
                 transported: false,
@@ -7621,6 +7633,7 @@ impl LocalAccessContext<'_, '_> {
             };
         }
         result.reads.push(Arc::new(ReactiveRead {
+            withdrawn_slot: false,
             pending_open: false,
             summary_attributed: false,
             transported: false,
@@ -7802,6 +7815,7 @@ impl LocalAccessContext<'_, '_> {
                 {
                     let call_location = location(file.path.shared(), call.span);
                     result.reads.push(Arc::new(ReactiveRead {
+                        withdrawn_slot: false,
                         pending_open: false,
                         summary_attributed: false,
                         transported: false,

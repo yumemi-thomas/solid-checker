@@ -271,10 +271,45 @@ export const SETTER_READS = {
   "setter-fn-apply": { ...SETTER_STORE, kind: "plain", contexts: ["effect-apply"], text: (o) => `setSw2((d) => { d.n = ${o}(); });` },
 };
 
+// ADR 0803: a slot a write to array iteration withdrew, held in another module (`slots.ts`) and used in App.tsx through the holders the
+// corpus spells (an IIFE's tuple, a `let`, a `const` alias, a hook's object, an object or class instance, a prop's value). The iterator is
+// written back unchanged (`iter-same`), so the use runs and Chrome warns; f11b000cd had no row at the use (corpus list m11, 35 lines).
+const SLOT = "const [a, b] = createSignal(1);";
+const SLOT_HOLDERS = {
+  iife: { file: 'export const [r, setR] = (() => { const [r, setR] = createSignal(1); return [r, setR] as const; })();', names: ["r", "setR"], read: "r()", write: "setR(2)" },
+  let: { file: `${SLOT}\nexport let r = a;\nexport let setR = b;`, names: ["r", "setR"], read: "r()", write: "setR(2)" },
+  alias: { file: `${SLOT}\nexport const r = a;\nexport const setR = b;`, names: ["r", "setR"], read: "r()", write: "setR(2)" },
+  hook: { file: "export function useR() {\n  const [r, setR] = createSignal(1);\n  return { r, setR };\n}", names: ["useR"], read: "useR().r()", write: "useR().setR(2)", held: "const h = useR();", heldRead: "h.r()", heldWrite: "h.setR(2)" },
+  object: { file: `${SLOT}\nexport const box = { r: a, setR: b };`, names: ["box"], read: "box.r()", write: "box.setR(2)" },
+  class: { file: `${SLOT}\nclass Box {\n  r = a;\n  setR = b;\n}\nexport const box = new Box();`, names: ["box"], read: "box.r()", write: "box.setR(2)" },
+};
+const slotHost = (holder, store = false) => ({
+  kind: "plain",
+  contexts: ["iter-same"],
+  importLines: [`import { ${holder.names.join(", ")} } from "./slots";`],
+  files: { "slots.ts": `import { ${store ? "createStore" : "createSignal"} } from "solid-js";\n\n${holder.file}\n` },
+});
+const SLOT_READS = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([name, holder]) => [
+  [`wd-${name}-read`, { ...slotHost(holder), text: () => `void ${holder.read};` }],
+  ...(holder.held ? [[`wd-${name}-held-read`, { ...slotHost(holder), text: () => `${holder.held} void ${holder.heldRead};` }]] : []),
+]));
+// A prop whose value reads the slot, read in the child's body (its strict window): a signal's accessor, and a store's key.
+const propRead = (value) => () => `const K = (p: { v: number }) => { void p.v; return null; }; void children(() => <K v={${value}} />)();`;
+SLOT_READS["wd-prop-read"] = { ...slotHost(SLOT_HOLDERS.alias), imports: ["children"], text: propRead("r()") };
+SLOT_READS["wd-prop-store-read"] = {
+  ...slotHost({ file: "export const [st, setSt] = createStore({ v: 1 });", names: ["st"] }, true),
+  imports: ["children"],
+  text: propRead("st.v"),
+};
+const SLOT_WRITES = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([name, holder]) => [
+  [`wd-${name}-write`, { ...slotHost(holder), text: () => `${holder.write};` }],
+  ...(holder.held ? [[`wd-${name}-held-write`, { ...slotHost(holder), text: () => `${holder.held} ${holder.heldWrite};` }]] : []),
+]));
+
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS },
-  REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...SLOT_READS },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
   CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,

@@ -92,7 +92,9 @@ impl LocalAccessContext<'_, '_> {
     }
 
     fn source_open(&self, symbol: &str, walk: &OpenWalk<'_>) -> bool {
-        if self.async_sources.contains(symbol) {
+        // ADR 0803: a withdrawn slot may be any function, a pending read
+        // included.
+        if self.async_sources.contains(symbol) || self.withdrawn_array_slots.contains(symbol) {
             return true;
         }
         if !walk.sources.borrow_mut().insert(symbol.into()) {
@@ -187,7 +189,9 @@ impl LocalAccessContext<'_, '_> {
                     .iter()
                     .any(|(path, span)| self.target_open(path, *span, walk));
             }
-            Some(Callable::Setter(_) | Callable::Action(_)) => return false,
+            Some(Callable::Setter(symbol) | Callable::Action(symbol)) => {
+                return self.withdrawn_array_slots.contains(symbol.as_str());
+            }
             None => {}
         }
         if let Some(symbol) = self.lookup.callee_symbol(file, callee) {
@@ -195,7 +199,7 @@ impl LocalAccessContext<'_, '_> {
                 return self.source_open(symbol, walk);
             }
             if self.setters.contains_key(symbol) || self.actions.contains_key(symbol) {
-                return false;
+                return self.withdrawn_array_slots.contains(symbol);
             }
         }
         if let Some((target_file, target)) =
@@ -251,7 +255,10 @@ impl LocalAccessContext<'_, '_> {
             });
         parameter
             || handed_value(
-                &self.handed_tables(Some(&|symbol| self.async_sources.contains(symbol))),
+                &self.handed_tables(Some(&|symbol| {
+                    self.async_sources.contains(symbol)
+                        || self.withdrawn_array_slots.contains(symbol)
+                })),
                 file,
                 value,
                 super::HANDED_DEPTH - 1,

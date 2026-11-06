@@ -50,6 +50,10 @@ pub(crate) enum PropsReactivity {
         /// that value performs a reactive read and must stay distinguishable
         /// from ordinary prop backing.
         accessor_values: BTreeSet<String>,
+        /// ADR 0803: prop names some call site passes a slot a write to array
+        /// iteration withdrew, as the whole value: whether calling it reads
+        /// an accessor is unproven either way.
+        accessor_unresolved: BTreeSet<String>,
         /// What the call sites pass for each prop a call of the prop's value
         /// may act through ([`PassedSources`]).
         passed: PassedSources,
@@ -194,6 +198,10 @@ impl PropsReactivityIndex {
                     accessor_values, ..
                 },
             ) if accessor_values.contains(name) => PropUse::Reactive,
+            Some(PropsReactivity::Enumerated {
+                accessor_unresolved,
+                ..
+            }) if accessor_unresolved.contains(name) => PropUse::Unknown,
             // Only a complete caller set can prove the value is *not* an
             // accessor; an escaping component keeps the obligation.
             Some(PropsReactivity::Enumerated { .. }) => PropUse::Static,
@@ -313,6 +321,10 @@ pub(super) struct ComponentInputs<'s> {
     pub(super) slots: &'s HashMap<crate::base::FileId, usize>,
     /// The symbols some analyzed file exports.
     pub(super) exported: &'s BTreeMap<SymbolId, ()>,
+    /// ADR 0803: a primitive's array-pattern slots, when a visible write to
+    /// array iteration withdrew them. They stay sources (each use is held),
+    /// but a value passed from one proves nothing about the prop.
+    pub(super) withdrawn: &'s HashSet<SymbolId>,
     /// The prop sources attached to each declaration, sorted, built on first
     /// use.
     pub(super) attached: std::sync::OnceLock<HashMap<DeclarationAt, Vec<SymbolId>>>,
@@ -353,6 +365,7 @@ impl ComponentInputs<'_> {
             StateKey::Runtime(symbol) => u64::from(self.runtime_sources.contains(symbol)),
             StateKey::Uses(path, span) => fingerprint(&self.uses.get(&(Arc::clone(path), *span))),
             StateKey::Exported(symbol) => u64::from(self.exported.contains_key(symbol)),
+            StateKey::Withdrawn(symbol) => u64::from(self.withdrawn.contains(symbol)),
             StateKey::Attached(path, start, end) => {
                 fingerprint(&self.attached_index().get(&(Arc::clone(path), *start, *end)))
             }
@@ -400,6 +413,11 @@ impl ComponentInputs<'_> {
     fn is_runtime(&self, symbol: &SymbolId) -> bool {
         self.note(super::trace::StateKey::Runtime(symbol.clone()));
         self.runtime_sources.contains(symbol)
+    }
+
+    fn is_withdrawn(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Withdrawn(symbol.clone()));
+        self.withdrawn.contains(symbol)
     }
 
     fn exported(&self, symbol: &SymbolId) -> bool {
@@ -751,6 +769,7 @@ pub(super) fn classify_one_component(
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
     let mut accessor_values = BTreeSet::new();
+    let mut accessor_unresolved = BTreeSet::new();
     let mut passed = PassedSources::new();
     let mut spreads = Vec::new();
     for (use_file, element) in component_uses {
@@ -802,11 +821,18 @@ pub(super) fn classify_one_component(
             };
             if attribute.namespace.is_none()
                 && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
-                && attribute.expression.is_some_and(|expression| {
-                    passed_expression_is_accessor(lookup, entities, inputs, use_file, expression)
-                })
+                && let Some(expression) = attribute.expression
             {
-                accessor_values.insert(attribute_name.to_owned());
+                match passed_expression_is_accessor(lookup, entities, inputs, use_file, expression)
+                {
+                    Some(true) => {
+                        accessor_values.insert(attribute_name.to_owned());
+                    }
+                    None => {
+                        accessor_unresolved.insert(attribute_name.to_owned());
+                    }
+                    Some(false) => {}
+                }
             }
             let entry = passed.entry(attribute_name.to_owned()).or_default();
             match attribute
@@ -920,6 +946,7 @@ pub(super) fn classify_one_component(
             reactive,
             unresolved,
             accessor_values,
+            accessor_unresolved,
             passed,
         },
         forwarded,
@@ -1090,19 +1117,27 @@ fn lone_spread_receiver_is_inert(
     }
 }
 
+/// Whether the attribute's whole value is a proven accessor; `None` for a
+/// slot ADR 0803 withdrew, which is neither proven.
 fn passed_expression_is_accessor(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
     inputs: &ComponentInputs<'_>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
-) -> bool {
+) -> Option<bool> {
     let expression = file.ast.peel_ts_sugar_span(expression);
-    entities
+    let Some(symbol) = entities
         .get(&location(file.path.shared(), expression))
         .cloned()
         .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))
-        .is_some_and(|symbol| inputs.is_accessor(&symbol))
+    else {
+        return Some(false);
+    };
+    if inputs.is_withdrawn(&symbol) {
+        return None;
+    }
+    Some(inputs.is_accessor(&symbol))
 }
 
 /// ADR 0509: whether an attribute's expression calls an async source
@@ -1150,8 +1185,10 @@ fn passed_source(
         .get(&location(file.path.shared(), expression))
         .cloned()
         .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))?;
-    (inputs.is_setter(&symbol) || inputs.is_action(&symbol) || inputs.is_accessor(&symbol))
-        .then_some(symbol)
+    // ADR 0803: a withdrawn slot is no exact source; the site passes `other`.
+    (!inputs.is_withdrawn(&symbol)
+        && (inputs.is_setter(&symbol) || inputs.is_action(&symbol) || inputs.is_accessor(&symbol)))
+    .then_some(symbol)
 }
 
 /// Whether a reference span is an export specifier's local name in the file it
@@ -1260,6 +1297,8 @@ fn classify_passed_expression(
             // The binder fallback covers plain locals entity facts skip.
             .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), root));
         match symbol {
+            // ADR 0803: a withdrawn slot proves nothing either way.
+            Some(symbol) if inputs.is_withdrawn(&symbol) => result = PropUse::Unknown,
             Some(symbol) if inputs.kind(&symbol) == Some(ReactiveSourceKind::Store) => {
                 let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
                     file.ast
@@ -1324,7 +1363,9 @@ fn classify_passed_expression(
             continue;
         }
         let callee = entities.get(&location(file.path.shared(), call.callee));
-        if callee.is_some_and(|symbol| inputs.is_accessor(symbol) && inputs.is_runtime(symbol)) {
+        if callee.is_some_and(|symbol| {
+            !inputs.is_withdrawn(symbol) && inputs.is_accessor(symbol) && inputs.is_runtime(symbol)
+        }) {
             return PropUse::Reactive;
         }
         // Any other call may read reactive state each time the compiled
@@ -1355,6 +1396,8 @@ fn classify_passed_expression(
             .cloned()
             .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), identifier.span));
         match symbol {
+            // ADR 0803: a withdrawn slot may hold anything, a store included.
+            Some(symbol) if inputs.is_withdrawn(&symbol) => result = PropUse::Unknown,
             // A store passed whole is a reference: reading the prop hands over
             // the proxy and reads no key. The receiver's own key reads are
             // what is reactive, and this classification does not follow them.

@@ -4734,5 +4734,17 @@
    "mx-reactive-write-in-owned-scope-iter-same-signal-direct-none-s-module-default-hook"
   ],
   "rediscovered": "iter-same (REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED, 3,624 programs): work-in-progress builds 492, 72 then 24 false-clean (references, then imports, then transported calls); 7c733a10a 0 (proved V); ADR 0803 0 false-clean, 0 false-positive"
+ },
+ {
+  "finding": "ADR 0803's first landing (f11b000cd) took withdrawn slots out of the source tables: a use through an IIFE's tuple, a `let`, a `const` alias, a hook's object, an object or class holder or a prop had no row (35 corpus lines, list m11/adr0803-uses-without-row.tsv), and a prop whose backing is a withdrawn store slot certified",
+  "found": "the integrator (Part 11), classifying f11b000cd's emptied lines (m11/classify174d.py); R1e, flip-read.mjs wd-* with the slot in slots.ts",
+  "fixed": "ADR 0803, the slot held where it is used (R1e)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-iter-same-wd-alias-write-direct-none",
+   "mx-reactive-write-in-owned-scope-iter-same-wd-let-write-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): f11b000cd 96 false-clean, this build 72, the 24 of wd-alias-write and wd-let-write now rows. The 72 left (wd-iife, wd-class, wd-let-read, wd-alias-read across modules) are false cleans on 7c733a10a too with no iteration write; the census build r3d gives each a row (ADR 0821, value-held-in-binding, value-in-class-field). Fixture iteration-written-slots variants prop-value (store and signal backing, f11b000cd certified the store one) and open-compute. Found before landing: with the slots kept as sources a withdrawal no longer moved the tables, so the daemon reused a file chunk whose references it had held (process test returned_tuple_iteration_edits_match_cold_in_both_directions, shadow mismatch); the withdrawn set now keys the local-access cache"
  }
 ]

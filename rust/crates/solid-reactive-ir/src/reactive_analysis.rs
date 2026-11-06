@@ -781,6 +781,7 @@ pub(crate) fn collect_project<'facts>(
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(siblings);
+    hold_withdrawn_slot_rows(ctx, &source.withdrawn_array_slots, draft);
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
@@ -789,6 +790,70 @@ pub(crate) fn collect_project<'facts>(
     upstream_compat::check_project(ctx, draft);
     timings.upstream_compat = compat_started.elapsed();
     interprocedural.factory_instances
+}
+
+/// ADR 0803: a withdrawn slot stays a source, so transport, the handed net and
+/// the census follow it to every use; each row whose source is one is held
+/// there. A read keeps its row, uncertain; a write or an async read is
+/// replaced by the obligation at its own location.
+fn hold_withdrawn_slot_rows(
+    ctx: &AnalysisContext<'_>,
+    withdrawn: &HashSet<crate::identity::SymbolId>,
+    draft: &mut ProgramDraft,
+) {
+    if withdrawn.is_empty() {
+        return;
+    }
+    let lookup = ctx.semantic_lookup;
+    let is_withdrawn = |declaration: &crate::Location| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(declaration.start_byte),
+            u32::try_from(declaration.end_byte),
+        ) else {
+            return false;
+        };
+        lookup
+            .entity_at(
+                declaration.path.as_ref(),
+                solid_facts::core::Span::new(start, end),
+            )
+            .is_some_and(|entity| withdrawn.contains(&*entity.symbol))
+    };
+    let obligation = |at: &crate::Location, callee: &str| crate::StaticDefect {
+        kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: callee.to_owned(),
+            member: None,
+        },
+        location: at.clone(),
+        analysis_context: crate::blockers::TUPLE_ITERATION_WRITTEN.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    };
+    let mut held = Vec::new();
+    for read in &mut draft.reads {
+        if is_withdrawn(&read.declaration) || read.origin.as_ref().is_some_and(is_withdrawn) {
+            read.uncertain = true;
+            read.withdrawn_slot = true;
+            held.push(obligation(&read.location, &read.accessor));
+        }
+    }
+    draft.writes.retain(|write| {
+        let keep = !is_withdrawn(&write.declaration);
+        if !keep {
+            held.push(obligation(&write.location, &write.setter));
+        }
+        keep
+    });
+    draft.async_reads.retain(|read| {
+        let keep = !is_withdrawn(&read.declaration);
+        if !keep {
+            held.push(obligation(&read.location, &read.accessor));
+        }
+        keep
+    });
+    for defect in held {
+        draft.push_defect(defect);
+    }
 }
 
 /// F0, ADR 0686: a transported target drops the handed obligation only if its
