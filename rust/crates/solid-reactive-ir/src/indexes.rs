@@ -94,9 +94,10 @@ pub(super) type ReturnedInvocationSites = std::sync::Mutex<
     >,
 >;
 
-/// Per-build cache of `component_mount_reach`, by function and depth, with the
-/// reads each answer took ([`SemanticLookup::component_mount_reach_memo`]).
-pub(super) type ComponentMountReach = std::sync::Mutex<
+/// Per-build cache of a disposal reach by span and depth, with the reads each
+/// answer took ([`SemanticLookup::component_mount_reach_memo`],
+/// [`SemanticLookup::disposal_reach_memo`]).
+pub(super) type DisposalReachMemo = std::sync::Mutex<
     HashMap<
         (String, Span, usize),
         (
@@ -897,7 +898,9 @@ pub(super) struct SemanticLookup<'a> {
     returned_invocation_sites: ReturnedInvocationSites,
     /// ADR 0782: where each proven component's mounts run, relative to a
     /// disposal. Every write in the component asks.
-    component_mount_reach: ComponentMountReach,
+    component_mount_reach: DisposalReachMemo,
+    /// ADR 0782: where each site runs relative to a disposal.
+    disposal_reach: DisposalReachMemo,
     /// This build's views of the returned-invocation and returned-source memos.
     invocation_answers: returned_invocations::State,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
@@ -1267,7 +1270,8 @@ impl<'a> SemanticLookup<'a> {
             assigned_member_names: crate::base::reads::Recorded::new(),
             reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
-            component_mount_reach: ComponentMountReach::default(),
+            component_mount_reach: DisposalReachMemo::default(),
+            disposal_reach: DisposalReachMemo::default(),
             invocation_answers: returned_invocations::State::default(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
@@ -2669,9 +2673,30 @@ impl<'a> SemanticLookup<'a> {
         depth: usize,
         compute: impl FnOnce() -> crate::execution_role::DisposalReach,
     ) -> crate::execution_role::DisposalReach {
+        Self::reach_memo(&self.component_mount_reach, path, span, depth, compute)
+    }
+
+    /// The memoised disposal reach of the site at `span` of `path`, asked `depth`
+    /// handles or mounts deep, as [`Self::component_mount_reach_memo`].
+    pub(crate) fn disposal_reach_memo(
+        &self,
+        path: &str,
+        span: Span,
+        depth: usize,
+        compute: impl FnOnce() -> crate::execution_role::DisposalReach,
+    ) -> crate::execution_role::DisposalReach {
+        Self::reach_memo(&self.disposal_reach, path, span, depth, compute)
+    }
+
+    fn reach_memo(
+        table: &DisposalReachMemo,
+        path: &str,
+        span: Span,
+        depth: usize,
+        compute: impl FnOnce() -> crate::execution_role::DisposalReach,
+    ) -> crate::execution_role::DisposalReach {
         let key = (path.to_owned(), span, depth);
-        let found = self
-            .component_mount_reach
+        let found = table
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(&key)
@@ -2685,7 +2710,7 @@ impl<'a> SemanticLookup<'a> {
         }
         // Computed outside the lock: the computation re-enters the lookup.
         let (computed, reads) = crate::base::reads::record(compute);
-        self.component_mount_reach
+        table
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .entry(key)

@@ -99,6 +99,26 @@ fn with_lookup<T>(
     body(&lookup)
 }
 
+/// ADR 0782: each disposal memo has its own table: a site and a function at
+/// one span are different questions.
+#[test]
+fn disposal_reach_memo_is_kept_per_site_and_depth_apart_from_the_mount_memo() {
+    use crate::execution_role::DisposalReach;
+    with_lookup("export function A() {}", &[], |lookup| {
+        let at = Span::new(0, 10);
+        let mount = lookup.component_mount_reach_memo(PATH, at, 0, || DisposalReach::Only);
+        let site = lookup.disposal_reach_memo(PATH, at, 0, || DisposalReach::NotIn);
+        assert_eq!((mount, site), (DisposalReach::Only, DisposalReach::NotIn));
+        // A repeat computes nothing; another depth is its own question.
+        let again = lookup.disposal_reach_memo(PATH, at, 0, || DisposalReach::Unplaced);
+        let deeper = lookup.disposal_reach_memo(PATH, at, 1, || DisposalReach::Unplaced);
+        assert_eq!(
+            (again, deeper),
+            (DisposalReach::NotIn, DisposalReach::Unplaced)
+        );
+    });
+}
+
 /// ADR 0782: the memo answers what the computation answered, per function and
 /// depth, and an answer computed in a probe is not kept.
 #[test]

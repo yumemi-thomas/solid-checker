@@ -668,7 +668,21 @@ pub(super) fn runs_in_disposal(
 
 /// [`runs_in_disposal`], `depth` handle calls deep (ADR 0456): a call of a
 /// cleanup's handle written in another cleanup asks the question again there.
+///
+/// Memoized per site and depth, for the same reason as
+/// [`component_mount_reach`]: a cleanup handle's calls fan out at each depth.
 fn runs_in_disposal_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> DisposalReach {
+    lookup.disposal_reach_memo(file.path.as_str(), span, depth, || {
+        runs_in_disposal_uncached(file, span, lookup, depth)
+    })
+}
+
+fn runs_in_disposal_uncached(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
