@@ -3757,6 +3757,18 @@ impl LocalAccessContext<'_, '_> {
         {
             return;
         }
+        // ADR 0752: with no async optimistic source in the program, no setter
+        // is [`Self::optimistic_async_setter`] and no call reaches one (a
+        // reach walk past its budget is otherwise undecided).
+        if !self.source_primitives.iter().any(|(symbol, primitive)| {
+            self.async_sources.contains(symbol.as_str())
+                && matches!(
+                    self.lookup.dialect.primitive(primitive),
+                    Some(Primitive::CreateOptimistic | Primitive::CreateOptimisticStore)
+                )
+        }) {
+            return;
+        }
         for call in &file.ast.calls {
             let here = location(file.path.shared(), call.span);
             if result
@@ -4020,8 +4032,9 @@ impl LocalAccessContext<'_, '_> {
     /// What running `value` may call: the value itself, a function's callees and
     /// the identifiers it hands on, what a hook returns, what a `let` is
     /// assigned. A name a function only mentions is no call. Each node is walked
-    /// once; past the budget, and at an import nothing here follows, the answer
-    /// is [`Self::value_reaches`]'s, the mention walk.
+    /// once; at an import nothing here follows, the answer is
+    /// [`Self::value_reaches`]'s, the mention walk. ADR 0752: a walk that ran
+    /// past the budget did not decide, so it may reach.
     fn calls_reach(
         &self,
         file: &solid_facts::FileFacts,
@@ -4029,8 +4042,7 @@ impl LocalAccessContext<'_, '_> {
         hit: &dyn Fn(&SymbolId) -> bool,
     ) -> bool {
         let mut seen = HashSet::default();
-        self.calls_reach_within(file, value, hit, &mut seen)
-            || (seen.len() > CALL_WALK_BUDGET && self.value_reaches(file, value, 4, hit))
+        self.calls_reach_within(file, value, hit, &mut seen) || seen.len() > CALL_WALK_BUDGET
     }
 
     fn function_calls_reach(

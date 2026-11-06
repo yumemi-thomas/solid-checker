@@ -2726,3 +2726,45 @@ fn value_chains_past_their_limit_are_uncertifiable() {
         "{past:?}"
     );
 }
+
+/// ADR 0752: a round cap or work budget that runs out leaves the question
+/// open. The forwarding loop's 8 rounds: a member read 12 helpers down from
+/// an apply is the caller's obligation (`parameter-use-unmodeled`), as 3 is
+/// (`parameter-member-targets-diverge`). `calls_reach`'s 512 nodes: a call
+/// whose reach goes on past them may run the optimistic setter (SC2009).
+#[test]
+fn searches_past_their_budget_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-budget-limit") else {
+        return;
+    };
+    let app = include_str!("../../../../fixtures/reactive-ir/bounds-budget-limit/App.tsx");
+    let optimistic =
+        include_str!("../../../../fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx");
+    let short = rows_at(&findings, "App.tsx", line_of(app, "fa1({ read: a })"));
+    assert_eq!(
+        short,
+        [(
+            "SC9012",
+            "uncertifiable",
+            "parameter-member-targets-diverge"
+        )]
+    );
+    let long = rows_at(&findings, "App.tsx", line_of(app, "fb1({ read: a })"));
+    assert_eq!(
+        long,
+        [("SC9012", "uncertifiable", "parameter-use-unmodeled")]
+    );
+    let past = rows_at(
+        &findings,
+        "optimistic.tsx",
+        line_of(optimistic, "function g1("),
+    );
+    assert_eq!(past.len(), 1, "{past:?}");
+    assert_eq!((past[0].0, past[0].1), ("SC2009", "uncertifiable"));
+    let within = rows_at(
+        &findings,
+        "optimistic.tsx",
+        line_of(optimistic, "function g3("),
+    );
+    assert!(within.is_empty(), "{within:?}");
+}

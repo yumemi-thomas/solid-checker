@@ -1061,3 +1061,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/bounds-search-depth-limit/node_modules/**
 !fixtures/reactive-ir/bounds-value-depth-limit/node_modules/
 !fixtures/reactive-ir/bounds-value-depth-limit/node_modules/**
+!fixtures/reactive-ir/bounds-budget-limit/node_modules/
+!fixtures/reactive-ir/bounds-budget-limit/node_modules/**
