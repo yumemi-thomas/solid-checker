@@ -5563,5 +5563,43 @@
    "mx-reactive-write-in-owned-scope-iter-same-wd-class-write-direct-none"
   ],
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
+ },
+ {
+  "finding": "item 5: a pattern over a store root reached through a holder slot (`const o = { st }; const { a } = o.st;`) was followed with no row; the file certified while Chrome warns",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-store-holder-pattern-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-store-holder-pattern-direct-none",
+   "mx-strict-read-untracked-root-use-store-holder-pattern-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs use-store-holder-pattern and use-namespace-throw (108 programs, body, effect-apply, root; Chrome warns on each): mg1 (e57cc0dc5) 106 false-clean, all certified, 2 typed-away; ADR 0812 0 false-clean (106 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PatternThroughSlot, negative PatternOnRoot"
+ },
+ {
+  "finding": "item 6: a namespace member (`import * as S`; `throw S.count`, then called) is listed at its property, which no identifier reference names, so the census skipped it; the file certified while Chrome warns",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-namespace-throw-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-namespace-throw-direct-none",
+   "mx-strict-read-untracked-root-use-namespace-throw-direct-none"
+  ],
+  "rediscovered": "the same run as item 5 (use-namespace-throw, 54 of the 108). Fixture reactive-ir/value-use-census ReviewTwo.tsx NamespaceThrown with ReviewNs.ts, negative NamespaceTracked; router-params/variants/use-action-imported-namespace gains its row at `actions.save`"
+ },
+ {
+  "finding": "item 10: a source not proven sync as an element's bare child (`<b>{v as unknown as string}</b>`, the only tsc-clean spelling) was followed with no row; the file certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-net-bare-child-direct-none",
+   "mx-async-outside-loading-boundary-show-net-bare-child-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs net-bare-child (36 programs, jsx and show; Chrome warns on each): mg1 36 false-clean, all certified; ADR 0812 0 false-clean (36 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PendingChild, negative SyncChild"
  }
 ]

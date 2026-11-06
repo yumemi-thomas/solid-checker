@@ -3023,6 +3023,71 @@
       "start": 91,
       "end": 93,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 336,
+      "end": 338,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 358,
+      "end": 362,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 538,
+      "end": 543,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 787,
+      "end": 794,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-pending-in-jsx",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 1228,
+      "end": 1229,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "computed-call-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 1533,
+      "end": 1543,
+      "fixes": 0
     }
   ]
 }

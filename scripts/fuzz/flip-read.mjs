@@ -237,6 +237,8 @@ export const NET_PENDING = {
   "net-peek-member": { ...PEEK, text: (o) => `const peek = (h: { go: () => number }) => h.go(); void peek({ go: ${o} });` },
   // W's census review H3: a tracked position excused a pending accessor reached through a pattern over a holder.
   "net-pattern-pending": { ...PEEK, text: (o) => `const v = { c: ${o} }; const { c: h } = v; void h();` },
+  // Review item 10: an element inserts and calls a bare accessor child, so a pending one is read there; only a cast spells it.
+  "net-bare-child": { ...PEEK, text: (o) => `void (<b>{${o} as unknown as string}</b>);` },
 };
 // ADR 0802: no fact calls these sources async, and each is pending by what its compute reads. Chrome warns on each; each certified before.
 const OPEN_MEMO = "const useM = (g: () => number) => createMemo(() => g());";
@@ -334,6 +336,10 @@ export const VALUE_USES = {
   "use-param-pattern": { ...USE_READ, text: (o) => `const run = (f: () => number) => { const v = { f }; const { f: g } = v; return g(); }; void run(${o});` },
   // H4: a store root's member reached through a holder slot needed no row.
   "use-store-holder-member": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; const [st] = createStore({ a: 1 }); const v = { st }; void v.st.a;` },
+  // Review item 5: a pattern over a store root reached through a holder slot needed no row.
+  "use-store-holder-pattern": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; const [st] = createStore({ a: 1 }); const v = { st }; const { a } = v.st; void a;` },
+  // Review item 6: a namespace member is listed at its property, which no identifier reference names, so nothing walked it.
+  "use-namespace-throw": { ...USE_READ, importLines: ['import * as Nsm from "./nsm";'], files: { "nsm.ts": 'import { createSignal } from "solid-js";\nexport const [nsc] = createSignal(1);\n' }, text: (o) => `void ${o}; try { throw Nsm.nsc; } catch (e) { void (e as () => number)(); }` },
   // H5: a bare child is what its parent does with it; `For` calls it as the mapper.
   "use-child-for": { ...USE_READ, imports: ["For"], text: (o) => `const el = <For each={[1]}>{${o}}</For>; void (el as unknown as () => unknown)();` },
   // P12 (R2b's held patterns): a store a hook returns, read through the hook's call; and a `let` export of an accessor.
