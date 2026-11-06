@@ -947,7 +947,27 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
                             })
                     })
                 });
-        if namespace_member {
+        // `import { Api } from "./m"`, `export * as Api from "solid-js"`:
+        // `Api.flush()` is the namespace's too, and only the export knows it
+        // (ADR 0780).
+        let imported_member = || {
+            file.ast
+                .reference_declaration(receiver)
+                .is_some_and(|declaration| {
+                    file.ast.imports.iter().any(|import| {
+                        !import.type_only
+                            && import.bindings.iter().any(|binding| {
+                                !binding.type_only && binding.local.span == declaration
+                            })
+                    })
+                })
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+        };
+        if namespace_member || imported_member() {
             add_symbol(member.property, false);
         }
         if file.ast.calls.iter().any(|call| call.span == member.object) {

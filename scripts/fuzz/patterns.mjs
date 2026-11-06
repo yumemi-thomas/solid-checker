@@ -2,7 +2,7 @@
 // review ran and tsc accepted. The generators write shapes, and these are the ones they cannot write yet: each is a held input for the fixes
 // (queue.md), judged on every run against open-defects.json (open-defects.mjs). Chrome judges a program by its reported and thrown codes.
 //
-//   node scripts/fuzz/patterns.mjs [--checker <bin>] [--typefacts <bin>] [--out <dir>] [--only substring] [--update]
+//   node scripts/fuzz/patterns.mjs [--checker <bin>] [--typefacts <bin>] [--out <dir>] [--only substring[,substring]] [--update]
 //
 // A false clean: Chrome reports a claimed code and no finding covers it, `certified` when the program has no uncertifiable finding. A false
 // positive: a violation of a rule with a runtime counterpart none of whose codes Chrome reported; the lane has no hit counters, so whether
@@ -165,7 +165,7 @@ async function main() {
   const out = value("--out", join(tmpdir(), `solid-checker-patterns-${process.pid}`));
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  const cases = patternCases().filter((entry) => !only || entry.id.includes(only));
+  const cases = patternCases().filter((entry) => !only || only.split(",").some((part) => entry.id.includes(part)));
   const records = await runChrome(cases, join(out, "chrome"));
   const findings = await runChecker(cases, join(out, "check"), { checker, typefacts });
   const expected = JSON.parse(readFileSync(join(here, "expected-silent.json"), "utf8")).patterns;

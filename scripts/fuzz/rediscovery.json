@@ -4146,5 +4146,67 @@
    "mx-strict-read-untracked-ref-named-store-dstr-assign-direct-closure"
   ],
   "rediscovered": "rm5 false-clean, the fix recall-gap: all 152 by id"
+ },
+ {
+  "finding": "createErrorBoundary and createLoadingBoundary from solid-js/internal return a memo's accessor; a read in a body certified, Chrome warns (b05, b06, a list fix: the old programs imported them from solid-js, which tsc rejects)",
+  "found": "T-other, patterns report P6",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-created-error-boundary-direct-none",
+   "mx-strict-read-untracked-body-created-loading-boundary-direct-none",
+   "mx-strict-read-untracked-root-created-error-boundary-alias-none"
+  ],
+  "rediscovered": "rt4 false-clean on all 72 created-*-boundary programs, the fix agree on all 72"
+ },
+ {
+  "finding": "`export * as Solid from \"solid-js\"` named no primitive: a read of a source made through it, and a store write, certified; Chrome warns (d7-export-star-as, -store)",
+  "found": "V-D7, patterns report P5",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-star-as-signal-direct-none",
+   "mx-strict-read-untracked-body-star-as-memo-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on all 72 star-as-* programs, the fix agree on all 72"
+ },
+ {
+  "finding": "`export * as Solid from \"solid-js\"`: a store made through it, written outside its setter, certified",
+  "found": "V-D7, patterns report P5",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-star-as-store-direct-none",
+   "mx-store-write-outside-setter-handler-star-as-store-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on all 36, the fix agree on all 36"
+ },
+ {
+  "finding": "`Api.flush()` in an apply, with `import { Api } from \"./m\"` and `export * as Api from \"solid-js\"`, certified: no property symbol was demanded, so the package root and the instance proof had no answer. Found by the new reexport-ns-as binding, not on any list",
+  "found": "the fuzzer, this slice's own shape",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-effect-apply-x-reexport-ns-as-none",
+   "mx-flush-in-effect-callback-effect-apply-rerun-x-reexport-ns-as-none"
+  ],
+  "rediscovered": "rt4 and the first fix false-clean, the final fix agree; 2,712 reexport-ns-as programs over every API code: 0 false cleans, 0 false positives"
+ },
+ {
+  "finding": "An inline onLoad in a control-flow callback answered DeferredCallback before the denied-event arm, so a read in it certified; Chrome warns (h18)",
+  "found": "T-other, patterns report P10",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-load-for-signal-direct-none",
+   "mx-strict-read-untracked-dny-load-show-signal-direct-none",
+   "mx-strict-read-untracked-dny-load-show-store-link-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean, the fix recall-gap (now uncertifiable): the 52 dny-load-for and dny-load-show programs"
  }
 ]

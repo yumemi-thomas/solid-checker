@@ -88,6 +88,14 @@ pub(crate) fn control_flow_execution_role(
             .max_by_key(|function| function.body.end - function.body.start)?;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
+        // A nested handler of an event the DOM also delivers on its own
+        // (`onLoad`), as `execution_role.denied-event` says in a body (ADR 0780).
+        if super::in_denied_handler(file, span) {
+            return Some(role_arm!(
+                "control_flow.control_flow_execution_role.denied-event",
+                ExecutionRole::Unknown
+            ));
+        }
         return Some(role_arm!(
             "control_flow.control_flow_execution_role.deferred-callback",
             ExecutionRole::DeferredCallback

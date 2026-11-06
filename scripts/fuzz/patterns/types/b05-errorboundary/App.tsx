@@ -1,4 +1,4 @@
-import { createOwner, createErrorBoundary, createLoadingBoundary, createRevealOrder } from "solid-js";
+import { createErrorBoundary } from "solid-js/internal";
 import { createSignal, createEffect, createRenderEffect, createTrackedEffect, createMemo, createStore, onCleanup, onSettled, getOwner, runWithOwner, createRoot, createContext, useContext, untrack, lazy, children, mapArray, repeat, Show, For, Errored, Loading, flush } from "solid-js";
 import { Dynamic, dynamic, clientOnly, render, Portal } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";

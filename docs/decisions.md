@@ -1930,3 +1930,7 @@ Walks that answered clean where they stopped (bounds audit): `effect_phase`'s 12
 <a id="adr-0752"></a>
 ## ADR 0752 — A budget that runs out decides nothing
 The forwarding loop stops after 8 rounds: `o.read()` forwarded through 12 helpers from an apply certified. An owner the next round would extend, and every owner forwarding to one, now gains an unmodeled use (an obligation at its callers), to a fixed point, sorted, in the fresh and replayed loops alike. `calls_reach` past 512 nodes may reach (SC2009), asked only with an async optimistic source. Corpus +258, inferay tests. Fixture `bounds-budget-limit`.
+
+<a id="adr-0780"></a>
+## ADR 0780 — Boundary accessors, `export * as` of Solid, a nested denied handler
+`createErrorBoundary` and `createLoadingBoundary` (`solid-js/internal`) return a memo's accessor, so they are sources (ADR 0690): proved violation in a body. `export * as Solid from "solid-js"` names every primitive, as `import * as Solid` does: proved violation. `Solid.flush()` through such a named import also needed the property's symbol, which only a namespace import demanded: a member callee of a named import now demands it, and `declaring_file` follows the export (proved SC2008). An inline `onLoad` in a control-flow callback took `deferred-callback` before the denied arm: now uncertifiable `function-run-unplaced`, as in a body. Fixtures `boundary-accessors`, `export-star-as-solid`, `control-flow-denied-handler`.

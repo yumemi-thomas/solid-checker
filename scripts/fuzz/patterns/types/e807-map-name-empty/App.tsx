@@ -12,5 +12,5 @@ const btn = (b: HTMLButtonElement) => { (globalThis as any).__b = () => b; };
 const click = async () => { (globalThis as any).__b().click(); };
 export function App() {
   const r = mapArray(() => [1], (x) => { c(); return x; }, { name: "" }); r;
-  return <p>{1.length}</p>;
+  return <p>{r().length}</p>;
 }

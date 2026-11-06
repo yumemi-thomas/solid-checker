@@ -92,6 +92,21 @@ pub(super) fn add_solid_import_names(
             if primitives.is_empty() {
                 continue;
             }
+            // `export * as Solid from "solid-js"` (ADR 0780): the binding is
+            // the namespace, as `import * as Solid` is.
+            if let Some(binding) = &export.namespace_binding {
+                let location = location(file.path.shared(), binding.span);
+                if let Some(symbol) = entities.get(&location)
+                    && !undeclared(facts, symbol)
+                {
+                    for primitive in primitives {
+                        names.insert(
+                            symbol_id(&format!("{symbol}::{primitive}")),
+                            (*primitive).into(),
+                        );
+                    }
+                }
+            }
             for specifier in &export.specifiers {
                 let Some(primitive) = file.source_text(specifier.local.span) else {
                     continue;
