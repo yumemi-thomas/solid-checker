@@ -5477,5 +5477,19 @@
   ],
   "rediscovered": "flip-read.mjs one-arg-ts-ignore and one-arg-expect-error (body, root, handler; 108 ids, --confirm-with-chrome): d8848fd18 108 false-clean, the fix 0 false-clean, 108 agree. tsc-oracle cases 142 (reports) and 144 fail on d8848fd18 and hold here; their twins 143 and 145 (directive on another line) stay silent on both. Probes: refresh/affects targets, an apply or onSettled returning a number (Chrome INVALID_REFRESH_TARGET, INVALID_AFFECTS_TARGET, REACTIVITY_HALTED): certified on d8848fd18, U solid-call-rejected-unchecked here",
   "outside": "the refresh/affects and returned-cleanup shapes: the generator cannot claim INVALID_REFRESH_TARGET or INVALID_AFFECTS_TARGET (codes.mjs: out of scope, typed away) nor REACTIVITY_HALTED (a consequence code); probes cases/sup2 and fixture reactive-ir/tsc-suppressed-rejections hold them"
+ },
+ {
+  "finding": "a store handed to a selected package's function that reads it (`JSON.stringify(o)`, `o.a`) or writes it (`o.a = 5`) in a component body: certified, Chrome warns STRICT_READ_UNTRACKED and STORE_WRITE_OUTSIDE_SETTER. R2c held them for the census",
+  "found": "open-defects values/d8-pkg-plain-json, values/d8-pkg-plain-member-read, values/d8-pkg-plain-store-handoff (V-D8)",
+  "fixed": "ADR 0692",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/d8-pkg-plain-json",
+   "values/d8-pkg-plain-member-read",
+   "values/d8-pkg-plain-store-handoff"
+  ],
+  "rediscovered": "patterns --only d8-pkg (22 programs): build re5 (e528d1841, no census) 3 false-clean, certified with no finding; build rm2 (the census merged, 9954cf5e9) 22 fine, the three U SC9012 value-to-unresolved-callee at the call. The census WIP commit 035286ae0 had dropped them from open-defects.json with no entry naming them; this is that entry. Same-file twins (cases/d8in, Chrome confirmed): re5 certified, rm2 U value-root-in-helper and value-in-carrier; the write twin stays SC2003 V",
+  "outside": "the generator hands no store to a package function (no package source in grid programs): the pattern lane holds them"
  }
 ]
