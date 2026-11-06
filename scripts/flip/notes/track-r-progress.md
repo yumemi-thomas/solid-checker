@@ -98,3 +98,37 @@ Surprises:
 - `view` children in a generator context must be numbers: build a boundary in `body` with `domExpr`.
 
 Stop report, 2026-11-06, the 72 of `pos-flush-fn` (STORE_WRITE_OUTSIDE_SETTER, `nested-assign`, `nested-push`, mount `dynamic`): whole `mx-recall` on `rm5` showed 60 wrong-rule and 12 false positives. Chrome reports only the store write, so SC1001's no-window claim holds. Same checker, older judges (`scratch judge.sh`, partial runs: the oracle stops on the pinned rc): `7e9b9d5ee^` 0, `7e9b9d5ee` (ADR 0641, `beside`) 72 wrong-rule, `5b8a1d7b5^` 72, `5b8a1d7b5` 60 + 12. Every saved build back to `base` gives the same 72 under today's judge. So the judge brought them back, not the checker. The 12 were a line with no counter (`wrapUse`): the generator now counts it. A first fix in `silenceMeasured` was withdrawn on the owner's word and must not return.
+
+## Handoff at 976e73028, 2026-11-06
+
+Pushed. Tree clean. Fresh Opus 5.5 high agent: read this section first. Census research runs separately and writes `/tmp/sc-scratch.noindex/census-research/report.md`: read it before step 4.
+
+**Baselines.** Build `rk2/`, sweep `sweep-k2.json`: 21,616 U, 377 V, 0 unnamed, 0 exit errors. Patterns 139 open (3 FP, 133 FC, 3 no run). `make verify` green on this tree through verify-delta's escalation, in the lanes as written. Set `SOLID_CHECKER_TSRS_BIN=/Users/thomas/Documents/Github/tsrs/target/release/tsrs` for old-revision judges (scratch `judge.sh <rev> <bindir>`).
+
+**Merge first.** `origin/claude/flip-writes` moved 2 commits past the last merge: `138ff86e7` (ADR 0750, a walk past its depth limit is undecided) and `91311857e` (ADR 0751, a value chain past its limit). They overlap step 6 below. W took 0750 and 0751, so continue from 0752 if R's range runs out.
+
+**Next ADR.** Used 0689, 0690, 0691, 0693, 0696. 0692 (census) and 0695 (bounds) have text drafted in scratch `w0/all.diff`. 0694, 0697-0699 free.
+
+**Done of the owner's order.**
+1. Grids on the merged head: `mx-recall` 607,719 programs, 862 FC (690 ASYNC_OUTSIDE, 152 store destructures, 20 `then-named`), 196 wrong-rule, 12 FP. `lg-recall` 372,353 (lean, `rm5`, restored judge), 0 FP, 8 disturbed, all the unplaceable LOWERCASE_EVENT_ATTRIBUTE. Both before `976e73028`.
+2. F0 rest, F-C, F-D: done, ADRs 0689, 0690. Proved V: `children`, `mapArray`, `repeat`, `createMemo(fn)()`. Now uncertifiable: handed call results, `.toArray()`.
+3. C-D4: already held. `n01 n03 n06` give SC1001 U and SC5001 U, with no code change this session.
+5. `new Map()`: done, proved, ADR 0693.
+Owner's rulings: done, ADR 0696 (`c16`, `h17`, unevaluable branch). `scripts/fuzz/expected-silent.json` holds the ruled programs.
+The 152: all closed, now uncertifiable, ADR 0691. `ref-factory` measured 40, so the inference held.
+
+**Left, in order, all drafted in scratch `/tmp/sc-scratch.noindex/flip-reads/w0/`, none landed.**
+4. Census, ADR 0692: `hold/value_use.rs`, `census-block.rs` (goes back after the `open_members` block in `reactive_analysis.rs`), `p-census.diff`, `gen-values.py`, `hold/fixtures/value-use-census`. Add `mod value_use;`. Its blockers are already in `blockers.rs`. Debug-build probes before the merge: of 239 open FC patterns, 34 stayed certified with census and bounds together; all research probes closed but `u11`, W's. Then remeasure 690 ASYNC_OUTSIDE, 71 `async-value-member`, 20 `then-named`. Open lead: `h.a()` where a hook returns `{ a: createMemo(...) }`, read in tracked JSX, is certified (`hookm`): the source has no binding, so no async row.
+6. Bounds, ADR 0695: `p-bounds.diff`, `gen-chain.py`, `hold/fixtures/walk-bounds`, `notes/bounds-audit.md`. Includes the silent default `allowed-unplaced-nested`, certified where Chrome warns, and forwarded callbacks. Roles test pin already in the patch. Measure against W's ADRs 0750, 0751. Warning: a depth-limit answer of true in `value_reaches` moved 13 true V and raised 710 SC2009; the exact walk moved none. Keep the exact walk.
+7. `outside` entries: not done. Known stale reasons: "ASYNC_OUTSIDE ... not MISUSE_CODES" (cells since ADR 0668), "`<Dynamic>` is not a mount" (contexts `dyn-jsx-*` exist). `sort.call` was never tried: use a text variant, kind `store-array`, `Array.prototype.sort.call(${o})`. Text variants (`FLIP_READ_VARIANTS`, `text`, `imports`, `legal`) can write most sites `outside` says a context cannot; `variantContexts` must name legal contexts too, or no legal program is generated.
+Patches were cut before the merges: apply with `git apply --3way`, and `git add` new fixtures before `make coverage`, which refuses untracked stubs. Add the `.gitignore` exceptions.
+
+**Open for the owner.**
+- `flush(fn)`: SC1001 with the no-window hint on a store Get inside `flush(fn)`, in a body only `dynamic()` mounts. Do not change until a ruling is relayed. My answer in the final report: keep the warning.
+- 136 `LOADING_ON_OUTSIDE_HOLD` wrong-rule: SC5003 V beside it. The oracle records ASYNC_OUTSIDE_LOADING_BOUNDARY on all 136, so the claim is true. The code is placeless, so `corroborated` cannot place it, and SC5006 is not reported for these rows. Not on `open-defects.json`, not changed.
+- The 72 `pos-flush-fn`: closed in the judge and the generator (`922e1e7d1`). Cause and bisect are in that commit.
+- ADR 0683 +68, ADR 0686 +125, and `976e73028` +1,315: over the review threshold of 20, unreviewed.
+
+**W's leftovers, not started:** nested identity, `Object.entries`, destructured loop binding, and the SC2001 and SC4002 wording (`lib.rs`, the owner's "add wording for W's new blockers"). `u11` stays W's.
+
+**Traps from this session.** Grid processes read `scripts/fuzz/*.mjs` live: no edit there while a grid runs. A `silenceMeasured` fallback was withdrawn on the owner's word: a finding's line needs its own counter. verify-delta skips `tsc-oracle` unless a path escalates: `8833e6bfa` went out with that gate red. `make coverage` shows one row per fixture: compare snapshots row by row. The commit message of `976e73028` rests on grids from before its last two edits; rerun the whole set after the census.
