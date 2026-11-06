@@ -56,6 +56,11 @@ constrained set — "Dates, Maps, Sets, typed arrays, cyclic structures" (RFC
 `RegExp` rides the doc's "etc." and is included because the probe proves it
 throws (its prototype fails the plain-object check).
 
+A call TypeScript rejects (an extra argument is TS2554) is TypeScript's and
+silent, except where `tsc` may report nothing on it (a `// @ts-ignore` or
+`@ts-expect-error` that may cover a line of it, a `@ts-nocheck`, JavaScript):
+there it is uncertifiable, `solid-call-rejected-unchecked` (ADR 0830).
+
 ## Why is this bad?
 
 The declared TypeScript signature accepts the value — the type system is

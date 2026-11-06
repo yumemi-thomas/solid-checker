@@ -17,6 +17,12 @@ a non-callable apply or a non-function cleanup).
 - `Block.ts`: a block directive over two lines, which tsc 5 files under its last
   line and tsgo under its first: only one may suppress, uncertifiable.
 - `Nocheck.ts`: the leading `// @ts-nocheck` pragma: a violation.
+- `Positions.tsx`: `uncalled-accessor`'s positions TypeScript closes (a typed
+  native attribute, a class object value, a computed key, an arithmetic
+  operand), each suppressed: uncertifiable; with the directive on another
+  line (`Elsewhere`), silent.
+- `Server.ts`: `server-function-rich-argument`'s arity arm (TS2554)
+  suppressed: uncertifiable; with the directive elsewhere, silent.
 
 The stub is as strict as the published typings for these calls
 (`EffectFunction` returns `(() => void) | void`, no one-argument overload,

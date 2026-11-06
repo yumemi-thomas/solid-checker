@@ -5491,5 +5491,12 @@
   ],
   "rediscovered": "patterns --only d8-pkg (22 programs): build re5 (e528d1841, no census) 3 false-clean, certified with no finding; build rm2 (the census merged, 9954cf5e9) 22 fine, the three U SC9012 value-to-unresolved-callee at the call. The census WIP commit 035286ae0 had dropped them from open-defects.json with no entry naming them; this is that entry. Same-file twins (cases/d8in, Chrome confirmed): re5 certified, rm2 U value-root-in-helper and value-in-carrier; the write twin stays SC2003 V",
   "outside": "the generator hands no store to a package function (no package source in grid programs): the pattern lane holds them"
+ },
+ {
+  "finding": "SC1005's positions TypeScript closes (a typed native attribute, a class object value, a computed key, an arithmetic operand) and SC7007's arity arm stayed silent under a `// @ts-ignore` that covers them, where tsc reports nothing: silence with no reason behind it (coordinator, after ADR 0830)",
+  "found": "R2e's item 2 list; probes cases/sup6 (tsc, checker)",
+  "fixed": "ADR 0830",
+  "rediscovered": "probes cases/sup6: a82d5eed3 certified a1 c1 n1 v1 (k1 only through the census's value-use-unclassified); rt2 U solid-call-rejected-unchecked on each; the directive-elsewhere twins a2 k2 v2 (tsc rejects them) silent for the rule on both. Fixture reactive-ir/tsc-suppressed-rejections Positions.tsx and Server.ts hold them",
+  "outside": "no runtime code to claim: SC1005 has no Solid diagnostic (Chrome is quiet on `title={label}`), and SC7007 is not run (the harness has no `use server` host); the fixture holds both"
  }
 ]

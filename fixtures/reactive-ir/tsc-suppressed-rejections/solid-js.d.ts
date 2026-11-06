@@ -11,3 +11,10 @@ declare module "solid-js" {
   ): void;
   export function onSettled(callback: () => void | (() => void)): void;
 }
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    div: { title?: string; id?: string; class?: string | Record<string, boolean>; children?: unknown };
+  }
+  type Element = unknown;
+}

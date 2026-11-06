@@ -476,6 +476,23 @@ fn rich_arguments_in_file(
         }
         match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
             Some(resolved) if resolved.validity == ResolvedCallValidity::Valid => {}
+            // ADR 0830: a rejected call on a line a directive may silence, or
+            // in JavaScript, is reported by nothing: whether its arguments
+            // cross the transport is open, never a violation.
+            Some(_) if file.tsc_may_be_silent_within(call.span) => {
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ServerFunctionRichArgument {
+                        transport: RichArgumentTransport::Unresolved {
+                            reason: "TypeScript rejects this call, and a directive or an unchecked file may keep it from saying so".to_string(),
+                        },
+                    },
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: crate::blockers::SOLID_CALL_REJECTED_UNCHECKED.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+                continue;
+            }
             // Recovery and unresolved calls are TypeScript-owned. Emitting
             // a transport finding on the same invalid call would violate
             // the project's no-duplicate boundary.
