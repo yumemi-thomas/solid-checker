@@ -736,20 +736,20 @@ const SHAPE_DEFINERS: [&str; 2] = ["Object.defineProperties", "Object.assign"];
 
 /// Every write to a standard global, prototype or constructor member in the
 /// file: an assignment, or a definer's call on one.
-fn standard_patches(view: &FileView<'_>) -> Vec<Hazard> {
+fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Hazard> {
     let file = view.file;
     let ast = &file.ast;
     let mut patches = Vec::new();
-    for write in assignment_writes(file) {
+    for write in writes {
         match write {
             AssignmentWrite::Name(member, key) => {
-                let object = ast.members[member as usize].object;
+                let object = ast.members[*member as usize].object;
                 if let Some(root) = file.standard_root(object) {
-                    push_patch(&root, &key, &mut patches);
+                    push_patch(&root, key, &mut patches);
                 }
             }
             AssignmentWrite::PrototypeOwner(member) => {
-                let prototype = ast.members[member as usize].span;
+                let prototype = ast.members[*member as usize].span;
                 if let Some(root) = file.standard_root(prototype) {
                     push_patch(&root, ANY_MEMBER, &mut patches);
                 }
@@ -760,15 +760,17 @@ fn standard_patches(view: &FileView<'_>) -> Vec<Hazard> {
     // `globalThis[key] = f`: a key no fact reads.
     for assignment in &ast.assignments {
         let target = ast.peel_ts_sugar_span(assignment.target);
+        // The root first: most computed writes are `xs[i] = v`, and the tests
+        // after it scan the file's tables.
         if ast.computed_members.binary_search(&target).is_ok()
+            && let Some(member) = ast.member_at(target)
+            && let Some(root) = file.standard_root(member.object)
             && !ast
                 .literal_computed_members
                 .iter()
                 .any(|literal| literal.span == target)
-            && let Some(member) = ast.member_at(target)
             && crate::indexes::constant_string_key(file, member.property).is_none()
             && !symbol_key(file, member.property)
-            && let Some(root) = file.standard_root(member.object)
         {
             // A key the types pin: an imported `const`.
             let key = view
@@ -1090,14 +1092,15 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));
     }
-    let patches = standard_patches(view);
+    let writes = assignment_writes(file);
+    let patches = standard_patches(view, &writes);
     if !patches.is_empty() {
         entries.push((Hazard::AnyStandardPatch, 0));
     }
     for (index, patch) in patches.into_iter().enumerate() {
         entries.push((patch, ordinal(index)));
     }
-    for write in assignment_writes(file) {
+    for write in writes {
         match write {
             AssignmentWrite::Name(..) => {}
             AssignmentWrite::UnownedPrototype => entries.push((Hazard::UnownedPrototypeWrite, 0)),
