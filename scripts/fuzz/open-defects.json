@@ -641,15 +641,6 @@
    "certified": true
   },
   {
-   "id": "types/f18-reflect-apply",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/f26-accessor-as-callback",
    "item": "T-other",
    "outcome": "false-clean",
@@ -666,15 +657,6 @@
    "rules": [
     "no-write-in-pure-computation"
    ]
-  },
-  {
-   "id": "types/h04-reflect-apply-setter",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
   },
   {
    "id": "types/h08-setter-as-cb",
@@ -804,15 +786,6 @@
   },
   {
    "id": "values/d3-param-default",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d3-reflect-apply",
    "item": "V-D3",
    "outcome": "false-clean",
    "codes": [

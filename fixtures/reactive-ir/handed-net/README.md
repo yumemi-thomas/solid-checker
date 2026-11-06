@@ -1,0 +1,3 @@
+# handed-net
+
+**Claim (ADRs 0770-0773).** Each program writes, acts or reads through a value no fact resolves, Chrome reports it, and the build before certified it: a member past the first step (`n1`, `n4`, `n9`), a value handed to a helper at a tracked position (`r1`, `a1`, `a9`, `a13`, `h2`, `run-local`), a hook behind `.call`, `.bind`, a rebound or computed callee or a chosen hook (`c1`, `c7`, `c9`, `c11`, `c12`), a `Function.prototype` or `Reflect.apply` hand-off (`s6`, `s8`, `push-apply`). Each is uncertifiable, none a violation. `handed-net-guards` holds the programs the net must leave alone.

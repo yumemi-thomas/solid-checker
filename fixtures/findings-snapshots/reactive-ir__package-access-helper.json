@@ -357,6 +357,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 2136,
+      "end": 2149,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
       "start": 2214,
       "end": 2219,
       "fixes": 0
