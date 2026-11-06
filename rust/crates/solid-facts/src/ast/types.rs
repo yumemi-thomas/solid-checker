@@ -2150,8 +2150,18 @@ impl AstFacts {
         let mut pending = vec![root];
         let mut operands = Vec::new();
         let mut total = true;
+        // A postfix update is a fact whose `value_span` is its whole expression
+        // (`i++`), so that span leads back to itself and pushes two for every
+        // pop. Syntax is a tree, so a span met twice is such a cycle: it answers
+        // as written and the walk is not total.
+        let mut seen = std::collections::BTreeSet::new();
         while let Some(span) = pending.pop() {
             let span = self.peel_ts_sugar_span(span);
+            if !seen.insert(span) {
+                total = false;
+                operands.push(span);
+                continue;
+            }
             if let Some(tail) = sequence_tail(span) {
                 pending.push(tail);
             } else if let Some(conditional) = self.conditional_at(span) {

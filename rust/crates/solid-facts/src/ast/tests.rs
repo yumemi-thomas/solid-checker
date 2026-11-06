@@ -3525,6 +3525,26 @@ fn records_the_invoked_identifier_of_a_callee_spelling() {
 /// ADR 0468: the operands a comma, conditional or logical callee may evaluate
 /// to, and the identifier references among them; `&&`'s left is never one.
 #[test]
+fn a_composite_walk_ends_on_a_postfix_update() {
+    // `i++` is a fact whose value is the update itself: without a visited set
+    // the walk pushes two spans for every pop and fills memory.
+    let source = "let i = 0;\ni++;\n";
+    let facts = extract("/project/App.ts", source).unwrap();
+    let start = source.find("i++").unwrap() as u32;
+    let update = Span {
+        start,
+        end: start + 3,
+    };
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let operands = facts.composite_callee_operands(update);
+    assert_eq!(
+        operands.iter().map(|span| text(*span)).collect::<Vec<_>>(),
+        ["i", "i++"]
+    );
+    assert!(!facts.composite_callee_total(update));
+}
+
+#[test]
 fn lists_the_operands_a_composite_callee_may_evaluate_to() {
     let source = "declare const c: boolean;\n\
                   declare const f: () => void, h: () => void;\n\
