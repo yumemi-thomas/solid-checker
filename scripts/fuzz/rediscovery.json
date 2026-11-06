@@ -5601,5 +5601,31 @@
    "mx-async-outside-loading-boundary-show-net-bare-child-direct-none"
   ],
   "rediscovered": "flip-read.mjs net-bare-child (36 programs, jsx and show; Chrome warns on each): mg1 36 false-clean, all certified; ADR 0812 0 false-clean (36 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PendingChild, negative SyncChild"
+ },
+ {
+  "finding": "`flush()` in a closure handed through forwarding helpers (`hc1(() => flush())`, `hc1 = (g) => hc0(g)`) inside `action(function* …)` certified while Chrome throws FLUSH_IN_ACTION: the action-step climb stops at a forwarded closure and the unplaced net placed it",
+  "found": "W's recall grids at 4c81fcc00 (origin/claude/flip-research-w 41ccacbc0, research-w-grids-merged.md), every row rerun uncached in Chrome",
+  "fixed": "ADR 0832",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-action-x-direct-forward-2",
+   "mx-flush-in-action-action-x-wrapper-forward-13",
+   "mx-flush-in-action-action-after-yield-x-direct-forward-2",
+   "mx-flush-in-action-action-after-yield-x-destructured-forward-13"
+  ],
+  "rediscovered": "FLUSH_IN_ACTION forward-2/forward-13 ids (40, Chrome confirmed): build wd3 (e0606cbb7) 20 certified false cleans (action and action-after-yield, every binding); ADR 0832 0 (40 recall-gap, SC2006 U function-run-unplaced). Legal twins of the same layers (160): clean on both. Fixture rc21-flush-in-action-unplaced Forwarded.tsx (U, and silent after the body's await)"
+ },
+ {
+  "finding": "a read in a store setter's callback inside a named helper an effect's apply calls (`const wrapUse = () => { setSw2((d) => { d.n = a1(); }); }`) certified while Chrome warns STRICT_READ_UNTRACKED: the setter-callback row is the helper's, and no summary carries it",
+  "found": "R3b (open-work, held in open-defects.json until f1d5f3710's merge dropped the entry); W's recall grids at 4c81fcc00 (research-w-grids-merged.md)",
+  "fixed": "ADR 0833",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-none",
+   "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-module-helper"
+  ],
+  "rediscovered": "setter-fn ids (18, Chrome confirmed): build fl1 (4787f08e1) 6 certified false cleans (wrapper, every layer), alias and direct agree; ADR 0833 0 (wrapper recall-gap, SC1001 U function-run-unplaced at the read), alias and direct agree. Fixture reactive-ir/setter-callback-in-helper (InHelper U; fl1 silent there)"
  }
 ]

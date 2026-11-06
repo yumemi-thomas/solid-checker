@@ -1464,6 +1464,27 @@ fn named_closure_in_root_callback<'a>(
         .min_by_key(|function| function.body.end - function.body.start)
 }
 
+/// The call [`handed_to_unreviewed_call`] finds `function` written in.
+pub(crate) fn handed_to_unreviewed_call_at(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    file.ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })
+        .find(|(call, _)| {
+            lookup.primitive_at_call(file, call.span).is_none()
+                && !lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .is_some_and(|declaration| declaration.standard_library)
+        })
+        .map(|(call, _)| call.span)
+}
+
 /// Whether the first function around `function` that a primitive call takes as
 /// its callback, by the literal or by its binding, is taken in a position whose
 /// callback runs in a root the call creates, or lies past the climb's bound
@@ -1569,18 +1590,7 @@ fn handed_to_unreviewed_call(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast
-        .arguments_containing(function.span)
-        .filter(|(call, index)| {
-            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
-        })
-        .any(|(call, _)| {
-            lookup.primitive_at_call(file, call.span).is_none()
-                && !lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(|resolved| resolved.declaration.as_ref())
-                    .is_some_and(|declaration| declaration.standard_library)
-        })
+    handed_to_unreviewed_call_at(file, function, lookup).is_some()
 }
 
 /// Whether the first function around `function` that a primitive call takes
