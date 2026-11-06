@@ -39,6 +39,25 @@ pub(crate) fn summary_complete(
     .complete(file, function)
 }
 
+/// [`summary_complete`], once per function for one analysis: both filters of
+/// `reactive_analysis.rs` ask about every source call target. Each ask starts a
+/// walk of its own, so the answer does not depend on what was asked before.
+#[derive(Default)]
+pub(crate) struct SummaryMemo(rustc_hash::FxHashMap<(String, Span), bool>);
+
+impl SummaryMemo {
+    pub(crate) fn complete(
+        &mut self,
+        file: &solid_facts::FileFacts,
+        function: &FunctionFact,
+        lookup: &SemanticLookup<'_>,
+    ) -> bool {
+        crate::walk_memo::memoized(&mut self.0, (file.path.to_string(), function.span), |_| {
+            summary_complete(file, function, lookup)
+        })
+    }
+}
+
 impl Walk<'_, '_> {
     fn complete(&mut self, file: &solid_facts::FileFacts, function: &FunctionFact) -> bool {
         if !self.entered.insert((file.path.to_string(), function.span)) {

@@ -1463,3 +1463,36 @@ fn callback_result_identity_exhaustion_retains_typed_candidates() {
         });
     }
 }
+
+#[test]
+fn a_summary_memo_answers_as_the_plain_walk_does_in_any_order() {
+    let source = "
+        const value = 1;
+        function a() { return value; }
+        function b() { a(); return this; }
+        function c() { d(); }
+        function d() { c(); arguments; }
+        function e() { a(); }
+    ";
+    with_lookup(source, &[], |lookup| {
+        let file = &lookup.files()[0];
+        let functions = &file.ast.functions;
+        let plain = functions
+            .iter()
+            .map(|function| {
+                crate::interproc::completeness::summary_complete(file, function, lookup)
+            })
+            .collect::<Vec<_>>();
+        assert!(plain.contains(&true) && plain.contains(&false));
+        // Forward, backward and twice: no ask may lean on an earlier one.
+        let mut forward = crate::interproc::completeness::SummaryMemo::default();
+        let mut backward = crate::interproc::completeness::SummaryMemo::default();
+        for (function, answer) in functions.iter().zip(&plain) {
+            assert_eq!(forward.complete(file, function, lookup), *answer);
+            assert_eq!(forward.complete(file, function, lookup), *answer);
+        }
+        for (function, answer) in functions.iter().zip(&plain).rev() {
+            assert_eq!(backward.complete(file, function, lookup), *answer);
+        }
+    });
+}
