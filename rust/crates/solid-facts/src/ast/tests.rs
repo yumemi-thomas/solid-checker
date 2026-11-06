@@ -3581,3 +3581,35 @@ fn lists_the_operands_a_composite_callee_may_evaluate_to() {
         [true, false, true, true, true, true, false, false, false]
     );
 }
+
+/// Memory review item 7: the per-file index answers what the scan of `bindings`
+/// it replaced answered, for every name of every shape.
+#[test]
+fn identifier_binding_answers_what_the_scan_answered() {
+    let facts = extract(
+        "fixture.ts",
+        concat!(
+            "const a = 1; let b; var c = a; const { d, e: f } = g; const [h] = i;\n",
+            "function p(q: number, r = q) { const a = r; return a; }\n",
+            "for (const s of []) { const t = s; }\n",
+        ),
+    )
+    .unwrap();
+    let scan = |declaration| {
+        facts.bindings.iter().position(|binding| {
+            binding.shape == BindingShape::Identifier
+                && binding.names.iter().any(|name| name.span == declaration)
+        })
+    };
+    let names = facts
+        .bindings
+        .iter()
+        .flat_map(|binding| binding.names.iter().map(|name| name.span))
+        .collect::<Vec<_>>();
+    assert!(names.len() >= 9, "{names:?}");
+    for name in names.into_iter().chain([Span::new(0, 1)]) {
+        let indexed = facts.identifier_binding(name).map(std::ptr::from_ref);
+        let scanned = scan(name).map(|at| std::ptr::from_ref(&facts.bindings[at]));
+        assert_eq!(indexed, scanned, "{name:?}");
+    }
+}

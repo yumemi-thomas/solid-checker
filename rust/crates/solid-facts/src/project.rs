@@ -682,15 +682,7 @@ impl FileFacts {
             let declaration = self
                 .ast
                 .reference_declaration(self.ast.peel_ts_sugar_span(value))?;
-            value = self
-                .ast
-                .bindings
-                .iter()
-                .find(|binding| {
-                    binding.shape == crate::ast::BindingShape::Identifier
-                        && binding.names.iter().any(|name| name.span == declaration)
-                })?
-                .initializer?;
+            value = self.ast.identifier_binding(declaration)?.initializer?;
         }
         None
     }
@@ -707,12 +699,7 @@ impl FileFacts {
                 break;
             };
             value = ast
-                .bindings
-                .iter()
-                .find(|binding| {
-                    binding.shape == crate::ast::BindingShape::Identifier
-                        && binding.names.iter().any(|name| name.span == declaration)
-                })?
+                .identifier_binding(declaration)?
                 .initializer
                 .map(|initializer| ast.peel_ts_sugar_span(initializer))?;
         }

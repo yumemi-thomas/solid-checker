@@ -198,6 +198,8 @@ pub struct AstSpanIndex {
     returns_by_peeled_argument: OnceLock<HashMap<Span, Vec<u32>>>,
     /// Binding indexes by their initializer's peeled span.
     bindings_by_peeled_initializer: OnceLock<HashMap<Span, Vec<u32>>>,
+    /// The first plain-identifier binding of each name span.
+    identifier_bindings: OnceLock<HashMap<Span, u32>>,
     /// Answers to per-declaration questions, by (question, declaration).
     flags: RwLock<HashMap<(u8, Span), bool>>,
 }
@@ -325,6 +327,7 @@ impl AstSpanIndex {
             calls_by_peeled_callee: OnceLock::new(),
             returns_by_peeled_argument: OnceLock::new(),
             bindings_by_peeled_initializer: OnceLock::new(),
+            identifier_bindings: OnceLock::new(),
             flags: RwLock::new(HashMap::new()),
             arguments_by_span: SpanTable::build(argument_entries),
             argument_slots,
@@ -658,6 +661,26 @@ impl AstFacts {
         })
         .iter()
         .map(|index| &self.calls[*index as usize])
+    }
+
+    /// The first [`BindingShape::Identifier`] binding that declares the name at
+    /// `declaration`: what a scan of `bindings` finds, built once per file.
+    #[must_use]
+    pub fn identifier_binding(&self, declaration: Span) -> Option<&BindingFact> {
+        let index = self.span_index().identifier_bindings.get_or_init(|| {
+            let mut index = HashMap::new();
+            for (at, binding) in self.bindings.iter().enumerate() {
+                if binding.shape == crate::ast::BindingShape::Identifier {
+                    for name in &binding.names {
+                        index.entry(name.span).or_insert(at as u32);
+                    }
+                }
+            }
+            index
+        });
+        index
+            .get(&declaration)
+            .map(|at| &self.bindings[*at as usize])
     }
 
     /// The returns whose argument, peeled, is exactly `span`, in `returns`

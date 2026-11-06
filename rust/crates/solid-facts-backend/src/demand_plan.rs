@@ -979,9 +979,9 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
                 })
                 && file
                     .ast
-                    .calls
-                    .iter()
-                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+                    .calls_with_peeled_callee(member.span)
+                    .next()
+                    .is_some()
         };
         if namespace_member || imported_member() {
             add_symbol(member.property, false);
