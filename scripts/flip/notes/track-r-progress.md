@@ -201,6 +201,7 @@ Same branch, worktree and scratch `$S` as R2c. Baseline: build `rpv1`, sweep `sw
 |---|---|---|---|
 | primitive identity (ADR 0826) | root cause: `symbol_names` named the unknown symbol (root of every unresolved import) after `@solidjs/router`'s unresolved `import { createOwner } from "solid-js"`; a root with no declaration is named by nothing | | corpus `pi1` vs `pv1`: 0 V moved, -82 U (SC9012 78, SC3001 2, SC6001 2), +8 SC9012 U once hidden by one row per start. Witnesses 300 of 336, same fails. Coverage 0 moved |
 | unresolved import (ADR 0827), the coordinator's challenge to 0826 | | every runtime use of an import the compiler did not resolve, `import-unresolved` (was certified: JSX call, body read, effect argument, tag, write) | corpus `iu1` vs `pi1`: +7,109 U, 0 removed, 0 V moved. Coverage: 15 fixtures, additions only, read |
+| forward closure in a root or owner callback in a handler (ADR 0828), W's early grid | `pos-handler-root` forward-2/13: 38 V | `pos-handler-owner` forward-2/13: 38 U | 76 ids: 76 FC to 0; legal 2,242: 0 FP, 0 differ; corpus 0 moved; coverage 0 moved |
 
 ## R2 handoff, 2026-11-06
 
