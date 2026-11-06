@@ -605,15 +605,6 @@
    "certified": true
   },
   {
-   "id": "types/d01-cast",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/d01-dispose-in-apply-cleanup-read",
    "item": "T-D1",
    "outcome": "false-clean",
@@ -621,33 +612,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": false
-  },
-  {
-   "id": "types/d07-lying-thenable-cast",
-   "item": "T-D4",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/e107-patched-global",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/e108-patched-then",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
   },
   {
    "id": "types/e703-cleanup-component-write",
@@ -792,15 +756,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": false
-  },
-  {
-   "id": "types/x30-thenable-cast-to-promise",
-   "item": "T-D4",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
   },
   {
    "id": "values/d2-body-read-root",
@@ -1064,33 +1019,6 @@
    "certified": true
   },
   {
-   "id": "values/t3-bind-cast-arg",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-bind-cast-noarg",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-call-cast",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/t4-eq-empty",
    "item": "V-D4",
    "outcome": "false-clean",
@@ -1231,6 +1159,33 @@
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
+   ],
+   "certified": true
+  },
+  {
+   "id": "types/p3-cast-param",
+   "item": "R2 P3 residual: the assertion is away from the receiver",
+   "outcome": "false-clean",
+   "codes": [
+    "REACTIVE_WRITE_IN_OWNED_SCOPE"
+   ],
+   "certified": true
+  },
+  {
+   "id": "types/p3-cast-field",
+   "item": "R2 P3 residual: the assertion is away from the receiver",
+   "outcome": "false-clean",
+   "codes": [
+    "REACTIVE_WRITE_IN_OWNED_SCOPE"
+   ],
+   "certified": true
+  },
+  {
+   "id": "types/p3-cast-return",
+   "item": "R2 P3 residual: the assertion is away from the receiver",
+   "outcome": "false-clean",
+   "codes": [
+    "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
   }

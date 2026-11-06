@@ -146,6 +146,7 @@ Base `879eca007` reports, branch `claude/flip-r2`, ADRs 0780-0789. Scratch `/tmp
 |---|---|---|---|
 | List: 9 programs, 3 no-run | `a11`'s twin confirmed (STRICT_READ_UNTRACKED); `h03` is NO_OWNER_EFFECT, SC4001 stands; `e807` runs | | `e911` (`on:click` is TS2322) and `f08` (the plugin leaves `@dec` in, no way to run it; SC1001 U at its site) deleted |
 | P6, P5, P10 (ADR 0780) | `b05 b06 d7-export-star-as -store`, and `Api.flush()` SC2008, which the new binding found | `h18`, `onLoad` in a control-flow callback | 139 to 130 open |
+| P3, P4, F3 (ADR 0781) | | lying cast and patched global: `d01-cast d07 x30 e107 e108`, `t3-*-cast`, F3 no longer a false positive | 3 new held rows, `p3-cast-*`: an assertion away from the receiver, certified, Chrome warns. Needs the owner |
 ## R3
 
 Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).

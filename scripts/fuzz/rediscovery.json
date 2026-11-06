@@ -4221,5 +4221,60 @@
    "mx-store-write-outside-setter-pos-flush-fn-nested-assign-wrapper-closure-m-dynamic"
   ],
   "rediscovered": "focus on STORE_WRITE_OUTSIDE_SETTER, mx-recall, pos-flush-fn, rt4 against rt7, by id: 2,514 programs, 72 finding sets moved, 60 one SC1001 row and 12 two, V to U, SC2003 V on all 72, 0 outcomes moved. No old build fails: the judge rates a claim Chrome shows silent as agree on both builds, and the owner said not to change it. The moved findings are the check. Pattern programs returns/flush-dyn-path-get and returns/flush-dyn-real-read keep both shapes in the smoke set; fixture flush-write-path pins each answer"
+ },
+ {
+  "finding": "A lying cast on a standard method: `(t as unknown as Promise<void>).then(fn)` resolved to Promise.then from the written type, on the spot, through `as any`, or held by a binding: a write in fn certified, Chrome warns (d01-cast, d07, x30)",
+  "found": "T-D4, patterns report P3",
+  "fixed": "ADR 0781",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-cast-then-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-then-store-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-then-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-any-then-signal-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on 9 of the 24 direct-none cast programs, the fix 0: agree or recall-gap"
+ },
+ {
+  "finding": "A patched global or prototype: `window.setTimeout =`, `(globalThis as any).setTimeout =`, defineProperty on globalThis, `Promise.prototype.then =`, through an alias: a write in the callback certified, Chrome warns (e107, e108). ADR 0683 had called this a premise",
+  "found": "T-other, patterns report P4",
+  "fixed": "ADR 0781",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-patch-global-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-global-store-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-global-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-window-signal-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on 15 of the 30 direct-none patch programs, the fix recall-gap on all"
+ },
+ {
+  "finding": "The same casts and patches around a read: certified, Chrome warns",
+  "found": "the fuzzer, this slice's own shapes",
+  "fixed": "ADR 0781",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-cast-then-signal-direct-none",
+   "mx-strict-read-untracked-cast-then-memo-direct-none",
+   "mx-strict-read-untracked-patch-global-signal-direct-none",
+   "mx-strict-read-untracked-patch-global-memo-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on 24 programs, the fix recall-gap"
+ },
+ {
+  "finding": "The lying cast the other way: `(t as unknown as number[]).forEach(cb)` with a `t` that defers, SC1001 and SC2001 V, Chrome quiet (F3, s1-then-cast-array)",
+  "found": "patterns report F3",
+  "fixed": "ADR 0781",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-cast-late-foreach-signal-wrapper-none",
+   "lg-strict-read-untracked-cast-late-foreach-signal-hook-none",
+   "lg-strict-read-untracked-cast-late-foreach-signal-hook-member-none"
+  ],
+  "rediscovered": "rt4 37 STRICT_READ and 123 REACTIVE_WRITE false positives in 430 cast-late-foreach programs (layer none), the fix 0"
  }
 ]
