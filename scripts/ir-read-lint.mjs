@@ -167,7 +167,6 @@ export function readSites(text) {
     const add = (kind, count) => {
       for (let n = 0; n < count; n += 1) sites.push({ line: index + 1, kind });
     };
-    add("facts.files", (line.match(/\bfacts\s*\.\s*files\b/g) ?? []).length);
     add("files()", (line.match(/\.\s*files\s*\(\s*\)/g) ?? []).length);
     add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
     add("symbols_by_id", (line.match(/\bsymbols_by_id\s*\(\s*\)/g) ?? []).length);
@@ -181,6 +180,8 @@ export function readSites(text) {
       sites.push({ line: code.slice(0, found.index).split("\n").length, kind });
     }
   };
+  // rustfmt splits `facts\n.files` as often as it keeps it on one line.
+  joined("facts.files", /\bfacts\s*\.\s*files\b/g);
   joined("typescript-table", /\b(?:typescript|table)\s*\.\s*(?:entities|symbols|files)\s*\(\s*\)/g);
   joined(
     "symbol_names-scan",

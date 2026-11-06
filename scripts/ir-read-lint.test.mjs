@@ -81,6 +81,11 @@ test("production code after a #[cfg(test)] item is scanned; the item itself is n
   ]);
 });
 
+test("a read rustfmt splits over lines is counted at the line it starts on", () => {
+  const text = ["fn a(facts: &ProjectFacts) {", "    let n = facts", "        .files", "        .len();", "}", ""].join("\n");
+  assert.deepEqual(readSites(text), [{ line: 2, kind: "facts.files" }]);
+});
+
 test("a pending-review list is carried, not counted", () => {
   const allowed = { "a.rs": { file_by_path: 1, [PENDING]: ["1 file_by_path: why"] } };
   assert.deepEqual(violations(allowed, { "a.rs": { file_by_path: 1 } }), []);
