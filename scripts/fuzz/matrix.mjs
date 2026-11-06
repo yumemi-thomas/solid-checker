@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { partlySilentRules, besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { partlySilentRules, besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -94,7 +94,28 @@ export function judge(input) {
   return { outcome: "false-positive", detail: { ...detail, primary: verdict.detail?.beside ? "agree" : verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
 }
 
-function judgeSite({ code, site, typecheck: typed, checker, runtime, others = [] }) {
+/** The line of a diagnostic's own `loc` (`…App.tsx:12:25`; a grid slot's prefix differs), or null. */
+const locLine = (event) => {
+  const match = /App\.tsx:(\d+):/.exec(String(event.loc ?? ""));
+  return match ? Number(match[1]) : null;
+};
+
+/**
+ * The lines a placeless code's `loc` may name for this site: the opening line of each node enclosing the site (a proper prefix of its
+ * path in `built.lineTable`) whose span reaches the site's line. Solid's ASYNC_OUTSIDE_LOADING_BOUNDARY carries the `{` of the JSX hole
+ * of the render effect that raised it, which holds the site; its stack is the flush's and names no App.tsx line. A node that also holds
+ * another use site of the program (`others`) names no one site, so it is not one of them.
+ */
+const holeLines = (built, site, others = []) => {
+  const path = site?.path;
+  if (!built?.lineTable || !Array.isArray(path) || !Number.isInteger(site.line)) return [];
+  return built.lineTable
+    .filter((row) => Array.isArray(row.path) && row.path.length < path.length && row.path.every((key, index) => key === path[index]) && row.endLine >= site.line && row.line <= site.line)
+    .filter((row) => !others.some((lines) => lines.some((line) => row.line <= line && line <= row.endLine)))
+    .map((row) => row.line);
+};
+
+function judgeSite({ code, site, typecheck: typed, checker, runtime, others = [], built }) {
   // A program tsc rejects is no evidence of recall, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
@@ -154,12 +175,17 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
-  const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
+  const holes = holeLines(built, site, others);
+  const atHole = (event) => isPlacelessCode(event.code) && holes.includes(locLine(event));
+  const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && (attributed(event).some((position) => region.includes(position.line)) || atHole(event))));
+  // Counted on its own: a row corroborated only through a placeless code's `loc` (`holeCorroborated`), not a stack position.
+  const holeOnly = (finding) => !codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
   // A violation whose silence the control run measured on its own lines (`runtimeSilent`, pipeline.mjs) has no code that could have fired
   // there: `offSiteVerdicts` reads it as no-counterpart, and it names no rule wrongly here. It excuses nothing else: with no claiming rule the
   // row falls through to a recall gap or a false clean.
   const wrong = violations.filter((finding) => !corroborated(finding) && !finding.runtimeSilent && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
+  if (violations.some((finding) => corroborated(finding) && holeOnly(finding))) detail.holeCorroborated = true;
   // A claiming violation does not excuse another rule's on these lines: on the `agree` path the second finding is judged the same way
   // (`leaf-owner-forbidden-call` beside `no-await-primitive-in-tracked-scope`, ADR 0641).
   const beside = wrong.filter((finding) => !rules.includes(finding.rule));

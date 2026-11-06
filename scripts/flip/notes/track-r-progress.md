@@ -135,3 +135,11 @@ Patches were cut before the merges: apply with `git apply --3way`, and `git add`
 **W's leftovers, not started:** nested identity, `Object.entries`, destructured loop binding, and the SC2001 and SC4002 wording (`lib.rs`, the owner's "add wording for W's new blockers"). `u11` stays W's.
 
 **Traps from this session.** Grid processes read `scripts/fuzz/*.mjs` live: no edit there while a grid runs. A `silenceMeasured` fallback was withdrawn on the owner's word: a finding's line needs its own counter. verify-delta skips `tsc-oracle` unless a path escalates: `8833e6bfa` went out with that gate red. `make coverage` shows one row per fixture: compare snapshots row by row. The commit message of `976e73028` rests on grids from before its last two edits; rerun the whole set after the census.
+
+## R3
+
+Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).
+
+| Step | State | Moved | Notes |
+|---|---|---|---|
+| 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
