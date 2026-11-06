@@ -2400,10 +2400,20 @@ fn holder_call_role(
             }
         }
     }
+    // The path guard below stops a cycle, and each position re-explores what
+    // it shares with the others, so the depth is the bound on this search.
+    let Some(level) = holder_level(classifying) else {
+        return role_arm!(
+            "callee_roles.inheriting-holder-depth",
+            ExecutionRole::Unknown
+        );
+    };
+    classifying.insert(level.clone());
     let mut roles = Vec::new();
     for position in positions {
         let key = (file.path.to_string(), position);
         if !classifying.insert(key.clone()) {
+            classifying.remove(&level);
             return role_arm!(
                 "callee_roles.inheriting-holder-recursive",
                 ExecutionRole::Unknown
@@ -2420,6 +2430,7 @@ fn holder_call_role(
         ));
         classifying.remove(&key);
     }
+    classifying.remove(&level);
     if roles.iter().any(|role| role.reports_untracked_read()) {
         return at_call;
     }
@@ -2433,6 +2444,19 @@ fn holder_call_role(
         "callee_roles.inheriting-holder-silent",
         ExecutionRole::DeferredCallback
     )
+}
+
+/// How many holders [`holder_call_role`] nests through before it stops asking.
+const HOLDER_DEPTH: u32 = 8;
+
+/// The marker of the next nested [`holder_call_role`], or `None` past
+/// [`HOLDER_DEPTH`]. Kept in `classifying`, as the write marker is: the depth
+/// has to cross the role walk between two holders. The path holds a NUL, so no
+/// file's key is one.
+fn holder_level(classifying: &HashSet<(String, Span)>) -> Option<(String, Span)> {
+    (0..HOLDER_DEPTH)
+        .map(|level| ("\0holder".to_owned(), Span::new(level, level)))
+        .find(|marker| !classifying.contains(marker))
 }
 
 /// The calls whose callee is exactly the binding at `name`, in its own file.
@@ -2728,4 +2752,28 @@ fn carried_into_callback(
             !function.span.contains(*carrier)
                 && carried_into_callback(file, *carrier, callback, lookup, depth - 1)
         })
+}
+
+#[cfg(test)]
+mod holder_depth_tests {
+    use super::{HOLDER_DEPTH, HashSet, holder_level};
+
+    #[test]
+    fn nested_holders_stop_at_the_depth_limit_and_free_their_level() {
+        let mut classifying: HashSet<(String, solid_facts::core::Span)> = HashSet::default();
+        // A file's own key is no level, whatever its span.
+        classifying.insert(("a.tsx".to_owned(), solid_facts::core::Span::new(0, 0)));
+        let mut held = Vec::new();
+        for _ in 0..HOLDER_DEPTH {
+            let level = holder_level(&classifying).expect("within the depth");
+            assert!(classifying.insert(level.clone()), "each level is its own");
+            held.push(level);
+        }
+        // Past the depth the caller answers `Unknown`, never silent.
+        assert_eq!(holder_level(&classifying), None);
+        // A sibling position after a return is asked at the same depth again.
+        let last = held.pop().unwrap();
+        classifying.remove(&last);
+        assert_eq!(holder_level(&classifying), Some(last));
+    }
 }
