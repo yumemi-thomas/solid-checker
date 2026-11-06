@@ -22,6 +22,18 @@ pub struct FileFacts {
     pub compiler: Arc<ExecutionMap>,
 }
 
+/// What `tsc` says at one place of a file, as far as its text decides
+/// ([`FileFacts::tsc_silence_at`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TscSilence {
+    /// No directive or pragma reaches it: a diagnostic there is reported.
+    Reports,
+    /// One compiler may suppress it, or the file may be unchecked JavaScript.
+    Maybe,
+    /// Both compilers suppress a diagnostic there.
+    Silent,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct ProjectFacts {
     pub generation: Generation,
@@ -592,6 +604,111 @@ impl FileFacts {
             .collect()
     }
 
+    /// Whether `tsc` reports a diagnostic that starts at byte `offset` of this
+    /// file, as far as the file's own text decides (ADR 0830).
+    ///
+    /// The walk is tsgo's (`program.rs` `get_diagnostics_with_preceding_directives`,
+    /// tsc 5's `markPrecedingCommentDirectiveLine`): from the line above the
+    /// diagnostic upwards, a directive line suppresses it, and a line that is
+    /// neither blank nor begins (past spaces and tabs) with `//` ends the walk.
+    /// `Silent` only where both compilers agree: an exact directive, or a
+    /// TypeScript file with a canonical leading `// @ts-nocheck`. A JavaScript
+    /// file is `Maybe` (whether `checkJs` applies is not in the facts), and so
+    /// is a line only one compiler reads as suppressed.
+    #[must_use]
+    pub fn tsc_silence_at(&self, offset: u32) -> TscSilence {
+        if self.ast.typescript_check_pragma == Some(false) && !self.javascript() {
+            return TscSilence::Silent;
+        }
+        if self.javascript() || self.ast.typescript_nocheck_comment {
+            return TscSilence::Maybe;
+        }
+        if self.ast.typescript_directives.is_empty() {
+            return TscSilence::Reports;
+        }
+        let lines = crate::ast::LineTable::new(&self.source);
+        self.silence_of_line(&lines, lines.line(offset).saturating_sub(1))
+    }
+
+    /// Whether `tsc` may say nothing about some line of `span`: any line of it
+    /// is not [`TscSilence::Reports`]. The premise an uncertifiable result may
+    /// use where a diagnostic's exact line is not known (ADR 0830).
+    #[must_use]
+    pub fn tsc_may_be_silent_within(&self, span: Span) -> bool {
+        if self.javascript() || self.ast.typescript_nocheck_comment {
+            return true;
+        }
+        if self.ast.typescript_directives.is_empty() {
+            return false;
+        }
+        let lines = crate::ast::LineTable::new(&self.source);
+        let first = lines.line(span.start).saturating_sub(1);
+        let last = lines
+            .line(span.end.saturating_sub(1).max(span.start))
+            .saturating_sub(1);
+        (first..=last).any(|line| self.silence_of_line(&lines, line) != TscSilence::Reports)
+    }
+
+    /// The zero-based line byte `offset` falls on, by ECMAScript line
+    /// terminators.
+    #[must_use]
+    pub fn line_of(&self, offset: u32) -> u32 {
+        crate::ast::LineTable::new(&self.source)
+            .line(offset)
+            .saturating_sub(1)
+    }
+
+    /// Whether any place of the file may be one `tsc` says nothing about: it
+    /// is JavaScript, or holds a directive or a `@ts-nocheck` pragma.
+    #[must_use]
+    pub fn tsc_may_be_silent_somewhere(&self) -> bool {
+        self.javascript()
+            || self.ast.typescript_nocheck_comment
+            || !self.ast.typescript_directives.is_empty()
+    }
+
+    fn javascript(&self) -> bool {
+        [".js", ".jsx", ".mjs", ".cjs"]
+            .iter()
+            .any(|extension| self.path.as_str().ends_with(extension))
+    }
+
+    fn silence_of_line(&self, lines: &crate::ast::LineTable, line: u32) -> TscSilence {
+        let directives = &self.ast.typescript_directives;
+        let mut answer = TscSilence::Reports;
+        let mut current = line;
+        while let Some(above) = current.checked_sub(1) {
+            current = above;
+            for directive in directives {
+                if directive.exact && directive.first_line == above {
+                    return if answer == TscSilence::Maybe {
+                        TscSilence::Maybe
+                    } else {
+                        TscSilence::Silent
+                    };
+                }
+                if directive.first_line == above || directive.last_line == above {
+                    answer = TscSilence::Maybe;
+                }
+            }
+            let Some(text) = lines.text_of(&self.source, above) else {
+                break;
+            };
+            // tsgo: spaces and tabs, then the end, a line break or `//`.
+            // tsc 5: the whole line trimmed of any whitespace, empty or `//`.
+            let go = text.trim_start_matches([' ', '\t']);
+            let go = go.is_empty() || go.starts_with(['\r', '\n']) || go.starts_with("//");
+            let tsc = text.trim();
+            let tsc = tsc.is_empty() || tsc.starts_with("//");
+            match (go, tsc) {
+                (true, true) => {}
+                (false, false) => break,
+                _ => answer = TscSilence::Maybe,
+            }
+        }
+        answer
+    }
+
     /// Returns the UTF-8 source text covered by a fact span.
     ///
     /// Fact consumers use this instead of retaining owned copies of verbatim
@@ -912,6 +1029,88 @@ mod tests {
         );
         let joined = ProjectFacts::join(generation, "project", vec![file], table).unwrap();
         assert_eq!(joined.files.len(), 1);
+    }
+
+    fn facts_of(path: &str, source: &str) -> FileFacts {
+        let ast = extract(path, source).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: SourceHash::of(source),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap()
+    }
+
+    /// ADR 0830: what tsc says at the start of the line holding `marker`.
+    fn silence(path: &str, source: &str, marker: &str) -> TscSilence {
+        let offset = u32::try_from(source.find(marker).unwrap()).unwrap();
+        facts_of(path, source).tsc_silence_at(offset)
+    }
+
+    #[test]
+    fn a_directive_silences_the_line_below_through_blank_and_comment_lines() {
+        use TscSilence::*;
+        let exact = "// @ts-ignore\nX;\n";
+        assert_eq!(silence("a.ts", exact, "X"), Silent);
+        assert_eq!(
+            silence("a.ts", "/// @ts-expect-error\n\n  // note\nX;\n", "X"),
+            Silent
+        );
+        assert_eq!(silence("a.ts", "f(); // @ts-ignore\nX;\n", "X"), Silent);
+        assert_eq!(silence("a.ts", "/* @ts-ignore */\nX;\n", "X"), Silent);
+        // Code between the directive and the line ends the walk.
+        assert_eq!(silence("a.ts", "// @ts-ignore\nf();\nX;\n", "X"), Reports);
+        // The directive's own line, and a line above it, are not covered.
+        assert_eq!(silence("a.ts", "X; // @ts-ignore\n", "X"), Reports);
+        assert_eq!(silence("a.ts", "X;\n// @ts-ignore\nf();\n", "X"), Reports);
+        assert_eq!(silence("a.ts", "f();\nX;\n", "X"), Reports);
+        // A string holding the words is no comment.
+        assert_eq!(
+            silence("a.ts", "const s = `\n// @ts-ignore\n`; X;\n", "X"),
+            Reports
+        );
+    }
+
+    #[test]
+    fn only_a_reading_both_compilers_share_is_silent() {
+        use TscSilence::*;
+        // tsc 5 files a two-line block under its last line, tsgo under its first.
+        assert_eq!(silence("a.ts", "/* @ts-ignore\n */\nX;\n", "X"), Maybe);
+        // tsc 5 takes one extra slash; tsgo any number.
+        assert_eq!(silence("a.ts", "//// @ts-ignore\nX;\n", "X"), Maybe);
+        // tsc 5 trims a no-break space; tsgo stops there.
+        assert_eq!(silence("a.ts", "// @ts-ignore\n\u{a0}\nX;\n", "X"), Maybe);
+        // JavaScript: whether checkJs applies is not in the facts.
+        assert_eq!(silence("a.js", "X;\n", "X"), Maybe);
+    }
+
+    #[test]
+    fn a_leading_nocheck_pragma_silences_the_file_and_a_late_one_may() {
+        use TscSilence::*;
+        assert_eq!(silence("a.ts", "// @ts-nocheck\nf();\nX;\n", "X"), Silent);
+        assert_eq!(
+            silence("a.ts", "/* x */\n// @ts-nocheck\nf();\nX;\n", "X"),
+            Silent
+        );
+        assert_eq!(
+            silence("a.ts", "f();\n// @ts-nocheck\nf();\nX;\n", "X"),
+            Maybe
+        );
+        assert_eq!(
+            silence("a.ts", "// @ts-nocheck\n// @ts-check\nX;\n", "X"),
+            Maybe
+        );
+        let file = facts_of("a.ts", "// @ts-ignore\nf();\nX;\nY;\n");
+        let x = u32::try_from("// @ts-ignore\nf();\n".len()).unwrap();
+        assert!(!file.tsc_may_be_silent_within(Span::new(x, x + 5)));
+        assert!(file.tsc_may_be_silent_within(Span::new(x - 5, x + 5)));
+        assert!(file.tsc_may_be_silent_somewhere());
     }
 
     #[test]

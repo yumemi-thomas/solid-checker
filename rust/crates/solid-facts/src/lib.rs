@@ -19,8 +19,8 @@ mod project;
 
 pub use core::{resolve_relative_module_path, resolve_relative_module_path_indexed};
 pub use project::{
-    FileFacts, JoinError, ProjectFacts, StandardRoot, TypeScriptChanges, TypeScriptSymbol,
-    TypeScriptTable,
+    FileFacts, JoinError, ProjectFacts, StandardRoot, TscSilence, TypeScriptChanges,
+    TypeScriptSymbol, TypeScriptTable,
 };
 pub use resolution::{AttestedImport, AttestedImportIndex, ImportResolution, SpecifierAttestation};
 pub use typefacts;

@@ -1,0 +1,105 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Block.ts",
+      "start": 301,
+      "end": 313,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 224,
+      "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 277,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 277,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 328,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 680,
+      "end": 692,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 680,
+      "end": 692,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 785,
+      "end": 794,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 859,
+      "end": 871,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Nocheck.ts",
+      "start": 208,
+      "end": 220,
+      "fixes": 0
+    }
+  ]
+}

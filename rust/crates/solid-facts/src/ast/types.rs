@@ -438,6 +438,28 @@ pub struct AstFacts {
     /// withhold the premise that `tsc` reports an error in the file.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub typescript_directive_comment: bool,
+    /// Every comment TypeScript registers as an `@ts-ignore` or
+    /// `@ts-expect-error` directive (facts schema 90): its first and last
+    /// line, zero-based, by ECMAScript line terminators. `exact` is set only
+    /// when tsc 5 and tsgo agree that it is one: a one-line comment spelling
+    /// `//`, an optional third `/`, spaces or tabs, then the directive (a
+    /// `/* */` comment the same with its `/` and `*` run). tsc keys a
+    /// directive by its last line and tsgo by its first, so a comment that
+    /// spans lines is never exact. See [`crate::FileFacts::tsc_silence_at`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub typescript_directives: Vec<TypescriptDirectiveFact>,
+    /// The file's `@ts-check`/`@ts-nocheck` pragma (facts schema 90), read as
+    /// both compilers read it: the last `// @ts-check` or `// @ts-nocheck`
+    /// among the comments before the first token. `Some(false)` is a
+    /// canonical `// @ts-nocheck` there with no `@ts-check` in any comment
+    /// of the file; `Some(true)` any `@ts-check` comment; `None` neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typescript_check_pragma: Option<bool>,
+    /// Whether any comment of the file mentions `@ts-nocheck` (facts schema
+    /// 90), wherever it is: one the reading above does not take may still
+    /// switch checking off, so every line may be unchecked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub typescript_nocheck_comment: bool,
     /// Code no execution reaches, from the syntax alone (facts schema 77, ADR
     /// 0458): every statement after one that never completes normally in the
     /// same list (a `function` declaration excepted, it is hoisted), and every
@@ -1337,6 +1359,16 @@ pub struct ExportSpecifierFact {
 pub enum IdentifierRole {
     Binding,
     Reference,
+}
+
+/// One TypeScript checking directive comment (facts schema 90).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypescriptDirectiveFact {
+    pub first_line: u32,
+    pub last_line: u32,
+    /// Both compilers read it as a directive on `first_line` (= `last_line`).
+    pub exact: bool,
 }
 
 /// One `yield` expression (facts schema 88).
@@ -2360,6 +2392,9 @@ impl AstFacts {
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),
             typescript_directive_comment: false,
+            typescript_directives: Vec::new(),
+            typescript_check_pragma: None,
+            typescript_nocheck_comment: false,
             unreachable_regions: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),

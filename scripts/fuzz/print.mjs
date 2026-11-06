@@ -162,9 +162,9 @@ function render(program, instrument) {
   // A line the site runs from (`const wrapUse = () => { … };`) has a counter of its own in the twin, so a finding there is measured there.
   const auxLine = (node, line) => {
     if (!line.includes(AUX)) return line;
-    if (!siteIndex.has(node)) return line.replace(AUX, "");
-    const counter = instrument ? `__h(${allocate("auto", "aux", pathOf.get(node))}); ` : "";
-    return line.replace(AUX, () => `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}${counter}`);
+    if (!siteIndex.has(node)) return line.replaceAll(AUX, "");
+    // Each marker its own counter: a site text over lines (ADR 0830) may hold one beside the wrapper's.
+    return line.replaceAll(AUX, () => `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}${instrument ? `__h(${allocate("auto", "aux", pathOf.get(node))}); ` : ""}`);
   };
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
@@ -293,7 +293,8 @@ function render(program, instrument) {
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
-      case "use": return siteCall(e, uses.get(e).text);
+      // A site text over lines (a directive above the call, ADR 0830) marks the line its runtime frame sits in with AUX.
+      case "use": return siteCall(e, auxLine(e, uses.get(e).text));
       case "ref": return packageHelpers.has(e.name) ? accessOf(packageHelpers.get(e.name)).callee : nsHelpers.has(e.name) ? `H.${e.name}` : e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {

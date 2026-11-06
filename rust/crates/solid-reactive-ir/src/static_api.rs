@@ -66,6 +66,38 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) package_instances: &'a crate::PackageInstanceEvidence,
 }
 
+/// ADR 0830: a function-literal argument of `call` returns a value that is
+/// neither a function literal nor absent, on a line `tsc` may not check: the
+/// published type (`(() => void) | void`) is what rejects a non-cleanup there.
+fn cleanup_return_unchecked(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+    use solid_facts::ast::ReturnValueKind;
+    call.arguments.iter().any(|argument| {
+        let span = file.ast.peel_ts_sugar_span(argument.span);
+        file.ast
+            .functions
+            .iter()
+            .find(|function| function.span == span)
+            .is_some_and(|function| {
+                function
+                    .expression_return
+                    .iter()
+                    .chain(file.ast.returns.iter().filter(|returned| {
+                        crate::owners::containing_ast_function(&file.ast, returned.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                    }))
+                    .filter(|returned| {
+                        !matches!(
+                            returned.value,
+                            ReturnValueKind::Function | ReturnValueKind::Undefined
+                        )
+                    })
+                    .any(|returned| {
+                        file.tsc_may_be_silent_within(returned.argument.unwrap_or(returned.span))
+                    })
+            })
+    })
+}
+
 impl StaticApiContext<'_> {
     /// ADR 0710: a role that runs off every effect apply's stack: an event
     /// handler (unless a synchronous dispatch may deliver it from an apply),
@@ -135,6 +167,35 @@ impl StaticApiContext<'_> {
                         .into(),
                     fixes: vec![],
                     uncertain: semantics.missing_effect_function == ProofStatus::Uncertain,
+                });
+            } else if let Some(kind) = kind
+                && file.tsc_may_be_silent_somewhere()
+                && (self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| {
+                        resolved.validity == typefacts::ResolvedCallValidity::Recovery
+                    })
+                    && file.tsc_may_be_silent_within(call.span)
+                    || dialect.accepts_cleanup_return(kind) && cleanup_return_unchecked(file, call))
+            {
+                // ADR 0830: TypeScript rejects this primitive's call, or a
+                // value a callback of it returns as its cleanup, and on that
+                // line nothing may say so. The claims the type owns there (a
+                // retired rule's: an apply's return, a refresh or affects
+                // target, an `onSettled` return) are open.
+                result.defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: file
+                            .source_text(call.callee)
+                            .unwrap_or("this call")
+                            .to_owned(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: crate::blockers::SOLID_CALL_REJECTED_UNCHECKED.to_owned(),
+                    fixes: vec![],
+                    uncertain: true,
                 });
             }
             // Where each primitive takes its options object -- a second index

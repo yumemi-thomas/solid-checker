@@ -134,6 +134,12 @@ pub(crate) const IMPORT_UNRESOLVED: &str = "import-unresolved";
 /// required `T | undefined`, `unknown`): whether `tsc` accepts it, and so
 /// whether it is this rule's, is open.
 pub(crate) const DELETE_OPERAND_UNPROVEN: &str = "delete-operand-unproven";
+/// ADR 0830: a call of a Solid primitive TypeScript rejects (an absent or
+/// non-callable apply, a cleanup that is no function, a target `refresh` or
+/// `affects` refuses) on a line a `@ts-ignore`, `@ts-expect-error` or
+/// `@ts-nocheck` may silence, or in JavaScript `tsc` may not check. Nothing
+/// may report it, and the runtime may throw or warn there.
+pub(crate) const SOLID_CALL_REJECTED_UNCHECKED: &str = "solid-call-rejected-unchecked";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";
