@@ -10,6 +10,16 @@
       "start": 0,
       "end": 0,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-reexport-gap-project-reexport/source.ts",
+      "start": 205,
+      "end": 222,
+      "fixes": 0
     }
   ]
 }

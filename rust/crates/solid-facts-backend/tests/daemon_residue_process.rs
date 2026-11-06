@@ -385,7 +385,18 @@ fn an_answer_nobody_reads_still_leaves_what_the_edit_resolved_observed() {
     .unwrap();
     let fresh = project.check(false, None);
     let count = |run: &Run| run.json()["findings"].as_array().unwrap().len();
-    assert_eq!(count(&fresh), count(&unread) + 1);
+    // ADR 0827: unresolved, each use of the package's exports is open.
+    let unresolved = |run: &Run| {
+        run.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|finding| finding["analysisContext"] == "import-unresolved")
+            .count()
+    };
+    assert!(unresolved(&unread) > 0, "{}", unread.stderr);
+    assert_eq!(unresolved(&fresh), 0, "{}", fresh.stderr);
+    assert_eq!(count(&fresh), count(&unread) - unresolved(&unread) + 1);
     let retained = project.check(true, None);
     assert_eq!(count(&retained), count(&fresh), "{}", retained.stderr);
     assert!(retained.stdout == fresh.stdout, "{}", retained.stderr);

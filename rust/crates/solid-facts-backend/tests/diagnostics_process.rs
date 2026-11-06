@@ -697,6 +697,52 @@ fn returned_literal_body_facts_project_reads_only_at_invocation() {
     assert_eq!(rows[0]["kind"], "violation");
 }
 
+/// ADR 0827: every runtime use of an import the compiler did not resolve is
+/// open, `import-unresolved`, and nothing of a resolved import is.
+#[test]
+fn unresolved_import_uses_are_open() {
+    let Some(findings) = diagnostic_fixture("import-unresolved") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/import-unresolved/App.tsx");
+    let resolved = source.find("export function Resolved").unwrap() as u64;
+    let rows = findings
+        .iter()
+        .filter(|row| row["analysisContext"] == "import-unresolved")
+        .collect::<Vec<_>>();
+    let subjects = rows
+        .iter()
+        .map(|row| row["coverageSubject"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    // Body call, effect argument, default import call, write, namespace
+    // member, handler write, JSX call, tag.
+    assert_eq!(
+        subjects,
+        [
+            "helper",
+            "helper",
+            "missingDefault",
+            "store",
+            "Missing",
+            "store",
+            "helper",
+            "Helper"
+        ],
+        "{rows:#?}"
+    );
+    for row in rows {
+        assert_eq!(row["id"], "SC9012");
+        assert_eq!(row["kind"], "uncertifiable");
+        assert!(
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/App.tsx"))
+                && row["primaryLocation"]["startByte"].as_u64() < Some(resolved),
+            "{row:#?}"
+        );
+    }
+}
+
 #[test]
 fn local_declaration_dispatch_rejects_escapes() {
     let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {

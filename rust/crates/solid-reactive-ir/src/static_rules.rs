@@ -44,7 +44,11 @@ pub(crate) fn static_prepass<'a>(
             .as_deref_mut()
             .map(|chunks| &mut chunks.value_references),
         &inputs,
-        |file| primitive_value_references(ctx, file),
+        |file| {
+            let mut defects = primitive_value_references(ctx, file);
+            defects.extend(unresolved_import_references(ctx, file));
+            defects
+        },
     );
     push_defects(draft, &per_file);
     let per_file = crate::late_chunks::FileChunks::run(
@@ -145,6 +149,66 @@ fn primitive_result_methods(
                 fixes: vec![],
                 uncertain: true,
             });
+        }
+    }
+    defects
+}
+
+/// ADR 0827: every runtime reference of an import binding the compiler did
+/// not resolve. The binding's symbol aliases a root with no declaration (the
+/// checker's one unknown symbol): a missing module, an export its target
+/// lacks, an import silenced by `@ts-ignore`. Nothing says what the value is,
+/// so a call of it, a read of it in a tracked scope, a tag, a write through
+/// it are all open: an obligation at each reference, never a silent clean.
+/// A binding with no entity is the same missing fact. Type positions are
+/// erased and skipped.
+fn unresolved_import_references(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let ast = &file.ast;
+    let mut defects = Vec::new();
+    for import in ast.imports.iter().filter(|import| !import.type_only) {
+        for binding in import
+            .bindings
+            .iter()
+            .filter(|binding| !binding.type_only && binding.runtime_referenced)
+        {
+            let declaration = binding.local.span;
+            let unresolved = ctx
+                .entities
+                .at(file.path.as_str(), declaration)
+                .is_none_or(|symbol| ctx.semantic_lookup.symbol_undeclared(symbol.as_str()));
+            if !unresolved {
+                continue;
+            }
+            let name = file.source_text(declaration).unwrap_or("this import");
+            for &(reference, _) in
+                ast.reference_declarations
+                    .iter()
+                    .filter(|(reference, declared)| {
+                        *declared == declaration && *reference != declaration
+                    })
+            {
+                if ast
+                    .type_queries
+                    .iter()
+                    .chain(&ast.type_names)
+                    .any(|erased| erased.contains(reference))
+                {
+                    continue;
+                }
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: name.to_owned(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), reference),
+                    analysis_context: crate::blockers::IMPORT_UNRESOLVED.to_owned(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
         }
     }
     defects

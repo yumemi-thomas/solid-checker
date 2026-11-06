@@ -235,6 +235,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::blockers::IMPORT_UNRESOLVED => (
+            format!(
+                "{callee} is imported, but the compiler did not resolve the import, so what the value is, and what a call, read or write through it does here, cannot be proven"
+            ),
+            "Make the imported module and its export resolvable (generate it, install it, or declare its types), so solid-checker can see the value.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN => (
             format!(
                 "{callee} is used as a value, and which function it is cannot be proven: the type facts attribute a Solid primitive to it, but no import of a Solid module names it, so the calls that reach it are not followed"

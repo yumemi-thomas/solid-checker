@@ -125,6 +125,10 @@ pub(crate) const PROP_PENDING_UNPROVEN: &str = "prop-pending-unproven";
 /// ADR 0825: the producer attributes a Solid primitive to a value no import
 /// confirms (ADR 0711): which function it is, and so what reaches it, is open.
 pub(crate) const PRIMITIVE_IDENTITY_UNPROVEN: &str = "primitive-identity-unproven";
+/// ADR 0827: a runtime use of an import the compiler did not resolve (a
+/// missing module, an export its target lacks): what the value is, and so
+/// what any call, read, tag or write through it does, is unknown.
+pub(crate) const IMPORT_UNRESOLVED: &str = "import-unresolved";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";

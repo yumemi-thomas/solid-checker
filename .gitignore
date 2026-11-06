@@ -1099,3 +1099,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/compound-member-tag/node_modules/**
 !fixtures/reactive-ir/props-destructure-pending/node_modules/
 !fixtures/reactive-ir/props-destructure-pending/node_modules/**
+!fixtures/reactive-ir/import-unresolved/node_modules/
+!fixtures/reactive-ir/import-unresolved/node_modules/**

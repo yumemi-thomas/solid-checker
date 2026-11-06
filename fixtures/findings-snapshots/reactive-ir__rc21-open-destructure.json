@@ -42,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 257,
+      "end": 262,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -59,6 +69,16 @@
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 404,
       "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 468,
+      "end": 479,
       "fixes": 0
     },
     {
