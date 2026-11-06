@@ -536,6 +536,40 @@ pub(crate) fn collect_project<'facts>(
             read.uncertain = true;
         }
     }
+    // ADR 0694: in a body only `dynamic()` mounts, a write itself is
+    // uncertifiable, so a store Get that only leads to one claims no more.
+    for read in &mut draft.reads {
+        if read.kind.as_ref() != "store-path"
+            || read.execution != crate::ExecutionRole::UntrackedUnwindowed
+            || read.is_uncertifiable()
+        {
+            continue;
+        }
+        let place = |location: &typefacts::Location| {
+            Some((
+                analyzed_file(ctx, location.path.as_ref())?,
+                solid_facts::core::Span::new(
+                    u32::try_from(location.start_byte).ok()?,
+                    u32::try_from(location.end_byte).ok()?,
+                ),
+            ))
+        };
+        // A row attributed at a call of a helper stands for the Get in it.
+        let (Some((file, span)), Some((get_file, get))) = (
+            place(&read.location),
+            place(read.origin.as_ref().unwrap_or(&read.location)),
+        ) else {
+            continue;
+        };
+        if crate::execution_role::dynamic_component_entry(file, span, ctx.semantic_lookup)
+            == Some(true)
+            && !ctx.semantic_lookup.site_in_undecided_component(file, span)
+            && upstream_compat::serves_write_path(get_file, get, ctx.semantic_lookup)
+        {
+            read.uncertain = true;
+            read.via = crate::blockers::WRITE_PATH_VIA.into();
+        }
+    }
     // ADR 0570: a read not proven to run in the pass that created its source
     // (a later mount of a handed or module-scope memo) may meet it settled.
     for read in &mut draft.async_reads {

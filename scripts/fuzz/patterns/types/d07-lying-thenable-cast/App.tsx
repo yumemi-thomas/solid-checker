@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createRenderEffect, createMemo, onCleanup, onSettled, getOwner, createOwner, runWithOwner, createRoot, untrack, lazy, Show, For, Errored, flush } from "solid-js";
+import { createSignal, createEffect, createRenderEffect, createMemo, onCleanup, onSettled, getOwner, runWithOwner, createRoot, untrack, lazy, Show, For, Errored, flush } from "solid-js";
 import { Dynamic, Portal } from "@solidjs/web";
 declare const __log: (...a: any[]) => void;
 const [c, setC] = createSignal(1);

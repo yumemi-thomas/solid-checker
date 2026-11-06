@@ -24,6 +24,7 @@
 
 pub mod rule_options;
 mod shared_reactivity;
+pub(crate) use shared_reactivity::serves_write_path;
 mod structure;
 mod syntax;
 

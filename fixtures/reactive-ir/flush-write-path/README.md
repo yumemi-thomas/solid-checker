@@ -1,0 +1,3 @@
+# flush-write-path
+
+ADR 0694, the owner's ruling on SC1001 in `flush(fn)` in a body only `dynamicComponent` mounts (ADRs 0530, 0542). Rc.21 opens no strict window there. A real read keeps its violation, a violation meaning wrong if it runs: `RealRead`, `Compound`, `Alias`, `ReadMethod`, `Lookalike`, the right side of `ValueBeside`. A store Get that only leads to a write is uncertifiable, `write-path-read-unproven`: `PathAssign`, `PathDeep`, `PathPush`, `PathDelete`, `PathStandardWrite`, `PathClosure`, the left of `ValueBeside`. `Ordinary` is the same write in a plainly mounted component, where SC1001 keeps its violation.

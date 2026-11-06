@@ -71,6 +71,18 @@ export const CREATED_READS = {
   "created-map-array": { ...CREATED, imports: ["mapArray"], text: (o) => `const r = mapArray(() => [${o}()], (x) => x); void r();` },
   "created-repeat": { ...CREATED, imports: ["repeat"], text: (o) => `const r = repeat(() => ${o}(), (i) => i); void r();` },
   "created-memo-call": { ...CREATED, imports: ["createMemo"], text: (o) => `void createMemo(() => ${o}())();` },
+  // ADR 0780: the same from `solid-js/internal`, whose boundaries return their memo too.
+  "created-error-boundary": { ...CREATED, imports: ["createErrorBoundary"], text: (o) => `const r = createErrorBoundary(() => ${o}(), () => 0); void r();` },
+  "created-loading-boundary": { ...CREATED, imports: ["createLoadingBoundary"], text: (o) => `const r = createLoadingBoundary(() => ${o}(), () => 0); void r();` },
+};
+// ADR 0780: `export * as Api from "solid-js"` names every primitive, with no `import * as` of Solid in the project.
+const STAR_AS = { kind: "plain", importLines: ['import { Api } from "./solid-api";'], files: { "solid-api.ts": 'export * as Api from "solid-js";\n' } };
+export const STAR_AS_READS = {
+  "star-as-signal": { ...STAR_AS, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "const [r] = Api.createSignal(1); void r();" },
+  "star-as-memo": { ...STAR_AS, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "const r = Api.createMemo(() => 1); void r();" },
+};
+export const STAR_AS_WRITES = {
+  "star-as-store": { ...STAR_AS, contexts: ["body", "handler"], text: () => "const [r] = Api.createStore({ v: 1 }); r.v = 2;" },
 };
 // ADR 0696: a prop's function, run only behind a prop of the component. A caller that passes it warns; one that leaves it out runs nothing.
 const guarded = (attribute) => (o) => `const K = (p: { r?: () => number; on?: boolean }) => { if (p.on) void p.r!(); return null; }; void children(() => <K ${attribute}r={() => ${o}()} />)();`;
@@ -130,11 +142,11 @@ export const NET_STORE_CALLS = {
 
 export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: NET_WRITES,
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: NET_PENDING,
-  STORE_WRITE_OUTSIDE_SETTER: NET_STORE_CALLS,
+  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 

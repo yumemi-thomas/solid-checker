@@ -520,6 +520,10 @@ impl<'l, 'a> Walk<'l, 'a> {
         })
     }
 
+    fn analyzed(&self, path: &str) -> Option<&'a FileFacts> {
+        self.files().get(path).copied()
+    }
+
     /// The analyzed file a module specifier written at `span` in `file` lands
     /// on (the resolver's file, or the one the compiler included in its place);
     /// `None` when the resolution is not attested.
@@ -583,7 +587,28 @@ impl<'l, 'a> Walk<'l, 'a> {
         }
         let name = match (binding.kind, name) {
             (solid_facts::ast::ImportKind::Namespace, Some(name)) => name,
-            (solid_facts::ast::ImportKind::Namespace, None) | (_, Some(_)) => return None,
+            (solid_facts::ast::ImportKind::Namespace, None) => return None,
+            // `import { Api } from "./m"`, `export * as Api from "solid-js"`
+            // (ADR 0780): `Api.flush()` is the namespace's member.
+            (solid_facts::ast::ImportKind::Default, Some(_)) => return None,
+            (_, Some(name)) => {
+                let exported = binding.imported.as_deref()?;
+                let landing = self.landing(file, import.span, &import.module)?;
+                let target = self.analyzed(landing.as_str())?;
+                let export = target.ast.module_level_exports().find(|export| {
+                    !export.type_only && export.namespace.as_deref() == Some(exported)
+                })?;
+                return match self.follow_export(
+                    target,
+                    export.span,
+                    export.module.as_deref()?,
+                    &name,
+                    0,
+                ) {
+                    Chain::Found(path, module) => Some((path, module)),
+                    Chain::Missing | Chain::Unknown => None,
+                };
+            }
             (solid_facts::ast::ImportKind::Default, None) => "default".to_owned(),
             (_, None) => binding.imported.as_deref()?.to_owned(),
         };
@@ -610,7 +635,7 @@ impl<'l, 'a> Walk<'l, 'a> {
         let Some(landing) = self.landing(file, span, module) else {
             return Chain::Unknown;
         };
-        let Some(target) = self.files().get(landing.as_str()).copied() else {
+        let Some(target) = self.analyzed(landing.as_str()) else {
             // Outside the project: this file's import is the package's.
             return Chain::Found(file.path.to_string(), module.to_owned());
         };

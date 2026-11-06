@@ -4538,6 +4538,76 @@ const ARRAY_MUTATORS: [&str; 9] = [
     "copyWithin",
 ];
 
+/// ADR 0694: whether the member Get at `get` only serves a write's path: it
+/// is the object of a chain that ends in an assignment target, a delete target
+/// or an in-place array method's receiver, or it is the target a standard
+/// library write takes (`s.a` in `s.a.v = 7`, `s.items.push(1)`,
+/// `Object.assign(s.a, x)`). A value used as anything else is a read, which a
+/// chain through a call (`s.items.find(f).v = 1`) is.
+pub(crate) fn serves_write_path(
+    file: &FileFacts,
+    get: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let mut link = ast.peel_ts_sugar_span(get);
+    let Some(first) = ast.member_at(link) else {
+        return false;
+    };
+    // A method of an in-place call answers at the whole callee, `s.items.push`.
+    let in_place = |member: &solid_facts::ast::MemberFact| {
+        ARRAY_MUTATORS.contains(&text(file, member.property))
+            && ast.calls_with_peeled_callee(member.span).any(|call| {
+                !call.construct
+                    && lookup
+                        .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                        .is_some_and(|declaration| {
+                            declaration.qualified_name.as_ref()
+                                == format!("Array.{}", text(file, member.property))
+                        })
+            })
+    };
+    if in_place(first) {
+        return true;
+    }
+    loop {
+        if ast.calls.iter().any(|call| {
+            !call.construct
+                && call.arguments.first().is_some_and(|argument| {
+                    !argument.spread && ast.peel_ts_sugar_span(argument.span) == link
+                })
+                && lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_some_and(|declaration| {
+                        STANDARD_LIBRARY_WRITES
+                            .iter()
+                            .any(|(_, qualified)| declaration.qualified_name.as_ref() == *qualified)
+                    })
+        }) {
+            return true;
+        }
+        let Some(next) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == link)
+        else {
+            return false;
+        };
+        if ast.assignments.iter().any(|assignment| {
+            assignment_write_targets(file, assignment)
+                .iter()
+                .any(|target| ast.peel_ts_sugar_span(*target) == next.span)
+        }) || ast.deleted_targets.contains(&next.span)
+        {
+            return true;
+        }
+        if in_place(next) {
+            return true;
+        }
+        link = next.span;
+    }
+}
+
 /// A call of an in-place array method on a path of a proven store: the call
 /// resolves, through Type Facts, to the standard library's `Array` method, so
 /// a project method of the same name, a `ReadonlyArray`, a typed array and an

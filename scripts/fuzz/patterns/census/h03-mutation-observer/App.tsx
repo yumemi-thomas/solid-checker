@@ -11,8 +11,8 @@ const misuseEffect = (tag: string) => { log(tag, own()); createEffect(() => c(),
 export function App() {
   let el!: HTMLDivElement;
   queueMicrotask(() => new MutationObserver(() => misuseEffect("mo")).observe(el, { childList: true }));
-  return <div ref={el}>m</div>;
+  return <div class="t" ref={el}>m</div>;
 }
 export async function after() {
-  document.querySelector("div")!.append("x"); await new Promise((r) => setTimeout(r, 20));
+  document.querySelector(".t")!.append("x"); await new Promise((r) => setTimeout(r, 20));
 }
