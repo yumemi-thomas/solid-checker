@@ -319,8 +319,6 @@ pub(crate) fn collect_project<'facts>(
     handed.extend(local_access_context.open_array_member_obligations(&open_members));
     // The census: every reference of a proven source is followed, or an
     // obligation naming where it went.
-    let mut census =
-        crate::value_use::Census::new(ctx.semantic_lookup, ctx.entities, ctx.symbol_names);
     let mut callables = ctx
         .accessors
         .keys()
@@ -330,7 +328,14 @@ pub(crate) fn collect_project<'facts>(
         .collect::<Vec<_>>();
     callables.sort_unstable();
     callables.dedup();
-    for symbol in callables {
+    let mut census = crate::value_use::Census::new(
+        ctx.semantic_lookup,
+        ctx.entities,
+        ctx.symbol_names,
+        callables.iter().map(|symbol| symbol.as_ref()).collect(),
+        &interprocedural.source_call_targets,
+    );
+    for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
                 || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);

@@ -326,6 +326,11 @@ pub struct AstFacts {
     /// Exact operands of delete expressions, independently of assignments.
     #[serde(default)]
     pub deleted_targets: Vec<Span>,
+    /// Values nothing takes: an expression statement's value, the operand of
+    /// `void` or `typeof`, either side of `===` or `!==` (facts schema 90, ADR
+    /// 0692). No coercion runs and no value leaves.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inert_operands: Vec<Span>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
     /// Every `break` and `continue` statement, by span, sorted.
@@ -2347,6 +2352,7 @@ impl AstFacts {
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
+            inert_operands: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             throw_statements: Vec::new(),
