@@ -1,0 +1,3 @@
+# setter-callback-in-helper
+
+Claim (ADR 0833): a store setter runs its callback on its own stack (ADR 0676), so the read's role is the setter call's. When that call is in a named helper (`const wrapUse = () => { setSt((d) => { d.n = a(); }); }`) that an effect's apply calls, the read runs untracked on the apply's stack (Chrome, rc.21: STRICT_READ_UNTRACKED), and no summary carries a read written in the setter's callback: `InHelper` is an `SC1001` uncertifiable, `function-run-unplaced`, at the read (it was certified). Kept: `InApply`, the setter called in the apply, a violation. Silent: `DraftInHelper`, a read of the setter's own draft. Stubs: rc.21's `solid-js` version; `solid-js.d.ts` as strict as the published typings for what it calls.

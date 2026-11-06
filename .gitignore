@@ -1119,3 +1119,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/props-destructure-pending/node_modules/**
 !fixtures/reactive-ir/import-unresolved/node_modules/
 !fixtures/reactive-ir/import-unresolved/node_modules/**
+!fixtures/reactive-ir/setter-callback-in-helper/node_modules/
+!fixtures/reactive-ir/setter-callback-in-helper/node_modules/**

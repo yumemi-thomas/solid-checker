@@ -31,7 +31,7 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 
 - Fuzzer async family (ADR 0612): a thrown code past an async compute's await is reported by nothing (README, Not built).
 - Fuzzer `ref-factory-body` with a helper or IIFE layer and a `hook-member`, `or-assign` or `bind` binding (about 190 recall programs, ADR 0527): the read reaches the layer through a binding dispatch, ADR 0522's non-layer edge; certified clean.
-- Fuzzer `setter-fn-apply`, `wrapper` binding (6 programs, R3b): a read in a store setter's callback inside a body arrow an effect's apply calls (`const w = () => { setS((d) => { d.n = r(); }); }`) is certified; the same arrow with a plain read is V, a `function` declaration uncertifiable. Held in open-defects.json.
+- Fuzzer `setter-fn-apply`, `wrapper` binding (6 programs, R3b; W's grids): a read in a store setter's callback inside a named helper an effect's apply calls (`const w = () => { setS((d) => { d.n = r(); }); }`) is uncertifiable at the read since ADR 0833 (was certified); the same helper with a plain read is V. Owed proof: a V needs the summary to carry a read in an exact setter's argument-0 callback (the setters table in the interprocedural context).
 - Fuzzer `pos-handler-expr` with some non-direct bindings (about 25 recall programs, ADR 0527): a read in the IIFE of a handler expression reached through an alias, tuple or hook binding of the memo variant; certified clean.
 
 - `c2d-method-tracked` (App.tsx:19, :32): a function registered from a method or helper called in tracked JSX, then run by a later component body, keeps its registrant's lexical role. Same family: c2, c2c, c3d.

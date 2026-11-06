@@ -2871,6 +2871,15 @@ impl LocalAccessContext<'_, '_> {
                 None => return Some(ExecutionRole::Unknown),
             }
         }
+        // A setter call in a named helper runs where the helper's callers do,
+        // and no summary carries a read written in the setter's callback (it
+        // is no layer the in-place climb crosses): unplaced, unless a named
+        // callback role places the helper.
+        if inside_non_component_function(file, setter_call.callee, self.lookup)
+            && named_callback_execution_role(file, setter_call.callee, self.lookup).is_none()
+        {
+            return Some(ExecutionRole::Unknown);
+        }
         let role = read_execution_role(
             file,
             setter_call.callee,
