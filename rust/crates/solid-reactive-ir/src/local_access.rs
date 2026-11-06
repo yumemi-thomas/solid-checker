@@ -22,11 +22,12 @@ use crate::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::execution_role::{
-    RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
-    control_flow_execution_role, direct_control_flow_body_role, host_callback_timing,
-    missing_jsx_census, named_callback_execution_role, nested_literal_runs_during_body,
-    pending_accessor_probe, read_analysis_context, read_execution_role, semantic_execution_role,
-    semantic_write_execution_role, unclassified_callback_reaches_modelled_consumer,
+    RootBodyGuard, allowed_callback_spans, async_execution_role, async_read_placement,
+    callee_callback_timing, control_flow_execution_role, direct_control_flow_body_role,
+    host_callback_timing, missing_jsx_census, named_callback_execution_role,
+    nested_literal_runs_during_body, pending_accessor_probe, read_analysis_context,
+    read_execution_role, semantic_execution_role, semantic_write_execution_role,
+    unclassified_callback_reaches_modelled_consumer,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -5447,7 +5448,8 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
-                let lexical = async_execution_role(file, position, execution);
+                let semantic = execution;
+                let lexical = async_read_placement(file, position, execution);
                 let execution = async_read_role(
                     file,
                     position,
@@ -5553,9 +5555,14 @@ impl LocalAccessContext<'_, '_> {
                     // ADR 0779: an anonymous function in a tracked position,
                     // which no binding climbs out of (`<K run={() => h()} />`):
                     // it may run there, past no boundary.
-                    if lexical == ExecutionRole::TrackedJsx
-                        && read_loading_cover(self.lookup, file, position, self.symbol_names)
-                            != LoadingCover::Covered
+                    // ADR 0836: so may one in a child function's closure, which
+                    // nothing places in a tracked insert (`async_execution_role`).
+                    let unplaced_child = lexical == ExecutionRole::Unknown
+                        && semantic == ExecutionRole::DeferredCallback;
+                    if (unplaced_child
+                        || (lexical == ExecutionRole::TrackedJsx
+                            && read_loading_cover(self.lookup, file, position, self.symbol_names)
+                                != LoadingCover::Covered))
                         && function_binding_name(
                             file,
                             containing_ast_function(&file.ast, position).unwrap_or(function),
@@ -6492,7 +6499,7 @@ impl LocalAccessContext<'_, '_> {
             || async_options.server_rendering_unresolved)
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
-            let async_execution = async_execution_role(file, call.callee, execution);
+            let async_execution = async_read_placement(file, call.callee, execution);
             // ADR 0623: tracked, in a computation's own callback: it suspends.
             let computation_read = async_execution == ExecutionRole::TrackedJsx
                 && crate::execution_role::computation_read_suspends(
@@ -7164,7 +7171,7 @@ impl LocalAccessContext<'_, '_> {
                 || member_options.server_rendering_unresolved)
             && !pending_accessor_probe(file, member, self.lookup)
         {
-            let async_execution = async_execution_role(file, member, execution);
+            let async_execution = async_read_placement(file, member, execution);
             let async_execution =
                 if member_options.ssr_client_bare || member_options.server_rendering_unresolved {
                     async_execution

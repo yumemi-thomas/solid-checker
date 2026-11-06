@@ -5601,5 +5601,18 @@
    "mx-async-outside-loading-boundary-for-x-wrapper-chain-13"
   ],
   "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY flow-context ids (1,568, Chrome confirmed): build sf1 (58d14e945) 2 certified false cleans; ADR 0834 0 (recall-gap, SC5003 U), no other id moved; legal twins (3,868) unchanged. Fixture reactive-ir/flow-iife-tracked PendingInRow (sf1 silent) and ResolveInRow (U to a Chrome-confirmed V)"
+ },
+ {
+  "finding": "a pending async memo read in a closure handed through forwarding helpers inside a `Show` child callback with a parameter (`<Show when={1}>{(_u) => { hc1(() => { a1(); }); … }}</Show>`) was SC5003 async-outside-loading-boundary violation where Chrome reports only PENDING_ASYNC_UNTRACKED_READ: a deferred site inside JSX was taken as rendered",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md); confirmed by Part 13 on m13e, 12 of 12",
+  "fixed": "ADR 0836",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-flow-show-x-direct-forward-2",
+   "mx-pending-async-untracked-read-flow-show-x-hook-member-forward-13",
+   "mx-pending-async-untracked-read-flow-show-x-tuple-forward-2"
+  ],
+  "rediscovered": "PENDING_ASYNC_UNTRACKED_READ and ASYNC_OUTSIDE_LOADING_BOUNDARY ids in flow, JSX and callback-prop contexts (7,294, Chrome confirmed): build ao3 (3f0c6f146) 12 wrong-rule (SC5003 V, the runtime's code PENDING_ASYNC_UNTRACKED_READ); ADR 0836 0 (recall-gap), nothing else moved; legal twins (72) clean on both. Fixture reactive-ir/show-child-pending-read Forwarded (U for both pending rules), InChild (SC5001 V kept)"
  }
 ]

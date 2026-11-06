@@ -30,7 +30,7 @@ through up to four such functions. The finding sits at that call and is
 uncertifiable, never proven: nothing shows the read runs pending while the
 call renders (ADR 0462). A call in a named function no named-callback role
 places (a closure in a `<For>` child handed to a timer, or never called) is not
-rendered by the JSX around it (ADR 0564). A function run in place in a tracked JSX expression of a flow row (`<For>{() => <p>{(() => use())()}</p>}</For>`) is rendered there, as outside a flow row (ADR 0834). A read in a callback a
+rendered by the JSX around it (ADR 0564). A function run in place in a tracked JSX expression of a flow row (`<For>{() => <p>{(() => use())()}</p>}</For>`) is rendered there, as outside a flow row (ADR 0834). A closure handed on from a child callback (`<Show when={1}>{(_u) => { h(() => use()); … }}</Show>`) is not rendered by the element around it: uncertifiable, never this rule's violation (ADR 0836). A read in a callback a
 standard-library carrier may run zero times (`{[].map(() => user())}`, an
 unknown-length receiver) is uncertifiable (ADR 0563). An exact `const` alias of the accessor (`const read =
 user`, `const { read } = { read: user }`) is the accessor (ADR 0463).
