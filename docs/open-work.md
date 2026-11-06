@@ -14,6 +14,7 @@ Value-use census, owed proof: a store or props root handed to a function (a proj
 
 Census, later proof (coordinator, 2026-11-07): `refresh(t)` and `affects(t, k?)` read only `t[$REFRESH]` or `t[$TARGET]` (rc.21 `@solidjs/signals` dev.js:3636, :10018), and a computed key coerces a function without calling it, so these positions could be followed instead of `value-in-carrier` / `value-use-unclassified`. Not done: show a store proxy's `$REFRESH` Get is untracked, and measure in Chrome. Until then they stay uncertifiable (tsc-oracle cases [4], [6], [21] carry them as distinct findings).
 
+Judges, owed before #173 (coordinator, ADR 0814): the pattern and grid judges let one SC9012 anywhere in a program cover every claimed code (`withholdingRules`, `coversCode`). Their records must keep each diagnostic's site, withholding cover a code only there (placeless codes excepted), with a frozen twin holding one SC9012 at another line; rows that turn into false cleans then are gaps to close.
 Census, owed proof (U today): a mutator call or `delete` through a hook holder's store member (`delete holder.opt.v`, fixture local-alias-member-reads) stays `value-held-in-binding` at the store: ADR 0811 surfaces only SC2003's member assignments. Proof: surface `no_store_mutator_call`'s and `no_store_delete`'s decisions the same way.
 
 Not checked (PLAN.md, kept here when it goes): SC7007 at runtime (no host compiles `"use server"`); SC7006's `export let` edit on a server; every `continue` in `cleanup.rs` read line by line; `effect_phase.rs` `None` arms beyond the method path.
