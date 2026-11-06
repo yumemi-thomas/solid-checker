@@ -87,6 +87,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/run-with-owner-in-computation/App.tsx",
+      "start": 1205,
+      "end": 1231,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/App.tsx",
       "start": 1251,
       "end": 1258,
       "fixes": 0

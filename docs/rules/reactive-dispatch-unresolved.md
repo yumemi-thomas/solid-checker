@@ -190,6 +190,28 @@ function may hand its parameter on to such a callee (ADR 0370).
 To let the analysis see the call, keep the receiving function in the project,
 or provide analyzable runtime source for the package under the declared host.
 
+## The value-use census (ADR 0692)
+
+Every reference of a proven source is followed, or it is this rule's uncertifiable, naming the position:
+
+| `analysisContext` | Position |
+|---|---|
+| `value-held-in-binding` | a `let`, an assignment, or a name no row reads |
+| `value-held-in-member` | a member assignment |
+| `value-through-logical` | a value of `? :`, `&&`, `\|\|`, `??` or a comma that goes on |
+| `value-in-class-field` | a class field or `this.x` |
+| `value-through-generator`, `value-through-await`, `value-through-new` | `yield`, `await`, `new` |
+| `value-as-parameter-default` | a parameter's default |
+| `value-in-carrier` | a spread, an iteration, a nested literal, a standard call that keeps or copies it, a primitive's value slot |
+| `value-to-unresolved-callee` | an unresolved call, a tag, a method's or a handed function's result |
+| `value-from-primitive-callback` | what a primitive's callback returns, unless the primitive answers it (`createRoot`) |
+| `value-bound-held` | `.bind` not called on the spot |
+| `value-forwarded` | a second hop |
+| `value-root-in-helper` | a store or props root a helper received |
+| `value-use-unclassified` | anything else, the default: `throw`, a computed key, a walk's limit |
+
+A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
+
 ## What keeps a leaf callback open
 
 The leaf walk follows each call in the callback's synchronous extent to a

@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-root-write-rc9/store.ts",
+      "start": 635,
+      "end": 642,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -49,6 +59,16 @@
       "path": "fixtures/reactive-ir/store-root-write-rc9/store.ts",
       "start": 940,
       "end": 992,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-root-write-rc9/store.ts",
+      "start": 1003,
+      "end": 1010,
       "fixes": 0
     }
   ]

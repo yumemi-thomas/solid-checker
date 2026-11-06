@@ -357,6 +357,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 4058,
+      "end": 4063,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 4172,
       "end": 4202,
       "fixes": 0

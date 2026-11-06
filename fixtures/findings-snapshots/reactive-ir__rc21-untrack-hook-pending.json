@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 158,
+      "end": 183,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -112,6 +122,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 1548,
+      "end": 1554,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -182,6 +202,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 2436,
+      "end": 2444,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -207,6 +237,26 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 3076,
+      "end": 3082,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 3076,
+      "end": 3082,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 3628,
       "end": 3635,
       "fixes": 0
@@ -216,6 +266,16 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 3891,
+      "end": 3897,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 3891,
       "end": 3897,
@@ -232,6 +292,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 4384,
+      "end": 4389,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -242,6 +312,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 4551,
+      "end": 4556,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -249,6 +329,26 @@
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 4613,
       "end": 4619,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 4836,
+      "end": 4841,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 4861,
+      "end": 4866,
       "fixes": 0
     },
     {

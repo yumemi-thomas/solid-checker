@@ -346,3 +346,54 @@ Stopped at the owner's 500k rule. Part 8's order is finished except the census. 
 **Open for the owner.** `flush(fn)` ruling done, ADR 0694; its `rediscovery.json` entry says no old build fails, because the judge rates both answers agree. Item 2 bounds depth, not fan-out: `sites^8` is the worst case left. `verify-delta` should select `repro-causes`: same hole as `tsc-oracle`, not done. `types/p3-cast-*` are R2's listed residual, for the owner.
 
 **Traps from this session.** A merge conflict on `open-defects.json` that takes one side drops the other's entries; `--update` puts them back without their `item` text: restore it. `bld.sh` used to copy a stale binary after a failed build; it refuses now. A task's "exit 0" is the shell's last command: read the `.rc` file. Chain with `&&`: a failed `git switch` let a cherry-pick run on the wrong branch once. A script with `cat` last hides the real exit. `====` in a zsh command line is an error and kills the rest.
+## R1, the handed net
+
+Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget suspended (`235888b82`, owner). All now uncertifiable; nothing proved. Corpus +2,490 U, 0 V moved.
+
+| Family | State | Row counts |
+|---|---|---|
+| Guards | fixture `handed-net-guards`; `n7`, `c15` U on purpose, the rest certified | |
+| N1-N3, `s6`, `s8` | pushed | 738 mx, 144 lg `net-*`: 0 FC, 0 FP. Old build fails, `rm5` fails the chosen hook |
+
+Traps: `excluded_role_holds` has a second caller, `SiteExclusions::at`, which the report missed: the generator found it. A held obligation is decided in `reactive_analysis`, because a result chunk may not read the setter tables unrecorded. `make verify` runs `diagnostics_process`, verify-delta does not unless it escalates. A fresh worktree needs `bun scripts/tsc-oracle.mjs provision --dialect all` and `bun scripts/fuzz/provision.mjs`. `$O/ids.mjs` plus `$O/idrun.sh` run one variant family in seconds, both builds.
+Not measured: N1 against N3 separately. Later proof: a helper's argument whose type holds no function.
+
+## Part 10 (integrator), handoff at the census landing, 2026-11-07
+
+Stopped at the owner's 500k rule after landing the census. A new agent takes the integrator's job here.
+
+**Landed on `claude/flip-census`.** ADR 0692 (census) and 0810 (`Object.keys`), with an audit of part 9's wip and W's review H1-H5. Corpus on build `cen24`: 28,429 U, 377 V (pre-census base `cb` 27,229; 0 sites cleared, +947). Witnesses 336/336 under the exact `closedAt` judge, HOST 25/25, patterns 1,210/1,217 (7 known-open false cleans). Not pushed yet: push after the first fully green merge.
+
+**Next, in order (coordinator's).** Merge `claude/flip-r1` at `7c733a10a`, then `claude/flip-r2` at `f7c4fc495` (R2c's ADRs to 0825; R2d continues there; `smoke/mx-src.json` is additions only, 1326 -> 1386 ids, confirmed). Each: guard by content (`composite_callee_walk`, `if !seen.insert(span) {` ... `total = false;`), union the append-only JSON lists by text, regenerate snapshots after reading every moved row, verify-delta, sweep against `sweep-cen24.json`, witnesses. Expect R2's 36 census-row witness failures to close; report any that do not. Then HANDOFF.md item 4.
+
+**Held for the census side (R2b's).** `use().v` store read (`r2-hook-store-member`, `-module`) and `export let read = c` (`r2-export-let-copy`), open-defects P12. Not yet taken: check them on `cen24` first (`scratch flip-r2/cases/p7u/u1-u6`); `export let` is a `let` binding, which `bound()` opens, so it may already be closed.
+
+**Known imprecision, fail-closed.** Cases [79]/[80] open at `store` because SC2003's row is pushed after the census (`upstream_compat::check_project` runs last in `collect_project`). Running the census after it would let SC2003's rows count; not done. The census's `has_row` sees reads, writes, actions, handed obligations and static defects pushed before it.
+
+**Fuzz judge fact.** `scripts/fuzz/checker.mjs parseFindings` keeps only `App.tsx` findings, so an uncertifiable in a helper file is judged certified (conservative for the judge, but a cross-file fix looks unfixed). H1's shapes export from App.tsx for that reason.
+
+**Scratch** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads`): `round.sh <tag> <prev-sweep>`, `fb.sh <tag> <fixture dirs>` (findings with blockers), `fz.sh` (id sets: `t/use-ids.json`, `t/w-ids.json`, `t/w1-ids.json`), `trace-patch.py` (applies a census trace to `value_use.rs` for a scratch build; restore the file after: `cp t/value_use.rs.fixed`), `classify.py <trace.tsv>`, `ftr.sh`, `wadv/cases` (W's 10 programs), `k10`-`k12` (Chrome probes). Builds `rcen14`-`rcen24`; `rcen18` is the pre-W build, `rcb` the pre-census base.
+
+## R1c, landing R1b's batch (2026-11-06)
+
+Worktree t3-b3846b2a, branch `claude/flip-r1-wip` on `add797a82`, work uncommitted until the coordinator answers the test-pin question. Scratch `/Users/thomas/dev/sc-scratch.noindex/flip-r1` (`tools/`, `cases/c2-c6`, builds `rd1-rd3`, `rdbg6`, `rdbg7`).
+
+- open-defects.json: 35 FIXED rows were stale merge carry-overs, all fine on `rm0` (0818e258a) and already gone on flip-reads with their rediscovery entries here; removed by text. The 3 `p3-cast-*` rows were missing here: copied from flip-reads (owner: open until W's cast research).
+- ir-read-lint: ADR 0801's `files()` scan moved to a per-file base hazard `ArrayIntrinsicObtained` (memo 59 removed); the two `file_by_path` in `open_compute.rs` stay (it is the recorded hand-out; answers live per analysis in `OpenComputes`).
+- Doubled rows: ADR 0801's slot transport and ADR 0222's returned source both claimed one read; `transport_reads::source_in_own_right` keeps one at call sites (result reads). Not in helper summaries: that dropped a proof.
+- Tried and withdrawn on the coordinator's challenge: accepting ADR 0282's census for an accessor slot. `cases/c3 p1` (Function handed to a parameter, called with a string) is certified then, Chrome warns. It also shows a pre-existing false positive on setter slots: pattern `types/s02-setter-slot-function-escaped`, open, held.
+- A fixture stub that types the accessor as `() => T` certifies a helper read the real typings hold (`handed-member-read`): `tuple-slot-function-obtained` has no helper case for that reason.
+- Pending the coordinator: 3 diagnostics_process pins (scratch `tools/diag-pins.diff`), then `make verify` and the landing commit. Catch-all test: belongs to the census module (`value_use.rs`, flip-census), not on this branch.
+
+## Part 11 (integrator), handoff, 2026-11-07
+
+Stopped near the 500k context rule at a green, pushed commit. A new agent takes the integrator's job here.
+
+**Landed and pushed** (`claude/flip-census` = `claude/flip-reads` = `81db5f9e0`), each with make verify exit 0 (verify-seq.sh, typefacts-test alone):
+`c2e158352` R1 7c733a10a (repro-causes green again; census defects from 86a9fae18 fixed under the coordinator's approval: tsc-oracle cases [4] [6] [21] `distinctFindings`, rule_quality_process pin of 8 census rows, wasm-parity dotdot row); `e394e3124` R2 abeb2027e (ADRs 0821-0828; `may_run_in_leaf_owner` = R2's free function with R1's exact walk; P12 closed as U with 3 new generator shapes); `3ec177fab` R2e d8848fd18 (ADR 0829); `81db5f9e0` docs (ADRs 0700-0721 facts and Owners restored, AGENTS.md rule, open-work [79]/[80] and PLAN's "Not checked"). Corpus on rm4: 36,314 U, 377 V, 0 unnamed blockers; witnesses 336/336, HOST 25/25, patterns 1,232/1,236 (4 held: p3-cast x3 FC, s02 FP).
+
+**Held: claude/flip-r1 f11b000cd (ADR 0803).** Backed out (coordinator): 35 uses of a withdrawn slot past its reference have no row (IIFE return, `let`, `const` alias, hook return, object/class, props), list in scratch `m11/adr0803-uses-without-row.tsv`, sent to R1d/R1e. Resolved unions saved: `m11/merge-f11b000cd-*` (flip-read.mjs and open-defects.json unions; snapshots regenerate). Merge R1's fixed tip, not f11b000cd alone; classify every emptied line with `m11/classify174d.py` (all of them, not a sample).
+
+**Next, in order.** (1) R1's fixed tip. (2) End-stage items, endstage-report.md: memory test (section 2: warm every worker, sample both sides at +100; no limit change; needs the coordinator's word on the diff), protections 1a-1d, doc budget back at the owner's sizes once the last merge is in (now decisions 584,878/590,000, open-work 90,893/95,000, docs 1,222,455/1,230,000, fixture READMEs 504,779/505,000: the three README facts, rows 11-13, need about 400 bytes more: ask). (3) [79]/[80]: open-work's entry; upstream-parity skill. (4) Census later proof B (refresh/affects targets, computed keys): open-work.
+
+**Machinery** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads/m11`): `gates2.sh <tag> <prev-sweep>` (every gate, sweep, make verify, each under sc-heavy + sc-guard 12; the old `gates.sh` starts with verify-delta, which escalates to the parallel verify and its memory-test flake); `rss.sh <tag> <stopfile>` (peak RSS); `snapcmp.py <theirs> <files>` (merged vs both parents: NEW in neither, LOST from both; check `-vs theirs` too, R1c's dedupe shows there); `resolve.py` (text unions); `fx1.sh <tag> <tsconfig> [runtime args]` (one fixture with blockers, from the repo root); `depth3-patch.py apply|restore` (scratch-build pattern: restore, then rebuild release before anything defaults to rust/target/release). open-defects.json is generated (indent 1): merge three-way by id, each side's removals kept, `grids` keyed by (idPrefix, code, item, variantPrefix). zsh: quote `"${rev}:path"` (`$rev:path` is a modifier). Builds rm1-rm4, r3d (scratch), rfw1 (R2's pre-census, copied).

@@ -412,6 +412,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 5072,
+      "end": 5076,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -672,6 +682,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 9243,
+      "end": 9253,
+      "fixes": 0
+    },
+    {
       "rule": "prefer-show",
       "code": "SC8015",
       "kind": "uncertifiable",
@@ -702,6 +722,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 9756,
+      "end": 9760,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -729,6 +759,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/consumer.tsx",
       "start": 203,
       "end": 309,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/consumer.tsx",
+      "start": 280,
+      "end": 298,
       "fixes": 0
     },
     {
@@ -862,6 +902,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
+      "start": 2142,
+      "end": 2147,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -899,6 +949,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
       "start": 2553,
       "end": 2563,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 374,
+      "end": 379,
       "fixes": 0
     },
     {
@@ -952,6 +1012,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 1339,
+      "end": 1344,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -969,6 +1039,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
       "start": 1699,
       "end": 1712,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 1918,
+      "end": 1923,
       "fixes": 0
     },
     {
@@ -1029,6 +1109,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
       "start": 2557,
       "end": 2570,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/factory.ts",
+      "start": 235,
+      "end": 239,
       "fixes": 0
     },
     {
@@ -1169,6 +1259,16 @@
       "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
       "start": 1631,
       "end": 1637,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
+      "start": 1780,
+      "end": 1786,
       "fixes": 0
     },
     {

@@ -362,6 +362,19 @@ pub(super) fn argument_behavior(
     })
 }
 
+/// ADR 0810: standard calls that read an object's own keys, run no getter and
+/// answer no value of it. `Object.keys` Gets nothing: a store's `ownKeys` trap
+/// has no strict-read warning in Chrome.
+pub(super) fn reads_keys_only(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && matches!(
+                declaration.qualified_name.as_ref(),
+                "ObjectConstructor.keys" | "ObjectConstructor.getOwnPropertyNames"
+            )
+    })
+}
+
 /// Only the reviewed global runtime calls consume the independent
 /// default-library binding fact. It never promotes a package declaration or
 /// a structurally typed method into the general library model.

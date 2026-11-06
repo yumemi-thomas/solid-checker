@@ -562,6 +562,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
+      "start": 487,
+      "end": 494,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

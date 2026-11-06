@@ -62,6 +62,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 1216,
+      "end": 1235,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -99,6 +109,16 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 1868,
       "end": 1878,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 1868,
+      "end": 1887,
       "fixes": 0
     },
     {
@@ -142,6 +162,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 2756,
+      "end": 2775,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -159,6 +189,16 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 3052,
       "end": 3062,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3052,
+      "end": 3071,
       "fixes": 0
     },
     {
@@ -182,6 +222,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3343,
+      "end": 3362,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -189,6 +239,16 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 3403,
       "end": 3413,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3403,
+      "end": 3422,
       "fixes": 0
     },
     {
@@ -209,6 +269,16 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 3808,
       "end": 3818,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3808,
+      "end": 3827,
       "fixes": 0
     }
   ]

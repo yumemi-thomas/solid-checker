@@ -1,0 +1,13 @@
+import { render } from "@solidjs/web";
+import { SettledInterval } from "./settled-interval";
+import { Settled } from "./settled";
+import { SyncOfMixed } from "./sync-of-mixed";
+import { Hole } from "./hole";
+import { Covered } from "./covered";
+import { AsyncSlot } from "./async-slot";
+import { AsyncOfMixed } from "./async-of-mixed";
+import { BodyRead } from "./body-read";
+import { HelperRead } from "./helper-read";
+import { TwoReturns } from "./two-returns";
+import { HeldThenWritten } from "./held-then-written";
+render(() => <><SettledInterval /><Settled /><SyncOfMixed /><Hole /><Covered /><AsyncSlot /><AsyncOfMixed /><BodyRead /><HelperRead /><TwoReturns /><HeldThenWritten /></>, document.body);

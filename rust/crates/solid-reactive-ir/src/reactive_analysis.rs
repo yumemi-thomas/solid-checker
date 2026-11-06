@@ -213,6 +213,10 @@ pub(crate) fn collect_project<'facts>(
     // push order. `push_defect` therefore derives the identity from the defect
     // kind's family and never from the vector it arrived in.
     let mut summaries = crate::interproc::completeness::SummaryMemo::default();
+    // ADR 0802: a source no fact calls async may still be pending, by what its
+    // compute reads: a value a caller handed it, a source a function form names.
+    let open_computes =
+        crate::local_access::OpenComputes::new(&interprocedural.source_call_targets);
     // ADR 0509: a call transport resolves exactly drops the obligation its
     // type alone, or its caller-supplied receiver, gave it.
     // A transported async source keeps it: where its read runs (a leaf
@@ -224,7 +228,7 @@ pub(crate) fn collect_project<'facts>(
             !matches!(
                 target,
                 crate::interproc::accessor_provenance::Callable::Accessor(symbol)
-                    if source.async_sources.contains(symbol)
+                    if local_access_context.source_compute_open(symbol, &open_computes)
             ) && target_summary_complete(ctx, target, &mut summaries)
         })
         .map(|(callee, _)| callee)
@@ -233,7 +237,25 @@ pub(crate) fn collect_project<'facts>(
     // A handed-member obligation is the last resort at its site: pushed after
     // every other producer's, it yields to a cause already recorded there.
     let mut handed = Vec::new();
-    for obligation in dispatch_obligations {
+    for mut obligation in dispatch_obligations {
+        // ADR 0802: held by local access, which could not ask.
+        if obligation.analysis_context == crate::local_access::HELD_OPEN_SOURCE {
+            let holds = analyzed_file(ctx, obligation.location.path.as_ref()).is_some_and(|file| {
+                local_access_context.value_holds_open_source(
+                    file,
+                    solid_facts::core::Span::new(
+                        u32::try_from(obligation.location.start_byte).unwrap_or(0),
+                        u32::try_from(obligation.location.end_byte).unwrap_or(0),
+                    ),
+                    &open_computes,
+                )
+            });
+            if !holds {
+                continue;
+            }
+            crate::local_access::UNRESOLVED_HANDED_READ
+                .clone_into(&mut obligation.analysis_context);
+        }
         if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER
             || obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
         {
@@ -358,12 +380,105 @@ pub(crate) fn collect_project<'facts>(
             draft.push_defect(obligation.clone());
             continue;
         };
-        if analyzed_file(ctx, obligation.location.path.as_ref())
-            .is_some_and(|file| local_access_context.tracked_call_hands_effect(file, call))
-        {
+        if analyzed_file(ctx, obligation.location.path.as_ref()).is_some_and(|file| {
+            local_access_context.tracked_call_hands_effect(file, call, &open_computes)
+        }) {
             let mut kept = obligation.clone();
             kept.analysis_context = context.to_owned();
             draft.push_defect(kept);
+        }
+    }
+    // The census: every reference of a proven source is followed, or an
+    // obligation naming where it went.
+    let mut callables = ctx
+        .accessors
+        .keys()
+        .chain(ctx.setters.keys())
+        .chain(ctx.actions.keys())
+        .chain(ctx.prop_sources.keys())
+        .collect::<Vec<_>>();
+    callables.sort_unstable();
+    callables.dedup();
+    let mut census = crate::value_use::Census::new(
+        ctx.semantic_lookup,
+        ctx.entities,
+        ctx.symbol_names,
+        callables.iter().map(|symbol| symbol.as_ref()).collect(),
+        &interprocedural.source_call_targets,
+        crate::attribution::ExportedCallers::new(
+            ctx.semantic_lookup,
+            ctx.aliases,
+            ctx.symbols_by_root,
+        ),
+        draft
+            .reads
+            .iter()
+            .map(|read| &read.location)
+            .chain(draft.writes.iter().map(|write| &write.location))
+            .chain(
+                draft
+                    .action_invocations
+                    .iter()
+                    .map(|action| &action.location),
+            )
+            .chain(handed.iter().map(|obligation| &obligation.location))
+            .chain(draft.static_defects.iter().map(|defect| &defect.location)),
+    );
+    for symbol in callables.iter().copied() {
+        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
+            let root = ctx.prop_sources.contains_key(symbol)
+                || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);
+            let pending = ctx.async_sources.contains(symbol);
+            let open = if root {
+                census.root_use(&reference, pending)
+            } else {
+                census.callable_use(&reference, ctx.accessors.contains_key(symbol), pending)
+            };
+            let Some(blocker) = open else {
+                continue;
+            };
+            handed.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: ctx
+                        .symbol_names
+                        .get(symbol)
+                        .map_or_else(|| "this value".to_owned(), ToString::to_string),
+                    member: None,
+                },
+                location: reference,
+                analysis_context: blocker.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+    // P13: a source with no name has no reference to start from.
+    for file in ctx.semantic_lookup.files() {
+        for call in &file.ast.calls {
+            let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            if !ctx.dialect.creates_reactive_source(primitive) {
+                continue;
+            }
+            let Some(blocker) = census.created_use(
+                file,
+                call.span,
+                ctx.dialect.returns_store(primitive),
+                ctx.dialect.returns_reactive_tuple(primitive),
+            ) else {
+                continue;
+            };
+            handed.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: "this value".to_owned(),
+                    member: None,
+                },
+                location: call.span.location(file.path.as_str()),
+                analysis_context: blocker.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
         }
     }
     // A row any other producer placed over the call (a read, a write, an
@@ -377,7 +492,8 @@ pub(crate) fn collect_project<'facts>(
         };
         // Only a row whose role is reported speaks for the call; a read row
         // only for an obligation raised for a possible read.
-        let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ;
+        let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
+            || obligation.analysis_context.starts_with("value-");
         draft.reads.iter().any(|read| {
             read_only
                 && over(&read.location)
@@ -525,6 +641,88 @@ pub(crate) fn collect_project<'facts>(
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(synthesized);
+    // ADR 0802: the read of such a source has the row an open source has.
+    let async_rows = draft
+        .async_reads
+        .iter()
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    let opened = draft
+        .reads
+        .iter()
+        .filter(|read| {
+            matches!(read.kind.as_ref(), "accessor" | "store-path")
+                && !async_rows.contains(&read.location)
+                // A proved strict read stands: it is wrong whether the source
+                // is settled or pending, and a row here would withdraw it.
+                && (read.execution == crate::ExecutionRole::TrackedJsx
+                    || ((read.execution.reports_untracked_read()
+                        || read.execution.reports_unplaced())
+                        && read.is_uncertifiable()))
+        })
+        .filter_map(|read| {
+            let file = analyzed_file(ctx, read.location.path.as_ref())?;
+            let span = solid_facts::core::Span::new(
+                u32::try_from(read.location.start_byte).ok()?,
+                u32::try_from(read.location.end_byte).ok()?,
+            );
+            let symbol = ctx.entities.get(&read.declaration)?;
+            // A probe meets the source pending by design, and a computation's
+            // own read suspends it: the question moves to whoever reads that.
+            if file.ast.call_at(span).is_some_and(|call| {
+                crate::execution_role::pending_accessor_probe(
+                    file,
+                    call.callee,
+                    ctx.semantic_lookup,
+                ) || crate::execution_role::computation_read_suspends(
+                    file,
+                    call.callee,
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.semantic_lookup,
+                )
+            }) || !local_access_context.source_compute_open(symbol, &open_computes)
+            {
+                return None;
+            }
+            let cover = crate::owners::read_loading_cover(
+                ctx.semantic_lookup,
+                file,
+                span,
+                ctx.symbol_names,
+            );
+            Some(crate::AsyncRead {
+                accessor: read.accessor.clone(),
+                location: read.location.clone(),
+                declaration: read.declaration.clone(),
+                execution: read.execution,
+                leaf_call_site_gates: Vec::new(),
+                leaf_owner: None,
+                under_loading: cover == crate::owners::LoadingCover::Covered,
+                async_provenance: true,
+                declared_loading: false,
+                options_opaque: true,
+                provenance_open: true,
+                caught: false,
+                component_prop: false,
+                ssr_client_hole: false,
+                server_rendering_unresolved: false,
+                host_callback_timing: read.host_callback_timing,
+                callee_callback_timing: read.callee_callback_timing,
+                invocation_context_unproven: false,
+                mount_unresolved: cover == crate::owners::LoadingCover::Unresolved,
+                settle_unproven: false,
+                call_attributed: false,
+                creation_pass_unproven: false,
+                root_pass_unproven: false,
+                carrier_run_unproven: false,
+                apply_first_run_pending: false,
+                pending_origin: None,
+                pending_apply: None,
+            })
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(opened);
     // ADR 0634: whichever layer reports it, a read of a store that may be its
     // raw value is no proven proxy read.
     for read in &mut draft.reads {
@@ -631,6 +829,51 @@ pub(crate) fn collect_project<'facts>(
             solid_facts::core::Span::new(start, end),
         );
     }
+    // ADR 0774: an async read no fact places may run at a tracked position with
+    // no boundary. SC5001's row alone leaves SC5003 nothing to say at the site,
+    // so such a read gets the pair `push_unplaced_async_reads` writes.
+    let tracked = draft
+        .async_reads
+        .iter()
+        .filter(|read| read.execution == crate::ExecutionRole::TrackedJsx)
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    let siblings = draft
+        .async_reads
+        .iter()
+        .filter(|read| {
+            ((read.execution == crate::ExecutionRole::Unknown && read.invocation_context_unproven)
+                || read.component_prop
+                || read.callee_callback_timing)
+                && !read.under_loading
+                && !read.declared_loading
+                && !tracked.contains(&read.location)
+                && analyzed_file(ctx, read.location.path.as_ref()).is_none_or(|file| {
+                    let (Ok(start), Ok(end)) = (
+                        u32::try_from(read.location.start_byte),
+                        u32::try_from(read.location.end_byte),
+                    ) else {
+                        return true;
+                    };
+                    crate::owners::read_loading_cover(
+                        ctx.semantic_lookup,
+                        file,
+                        solid_facts::core::Span::new(start, end),
+                        ctx.symbol_names,
+                    ) != crate::owners::LoadingCover::Covered
+                })
+        })
+        .map(|read| crate::AsyncRead {
+            execution: crate::ExecutionRole::TrackedJsx,
+            invocation_context_unproven: false,
+            component_prop: false,
+            host_callback_timing: false,
+            callee_callback_timing: false,
+            call_attributed: true,
+            ..read.clone()
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(siblings);
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
@@ -638,6 +881,30 @@ pub(crate) fn collect_project<'facts>(
     let compat_started = Instant::now();
     upstream_compat::check_project(ctx, draft);
     timings.upstream_compat = compat_started.elapsed();
+    // ADR 0692: upstream's `package-callee` row, pushed last, holds the same
+    // reference open as the census row before it (`observe(count)`): one
+    // SC9012 per span, the ported one kept.
+    let uncaptured = draft
+        .static_defects
+        .iter()
+        .filter(|defect| {
+            matches!(
+                defect.kind,
+                crate::StaticDefectKind::ReactiveSourceUncaptured { .. }
+            )
+        })
+        .map(|defect| defect.location.clone())
+        .collect::<HashSet<_>>();
+    if !uncaptured.is_empty() {
+        draft.static_defects.retain(|defect| {
+            !(defect.analysis_context.starts_with("value-")
+                && matches!(
+                    defect.kind,
+                    crate::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+                )
+                && uncaptured.contains(&defect.location))
+        });
+    }
     interprocedural.factory_instances
 }
 

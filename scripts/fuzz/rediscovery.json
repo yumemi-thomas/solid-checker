@@ -4613,6 +4613,78 @@
   "rediscovered": "flip-read.mjs net-sort-bind, net-sort-reflect (a descending comparator on `[1, 2]`): r3base (80db411e5, before c129b2c29) false-clean on 54 of 72 (bind in a handler, reflect in body and handler; bind in a body is recall-gap there), c11f67588 recall-gap on 72; the build before ADR 0716 (1dd911b95) false-clean on 72. Probes: bfd336ce8 certified both, the merge 8ff25dca5 made both uncertifiable. sc VM, Chrome confirming each direct-none program"
  },
  {
+  "finding": "an async read no fact places, at a `<Dynamic>` body, a tag or depth 16: certified or SC5001 only, Chrome warns the boundary",
+  "found": "census research C6, 288 rows",
+  "fixed": "ADR 0774",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-wrapper-none",
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-wrapper-closure",
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-wrapper-helper"
+  ],
+  "rediscovered": "rm2 false-clean, this build recall-gap, by id: 680 of 680 of the old build's failures across C1, C2, C3, C5, C6, C7"
+ },
+ {
+  "finding": "a tracked call of a value that may be pending, an alias, a literal member, a module hook, a barrel: certified, Chrome warns",
+  "found": "census research C1, 312 rows",
+  "fixed": "ADR 0775",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-let-alias-none",
+   "mx-async-outside-loading-boundary-jsx-x-let-alias-closure",
+   "mx-async-outside-loading-boundary-jsx-x-let-alias-helper"
+  ],
+  "rediscovered": "rm2 false-clean, this build recall-gap; patterns net/c1-let-alias, net/c1-literal-member; guards net/g1a, net/g1c, net/g1d stay certified"
+ },
+ {
+  "finding": "a named function a carrier provably runs at a tracked position, no boundary: certified, Chrome warns. `#199` and `#198` said a context cannot write it; it can, as a `handoff-*` layer",
+  "found": "census research C2, 84 rows; SC9012 research g2d",
+  "fixed": "ADR 0776",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-direct-handoff-foreach",
+   "mx-async-outside-loading-boundary-jsx-x-direct-handoff-map",
+   "mx-async-outside-loading-boundary-jsx-x-direct-handoff-from"
+  ],
+  "rediscovered": "rm2 false-clean, this build agree, a proved SC5003: 64 programs; patterns net/g2d-map-body, -foreach, -apply, -module-hf, net/g2f-sort-two-elements; guards net/g2a, net/g2d-neg-*, net/g2e stay quiet"
+ },
+ {
+  "finding": "a logical-assignment callee and a function an instance holds, in a named handler after an await: certified, Chrome warns",
+  "found": "census research C5, C7",
+  "fixed": "ADR 0777",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-then-named-x-or-assign-none",
+   "mx-untracked-read-after-await-then-named-x-or-assign-closure",
+   "mx-untracked-read-after-await-then-named-x-or-assign-helper"
+  ],
+  "rediscovered": "rm2 false-clean, this build recall-gap: 13 of 13; patterns net/c5-or-assign, net/c7-assign-this; guard net/g5b-or-assign-then-named-plain"
+ },
+ {
+  "finding": "a pending read in a timer, a `.then` or a microtask: an uncaught throw with an empty message and no code, certified",
+  "found": "SC9012 research p03",
+  "fixed": "ADR 0778",
+  "outside": "the runtime gives no code and the judge matches thrown messages, and an empty one claims nothing: no grid row can fail the old build. Fixture handed-net p1-timer, p2-timer and guard p8 hold it; witness cases3-p03"
+ },
+ {
+  "finding": "a read's climb off an anonymous attribute function: certified at the read, Chrome warns",
+  "found": "census research C3",
+  "fixed": "ADR 0779",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-cbp-jsx-destructured-x-direct-none",
+   "mx-async-outside-loading-boundary-cbp-jsx-destructured-x-direct-closure",
+   "mx-async-outside-loading-boundary-cbp-jsx-destructured-x-direct-helper"
+  ],
+  "rediscovered": "rc6b false-clean, this build recall-gap: 14 of 14; patterns net/c3-cbp-wrapper; guards net/g4b, net/g4c stay certified"
+ },
+ {"finding": "a value the census did not name: `throw`, a default, a tag, a spread, a method's result, an export's position: certified, Chrome warned", "found": "end-stage report 1c, census research P11-P13", "fixed": "ADR 0692", "grid": "mx-recall", "code": "STRICT_READ_UNTRACKED", "ids": ["mx-strict-read-untracked-body-use-default-direct-none", "mx-strict-read-untracked-body-use-tagged-direct-none", "mx-strict-read-untracked-body-use-spread-direct-none", "mx-strict-read-untracked-body-use-root-direct-none", "mx-strict-read-untracked-body-use-untrack-direct-none", "mx-strict-read-untracked-body-use-throw-direct-none", "mx-strict-read-untracked-body-use-throw-operand-direct-none", "mx-strict-read-untracked-body-use-throw-hook-direct-none", "mx-strict-read-untracked-body-use-throw-created-direct-none", "mx-strict-read-untracked-body-use-class-return-direct-none", "mx-strict-read-untracked-body-use-slot-return-direct-none", "mx-strict-read-untracked-body-use-fn-alias-direct-none", "mx-strict-read-untracked-body-use-tag-direct-none", "mx-strict-read-untracked-body-use-created-values-direct-none", "mx-strict-read-untracked-body-use-created-json-direct-none"], "rediscovered": "old build 772 certified false cleans of 1,782 `use-*` programs (STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE); this build 0, 1,706 runtime-confirmed answer uncertifiable; 72 not fired, 4 typed away"},
+ {
   "finding": "A generator stepped from a tracked async compute: `for await (… of gen())` with a read after the generator's first await or yield, a wrapper's iterator, `yield*`, an inline generator, a sync generator stepped across the loop's await. UNTRACKED_READ_AFTER_AWAIT in Chrome, certified: no region reached the operand of a `for await`, and helpers returned on a generator",
   "found": "census/f02-async-generator-read-after-await, patterns report P9, R2's probes f1-f50",
   "fixed": "ADR 0820",
@@ -4635,6 +4707,70 @@
    "mx-untracked-read-after-await-gen-sync-loop-x-direct-closure"
   ],
   "rediscovered": "flip-read.mjs gen-*, id subset gen1.json of 1,488 programs: rbase (c6677ddac) 1,092 false-clean, 396 recall-gap, the fix 0 false-clean, 0 false-positive (200 agree, 1,288 recall-gap, withholding). Legal gen-prefix, gen-drain on the fix: 0 false-positive of 1,316"
+ },
+ {
+  "finding": "the census answered followed with no proof: `export default` of a literal or a creating call (no importer walked), a pattern over a holder inside a parameter hop, a pending accessor at a tracked position, a store root's member through a holder slot, a bare accessor child of `For`: certified, Chrome warned",
+  "found": "W's adversarial census review H1-H5 (research-w-census-adversarial.md, origin/claude/flip-research-w 23e23436b), checked on cen18",
+  "fixed": "ADR 0692",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-export-default-array-direct-none",
+   "mx-strict-read-untracked-body-use-export-default-object-direct-none",
+   "mx-strict-read-untracked-body-use-export-default-created-direct-none",
+   "mx-strict-read-untracked-body-use-param-pattern-direct-none",
+   "mx-strict-read-untracked-body-use-store-holder-member-direct-none",
+   "mx-strict-read-untracked-body-use-child-for-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs use-export-default-*, use-param-pattern, use-store-holder-member, use-child-for, 486 programs (body, effect-apply, root): cen18 466 false-clean, cen19 0 false-clean, 466 recall-gap (uncertifiable), 18 not-fired, 2 typed-away. H3 (ASYNC_OUTSIDE_LOADING_BOUNDARY, net-pattern-pending) is outside: the grid's jsx and show contexts read the text inside an IIFE, which the old build already opened, so no generated program reaches a direct `{h()}`; fixture value-use-census Review.tsx PendingPattern pins it, and W's p08 certified on cen18 and answers uncertifiable on cen19. H1's programs export from App.tsx because the grid judge reads App.tsx findings only"
+ },
+ {
+  "finding": "the census's write side: a setter thrown and called from the catch, certified, Chrome reported REACTIVE_WRITE_IN_OWNED_SCOPE (split from the ADR 0692 STRICT_READ_UNTRACKED entry, whose grid does not generate this code's programs)",
+  "found": "end-stage report 1c, census research P11-P13",
+  "fixed": "ADR 0692",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-body-use-write-throw-direct-none"
+  ],
+  "rediscovered": "counted in the ADR 0692 STRICT_READ_UNTRACKED entry's use-* run: 1,782 programs, old build 772 certified false cleans, census build 0"
+ },
+ {
+  "finding": "a sync-looking source over what its compute reads: `createMemo(() => g())` over a parameter, a memo over that memo, `createSignal(() => a())`, `createStore(() => ({ v: a() }), seed)`: certified at the read, Chrome warns",
+  "found": "R1 C1b guards t1, t11, l2-l5, l7",
+  "fixed": "ADR 0802",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-open-hook-memo-direct-none",
+   "mx-async-outside-loading-boundary-show-open-hook-memo-direct-none",
+   "mx-async-outside-loading-boundary-jsx-open-memo-chain-direct-none",
+   "mx-async-outside-loading-boundary-show-open-memo-chain-direct-none",
+   "mx-async-outside-loading-boundary-jsx-open-signal-fn-direct-none",
+   "mx-async-outside-loading-boundary-show-open-signal-fn-direct-none",
+   "mx-async-outside-loading-boundary-jsx-open-store-fn-direct-none",
+   "mx-async-outside-loading-boundary-show-open-store-fn-direct-none"
+  ],
+  "rediscovered": "rm0 false-clean 144 of 324, this build 0 false-clean, 324 recall-gap; guards fixture open-source-computes stay certified"
+ },
+ {
+  "finding": "a caught pending read through five or more helpers: Chrome reports CAUGHT_REACTIVE_READ, SC5008 had no row",
+  "found": "R1, value_reaches' depth 4",
+  "fixed": "ADR 0800",
+  "grid": "mx-recall",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-memo-caught-chain-5-direct-none",
+   "mx-caught-reactive-read-memo-caught-chain-9-direct-none",
+   "mx-caught-reactive-read-effect-compute-caught-chain-5-direct-none"
+  ],
+  "rediscovered": "rm0 false-clean 72 of 72, this build 0, 72 recall-gap; fixture value-walk-chain, past the budget too"
+ },
+ {
+  "finding": "one read, two rows: ADR 0801's slot transport and ADR 0222's returned source both claimed the read at 'const [read] = makeTuple(); read()' (SC1001 V twice, SC5003 U twice)",
+  "found": "R1c, diagnostics_process returned_tuple_iteration_mutations_withdraw_only_the_proven_read (case intact), then fixture snapshots",
+  "fixed": "ADR 0801 (R1c)",
+  "outside": "a grid judges each site's outcome, and a second row of the same read at the same site changes none. Fixtures tuple-accessor-slots body-read (once) and helper-read; 6 snapshots each lost one duplicate row (local-alias-literal-slots, project-callback-uses, read-in-place-layers-summary, root-window-reads, tuple-accessor-slots, use-site-role)"
  },
  {
   "finding": "A `const` copy of a source, exported: `export const read = c`, `export const api = st`, read or written in another module. Certified, Chrome warns: the alias row needed a local fact, and that fact leaves out an exported local. In a package it is `d8-pkg-types-lie-plain`",
@@ -5003,6 +5139,25 @@
    "mx-reactive-write-in-owned-scope-pos-handler-owner-refresh-wrapper-forward-13"
   ],
   "rediscovered": "the 76 ids (matrix.mjs --grid --recall --seed 1 --ids, --confirm-with-chrome, macOS, one id set): a16831776 76 false-clean (Chrome sample 8, all same); the fix 0 false-clean (Chrome sample 5, all same): pos-handler-root 38 agree (SC2001 proved V), pos-handler-owner 38 recall-gap (SC2001 U). Every other context of forward-2 was already agree or recall-gap on a16831776. Legal forward-2/forward-13 twins of the code (2,242 ids): 0 false-positive on both builds, 0 ids differ. The smoke sets hold no mx-recall grid, so the ids live here"
+ },
+ {
+  "finding": "P12, R2b's held false cleans: a store a hook returns, read as `use().v` (the hook in the module, or exported and read from another module), and an accessor exported by `export let read = c`: certified, Chrome reported STRICT_READ_UNTRACKED",
+  "found": "R2b, patterns values/r2-hook-store-member, r2-hook-store-module, r2-export-let-copy (open-defects P12)",
+  "fixed": "ADR 0692 (the census, on the merged tree with R2's ADR 0821): now uncertifiable (value-held-in-binding, value-forwarded), not proved",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-hook-store-member-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-hook-store-member-direct-none",
+   "mx-strict-read-untracked-root-use-hook-store-member-direct-none",
+   "mx-strict-read-untracked-body-use-hook-store-module-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-hook-store-module-direct-none",
+   "mx-strict-read-untracked-root-use-hook-store-module-direct-none",
+   "mx-strict-read-untracked-body-use-export-let-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-export-let-direct-none",
+   "mx-strict-read-untracked-root-use-export-let-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs use-hook-store-member, use-hook-store-module, use-export-let, 162 programs (body, effect-apply, root; every binding and layer): R2's rfw1 (pre-census) 162 false-clean, the merge's rm3 0 false-clean, 162 recall-gap, 0 false-positive; patterns: the three programs leave open-defects.json"
  },
  {
   "finding": "SC2003: a store `delete` whose operand Type Facts did not prove optional and writable was certified, though tsc accepts it and the proxy warns STORE_WRITE_OUTSIDE_SETTER (P8, R3's p1-p8): a computed key (`delete st[\"a\"]`), an index or open key (`st.rec[key]`, `st.items[0]`), an index-signature member (`st.rec.k`), a required `T | undefined`, `unknown`, a literal-typed variable key. TS2790 programs had to stay silent, and nothing told them apart",

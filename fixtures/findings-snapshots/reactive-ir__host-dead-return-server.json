@@ -17,6 +17,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-dead-return-server/App.tsx",
+      "start": 632,
+      "end": 639,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return-server/App.tsx",
       "start": 737,
       "end": 742,
       "fixes": 0

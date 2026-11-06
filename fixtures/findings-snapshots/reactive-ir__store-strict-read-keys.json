@@ -252,6 +252,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 3254,
+      "end": 3255,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -282,6 +292,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 3719,
+      "end": 3720,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -309,6 +329,16 @@
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 4103,
       "end": 4109,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/hook.ts",
+      "start": 393,
+      "end": 398,
       "fixes": 0
     },
     {

@@ -33,6 +33,9 @@ use crate::indexes::{EntitySymbols, SemanticLookup};
 use solid_facts::ProjectFacts;
 use typefacts::{Declaration, Location};
 
+mod open_compute;
+pub(crate) use open_compute::OpenComputes;
+
 /// The obligation context of a member call on a caller-supplied value
 /// (ADR 0509), dropped where accessor transport resolves the call.
 pub(crate) const UNRESOLVED_HANDED_MEMBER: &str = "handed-member-dispatch";
@@ -167,6 +170,38 @@ fn source_call_holds_a_value(
     }
 }
 
+/// ADR 0800: how many values one [`LocalAccessContext::value_reaches`] visits.
+const VALUE_WALK_BUDGET: usize = 256;
+
+/// ADR 0800: what a value's walk answers. Every caller opens an obligation on
+/// [`Self::may`]: a walk that ran out of budget decided nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ValueReach {
+    Reaches,
+    Clear,
+    Undecided,
+}
+
+impl ValueReach {
+    pub(crate) fn may(self) -> bool {
+        self != Self::Clear
+    }
+}
+
+/// The walk's state: what it has visited, and how much it may still visit.
+struct ValueWalk {
+    seen: HashSet<(Arc<str>, solid_facts::core::Span)>,
+    left: usize,
+    /// How many steps deep it stands, and how deep it may go, if it is cut.
+    depth: usize,
+    cut_at: Option<usize>,
+}
+
+/// ADR 0802: a tracked call of a value that holds an accessor, kept only if
+/// [`LocalAccessContext::value_holds_open_source`] says so; then it is
+/// [`UNRESOLVED_HANDED_READ`].
+pub(crate) const HELD_OPEN_SOURCE: &str = "held-open-source";
+
 /// [`UNRESOLVED_HANDED_MEMBER`] where the call may only read (its role reports
 /// no write or action): a read row at the call speaks for it.
 pub(crate) const UNRESOLVED_HANDED_READ: &str = "handed-member-read";
@@ -194,8 +229,8 @@ pub(crate) struct HandedTables<'a, 'l> {
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
     /// ADR 0771: at a tracked position a read of a settled accessor is legal,
-    /// so the accessors that count are these.
-    pub(crate) async_only: Option<&'a HashSet<SymbolId>>,
+    /// so the accessors that count are these. `None`: every one.
+    pub(crate) accessors_that_count: Option<&'a dyn Fn(&str) -> bool>,
 }
 
 /// Whether `member`'s object is a local literal that declares an accessor.
@@ -269,6 +304,13 @@ pub(crate) fn handed_value(
     {
         return handed_value(t, file, sequence.tail, depth - 1);
     }
+    // ADR 0777: an assignment's value, as a callee (`(slot ||= r1)()`).
+    let operands = file.ast.composite_callee_references(span);
+    if operands.iter().any(|operand| *operand != span) {
+        return operands
+            .iter()
+            .any(|operand| handed_value(t, file, *operand, depth - 1));
+    }
     // A local literal destructured or indexed later (`const [, f] = [0,
     // ctx.read]`, `const { f } = { f: imported }`): one of its values.
     if let Some(literal) = file.ast.array_literal_at(span) {
@@ -335,7 +377,7 @@ pub(crate) fn handed_value(
     // resolves to (through an import).
     let is_source = |symbol: &str| {
         (t.accessors.contains_key(symbol)
-            && t.async_only.is_none_or(|sources| sources.contains(symbol)))
+            && t.accessors_that_count.is_none_or(|counts| counts(symbol)))
             || t.setters.contains_key(symbol)
             || t.actions.contains_key(symbol)
     };
@@ -613,6 +655,13 @@ fn class_holds_handed_value(
     let Some(declaration) = file.ast.reference_declaration(callee) else {
         return false;
     };
+    let holds = |value: solid_facts::core::Span| {
+        // ADR 0777: a function an instance holds runs where it is called.
+        file.ast
+            .function_at(file.ast.peel_ts_sugar_span(value))
+            .is_some()
+            || handed_value(t, file, value, depth)
+    };
     file.ast
         .classes
         .iter()
@@ -622,9 +671,20 @@ fn class_holds_handed_value(
                 .as_ref()
                 .is_some_and(|name| name.span == declaration)
         })
-        .flat_map(|class| &class.elements)
-        .filter_map(|element| element.value)
-        .any(|value| handed_value(t, file, value, depth))
+        .any(|class| {
+            class
+                .elements
+                .iter()
+                .filter(|element| element.kind == solid_facts::ast::ClassElementKind::Field)
+                .filter_map(|element| element.value)
+                .any(holds)
+                // `this.m = () => …` in the class.
+                || file.ast.assignments.iter().any(|assignment| {
+                    class.span.contains(assignment.target)
+                        && file.ast.member_at(file.ast.peel_ts_sugar_span(assignment.target)).is_some_and(|member| file.source_text(member.object) == Some("this"))
+                        && holds(assignment.value_span)
+                })
+        })
 }
 
 /// Do not apply an incoming-prop witness to a replaced or escaping root.
@@ -1160,6 +1220,25 @@ pub(crate) struct LocalAccessReuse<'a> {
     /// The files whose own facts are the last build's
     /// ([`crate::source_discovery::SourceDiscovery::unchanged_paths`]).
     pub(crate) unchanged_paths: &'a HashSet<String>,
+}
+
+impl<'facts> LocalAccessContext<'_, 'facts> {
+    pub(crate) fn handed_tables<'t>(
+        &'t self,
+        accessors_that_count: Option<&'t dyn Fn(&str) -> bool>,
+    ) -> HandedTables<'t, 'facts> {
+        HandedTables {
+            lookup: self.lookup,
+            entities: self.entities,
+            prop_sources: self.prop_sources,
+            source_kinds: self.source_kinds,
+            accessors: self.accessors,
+            setters: self.setters,
+            actions: self.actions,
+            props_reactivity: self.props_reactivity,
+            accessors_that_count,
+        }
+    }
 }
 
 impl LocalAccessContext<'_, '_> {
@@ -2084,7 +2163,7 @@ impl LocalAccessContext<'_, '_> {
                     .is_none_or(|symbol| {
                         !self.accessors.contains_key(symbol)
                             || (!self.async_sources.contains(symbol)
-                                && self.value_reaches_async_source(file, call.callee, 4))
+                                && self.value_reaches_async_source(file, call.callee).may())
                     })
                 {
                     // ADR 0640: a value closed forms name exactly is that source.
@@ -2574,14 +2653,17 @@ impl LocalAccessContext<'_, '_> {
         let Some(accessor) = self.accessors.get(symbol) else {
             return;
         };
-        if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
-            return;
-        }
         // ADR 0674: a named function no call edge enters, handed by name to a
         // carrier (`[1].map(h)`): a carrier that provably runs it places the
         // read, and one that may not leaves it unplaced. SC1001's zero-run
         // trade is not extended to this arm.
-        let handed = handed_async_read_role(
+        // ADR 0776: a pending source is also a claim at a tracked carrier.
+        let pending = self.async_sources.contains(symbol);
+        let handed = (if pending {
+            handed_pending_read_role
+        } else {
+            handed_async_read_role
+        })(
             file,
             call.callee,
             allowed,
@@ -2590,6 +2672,14 @@ impl LocalAccessContext<'_, '_> {
             self.lookup,
         );
         let key = (mention.path.clone(), mention.start_byte, mention.end_byte);
+        if pending
+            && self.place_pending_read(file, call, symbol, accessor, handed, &key, result, seen)
+        {
+            return;
+        }
+        if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
+            return;
+        }
         if let Some((role, Some(carrier))) = handed
             && role.reports_untracked_read()
             && seen.insert(key.clone())
@@ -2609,6 +2699,48 @@ impl LocalAccessContext<'_, '_> {
         {
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
         }
+    }
+
+    /// ADR 0776, ADR 0778: the row of a pending source's read in a named
+    /// function, where [`handed_pending_read_role`] decides it. True when it did.
+    #[allow(clippy::too_many_arguments)]
+    fn place_pending_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        accessor: &(SymbolId, Location),
+        handed: Option<(ExecutionRole, Option<solid_facts::core::Span>)>,
+        key: &(Arc<str>, u64, u64),
+        result: &mut LocalAccessResult,
+        seen: &mut HashSet<(Arc<str>, u64, u64)>,
+    ) -> bool {
+        let (execution, carrier) = match handed {
+            Some((ExecutionRole::TrackedJsx, Some(carrier))) => {
+                (ExecutionRole::TrackedJsx, Some(carrier))
+            }
+            Some((ExecutionRole::DeferredCallback, None)) => {
+                (ExecutionRole::DeferredCallback, None)
+            }
+            Some((ExecutionRole::Unknown, _)) => {
+                if seen.insert(key.clone()) {
+                    self.push_accessor_read(
+                        file,
+                        call,
+                        symbol,
+                        accessor,
+                        ExecutionRole::Unknown,
+                        result,
+                    );
+                }
+                return true;
+            }
+            _ => return false,
+        };
+        if seen.insert(key.clone()) {
+            self.push_async_read(file, call, symbol, accessor, execution, carrier, result);
+        }
+        true
     }
 
     /// ADR 0676: the role of a read in a callback an exact setter runs on its
@@ -3019,6 +3151,24 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         let key = (mention.path.clone(), mention.start_byte, mention.end_byte);
+        // ADR 0776: a pending source is also a claim at a tracked carrier.
+        if let Some(accessor) = self.accessors.get(symbol)
+            && self.async_sources.contains(symbol)
+            && (inside_non_component_function(file, call.callee, self.lookup)
+                || nested_named_function(file, call.callee, self.lookup))
+        {
+            let handed = handed_pending_read_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            );
+            if self.place_pending_read(file, call, symbol, accessor, handed, &key, result, seen) {
+                return;
+            }
+        }
         // ADR 0531: a read written in a named function the program hands by
         // name to a carrier that runs it before returning (`[1].forEach(f)`,
         // `` tag`x` ``, `f.call(null)`, `Reflect.apply(f, …)`) runs at the
@@ -3503,6 +3653,7 @@ impl LocalAccessContext<'_, '_> {
             || execution.reports_untracked_read()
             || execution.reports_unplaced()
             || self.may_run_in_leaf_owner(file, call.callee)
+            || self.tracked_read_may_suspend(file, call, execution)
         {
             result.dispatch_obligations.push(crate::StaticDefect {
                 kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
@@ -3521,34 +3672,73 @@ impl LocalAccessContext<'_, '_> {
                 fixes: vec![],
                 uncertain: true,
             });
+        } else if self.tracked_read_may_hold_open_source(file, call, execution) {
+            // ADR 0802: decided once every table is built.
+            result.dispatch_obligations.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: file
+                        .source_text(call.callee)
+                        .unwrap_or("this callee")
+                        .to_owned(),
+                    member: None,
+                },
+                location: location(file.path.shared(), call.callee),
+                analysis_context: HELD_OPEN_SOURCE.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
         }
+    }
+
+    /// ADR 0775: a read is legal at a tracked position, and there SC5003 asks
+    /// about a pending source: whether this call may reach one, past no
+    /// boundary. A value that reaches only settled sources does not (`g1c`).
+    fn tracked_read_may_suspend(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        execution: ExecutionRole,
+    ) -> bool {
+        async_execution_role(file, call.callee, execution) == ExecutionRole::TrackedJsx
+            && read_loading_cover(self.lookup, file, call.span, self.symbol_names)
+                != crate::owners::LoadingCover::Covered
+            && self.pending_value(file, call.callee)
+    }
+
+    /// ADR 0802: a tracked call that holds a settled-looking accessor may still
+    /// hold one whose compute is open, and only the built tables can say so.
+    fn tracked_read_may_hold_open_source(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        execution: ExecutionRole,
+    ) -> bool {
+        async_execution_role(file, call.callee, execution) == ExecutionRole::TrackedJsx
+            && read_loading_cover(self.lookup, file, call.span, self.symbol_names)
+                != crate::owners::LoadingCover::Covered
+            && self.handed_callee(file, call.callee)
+    }
+
+    /// [`handed_value`] with an accessor counted only if it may be pending.
+    fn pending_value(&self, file: &solid_facts::FileFacts, span: solid_facts::core::Span) -> bool {
+        handed_value(
+            &self.handed_tables(Some(&|symbol| self.async_sources.contains(symbol))),
+            file,
+            span,
+            HANDED_DEPTH - 1,
+        )
     }
 
     /// Whether `span` is inside a leaf owner's callback (`onSettled`,
     /// `createTrackedEffect`), where a pending async read is forbidden, or in
-    /// a named local function a reference inside one names.
+    /// a named local function a reference inside one names. ADR 0800: each
+    /// reference is visited once, and a walk out of budget may.
     fn may_run_in_leaf_owner(
         &self,
         file: &solid_facts::FileFacts,
         span: solid_facts::core::Span,
     ) -> bool {
-        self.may_run_in_leaf_owner_within(file, span, 3)
-    }
-
-    fn may_run_in_leaf_owner_within(
-        &self,
-        file: &solid_facts::FileFacts,
-        span: solid_facts::core::Span,
-        depth: usize,
-    ) -> bool {
-        may_run_in_leaf_owner(
-            file,
-            span,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-            depth,
-        )
+        may_run_in_leaf_owner(file, span, self.entities, self.symbol_names, self.lookup)
     }
 
     /// Whether the callee, or the binding it names, is typed as a Solid
@@ -3621,22 +3811,7 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         callee: solid_facts::core::Span,
     ) -> bool {
-        handed_value(
-            &HandedTables {
-                lookup: self.lookup,
-                entities: self.entities,
-                prop_sources: self.prop_sources,
-                source_kinds: self.source_kinds,
-                accessors: self.accessors,
-                setters: self.setters,
-                actions: self.actions,
-                props_reactivity: self.props_reactivity,
-                async_only: None,
-            },
-            file,
-            callee,
-            HANDED_DEPTH,
-        )
+        handed_value(&self.handed_tables(None), file, callee, HANDED_DEPTH)
     }
 
     /// The write a call of the setter whose row is `symbol`'s makes: the
@@ -4162,7 +4337,7 @@ impl LocalAccessContext<'_, '_> {
             return self.calls_reach_within(file, head, hit, seen);
         }
         if !ast.identifiers.iter().any(|name| name.span == head) {
-            return self.value_reaches(file, value, 4, hit);
+            return self.value_reaches(file, value, hit).may();
         }
         if crate::source_discovery::reference_symbol(file, head, self.entities, self.lookup)
             .is_some_and(|symbol| hit(&symbol))
@@ -4188,7 +4363,7 @@ impl LocalAccessContext<'_, '_> {
         }
         // An import, a parameter: nothing here follows it.
         let Some((declaration, binding)) = binding else {
-            return self.value_reaches(file, value, 4, hit);
+            return self.value_reaches(file, value, hit).may();
         };
         ast.assignments.iter().any(|assignment| {
             ast.identifiers.iter().any(|name| {
@@ -4366,7 +4541,7 @@ impl LocalAccessContext<'_, '_> {
                                 .is_none()
                                     || !self.span_may_make_computation(file, hook.span, 4)
                             })
-                        && !self.value_reaches_async_source(file, call.callee, 4)
+                        && !self.value_reaches_async_source(file, call.callee).may()
                         // ADR 0658: a value a caller handed over may read.
                         && !self.handed_member_callee(file, call.callee))
                 {
@@ -4539,7 +4714,7 @@ impl LocalAccessContext<'_, '_> {
                                     .lookup
                                     .callee_symbol(file, call.callee)
                                     .is_none_or(|symbol| !self.accessors.contains_key(symbol))
-                                    && self.value_reaches_async_source(file, call.callee, 4)))
+                                    && self.value_reaches_async_source(file, call.callee).may()))
                     })
             })
     }
@@ -4719,26 +4894,18 @@ impl LocalAccessContext<'_, '_> {
         &self,
         file: &solid_facts::FileFacts,
         call: solid_facts::core::Span,
+        open: &OpenComputes<'_>,
     ) -> bool {
         let Some(call) = file.ast.call_at(call) else {
             return true;
         };
-        let tables = HandedTables {
-            lookup: self.lookup,
-            entities: self.entities,
-            prop_sources: self.prop_sources,
-            source_kinds: self.source_kinds,
-            accessors: self.accessors,
-            setters: self.setters,
-            actions: self.actions,
-            props_reactivity: self.props_reactivity,
-            async_only: Some(self.async_sources),
-        };
         // One step down: at the full depth `handed_value` leaves a bare
         // source name to the row its own call has.
-        call.arguments
-            .iter()
-            .any(|argument| handed_value(&tables, file, argument.span, HANDED_DEPTH - 1))
+        // ADR 0775: a withheld literal member's callee holds it too.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let holds = |value| self.value_holds_open_source(file, value, open);
+        call.arguments.iter().any(|argument| holds(argument.span))
+            || (file.ast.member_at(callee).is_some() && holds(callee))
     }
 
     /// Calls whose callee accessor transport resolves to a setter or an
@@ -4820,7 +4987,7 @@ impl LocalAccessContext<'_, '_> {
                 let handed = (inside_non_component_function(file, call.callee, self.lookup)
                     || nested_named_function(file, call.callee, self.lookup))
                 .then(|| {
-                    handed_async_read_role(
+                    handed_pending_read_role(
                         file,
                         call.callee,
                         &allowed,
@@ -4831,7 +4998,7 @@ impl LocalAccessContext<'_, '_> {
                 })
                 .flatten();
                 if let Some((role, Some(carrier))) = handed
-                    && role.reports_untracked_read()
+                    && (role.reports_untracked_read() || role == ExecutionRole::TrackedJsx)
                 {
                     self.push_async_read(
                         file,
@@ -5199,10 +5366,11 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
+                let lexical = async_execution_role(file, position, execution);
                 let execution = async_read_role(
                     file,
                     position,
-                    async_execution_role(file, position, execution),
+                    lexical,
                     self.entities,
                     self.symbol_names,
                     self.lookup,
@@ -5301,6 +5469,28 @@ impl LocalAccessContext<'_, '_> {
                     continue;
                 }
                 if execution != ExecutionRole::TrackedJsx && !unsuspendable {
+                    // ADR 0779: an anonymous function in a tracked position,
+                    // which no binding climbs out of (`<K run={() => h()} />`):
+                    // it may run there, past no boundary.
+                    if lexical == ExecutionRole::TrackedJsx
+                        && read_loading_cover(self.lookup, file, position, self.symbol_names)
+                            != LoadingCover::Covered
+                        && function_binding_name(
+                            file,
+                            containing_ast_function(&file.ast, position).unwrap_or(function),
+                        )
+                        .is_none()
+                    {
+                        self.push_unplaced_async_reads(
+                            file,
+                            read,
+                            name,
+                            declaration,
+                            &options,
+                            result,
+                        );
+                        continue;
+                    }
                     // The call may itself sit in a named local function a
                     // rendered call runs.
                     sites.push((anchor, depth + 1, every && !carrier, first && !carrier));
@@ -5410,9 +5600,11 @@ impl LocalAccessContext<'_, '_> {
                 .into(),
             // ADR 0628: a memo over an async source is pending with it, and a
             // pending read throws instead of warning.
+            // ADR 0800: this question alone stops at a depth. A strict read is
+            // wrong settled and wrong pending, so a walk cut here proves no less.
             uncertain: self.lookup.inside_possible_component(file, call.span)
                 || (!self.async_sources.contains(symbol)
-                    && self.value_reaches_async_source(file, call.callee, 4)),
+                    && self.value_reaches_near_async_source(file, call.callee)),
             missing_jsx_census: missing_jsx_census(file, timing_at, execution),
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
@@ -5724,7 +5916,7 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         let hook = crate::execution_role::hook_result_root(file, value, self.lookup);
-        if hook.is_none() && !self.value_reaches_async_source(file, value, 4) {
+        if hook.is_none() && !self.value_reaches_async_source(file, value).may() {
             return;
         }
         // A module's source has no owner of a body.
@@ -5742,9 +5934,11 @@ impl LocalAccessContext<'_, '_> {
         // a prop or a context value was made by another owner.
         if hook.is_some_and(|hook| {
             !self.span_may_make_computation(file, hook.span, 4)
-                && !self.value_reaches(file, value, 4, &|symbol| {
-                    self.accessors.contains_key(symbol) && !self.accessor_holds_a_value(symbol)
-                })
+                && !self
+                    .value_reaches(file, value, &|symbol| {
+                        self.accessors.contains_key(symbol) && !self.accessor_holds_a_value(symbol)
+                    })
+                    .may()
                 && !self.value_reaches_open_prop(file, value)
         }) {
             return;
@@ -5772,10 +5966,14 @@ impl LocalAccessContext<'_, '_> {
                 // one that names a sync memo says nothing of the memo's sources.
                 analysis_context: if carrier.is_some() {
                     "value-read-under-untrack".to_owned()
-                } else if self.value_reaches_async_source(file, value, 4) {
-                    "derived-read-under-untrack".to_owned()
                 } else {
-                    UNRESOLVED_HANDED_READ.to_owned()
+                    match self.value_reaches_async_source(file, value) {
+                        ValueReach::Reaches => "derived-read-under-untrack".to_owned(),
+                        ValueReach::Undecided => {
+                            crate::blockers::SEARCH_BUDGET_EXHAUSTED.to_owned()
+                        }
+                        ValueReach::Clear => UNRESOLVED_HANDED_READ.to_owned(),
+                    }
                 },
                 fixes: vec![],
                 uncertain: true,
@@ -5842,7 +6040,10 @@ impl LocalAccessContext<'_, '_> {
                 let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
                     return true;
                 };
-                if !self.value_reaches(file, value, 4, &|reached| reached == symbol) {
+                if !self
+                    .value_reaches(file, value, &|reached| reached == symbol)
+                    .may()
+                {
                     return false;
                 }
                 let open = |declared: &Location, property: &str| {
@@ -5919,24 +6120,82 @@ impl LocalAccessContext<'_, '_> {
         &self,
         file: &solid_facts::FileFacts,
         value: solid_facts::core::Span,
-        depth: usize,
-    ) -> bool {
-        self.value_reaches(file, value, depth, &|symbol| {
-            self.async_sources.contains(symbol)
-        })
+    ) -> ValueReach {
+        self.value_reaches(file, value, &|symbol| self.async_sources.contains(symbol))
     }
 
+    /// ADR 0800: whether the value at `value` names a symbol `hit` takes,
+    /// through bindings, functions and hooks, each visited once. A chain has no
+    /// length limit: only the work budget stops the walk, and then it is
+    /// undecided.
     fn value_reaches(
         &self,
         file: &solid_facts::FileFacts,
         value: solid_facts::core::Span,
-        depth: usize,
+        hit: &dyn Fn(&SymbolId) -> bool,
+    ) -> ValueReach {
+        let mut walk = ValueWalk {
+            seen: HashSet::default(),
+            left: VALUE_WALK_BUDGET,
+            depth: 0,
+            cut_at: None,
+        };
+        if self.value_walk(file, value, &mut walk, hit) {
+            ValueReach::Reaches
+        } else if walk.left == 0 {
+            ValueReach::Undecided
+        } else {
+            ValueReach::Clear
+        }
+    }
+
+    /// [`Self::value_reaches_async_source`] within four steps, for the one
+    /// question whose answer stands either way.
+    fn value_reaches_near_async_source(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: solid_facts::core::Span,
+    ) -> bool {
+        let mut walk = ValueWalk {
+            seen: HashSet::default(),
+            left: VALUE_WALK_BUDGET,
+            depth: 0,
+            cut_at: Some(4),
+        };
+        self.value_walk(file, value, &mut walk, &|symbol| {
+            self.async_sources.contains(symbol)
+        })
+    }
+
+    fn value_walk(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: solid_facts::core::Span,
+        walk: &mut ValueWalk,
+        hit: &dyn Fn(&SymbolId) -> bool,
+    ) -> bool {
+        // A cut walk may meet a value again nearer the root.
+        if walk.left == 0
+            || walk.cut_at.is_some_and(|cut| walk.depth >= cut)
+            || (walk.cut_at.is_none() && !walk.seen.insert((file.path.shared(), value)))
+        {
+            return false;
+        }
+        walk.left -= 1;
+        walk.depth += 1;
+        let reaches = self.value_step(file, value, walk, hit);
+        walk.depth -= 1;
+        reaches
+    }
+
+    fn value_step(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: solid_facts::core::Span,
+        walk: &mut ValueWalk,
         hit: &dyn Fn(&SymbolId) -> bool,
     ) -> bool {
         let ast = &file.ast;
-        let Some(depth) = depth.checked_sub(1) else {
-            return false;
-        };
         // What the text declares: a shorthand `return { setO }` is no reference.
         if ast.bindings.iter().any(|binding| {
             binding.names.iter().any(|name| {
@@ -5975,7 +6234,7 @@ impl LocalAccessContext<'_, '_> {
                         .as_ref()
                         .is_some_and(|name| name.span == declaration)
                 }) {
-                    return self.value_reaches(file, function.span, depth, hit);
+                    return self.value_walk(file, function.span, walk, hit);
                 }
                 let binding = ast
                     .bindings
@@ -5993,12 +6252,12 @@ impl LocalAccessContext<'_, '_> {
                             0,
                             self.lookup,
                         )
-                    && self.value_reaches(hook_file, hook.span, depth, hit)
+                    && self.value_walk(hook_file, hook.span, walk, hit)
                 {
                     return true;
                 }
                 binding.is_some_and(|binding| match binding.initializer {
-                    Some(initializer) => self.value_reaches(file, initializer, depth, hit),
+                    Some(initializer) => self.value_walk(file, initializer, walk, hit),
                     // A `let` with no initializer holds what is assigned to it.
                     None => {
                         !binding.immutable
@@ -6006,7 +6265,7 @@ impl LocalAccessContext<'_, '_> {
                                 ast.identifiers.iter().any(|name| {
                                     assignment.target.contains(name.span)
                                         && ast.reference_declaration(name.span) == Some(declaration)
-                                }) && self.value_reaches(file, assignment.value_span, depth, hit)
+                                }) && self.value_walk(file, assignment.value_span, walk, hit)
                             })
                     }
                 })
@@ -6167,7 +6426,8 @@ impl LocalAccessContext<'_, '_> {
                 } else {
                     async_read_role(
                         file,
-                        call.callee,
+                        // ADR 0776: a carrier's role is the carrier's.
+                        placed_at.unwrap_or(call.callee),
                         async_execution,
                         self.entities,
                         self.symbol_names,
@@ -6191,7 +6451,7 @@ impl LocalAccessContext<'_, '_> {
             let throws_under_untrack = async_provenance
                 && async_execution == ExecutionRole::UntrackedRendering
                 && execution != ExecutionRole::UntrackedRendering;
-            let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
+            let cover = read_loading_cover(self.lookup, file, timing_at, self.symbol_names);
             // ADR 0504: the proof climbs from the read to the apply itself, so a
             // read in a closure the apply calls (its own role the body's) is
             // placed there too.
@@ -6218,6 +6478,20 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
                 CARRIED_LEAF_DEPTH,
             );
+            // ADR 0778: a pending read on a later task throws with no code, and
+            // whether the source has settled by then is unknown. The projector
+            // takes no such role: the read is unplaced, as a handler's is. A
+            // leaf owner's callback has its own rule.
+            let async_execution = if async_provenance
+                && async_execution == ExecutionRole::DeferredCallback
+                && leaf_owner.is_none()
+                && !async_options.declared_loading
+                && !file.ast.any_jsx_containing(call.callee)
+            {
+                ExecutionRole::Unknown
+            } else {
+                async_execution
+            };
             result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!("{name}()").into(),
                 location: location(file.path.shared(), call.span),
@@ -8904,6 +9178,44 @@ pub(crate) fn handed_async_read_role(
     )
 }
 
+/// ADR 0776: [`handed_async_read_role`] for a source that may be pending: a
+/// tracked carrier places it too, where SC5003 asks about it.
+pub(crate) fn handed_pending_read_role(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
+    handed_role(
+        file,
+        span,
+        lookup,
+        true,
+        |at| {
+            if empty_literal_carrier(file, at) {
+                return ExecutionRole::DiscardedRendering;
+            }
+            async_execution_role(
+                file,
+                at,
+                read_execution_role(file, at, allowed, entities, symbol_names, lookup),
+            )
+        },
+        |role| role.reports_untracked_read() || role == ExecutionRole::TrackedJsx,
+    )
+}
+
+/// `[].map(f)`: the carrier at `at` is a method of an empty array literal.
+fn empty_literal_carrier(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
+    let ast = &file.ast;
+    ast.call_at(at)
+        .and_then(|call| ast.member_at(ast.peel_ts_sugar_span(call.callee)))
+        .and_then(|member| ast.array_literal_at(ast.peel_ts_sugar_span(member.object)))
+        .is_some_and(|literal| literal.elements.is_empty())
+}
+
 /// ADR 0535: a write or an action call in a named function handed by name
 /// to an inline carrier runs at the carrier; an unplaced hand-off, or a
 /// function written as a member's value, is an obligation. A role already
@@ -9692,14 +10004,26 @@ pub(crate) fn unreached_write_may_run(
 
 /// Whether `span` is inside a leaf owner's callback (`onSettled`,
 /// `createTrackedEffect`), where a pending async read is forbidden, or in a
-/// named local function a reference inside one names, `depth` names deep.
+/// named local function a reference inside one names. ADR 0800: each
+/// reference is visited once, and a walk out of budget may.
 pub(crate) fn may_run_in_leaf_owner(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
-    depth: usize,
+) -> bool {
+    let mut seen = HashSet::default();
+    may_run_in_leaf_owner_within(file, span, entities, symbol_names, lookup, &mut seen)
+}
+
+fn may_run_in_leaf_owner_within(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    seen: &mut HashSet<solid_facts::core::Span>,
 ) -> bool {
     if containing_leaf_owner(file, span, entities, symbol_names, lookup).is_some()
         || file.ast.functions.iter().any(|leaf| {
@@ -9708,9 +10032,6 @@ pub(crate) fn may_run_in_leaf_owner(
         })
     {
         return true;
-    }
-    if depth == 0 {
-        return false;
     }
     // The innermost function a name holds, through any IIFE written around
     // the span (it runs where it is written); any other anonymous function
@@ -9722,14 +10043,16 @@ pub(crate) fn may_run_in_leaf_owner(
             return file.ast.identifiers.iter().any(|identifier| {
                 identifier.role == solid_facts::ast::IdentifierRole::Reference
                     && file.ast.reference_declaration(identifier.span) == Some(name.span)
-                    && may_run_in_leaf_owner(
-                        file,
-                        identifier.span,
-                        entities,
-                        symbol_names,
-                        lookup,
-                        depth - 1,
-                    )
+                    && (seen.len() >= VALUE_WALK_BUDGET
+                        || (seen.insert(identifier.span)
+                            && may_run_in_leaf_owner_within(
+                                file,
+                                identifier.span,
+                                entities,
+                                symbol_names,
+                                lookup,
+                                seen,
+                            )))
             });
         }
         let invoked = file

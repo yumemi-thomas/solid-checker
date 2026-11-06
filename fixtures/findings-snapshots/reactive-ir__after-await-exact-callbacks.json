@@ -52,6 +52,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 819,
+      "end": 820,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -78,6 +88,16 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 1105,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 1114,
       "end": 1115,
       "fixes": 0
     },
@@ -142,6 +162,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 2186,
+      "end": 2187,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -158,6 +188,16 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 2481,
+      "end": 2489,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 2488,
       "end": 2489,
       "fixes": 0
     },

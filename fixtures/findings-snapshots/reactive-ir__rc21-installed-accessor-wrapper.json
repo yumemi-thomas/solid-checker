@@ -17,8 +17,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 245,
+      "end": 253,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 447,
       "end": 465,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 508,
+      "end": 516,
       "fixes": 0
     },
     {
@@ -37,8 +57,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 748,
+      "end": 756,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 942,
       "end": 993,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 982,
+      "end": 990,
       "fixes": 0
     },
     {
@@ -57,8 +97,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1220,
+      "end": 1228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 1332,
       "end": 1370,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1522,
+      "end": 1530,
       "fixes": 0
     }
   ]

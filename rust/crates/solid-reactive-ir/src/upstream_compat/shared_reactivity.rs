@@ -1268,7 +1268,7 @@ fn handed_tables<'a, 'l>(
         setters: context.setters,
         actions: context.actions,
         props_reactivity: context.props_reactivity,
-        async_only: None,
+        accessors_that_count: None,
     }
 }
 

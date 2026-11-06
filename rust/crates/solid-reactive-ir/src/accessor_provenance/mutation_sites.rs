@@ -184,6 +184,126 @@ fn resolves_to_project_function(
         })
 }
 
+/// The global `span` names: an identifier no declaration binds.
+fn global_name(file: &FileFacts, span: Span) -> Option<&str> {
+    let reference = file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == span && identifier.role == ast::IdentifierRole::Reference
+    });
+    (reference && file.ast.reference_declaration(span).is_none())
+        .then(|| file.source_text(span))
+        .flatten()
+}
+
+/// Whether the expression at `span` is only compared, so its value goes nowhere
+/// (`x instanceof Array`, `v.constructor === Array`, `typeof Function`).
+fn only_compared(file: &FileFacts, span: Span) -> bool {
+    let (Some(before), Some(after)) = (
+        file.source.get(..span.start as usize),
+        file.source.get(span.end as usize..),
+    ) else {
+        return false;
+    };
+    let (before, after) = (before.trim_end(), after.trim_start());
+    ["===", "!==", "==", "!=", "instanceof", "typeof"]
+        .iter()
+        .any(|operator| before.ends_with(operator))
+        || ["===", "!==", "==", "!=", "instanceof"]
+            .iter()
+            .any(|operator| after.starts_with(operator))
+}
+
+/// ADR 0801: whether `file` obtains, as a value, what the array iteration
+/// protocol lives on or a way to code from a string. `Array.prototype` and the
+/// array iterator's prototype are reached only by these spellings: the
+/// `Array` global as a value, `Array.prototype` with no plain member after it, a
+/// global object's `Array`, `__proto__`, `getPrototypeOf`, `.constructor`. Code
+/// from a string: `eval`, `Function`, a timer's string. A script element or a
+/// frame is outside the model. Per file, reading only the file: the base
+/// layer's [`crate::base::Hazard::ArrayIntrinsicObtained`].
+pub(crate) fn array_intrinsic_obtained(file: &FileFacts) -> bool {
+    let callees = file
+        .ast
+        .calls
+        .iter()
+        .map(|call| (file.ast.peel_ts_sugar_span(call.callee), call.span))
+        .collect::<HashMap<_, _>>();
+    let objects = file
+        .ast
+        .members
+        .iter()
+        .map(|member| file.ast.peel_ts_sugar_span(member.object))
+        .collect::<HashSet<_>>();
+    let member_after = |span: Span| {
+        file.source
+            .get(span.end as usize..)
+            .is_some_and(|after| after.trim_start().starts_with('.'))
+    };
+    file.ast.members.iter().any(|member| {
+        let key = member_key(file, member);
+        match key {
+            Some("__proto__") => return true,
+            Some("getPrototypeOf") => {
+                return callees
+                    .get(&member.span)
+                    .is_none_or(|call| !only_compared(file, *call));
+            }
+            Some("constructor") => {
+                let named = file
+                    .source
+                    .get(member.span.end as usize..)
+                    .is_some_and(|after| after.trim_start().starts_with(".name"));
+                return !named && !only_compared(file, member.span);
+            }
+            _ => {}
+        }
+        match global_name(file, file.ast.peel_ts_sugar_span(member.object)) {
+            Some("globalThis" | "window" | "self" | "global") => {
+                key.is_none_or(|key| matches!(key, "Array" | "Function" | "eval"))
+            }
+            Some("Array") => {
+                key.is_none() || (key == Some("prototype") && !member_after(member.span))
+            }
+            _ => false,
+        }
+    }) || file.ast.identifiers.iter().any(|identifier| {
+        matches!(
+            global_name(file, identifier.span),
+            Some("Array" | "Function")
+        ) && !file.ast.type_names.contains(&identifier.span)
+            && !objects.contains(&identifier.span)
+            && !callees.contains_key(&identifier.span)
+            && !only_compared(file, identifier.span)
+    }) || file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| global_name(file, identifier.span) == Some("eval"))
+        || file.ast.calls.iter().any(|call| {
+            match global_name(file, file.ast.peel_ts_sugar_span(call.callee)) {
+                Some("Function") => true,
+                // A timer runs a string as code.
+                Some("setTimeout" | "setInterval") => {
+                    call.arguments.first().is_some_and(|handler| {
+                        handler.spread
+                            || handler.runtime_value_kind == ast::RuntimeValueKind::Primitive
+                    })
+                }
+                _ => false,
+            }
+        })
+}
+
+/// ADR 0801: whether a hook's accessor slot may not be what the literal holds.
+/// A local `const [a] = createSignal(0)` rests on the same protocol with no
+/// census at all. What this asks is whether anything can reach that protocol:
+/// a program that never obtains an intrinsic cannot change it, whatever it
+/// writes. [`tuple_iteration_write`] refuses every call it cannot name, which
+/// any callback prop is, and every computed write. Both answers are hazard
+/// probes, so a reuse records which files' hazards it read.
+pub(crate) fn tuple_slot_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
+    lookup.program_has_eval() || lookup.hazard_present(crate::base::Hazard::ArrayIntrinsicObtained)
+}
+
 pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
     if lookup.visible_string_code() {
         return true;
@@ -227,7 +347,7 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                 // are covered by the same project-wide write census; exact
                 // non-mutating library signatures are outside this catalog.
                 return lookup.primitive_at_call(file, call.span).is_none()
-                    && !intrinsic_disjoint_store_setter(file, call, lookup)
+                    && !intrinsic_disjoint_setter(file, call, lookup)
                     && !intrinsic_disjoint_proxy_creation(file, call, lookup)
                     && !source_bound_invocation(file, call.callee, lookup)
                     && lookup
@@ -1063,10 +1183,13 @@ pub(super) fn source_bound_invocation(
             })
 }
 
-/// A store-setter type corroborates the binding, but does not prove runtime
-/// identity alone. Require the exact unwritten slot produced by a dialect
-/// primitive as well. Casts and declared-only setters cannot discharge a call.
-pub(super) fn intrinsic_disjoint_store_setter(
+/// ADR 0801: a setter stores its argument, or calls it with the previous value,
+/// and a function it calls is in the same census. It mutates no intrinsic, so an
+/// object handed to it (`setNow(new Date())`) leaves array iteration alone. This
+/// needs the exact unwritten setter slot a dialect primitive's tuple produced: a
+/// type alone does not prove runtime identity, so a cast or a declared-only
+/// setter cannot discharge a call.
+pub(super) fn intrinsic_disjoint_setter(
     file: &FileFacts,
     call: &ast::CallFact,
     lookup: &SemanticLookup<'_>,
@@ -1087,18 +1210,6 @@ pub(super) fn intrinsic_disjoint_store_setter(
     let Some(slot) = binding.array_slots.get(1).and_then(Option::as_ref) else {
         return false;
     };
-    let store_role = lookup
-        .entity_at(file.path.as_str(), callee)
-        .or_else(|| lookup.entity_at(origin.path.as_str(), slot.span))
-        .and_then(|entity| entity.type_descriptor.as_ref())
-        .is_some_and(|descriptor| {
-            descriptor.alias_declarations.iter().any(|declaration| {
-                lookup
-                    .dialect
-                    .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
-                    == Some(solid_dialect::TypeRole::StoreSetter)
-            })
-        });
     simple_array_binding(binding)
         && lookup.entity_symbol(origin, slot.span) == Some(symbol.as_str())
         && !crate::indexes::binding_written(origin, slot.span)
@@ -1106,10 +1217,7 @@ pub(super) fn intrinsic_disjoint_store_setter(
             .initializer
             .and_then(|span| origin.ast.call_at(origin.ast.peel_ts_sugar_span(span)))
             .and_then(|created| lookup.primitive_at_call(origin, created.span))
-            .is_some_and(|primitive| {
-                lookup.dialect.returns_reactive_tuple(primitive)
-                    && (store_role || lookup.dialect.returns_store(primitive))
-            })
+            .is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive))
 }
 
 /// ADR 0292: whether any analyzed file holds a reflective write

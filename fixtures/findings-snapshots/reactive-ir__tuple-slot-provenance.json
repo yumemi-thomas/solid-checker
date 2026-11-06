@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "reactive-dispatch-unresolved",
@@ -82,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
+      "start": 1382,
+      "end": 1389,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -139,6 +149,16 @@
       "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
       "start": 2163,
       "end": 2167,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
+      "start": 2194,
+      "end": 2199,
       "fixes": 0
     },
     {
@@ -252,6 +272,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
+      "start": 3443,
+      "end": 3452,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -292,6 +322,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 561,
+      "end": 568,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 729,
+      "end": 734,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -312,6 +362,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 892,
+      "end": 897,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 1013,
+      "end": 1018,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -319,6 +389,26 @@
       "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
       "start": 1297,
       "end": 1306,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 1363,
+      "end": 1370,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 1404,
+      "end": 1411,
       "fixes": 0
     },
     {
@@ -332,6 +422,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 1544,
+      "end": 1549,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -339,6 +439,16 @@
       "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
       "start": 1688,
       "end": 1695,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 1713,
+      "end": 1718,
       "fixes": 0
     },
     {
@@ -352,6 +462,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 1888,
+      "end": 1893,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -359,6 +479,16 @@
       "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
       "start": 2074,
       "end": 2081,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 2098,
+      "end": 2103,
       "fixes": 0
     },
     {
@@ -372,6 +502,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 2246,
+      "end": 2251,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -379,6 +519,26 @@
       "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
       "start": 2388,
       "end": 2395,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 2435,
+      "end": 2440,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-provenance/factories.ts",
+      "start": 2943,
+      "end": 2948,
       "fixes": 0
     }
   ]

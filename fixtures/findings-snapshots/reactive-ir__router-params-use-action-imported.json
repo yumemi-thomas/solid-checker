@@ -20,6 +20,26 @@
       "start": 321,
       "end": 336,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported/App.tsx",
+      "start": 903,
+      "end": 907,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported/App.tsx",
+      "start": 943,
+      "end": 947,
+      "fixes": 0
     }
   ]
 }

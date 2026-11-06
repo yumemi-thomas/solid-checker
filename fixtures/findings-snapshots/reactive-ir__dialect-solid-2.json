@@ -122,6 +122,18 @@
       "hint": "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here."
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 3326,
+      "end": 3367,
+      "fixes": 0,
+      "message": "the runtime target of this value cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior",
+      "hint": "Narrow the value to one exact implementation, or wrap the alternatives in an adapter whose body is available to solid-checker and has one explicit reactive behavior."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",

@@ -107,6 +107,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-invalid.tsx",
+      "start": 480,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-invalid.tsx",
       "start": 545,
       "end": 549,
       "fixes": 0
@@ -422,6 +432,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
+      "start": 403,
+      "end": 408,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -712,6 +732,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
+      "start": 262,
+      "end": 281,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -752,6 +782,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
+      "start": 358,
+      "end": 391,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -759,6 +799,16 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-valid.tsx",
       "start": 98,
       "end": 117,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-valid.tsx",
+      "start": 153,
+      "end": 168,
       "fixes": 0
     },
     {
@@ -778,6 +828,16 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
       "start": 208,
+      "end": 221,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
+      "start": 216,
       "end": 221,
       "fixes": 0
     },
@@ -852,6 +912,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
+      "start": 388,
+      "end": 393,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -859,6 +929,16 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
       "start": 748,
       "end": 767,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
+      "start": 812,
+      "end": 817,
       "fixes": 0
     },
     {

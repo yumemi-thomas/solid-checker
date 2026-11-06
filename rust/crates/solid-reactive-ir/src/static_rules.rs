@@ -473,7 +473,6 @@ fn component_props_destructure(
                         ctx.entities,
                         ctx.symbol_names,
                         ctx.semantic_lookup,
-                        3,
                     )
                 };
                 let names = (binding.names.len() <= binding.object_slots.len()).then(|| {
@@ -990,7 +989,7 @@ fn handed_reads_after_await_through_calls<'a>(
         setters: ctx.setters,
         actions: ctx.actions,
         props_reactivity: ctx.props_reactivity,
-        async_only: None,
+        accessors_that_count: None,
     };
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {

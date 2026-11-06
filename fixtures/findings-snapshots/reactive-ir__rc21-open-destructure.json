@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 200,
+      "end": 205,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -29,6 +39,16 @@
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 216,
       "end": 226,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 230,
+      "end": 235,
       "fixes": 0
     },
     {
@@ -52,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 273,
+      "end": 278,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -62,6 +92,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 307,
+      "end": 312,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -69,6 +109,16 @@
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 404,
       "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 412,
+      "end": 417,
       "fixes": 0
     },
     {

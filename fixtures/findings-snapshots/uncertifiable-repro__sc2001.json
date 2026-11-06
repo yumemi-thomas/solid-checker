@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package.ts",
+      "start": 378,
+      "end": 385,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -52,6 +62,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 650,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 668,
+      "end": 683,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -69,6 +99,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-assigned.ts",
       "start": 430,
       "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-member.tsx",
+      "start": 268,
+      "end": 285,
       "fixes": 0
     },
     {
@@ -109,6 +149,26 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
       "start": 633,
       "end": 649,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 841,
+      "end": 854,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 859,
+      "end": 871,
       "fixes": 0
     },
     {
@@ -196,6 +256,16 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 846,
+      "end": 859,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
       "start": 709,
       "end": 737,
@@ -239,6 +309,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-sibling-called.tsx",
       "start": 700,
       "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-sibling-called.tsx",
+      "start": 762,
+      "end": 766,
       "fixes": 0
     },
     {
@@ -459,6 +539,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
       "start": 763,
       "end": 786,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 780,
+      "end": 785,
       "fixes": 0
     },
     {
@@ -722,6 +812,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
+      "start": 706,
+      "end": 710,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -872,6 +972,16 @@
       "fixes": 0
     },
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
+      "start": 452,
+      "end": 459,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -879,6 +989,26 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
       "start": 490,
       "end": 503,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
+      "start": 498,
+      "end": 503,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
+      "start": 392,
+      "end": 397,
       "fixes": 0
     },
     {
@@ -939,6 +1069,16 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
       "start": 519,
       "end": 532,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 751,
+      "end": 762,
       "fixes": 0
     }
   ]

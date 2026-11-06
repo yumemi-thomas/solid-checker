@@ -31,7 +31,8 @@ const ids = readdirSync(casesDir).filter((n) => existsSync(join(casesDir, n, "Ap
 for (const id of ids) {
   const dir = join(root, "cases", id);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "App.tsx"), readFileSync(join(casesDir, id, "App.tsx")));
+  // Every source of the case: a program may span files.
+  for (const name of readdirSync(join(casesDir, id))) if (/\.tsx?$/.test(name)) writeFileSync(join(dir, name), readFileSync(join(casesDir, id, name)));
   writeFileSync(join(dir, "entry.tsx"), `import { OBSERVE, flush } from "solid-js";
 import { render } from "@solidjs/web";
 const rec: any = { diagnostics: [], errors: [], logs: [], hasFocus: document.hasFocus() };

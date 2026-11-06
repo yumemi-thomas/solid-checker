@@ -77,6 +77,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dynamic-string-tag-events/polymorphic.tsx",
+      "start": 778,
+      "end": 784,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dynamic-string-tag-events/polymorphic.tsx",
+      "start": 1928,
+      "end": 1933,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dynamic-string-tag-events/polymorphic.tsx",
       "start": 2308,
       "end": 2490,
       "fixes": 0
@@ -99,6 +119,16 @@
       "path": "fixtures/reactive-ir/dynamic-string-tag-events/polymorphic.tsx",
       "start": 2358,
       "end": 2371,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dynamic-string-tag-events/polymorphic.tsx",
+      "start": 2458,
+      "end": 2464,
       "fixes": 0
     },
     {

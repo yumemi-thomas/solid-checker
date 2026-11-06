@@ -102,6 +102,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/typed-accessor-roots/App.tsx",
+      "start": 3442,
+      "end": 3448,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -139,6 +149,16 @@
       "path": "fixtures/reactive-ir/typed-accessor-roots/App.tsx",
       "start": 3995,
       "end": 4008,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/typed-accessor-roots/impl.ts",
+      "start": 474,
+      "end": 479,
       "fixes": 0
     }
   ]

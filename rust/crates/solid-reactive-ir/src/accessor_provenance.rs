@@ -146,6 +146,8 @@ pub(crate) struct MemberStability {
     /// ADR 0282: a visible mutation that may change the array iteration
     /// protocol. Unknown receivers/keys refuse; spelling is not identity.
     tuple_iteration: bool,
+    /// ADR 0801: [`tuple_slot_iteration_write`], for a hook's accessor slot.
+    tuple_slot_iteration: bool,
 }
 
 pub(crate) enum Stability<'a> {
@@ -315,6 +317,7 @@ impl MemberStability {
             }
         }
         project.tuple_iteration = lookup.tuple_iteration_may_be_mutated();
+        project.tuple_slot_iteration = lookup.tuple_slot_iteration_may_be_mutated();
         project
     }
 

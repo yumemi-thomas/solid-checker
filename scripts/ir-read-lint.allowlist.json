@@ -231,6 +231,9 @@
   "rust/crates/solid-reactive-ir/src/loading_hold.rs": {
     "facts.files": 1
   },
+  "rust/crates/solid-reactive-ir/src/local_access/open_compute.rs": {
+    "file_by_path": 2
+  },
   "rust/crates/solid-reactive-ir/src/local_access.rs": {
     "facts.files": 4,
     "file_by_path": 5,
@@ -290,6 +293,7 @@
   },
   "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
     "facts.files": 1,
+    "files()": 1,
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/route_components.rs": {
@@ -368,5 +372,8 @@
   },
   "rust/crates/solid-reactive-ir/src/valid_use_server.rs": {
     "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/value_use.rs": {
+    "file_by_path": 1
   }
 }

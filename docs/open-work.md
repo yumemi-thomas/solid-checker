@@ -8,7 +8,19 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
-Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `may_run_in_leaf_owner_within` (3), `value_reaches` (4). `typed_sources` views (8) and `context_origin` rest on the census.
+Value-use census (ADR 0692), accepted trade: a hook's object or tuple handed on past one hop (`value-forwarded`, `value-to-unresolved-callee`, `value-in-carrier`) is uncertifiable, 1,221 corpus sites. Reopen: follow holders through a second hop and through `Object.keys`-style calls that read no value.
+
+Census, later proof (coordinator, 2026-11-07): `refresh(t)` and `affects(t, k?)` read only `t[$REFRESH]` or `t[$TARGET]` (rc.21 `@solidjs/signals` dev.js:3636, :10018), and a computed key coerces a function without calling it, so these positions could be followed instead of `value-in-carrier` / `value-use-unclassified`. Not done: show a store proxy's `$REFRESH` Get is untracked, and measure in Chrome. Until then they stay uncertifiable (tsc-oracle cases [4], [6], [21] carry them as distinct findings).
+
+Census, missing proofs (U today): ownership cases [79] hook-member-write and [80] hook-member-write-in-setter open at `store` (value-held-in-binding). The census runs before upstream_compat, and SC2003 leaves no row it can read: [79]'s is a static violation, [80]'s write is legal in the setter. Proof: surface the member writes SC2003 examined, without changing what it reports (upstream-parity skill), and run the census after it.
+
+Not checked (PLAN.md, kept here when it goes): SC7007 at runtime (no host compiles `"use server"`); SC7006's `export let` edit on a server; every `continue` in `cleanup.rs` read line by line; `effect_phase.rs` `None` arms beyond the method path.
+
+Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
+
+A memo over a parameter or a callback prop that every caller fills with a settled value is uncertifiable (ADR 0802): `source_compute_open` does not follow the arguments yet. A setter or a closure in a hook's tuple keeps ADR 0282's full veto (ADR 0801), so it stays SC9012 in most programs where an accessor slot is exact. So does a memo whose compute calls a `.map` callback's parameter over a closed literal (`objects.map(item => item.read())`): the handed net does not follow it.
+
+**False positive, open (R1c):** ADR 0282's census misses a `Function` held in a parameter and called with a string (`run(globalThis.Function)`, `make("…")()`), which can patch iteration. A hook's setter slot is then taken as exact: pattern `types/s02-setter-slot-function-escaped` gives SC2001 where Chrome is silent, the same on `0818e258a`. ADR 0222's returned-source reads rest on the same census. The accessor slot does not: ADR 0801's census refuses any program that obtains `Function` (fixture `tuple-slot-function-obtained`).
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 
@@ -242,9 +254,9 @@ Known false-positive shapes left open (fire today, wanted gone):
 - `untrack` (ADRs 0628, 0629): uncertifiable where the run may throw or warn but nothing proves it: a memo over an async source (no row says it is pending, so its strict read is uncertifiable too), a prop a hook reads through `merge`, `omit` or a spread (nothing follows the passed source there, and a getter's inline memo would be this body's), a closure handed by name (`untrack(read)`) and a wrapper called under it, a hook's value no transport resolves, a hook with two creations, a root's memo, a parameter a helper reads under `untrack`, a member of a value escaped from `untrack` that no store literal proves (a prop, a `Date` slot, a helper's result, a hand-off). A label that is an expression leaves its reads unplaced; `untrack(named, label)` with such a label is taken as unlabelled. A body re-run onto a fresh memo never ends and reports no code.
 
 - SC1001, SC5001 and SC5003 of a source with an open compute (ADR 0665) are uncertifiable, so `search()` from TanStack `useSearch` loses its true SC1001 (`probus-hk` Plan.tsx, 4 sites): its memo returns `res as TSelected` from a caller-supplied `select`, a bare type parameter, and ADRs 0266 and 0300 close no return. Moved past the plan's stop condition (true violation, no local proof): the owner decides. A parameter compute (`createMemo(options)`) is open too, though its declared type may close it.
-- SC5003 of a read in tracked JSX through a module hook, barrel, wrapper or hand-off has no row (ADR 0668, 690 programs, `open-defects.json`), until the census.
+- SC5003 of a read in tracked JSX: the 690 programs of ADR 0668 are closed (ADRs 0774-0776, 0779). An alias, a literal member, a hook's value and an unplaced read are uncertifiable, and only a carrier's named function is proved. Later proof: a never-rewritten `let` or a closed literal over an async source.
 
-- SC5001 of a pending getter handed through a member tag (`<ui.C a={a()} />`) has no row (71 programs, `open-defects.json`). SC1003 of a store destructure in a `ref` in a row, by name or from a factory certifies (152, ADR 0670). SC1002 of a named handler reading an accessor held by assignment has no row (20, ADR 0669). SC1002 `c05`, a `Map`-held accessor, until the census.
+- SC5001 of a pending getter handed through a member tag (`<ui.C a={a()} />`) has no row (71 programs, `open-defects.json`). SC1003 of a store destructure in a `ref` in a row, by name or from a factory certifies (152, ADR 0670). SC1002 of a named handler reading an accessor held by assignment has no row (20, ADR 0669). SC1002 `c05`, a `Map`-held accessor, is now uncertifiable through the census (ADR 0692).
 
 ## 4. Open questions and live approximations
 

@@ -217,6 +217,46 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3609,
+      "end": 3613,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3771,
+      "end": 3772,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4061,
+      "end": 4062,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4408,
+      "end": 4412,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 4447,
       "end": 4448,
       "fixes": 0
@@ -359,6 +399,16 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 7434,
       "end": 7446,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7627,
+      "end": 7631,
       "fixes": 0
     }
   ]

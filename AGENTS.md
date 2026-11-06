@@ -22,7 +22,10 @@ and docs/decisions.md (live decisions by ADR number).
    the execution model prove it. A missing fact, symbol, call target, compiler
    behavior, or dependency source yields an uncertifiable result (internal
    only, ADR 0328), never a violation and never a silent clean.
-   "Unresolved" is not evidence of anything.
+   "Unresolved" is not evidence of anything. A clean needs a proof: never
+   remove, narrow or skip an obligation, a witness or a judge row to gain
+   cleans or lose uncertifiables. What cannot be proved stays a named
+   uncertifiable.
 3. **Exact resolution.** Resolve exact symbols and declarations. No name-only
    matching, smallest-contained-symbol, wildcard trust, guessed member dispatch,
    or package behavior inferred from a package name. External behavior comes

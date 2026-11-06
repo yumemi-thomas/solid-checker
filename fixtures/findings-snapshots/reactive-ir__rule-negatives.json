@@ -20,6 +20,16 @@
       "start": 689,
       "end": 699,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rule-negatives/Props.tsx",
+      "start": 688,
+      "end": 690,
+      "fixes": 0
     }
   ]
 }

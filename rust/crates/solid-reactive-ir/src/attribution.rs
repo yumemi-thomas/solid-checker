@@ -114,6 +114,35 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     });
 }
 
+/// Whether the value census may take an exported function's callers as all of
+/// them (ADR 0692): the program is closed and every entry is a call expression
+/// the graph resolves to it, with no namespace handing it out unnamed. The
+/// premise ADR 0203's discharge takes; one graph serves a whole census.
+pub(crate) struct ExportedCallers<'a, 'b>(CallGraph<'a, 'b>);
+
+impl<'a, 'b> ExportedCallers<'a, 'b> {
+    pub(crate) fn new(
+        lookup: &'a SemanticLookup<'b>,
+        aliases: &'a HashMap<SymbolId, SymbolId>,
+        symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
+    ) -> Self {
+        Self(CallGraph {
+            lookup,
+            entities: lookup.entities(),
+            aliases,
+            symbols_by_root,
+            namespace_escapes: OnceCell::new(),
+            load_members: OnceCell::new(),
+            attested_project_texts: RefCell::new(None),
+            may_name_unresolved: true,
+        })
+    }
+
+    pub(crate) fn enumerable(&self, path: &str, function: Span) -> bool {
+        self.0.lookup.program_closed && self.0.entered_only_through_call_expressions(path, function)
+    }
+}
+
 /// How many functions a parameter's value is followed back through (ADR 0213).
 const PASS_THROUGH_DEPTH: usize = 4;
 

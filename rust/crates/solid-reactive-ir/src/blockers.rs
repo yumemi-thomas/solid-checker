@@ -103,6 +103,9 @@ pub(crate) const VALUE_BOUND_HELD: &str = "value-bound-held";
 pub(crate) const VALUE_FORWARDED: &str = "value-forwarded";
 pub(crate) const VALUE_ROOT_IN_HELPER: &str = "value-root-in-helper";
 pub(crate) const VALUE_USE_UNCLASSIFIED: &str = "value-use-unclassified";
+/// `export default` of a literal or a call: no binding names it, so no importer
+/// is walked (W's census review H1).
+pub(crate) const VALUE_EXPORTED_UNNAMED: &str = "value-exported-unnamed";
 pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-premise";
 /// ADR 0694: a store Get that only leads to a write, in a window no read in
 /// that body is proven in. `via` carries it: the row reads as through this.

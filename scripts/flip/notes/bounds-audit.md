@@ -93,10 +93,10 @@ One more answered a violation from a partial path (`is_own_setter`, a measured f
 | upstream_compat/shared_reactivity.rs:2279 `call_value` | 6 | false → `handed_container` / open | yes | |
 | upstream_compat/shared_reactivity.rs:3488 `named_function_standing` | WINDOW_DEPTH 3 | `Unproven` | yes | named: `Unproven(search-depth-limit)` |
 | local_access.rs:3218 `closed_source` | 6 | `None`: the strengthening only | yes | |
-| local_access.rs:5090 `value_reaches` | 4 | false; mixed polarity at its callers (`value_reaches_async_source` both ways) | unverified | open (see "Not fixed") |
+| local_access.rs:5090 `value_reaches` | 4 | false; mixed polarity at its callers (`value_reaches_async_source` both ways) | **yes** (`caught-chain-5`, `-9`: 72 false cleans on 0818e258a) | fixed, ADR 0800: no length limit, a budget of 256, `Reaches`/`Clear`/`Undecided`, every caller opens on `Undecided` |
 | local_access.rs:3379,3417 `calls_reach` | CALL_WALK_BUDGET 512 | falls back to `value_reaches` 4 | **no** (risk search, SC2009) | fixed: past the budget it may reach (SC2009 U, `optimistic-reach-unresolved`); `discover_optimistic_reach` now returns early with no async optimistic source |
 | local_access.rs:4948 `span_may_make_computation` | 4 | true | yes | |
-| local_access.rs:2845 `may_run_in_leaf_owner_within` | 3 | false: not in a leaf owner (risk) | unverified (probe lo-5: U by the general obligation) | open: no crossing input found |
+| local_access.rs:2845 `may_run_in_leaf_owner_within` | 3 | false: not in a leaf owner (risk) | unverified (probe lo-5: U by the general obligation) | fixed, ADR 0800: each reference once, true past the budget |
 | local_access.rs:1202 `view_hides_key` | 8 | false: the read stays a read | yes | |
 | local_access.rs:480 `call_builds_view` | VIEW_CALL_DEPTH 8 | false: an alias (the conservative reading) | yes | |
 | source_discovery/props_reactivity.rs:984,1046 | SPREAD_RECEIVER_DEPTH 4 | not proven inert | yes | |
@@ -173,7 +173,7 @@ d3002-20: U. No change.
 - `read_context.rs` `value_is_function`: `const` alias chains at 2, 8, 12, 20: certified at 2, U from 8 on, a handed-member row, no clean at the bound.
 - `interproc/obligations.rs` `direct_protocol_parameters` (64): `for (const f of p.m.m…)` at 2, 60, 63, 64, 65, 70: certified on all, **and Chrome warns on all**. So it is no bound effect: the iterator's `yield c` hands the accessor on. A live false clean for the census (`value-through-generator`), which must carry `hops-2` and `hops-70` from scratch `lim1/` as its test.
 - `typed_sources.rs` `push_view_candidates` (8), `resolver_values.rs` `context_origin`: not crossed. Read only: each stops adding a candidate or a transport, and the census or the handed net answers what is left. Rest on the census; recheck once it lands.
-- `may_run_in_leaf_owner_within` (3), `value_reaches` (4): both in `local_access.rs`, which R1 owns. Not changed here. R's draft (`w0/p-bounds.diff`) has the exact walk for `value_reaches` and unplaced rows at `CALL_ATTRIBUTED_DEPTH`; a depth-limit answer of true there moved 13 true V, so take the exact walk. `may_run_in_leaf_owner_within` has no crossing input: `lo-5` is U through the general obligation.
+- `may_run_in_leaf_owner_within` (3), `value_reaches` (4): both in `local_access.rs`, which R1 owns. Closed by R1b, ADR 0800 (landed by R1c). Before that: R's draft (`w0/p-bounds.diff`) has the exact walk for `value_reaches` and unplaced rows at `CALL_ATTRIBUTED_DEPTH`; a depth-limit answer of true there moved 13 true V, so take the exact walk. `may_run_in_leaf_owner_within` has no crossing input: `lo-5` is U through the general obligation.
 - **New, found by the `chain-N` shapes:** `report_helper_reads` stopped at 3 helpers and returned, 70 false cleans in `memo-async-loop`, `*-for-await`, `then-named`. Now uncertifiable, all 70 by id, followed to the end, each helper once; past `MAX_REGION_DEPTH`, `search-depth-limit`.
 
 Also seen, not bounds: `cleanup.rs:224` drops the UnresolvedCallback obligation when the call has no validity fact (a missing

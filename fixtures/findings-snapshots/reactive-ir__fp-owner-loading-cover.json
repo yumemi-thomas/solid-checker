@@ -40,6 +40,16 @@
       "start": 2614,
       "end": 2624,
       "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 2614,
+      "end": 2624,
+      "fixes": 0
     }
   ]
 }

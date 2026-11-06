@@ -32,6 +32,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1316,
+      "end": 1341,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
@@ -72,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2088,
+      "end": 2113,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
@@ -82,6 +102,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2270,
+      "end": 2295,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "uncertifiable",
@@ -89,6 +119,16 @@
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 2445,
       "end": 2455,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2473,
+      "end": 2498,
       "fixes": 0
     },
     {
@@ -129,6 +169,16 @@
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 3071,
       "end": 3081,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 3071,
+      "end": 3096,
       "fixes": 0
     },
     {

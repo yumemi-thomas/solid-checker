@@ -182,6 +182,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 2583,
+      "end": 2593,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -219,6 +229,16 @@
       "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
       "start": 2998,
       "end": 3020,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 3279,
+      "end": 3284,
       "fixes": 0
     },
     {
@@ -287,6 +307,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 4123,
+      "end": 4126,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
       "start": 4155,
       "end": 4172,
       "fixes": 0
@@ -299,6 +329,56 @@
       "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
       "start": 4947,
       "end": 4951,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 5304,
+      "end": 5308,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 5328,
+      "end": 5332,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 5349,
+      "end": 5353,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 5379,
+      "end": 5383,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability/App.tsx",
+      "start": 5398,
+      "end": 5402,
       "fixes": 0
     },
     {

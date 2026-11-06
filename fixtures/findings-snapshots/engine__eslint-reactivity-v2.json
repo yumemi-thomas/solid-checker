@@ -192,6 +192,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-local-merge.tsx",
+      "start": 177,
+      "end": 182,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -242,6 +252,16 @@
       "fixes": 1
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-passthrough.tsx",
+      "start": 100,
+      "end": 105,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -249,6 +269,16 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-read.tsx",
       "start": 58,
       "end": 69,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-tracked-destructure.tsx",
+      "start": 157,
+      "end": 162,
       "fixes": 0
     },
     {
@@ -458,6 +488,16 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/owned-reexport-refresh.tsx",
       "start": 99,
+      "end": 114,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/owned-reexport-refresh.tsx",
+      "start": 109,
       "end": 114,
       "fixes": 0
     },

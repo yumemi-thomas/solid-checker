@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // node scripts/flip/check.mjs <SCxxxx|all> [--bin <checker>] [--typefacts <producer>] [--tsc <tsrs>] [--jobs N] [--chrome]
 // Unpacks scripts/flip/witnesses.json into a temp dir, runs the checker on each witness of the rule, and judges it:
-//   clean   the site was certified and the runtime complained: must now report the rule (or SC9012 for census rows), never certify.
+//   clean   the site was certified and the runtime complained: must now report the rule, or the `closedBy` code at `closedAt` (line, blocker), never certify.
 //   warn    the rule claimed a violation the runtime contradicts: must no longer be a violation of that rule.
 //   keep    a true finding: every finding of the rule in `before` must stay, same kind.
 //   regress not certified today: must stay not certified.
@@ -83,7 +83,10 @@ async function judge(id) {
     if (!ok) { fail++; rows.push(`FAIL host    ${id}: ${w.open ? `open (${w.open}) ` : ""}unearned ${unearned.map((f) => f.id).join(" ") || "none"}, missed ${missed.join(" ") || "none"}; ${now.join(" ") || "no findings"}`); }
     return;
   }
-  if (w.kind === "clean") ok = w.rule === "SC9012" ? out.status !== "certified" : own.length > 0;
+  // `closedBy`: the census closes the row, under SC9012. A row of its own needs that finding, or a proved violation: an unrelated
+  // uncertifiable elsewhere in the program must not pass a witness (`endstage-report.md` 1a).
+  // `closedAt`: the line and blocker of the row that covers the runtime site, read by hand; a `closedBy` row without it fails.
+  if (w.kind === "clean") ok = w.closedBy ? Boolean(w.closedAt) && (out.findings ?? []).some((f) => f.id === w.closedBy && f.primaryLocation?.line === w.closedAt.line && (f.analysisContext ?? "").split(":")[0] === w.closedAt.blocker) : w.rule === "SC9012" ? (out.findings ?? []).some((f) => f.id === "SC9012" || f.kind === "violation") : own.length > 0;
   else if (w.kind === "pref") ok = own.some((f) => f.kind === (w.proved ? "violation" : "uncertifiable"));
   else if (w.kind === "warn") ok = !own.some((f) => f.kind === "violation");
   else if (w.kind === "keep") ok = was.filter((f) => f.startsWith(w.rule)).every((f) => now.includes(f));

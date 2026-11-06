@@ -30,6 +30,16 @@
       "start": 305,
       "end": 320,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-reexported/App.tsx",
+      "start": 652,
+      "end": 656,
+      "fixes": 0
     }
   ]
 }

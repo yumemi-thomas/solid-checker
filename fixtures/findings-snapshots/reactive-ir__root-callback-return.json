@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
+      "start": 541,
+      "end": 562,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -39,6 +49,16 @@
       "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
       "start": 1420,
       "end": 1428,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
+      "start": 3505,
+      "end": 3520,
       "fixes": 0
     },
     {

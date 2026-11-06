@@ -107,16 +107,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 4408,
-      "end": 4415,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
       "start": 4928,
       "end": 4932,
       "fixes": 0
@@ -147,8 +137,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 5822,
+      "end": 5826,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
       "start": 5864,
       "end": 5869,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 6000,
+      "end": 6004,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 6319,
+      "end": 6330,
       "fixes": 0
     },
     {
@@ -162,6 +182,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 6575,
+      "end": 6586,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 6774,
+      "end": 6777,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -169,6 +209,26 @@
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
       "start": 6815,
       "end": 6823,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 6970,
+      "end": 6973,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 7199,
+      "end": 7203,
       "fixes": 0
     },
     {
@@ -192,6 +252,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 7588,
+      "end": 7591,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "violation",
@@ -199,6 +269,16 @@
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
       "start": 7629,
       "end": 7636,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 7776,
+      "end": 7779,
       "fixes": 0
     },
     {

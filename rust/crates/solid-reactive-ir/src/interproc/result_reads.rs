@@ -665,23 +665,36 @@ fn push_withheld_member_obligation(
     // a call that reads nothing.
     let execution =
         semantic_execution_role(file, call.callee, allowed, entities, symbol_names, lookup);
-    if !crate::execution_role::excluded_role_holds(file, call.callee, execution, lookup)
-        && !crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup)
-    {
-        dispatch_obligations.push(StaticDefect {
-            kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                callee: call
-                    .static_callee(&file.source)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| "dynamic call".into()),
-                member: None,
-            },
-            location: location(file.path.shared(), call.callee),
-            analysis_context: "withheld-object-member".into(),
-            fixes: vec![],
-            uncertain: true,
-        });
+    if crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup) {
+        return;
     }
+    let excluded = crate::execution_role::excluded_role_holds(file, call.callee, execution, lookup);
+    // ADR 0775: at a tracked position what the member holds decides.
+    let held = excluded
+        && crate::execution_role::async_execution_role(file, call.callee, execution)
+            == ExecutionRole::TrackedJsx
+        && crate::owners::read_loading_cover(lookup, file, call.span, symbol_names)
+            != crate::owners::LoadingCover::Covered;
+    if excluded && !held {
+        return;
+    }
+    let mut defect = StaticDefect {
+        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: call
+                .static_callee(&file.source)
+                .map(str::to_owned)
+                .unwrap_or_else(|| "dynamic call".into()),
+            member: None,
+        },
+        location: location(file.path.shared(), call.callee),
+        analysis_context: "withheld-object-member".into(),
+        fixes: vec![],
+        uncertain: true,
+    };
+    if held {
+        hold_at_tracked_call(&mut defect, call.span);
+    }
+    dispatch_obligations.push(defect);
 }
 
 fn resolve_call_target<'b>(
@@ -861,6 +874,20 @@ fn call_summary(
     let ambiguous_candidates = site.ambiguous_candidates();
     let summary = if let Some(transported) = transported {
         match transported {
+            // ADR 0222: a callee that is a source in its own right
+            // (`const [read] = makeTuple()`) is read at this call by local
+            // access; ADR 0801's slot names that same read again.
+            accessor_provenance::Callable::Accessor(symbol)
+                if super::transport_reads::source_in_own_right(
+                    provenance,
+                    context.lookup,
+                    file,
+                    call.callee,
+                    symbol,
+                ) =>
+            {
+                (label, Vec::new(), None)
+            }
             accessor_provenance::Callable::Accessor(symbol) => (
                 label,
                 super::transport_reads::transported_read(provenance, symbol, file, call.span)
