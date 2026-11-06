@@ -22,7 +22,11 @@ use crate::indexes::SemanticLookup;
 use crate::runtime_semantics::RuntimeArgumentBehavior;
 
 /// How many positions one reference's walk may visit. Past it the answer is open.
-const MAX_STEPS: usize = 96;
+const MAX_STEPS: usize = 512;
+
+/// How many returns, props or contexts one walk may cross. Each ends in a
+/// position of its own, so the limit bounds cost, not trust.
+const MAX_HOPS: usize = 8;
 
 /// What the value at a position is.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -30,21 +34,38 @@ enum Mode {
     /// The source itself.
     Value,
     /// A literal or an alias of one that holds the source in a slot: a member
-    /// Get hands the value on.
-    Holder,
+    /// Get of that slot hands the value on.
+    Holder(Slot),
     /// A store or props root: its member Gets and Sets have their rows.
     Root,
     /// A literal holding a store or props root.
-    RootHolder,
+    RootHolder(Slot),
     /// A store or props root a project function received: no row sees its
     /// members there.
     RootParameter,
+}
+
+/// Which slot of a holder holds the source.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum Slot {
+    /// A computed key, or a slot after a spread.
+    Any,
+    /// A static key, interned by [`Census::key`]. An array's index is its text.
+    Key(u32),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Position {
     Followed,
     Open(&'static str),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Carried {
+    Accessor,
+    Writer,
+    /// A tuple or a root: either.
+    Either,
 }
 
 /// An argument of a call.
@@ -66,9 +87,11 @@ enum Holder {
     /// The target of a plain assignment: `props = merge(defaults, props)`
     /// holds no value there.
     Target,
-    ArrayElement(Span),
+    ArrayElement(Span, Option<usize>),
     Spread,
-    ObjectValue(Span),
+    /// A spread in an object literal, an array or a call's arguments.
+    ObjectSpread(Span),
+    ObjectValue(usize),
     ConditionalValue(Span),
     LogicalValue(Span),
     SequenceTail(Span),
@@ -138,20 +161,24 @@ impl FileIndex {
             }
         }
         for literal in &ast.array_literal_elements {
+            // Past a spread, an element's index is not its slot.
+            let mut index = Some(0);
             for element in &literal.elements {
                 let holder = if element.kind == solid_facts::ast::ArrayElementKind::Spread {
+                    index = None;
                     Holder::Spread
                 } else {
-                    Holder::ArrayElement(literal.span)
+                    Holder::ArrayElement(literal.span, index)
                 };
+                index = index.map(|index| index + 1);
                 add(element.span, holder);
             }
         }
-        for property in &ast.object_properties {
-            add(property.value, Holder::ObjectValue(property.span));
+        for (at, property) in ast.object_properties.iter().enumerate() {
+            add(property.value, Holder::ObjectValue(at));
         }
         for spread in &ast.spreads {
-            add(spread.argument, Holder::Spread);
+            add(spread.argument, Holder::ObjectSpread(spread.span));
         }
         for conditional in &ast.conditional_expressions {
             add(conditional.test, Holder::Test);
@@ -274,34 +301,32 @@ pub(crate) struct Census<'l, 'a> {
     /// met again while it is being answered is a cycle (a recursive helper),
     /// and a cycle is open.
     walked: HashMap<(String, Span, Mode), Option<Position>>,
+    keys: HashMap<String, u32>,
     /// The sources this census walks: a call of one has its row.
     sources: HashSet<&'l str>,
     /// The calls transport resolved to a source: each has its row.
     resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
-    /// Where each file has a read, write or action row.
-    rows: HashMap<&'l str, Vec<(u64, u64)>>,
-    /// The walk carries an accessor: a call of it reads, and writes nothing.
-    reading: bool,
+    /// Where each file has a read, write or action row, or an obligation.
+    rows: HashMap<String, Vec<(u64, u64)>>,
+    /// What a call of the walked value does.
+    carried: Carried,
     steps: usize,
     parameter_hops: usize,
-    /// Prop and context hops: a call of what they put in a name has its row at
-    /// the member, or none the census can test.
-    prop_hops: usize,
     return_hops: usize,
 }
 
 impl<'l, 'a> Census<'l, 'a> {
-    pub(crate) fn new(
+    pub(crate) fn new<'x>(
         lookup: &'l SemanticLookup<'a>,
         entities: &'l crate::EntitySymbols,
         symbol_names: &'l HashMap<crate::SymbolId, crate::SymbolId>,
         sources: HashSet<&'l str>,
         resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
-        located: impl Iterator<Item = &'l Location>,
+        located: impl Iterator<Item = &'x Location>,
     ) -> Self {
-        let mut rows = HashMap::<&'l str, Vec<(u64, u64)>>::default();
+        let mut rows = HashMap::<String, Vec<(u64, u64)>>::default();
         for location in located {
-            rows.entry(location.path.as_ref())
+            rows.entry(location.path.to_string())
                 .or_default()
                 .push((location.start_byte, location.end_byte));
         }
@@ -311,13 +336,13 @@ impl<'l, 'a> Census<'l, 'a> {
             symbol_names,
             files: HashMap::default(),
             walked: HashMap::default(),
+            keys: HashMap::default(),
             sources,
             resolved,
             rows,
-            reading: false,
+            carried: Carried::Either,
             steps: 0,
             parameter_hops: 0,
-            prop_hops: 0,
             return_hops: 0,
         }
     }
@@ -326,15 +351,19 @@ impl<'l, 'a> Census<'l, 'a> {
     pub(crate) fn callable_use(
         &mut self,
         reference: &Location,
-        reading: bool,
+        accessor: bool,
     ) -> Option<&'static str> {
-        self.reading = reading;
+        self.carried = if accessor {
+            Carried::Accessor
+        } else {
+            Carried::Writer
+        };
         self.reference_use(reference, Mode::Value)
     }
 
     /// The obligation one reference of a store or props root owes.
     pub(crate) fn root_use(&mut self, reference: &Location) -> Option<&'static str> {
-        self.reading = false;
+        self.carried = Carried::Either;
         self.reference_use(reference, Mode::Root)
     }
 
@@ -361,14 +390,18 @@ impl<'l, 'a> Census<'l, 'a> {
             return None;
         }
         // A tuple holds a setter too.
-        self.reading = !tuple;
+        self.carried = if tuple {
+            Carried::Either
+        } else {
+            Carried::Accessor
+        };
         self.walked.clear();
         self.steps = 0;
         let mode = match (store, tuple) {
             (false, false) => Mode::Value,
-            (false, true) => Mode::Holder,
+            (false, true) => Mode::Holder(Slot::Any),
             (true, false) => Mode::Root,
-            (true, true) => Mode::RootHolder,
+            (true, true) => Mode::RootHolder(Slot::Any),
         };
         match self.position(file, call, mode) {
             Position::Followed => None,
@@ -390,6 +423,11 @@ impl<'l, 'a> Census<'l, 'a> {
             Position::Followed => None,
             Position::Open(blocker) => Some(blocker),
         }
+    }
+
+    fn key(&mut self, key: &str) -> Slot {
+        let next = u32::try_from(self.keys.len()).unwrap_or(u32::MAX);
+        Slot::Key(*self.keys.entry(key.to_owned()).or_insert(next))
     }
 
     fn place(&self, reference: &Location) -> Option<(&'a FileFacts, Span)> {
@@ -480,9 +518,8 @@ impl<'l, 'a> Census<'l, 'a> {
                 } else if mode == Mode::Value
                     && self.steps > 1
                     && self.parameter_hops == 0
-                    && self.prop_hops == 0
                     && !self.has_row(file, ast.calls[call].callee)
-                    && !(self.reading && self.tracked(file, ast.calls[call].callee))
+                    && !self.role_clears(file, ast.calls[call].callee)
                 {
                     // Walked into a name no row reads: `const { c: h } = o; h()`.
                     Position::Open(blockers::VALUE_HELD_IN_BINDING)
@@ -513,15 +550,32 @@ impl<'l, 'a> Census<'l, 'a> {
                 self.returned(file, function.map(|function| function.span), mode)
             }
             Holder::ArrowBody(function) => self.returned(file, Some(function), mode),
-            Holder::ArrayElement(literal) | Holder::ObjectValue(literal) => {
+            Holder::ArrayElement(..) | Holder::ObjectValue(_) => {
                 // A literal in a literal: no row walks two member steps.
-                if matches!(mode, Mode::Holder | Mode::RootHolder) {
+                if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
                     return Position::Open(blockers::VALUE_IN_CARRIER);
                 }
+                let (literal, slot) = match row {
+                    Holder::ArrayElement(literal, Some(index)) => {
+                        (literal, self.key(&index.to_string()))
+                    }
+                    Holder::ObjectValue(property) => {
+                        let property = &ast.object_properties[property];
+                        let slot = match file.source_text(property.key) {
+                            Some(key) if !property.computed => {
+                                self.key(key.trim_matches(['"', '\'']))
+                            }
+                            _ => Slot::Any,
+                        };
+                        (property.span, slot)
+                    }
+                    Holder::ArrayElement(literal, None) => (literal, Slot::Any),
+                    _ => return Position::Open(blockers::VALUE_USE_UNCLASSIFIED),
+                };
                 let held = if mode == Mode::Value {
-                    Mode::Holder
+                    Mode::Holder(slot)
                 } else {
-                    Mode::RootHolder
+                    Mode::RootHolder(slot)
                 };
                 match enclosing_literal(file, literal) {
                     // A member of the literal may read it through `this`.
@@ -532,6 +586,18 @@ impl<'l, 'a> Census<'l, 'a> {
                 }
             }
             Holder::Spread => Position::Open(blockers::VALUE_IN_CARRIER),
+            // `{ ...state }` copies a holder's slots into a holder: what it
+            // held stays one member step away.
+            Holder::ObjectSpread(spread) => {
+                match (mode, object_spread_literal(file, spread)) {
+                    (Mode::Holder(_) | Mode::RootHolder(_), Some(literal))
+                        if !literal_reads_this(file, literal) =>
+                    {
+                        self.position(file, literal, mode)
+                    }
+                    _ => Position::Open(blockers::VALUE_IN_CARRIER),
+                }
+            }
             // A composite's value goes no further than a position that reads it
             // whole: an alias of it has no row.
             Holder::ConditionalValue(value)
@@ -585,8 +651,10 @@ impl<'l, 'a> Census<'l, 'a> {
             })
     }
 
-    /// Whether a read at `callee` runs where no strict-read rule speaks.
-    fn tracked(&self, file: &FileFacts, callee: Span) -> bool {
+    /// Whether the call at `callee` runs where the rules of what it may do do
+    /// not speak: an accessor's read, a setter's or an action's write. No row
+    /// says so at a call the walk reached through a name.
+    fn role_clears(&self, file: &FileFacts, callee: Span) -> bool {
         let role = crate::execution_role::read_execution_role(
             file,
             callee,
@@ -595,7 +663,13 @@ impl<'l, 'a> Census<'l, 'a> {
             self.symbol_names,
             self.lookup,
         );
-        role != crate::ExecutionRole::Unknown && !role.reports_untracked_read()
+        let reads = role != crate::ExecutionRole::Unknown && !role.reports_untracked_read();
+        let writes = role != crate::ExecutionRole::Unknown && !role.reports_disallowed_write();
+        match self.carried {
+            Carried::Accessor => reads,
+            Carried::Writer => writes,
+            Carried::Either => reads && writes,
+        }
     }
 
     fn member(&mut self, file: &'a FileFacts, at: Span, member: usize, mode: Mode) -> Position {
@@ -605,7 +679,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Mode::Value => {}
             Mode::Root => return Position::Followed,
             Mode::RootParameter => return Position::Open(blockers::VALUE_ROOT_IN_HELPER),
-            Mode::Holder | Mode::RootHolder => {
+            Mode::Holder(slot) | Mode::RootHolder(slot) => {
                 // A standard method of the holder hands the slot on through
                 // what it answers, unless a callback takes it, which the
                 // handed net follows (`handed_value`).
@@ -624,7 +698,22 @@ impl<'l, 'a> Census<'l, 'a> {
                 if carried {
                     return Position::Open(blockers::VALUE_IN_CARRIER);
                 }
-                let got = if mode == Mode::Holder {
+                // Another slot's Get holds nothing of this one.
+                let key = match ast
+                    .literal_computed_members
+                    .iter()
+                    .find(|literal| literal.span == member.span)
+                {
+                    Some(literal) => Some(literal.key.as_str()),
+                    None if ast.computed_members.contains(&member.span) => None,
+                    None => file.source_text(member.property),
+                };
+                if let (Slot::Key(_), Some(key)) = (slot, key)
+                    && self.key(key) != slot
+                {
+                    return Position::Followed;
+                }
+                let got = if matches!(mode, Mode::Holder(_)) {
                     Mode::Value
                 } else {
                     Mode::Root
@@ -686,7 +775,7 @@ impl<'l, 'a> Census<'l, 'a> {
         // no attribute the walk can name.
         let Some(prop) = slot.and_then(|slot| file.source_text(element.attributes[slot].name))
         else {
-            return if matches!(mode, Mode::Holder | Mode::RootHolder) {
+            return if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
                 Position::Open(blockers::VALUE_IN_CARRIER)
             } else {
                 Position::Followed
@@ -707,11 +796,10 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some(parameter) = component.parameters.first() else {
             return Position::Followed;
         };
-        if self.return_hops > 0 {
+        if self.return_hops >= MAX_HOPS {
             return Position::Open(blockers::VALUE_FORWARDED);
         }
         self.return_hops += 1;
-        self.prop_hops += 1;
         let mut answer = Position::Followed;
         'names: for name in &parameter.names {
             let identifier = parameter.shape == solid_facts::ast::BindingShape::Identifier;
@@ -737,7 +825,6 @@ impl<'l, 'a> Census<'l, 'a> {
             }
         }
         self.return_hops -= 1;
-        self.prop_hops -= 1;
         answer
     }
 
@@ -746,11 +833,10 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some(symbol) = self.lookup.callee_symbol(file, tag) else {
             return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         };
-        if self.return_hops > 0 {
+        if self.return_hops >= MAX_HOPS {
             return Position::Open(blockers::VALUE_FORWARDED);
         }
         self.return_hops += 1;
-        self.prop_hops += 1;
         let mut answer = Position::Followed;
         for reference in self.lookup.symbol_references(symbol) {
             let Some((reader, at)) = self.place(&reference) else {
@@ -780,7 +866,6 @@ impl<'l, 'a> Census<'l, 'a> {
             }
         }
         self.return_hops -= 1;
-        self.prop_hops -= 1;
         answer
     }
 
@@ -815,11 +900,14 @@ impl<'l, 'a> Census<'l, 'a> {
             return Position::Followed;
         }
         let each = match mode {
-            Mode::Holder if !identifier => Mode::Value,
-            Mode::RootHolder if !identifier => Mode::Root,
+            Mode::Holder(_) if !identifier => Mode::Value,
+            Mode::RootHolder(_) if !identifier => Mode::Root,
             other => other,
         };
-        for name in &binding.names {
+        let Some(names) = self.slot_names(binding, mode) else {
+            return Position::Open(blockers::VALUE_IN_CARRIER);
+        };
+        for name in names {
             for reference in self.references(file, name.span) {
                 let position = self.position(file, reference, each);
                 if position != Position::Followed {
@@ -851,6 +939,44 @@ impl<'l, 'a> Census<'l, 'a> {
             }
         }
         Position::Followed
+    }
+
+    /// The names that may hold the walked slot: all of them, but for a static
+    /// key the pattern names. `None`: a rest element holds a holder of its own.
+    fn slot_names(
+        &mut self,
+        binding: &'a solid_facts::ast::BindingFact,
+        mode: Mode,
+    ) -> Option<Vec<&'a solid_facts::ast::NamedSpan>> {
+        let all = || binding.names.iter().collect::<Vec<_>>();
+        let (Mode::Holder(slot) | Mode::RootHolder(slot)) = mode else {
+            return Some(all());
+        };
+        if binding.shape == solid_facts::ast::BindingShape::Identifier {
+            return Some(all());
+        }
+        let mut named = Vec::new();
+        for object in &binding.object_slots {
+            named.push((self.key(&object.property) == slot, &object.local));
+        }
+        for (index, array) in binding.array_slots.iter().enumerate() {
+            if let Some(array) = array {
+                named.push((self.key(&index.to_string()) == slot, array));
+            }
+        }
+        if named.len() != binding.names.len() {
+            return None;
+        }
+        if slot == Slot::Any {
+            return Some(all());
+        }
+        Some(
+            named
+                .into_iter()
+                .filter(|(holds, _)| *holds)
+                .map(|(_, name)| name)
+                .collect(),
+        )
     }
 
     /// A value a function returns: its callers are the handed net's. What a
@@ -891,7 +1017,7 @@ impl<'l, 'a> Census<'l, 'a> {
     /// the net follows calls, not what a root does past them. A function
     /// handed on has callers no row names.
     fn callers(&mut self, file: &'a FileFacts, function: Span, mode: Mode) -> Position {
-        if self.return_hops > 0 {
+        if self.return_hops >= MAX_HOPS {
             return Position::Open(blockers::VALUE_FORWARDED);
         }
         let Some(fact) = file.ast.function_at(function) else {
@@ -908,10 +1034,13 @@ impl<'l, 'a> Census<'l, 'a> {
             return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         };
         let foreign = crate::local_access::foreign_reference_hand_offs(file, fact, self.lookup);
-        if local.iter().any(|(_, hand_off)| *hand_off != HandOff::Call)
-            || foreign
-                .iter()
-                .any(|(_, _, hand_off)| *hand_off != HandOff::Call)
+        // `ReturnType<typeof useX>` hands nothing over.
+        if local
+            .iter()
+            .any(|(at, hand_off)| *hand_off != HandOff::Call && is_value_reference(file, *at))
+            || foreign.iter().any(|(holder, at, hand_off)| {
+                *hand_off != HandOff::Call && is_value_reference(holder, *at)
+            })
         {
             return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         }
@@ -993,6 +1122,10 @@ impl<'l, 'a> Census<'l, 'a> {
                 .lookup
                 .entity_at(file.path.as_str(), call.arguments[index].span)
                 .and_then(|entity| entity.callability);
+            // `Object.keys` runs no getter and answers no value.
+            if crate::runtime_semantics::reads_keys_only(resolved) {
+                return Position::Followed;
+            }
             return match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
                 Some(RuntimeArgumentBehavior::FreshStackCallback) => Position::Followed,
                 Some(RuntimeArgumentBehavior::ValueOnly)
@@ -1080,6 +1213,29 @@ fn enclosing_literal(file: &FileFacts, row: Span) -> Option<Span> {
         .filter(|shape| shape.span.contains(row))
         .min_by_key(|shape| shape.span.end - shape.span.start)
         .map(|shape| shape.span)
+}
+
+/// The object literal `spread` is written in: none in an array or a call's
+/// arguments, the nearest container either way.
+fn object_spread_literal(file: &FileFacts, spread: Span) -> Option<Span> {
+    let ast = &file.ast;
+    let size = |span: Span| span.end - span.start;
+    let object = enclosing_literal(file, spread)?;
+    let array = ast
+        .array_literal_elements
+        .iter()
+        .map(|literal| literal.span)
+        .filter(|span| span.contains(spread))
+        .map(size)
+        .min();
+    let call = ast
+        .calls
+        .iter()
+        .filter(|call| call.arguments.iter().any(|argument| argument.span.contains(spread)))
+        .map(|call| size(call.span))
+        .min();
+    (array.is_none_or(|array| size(object) < array) && call.is_none_or(|call| size(object) < call))
+        .then_some(object)
 }
 
 fn literal_reads_this(file: &FileFacts, literal: Span) -> bool {

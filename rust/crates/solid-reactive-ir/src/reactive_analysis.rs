@@ -393,7 +393,9 @@ pub(crate) fn collect_project<'facts>(
                     .action_invocations
                     .iter()
                     .map(|action| &action.location),
-            ),
+            )
+            .chain(handed.iter().map(|obligation| &obligation.location))
+            .chain(draft.static_defects.iter().map(|defect| &defect.location)),
     );
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
