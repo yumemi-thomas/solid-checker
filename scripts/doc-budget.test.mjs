@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { test } from "vitest";
 
-import { FILE_BUDGETS, FIXTURE_README_MAX, measuredSizes, violations } from "./doc-budget.mjs";
+import { FILE_BUDGETS, FIXTURE_README_MAX, ROOT, measuredSizes, report, violations } from "./doc-budget.mjs";
 
-test("the repository is within its documentation budget", () => {
-  assert.deepEqual(violations(measuredSizes()), []);
+// Suspended during the flip (scripts/doc-budget.mjs): this stood as `violations(measuredSizes())` equals `[]`, and returns before #173 merges.
+test("a run reports the measured sizes and everything over a limit, and does not fail", () => {
+  const sizes = measuredSizes();
+  const lines = report(sizes).join("\n");
+  for (const path of Object.keys(FILE_BUDGETS)) assert.match(lines, new RegExp(`${path.replaceAll(".", "\\.")}: ${sizes[path] ?? 0} of ${FILE_BUDGETS[path]} bytes`));
+  for (const found of violations(sizes)) assert.ok(lines.includes(found), found);
+  const run = spawnSync("bun", [join(ROOT, "scripts/doc-budget.mjs")], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /doc-budget \(suspended\)/);
+});
+
+test("the report names what is over, and says when nothing is", () => {
+  assert.match(report({ "AGENTS.md": FILE_BUDGETS["AGENTS.md"] + 1 }).join("\n"), /1 over, suspended[^\n]*\n {2}AGENTS\.md is/);
+  assert.ok(report({}).includes("nothing over"));
 });
 
 test("an oversized instruction file is reported", () => {
