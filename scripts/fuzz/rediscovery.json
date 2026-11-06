@@ -4391,5 +4391,18 @@
    "lg-store-write-outside-setter-handler-sw-fresh-test-direct-none"
   ],
   "rediscovered": "r3base false-positive on 36 lg-recall and 12 mx-recall programs, Chrome confirmed 36 of 36; the fix clean and not-fired; sw-fresh-spread and sw-fresh-frame clean on both"
+ },
+ {
+  "finding": "patterns api/v09-store-write-nullish `((unk() as T | null) ?? st).x = 5`, api/v10-store-write-let `let s2; s2 = st; s2.x = 5`, values/d6-comma `(log(\"x\"), st).a = 5`: certified, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
+  "found": "the pattern lane (open-defects.json, certified false clean on 80db411e5)",
+  "fixed": "ADR 0790 (bfd336ce8): a `??` is either operand, a `let` its assigned values, any other root its parts",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-coalesce-direct-none",
+   "mx-store-write-outside-setter-handler-sw-comma-direct-none",
+   "mx-store-write-outside-setter-handler-sw-let-direct-none"
+  ],
+  "rediscovered": "r3base (80db411e5) false-clean on all 108 programs of sw-coalesce, sw-comma, sw-let (handler, timer); the fix agree on 36 (sw-coalesce) and recall-gap on 72; same id set in the sc VM. The pattern lane at 3b4e446bc: the three patterns certified false clean on 80db411e5, fine on bfd336ce8"
  }
 ]

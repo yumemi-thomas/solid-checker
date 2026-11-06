@@ -205,24 +205,6 @@
    "certified": true
   },
   {
-   "id": "api/v09-store-write-nullish",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
-   "id": "api/v10-store-write-let",
-   "item": "C-D3 value-use",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "api/v11-store-write-class",
    "item": "C-D3 value-use",
    "outcome": "false-clean",
@@ -957,15 +939,6 @@
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d6-comma",
-   "item": "V-D6",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
    ],
    "certified": true
   },

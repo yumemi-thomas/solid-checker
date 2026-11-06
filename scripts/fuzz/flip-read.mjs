@@ -110,6 +110,9 @@ export const SUB_VALUE_WRITES = {
   "sw-await": { ...SUB_WRITE, text: (o) => `void (async () => { (await Promise.resolve(${o}.a)).v = 7; })();` },
   "sw-then": { ...SUB_WRITE, text: (o) => `void Promise.resolve(${o}.a).then((x) => { x.v = 7; });` },
   "sw-map-get": { ...SUB_WRITE, text: (o) => `new Map([[1, ${o}.a]]).get(1)!.v = 7;` },
+  // patterns api/v09-store-write-nullish and values/d6-comma: a `??` and a comma whose value is the store (root writes).
+  "sw-coalesce": { ...SUB_WRITE, text: (o) => `(((((): any => null)()) as typeof ${o} | null) ?? ${o}).v = 7;` },
+  "sw-comma": { ...SUB_WRITE, text: (o) => `(Math.random(), ${o}).v = 7;` },
   // Quiet in Chrome: a fresh literal written at its own property, and the frame's plain argument. The build before reported the first
   // a violation: the conditional's entity named its first token, the store in its test.
   "sw-fresh-test": { ...SUB_WRITE, contexts: [], legal: ["handler", "timer"], text: (o) => `(${o}.v > 0 ? { v: 1 } : { v: 2 }).v = 7;` },
