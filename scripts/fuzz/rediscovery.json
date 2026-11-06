@@ -4903,5 +4903,12 @@
   "fixed": "ADR 0825",
   "rediscovered": "sweep pv1 against ds3: 78 rows primitive-value -> primitive-identity-unproven, the same sites, 0 moved; the 2 an import confirms (app-game onCleanup, probus-hk untrack) keep the primitive's name, as probes p2 (named import) and p3 (namespace member) do",
   "outside": "no type-checked program reproduces the attribution: an import of a missing module (p4) or of an export solid-js lacks (p1) is a tsc error, and both are certified clean alone; the corpus projects' whole setup produces it"
+ },
+ {
+  "finding": "An unresolved import read as `createOwner`: `symbols.rs` `symbol_names` named an alias root after any declaration in a Solid package, and `@solidjs/router` 2.0.0-next.41's `import { createOwner } from \"solid-js\"` misses rc.21's typings, so its root is the checker's one unknown symbol, the root of every unresolved project import. 82 corpus U rows rested on it (SC9012 78, SC3001 2, SC6001 2), 0 V",
+  "found": "R2d, tracing ADR 0825's attribution (PLAN.md SC3001: \"E assumed: the primitive's identity\")",
+  "fixed": "ADR 0826",
+  "rediscovered": "probe r1 (scratch flip-r2/cases/pl: `@solidjs/router` in the program, `// @ts-ignore` above `import { helper } from \"./missing\"`, `helper` used as a value; tsc-clean): rpv1 (f7c4fc495) SC9012 U primitive-identity-unproven at `helper`, the fix certified. Unit test an_unresolved_import_inside_a_solid_package_names_no_root fails on f7c4fc495, passes on the fix. Sweep pi1 against pv1: 82 U rows gone, 8 SC9012 U appear (hidden before by one row per start byte), 0 V moved",
+  "outside": "the generator imports no `@solidjs/router` and emits no `@ts-ignore`; without the latter an unresolved import is a tsc error (TS2307, TS2305), so no grid program can carry the shape. The unit test holds it"
  }
 ]

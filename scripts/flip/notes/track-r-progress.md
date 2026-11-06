@@ -193,6 +193,14 @@ Head on `claude/flip-r2`: P7 `afcee743f`, lint `f6de3eb2f`, member tag `328763a2
 
 **Traps found:** `push_defect` keeps one SC9012 per start byte, so a new obligation hides another at the same start (sites stay U). For a shorthand `{ C }` the value's symbol is the property's: use `reference_declaration`. `run.mjs` copies only `App.tsx`. A coverage fixture's stubs must be staged (`git add`) before coverage counts them as tracked.
 
+## R2d, from 2026-11-07
+
+Same branch, worktree and scratch `$S` as R2c. Baseline: build `rpv1`, sweep `sweep-pv1.json`.
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| primitive identity (ADR 0826) | root cause: `symbol_names` named the unknown symbol (root of every unresolved import) after `@solidjs/router`'s unresolved `import { createOwner } from "solid-js"`; a root with no declaration is named by nothing | | corpus `pi1` vs `pv1`: 0 V moved, -82 U (SC9012 78, SC3001 2, SC6001 2), +8 SC9012 U once hidden by one row per start. Witnesses 300 of 336, same fails. Coverage 0 moved |
+
 ## R2 handoff, 2026-11-06
 
 For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.
