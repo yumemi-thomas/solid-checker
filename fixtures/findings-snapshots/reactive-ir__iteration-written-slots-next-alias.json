@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/next-alias/body-write.tsx",
+      "start": 109,
+      "end": 112,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/next-alias/body-write.tsx",
+      "start": 133,
+      "end": 134,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/next-alias/patch.ts",
+      "start": 168,
+      "end": 174,
+      "fixes": 0
+    }
+  ]
+}

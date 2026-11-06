@@ -221,14 +221,22 @@ export const CHECKS = {
   },
   "flip-tools": {
     why:
-      "nothing in the build, the gates or the tests reads scripts/flip/, so a typo there would surface only " +
-      "when someone runs it. check.mjs itself needs a release build and fails by design until both tracks " +
-      "merge, so this checks that its scripts parse and its data is JSON, no more",
+      "run.mjs and tsc.mjs run only by hand (Chrome, tsrs), so this checks that the flip's scripts parse " +
+      "and its data is JSON; `witnesses` runs check.mjs",
     commands: [
       ["node", "--check", "scripts/flip/check.mjs"],
       ["node", "--check", "scripts/flip/run.mjs"],
       ["node", "--check", "scripts/flip/tsc.mjs"],
-      ["jq", "empty", "scripts/flip/witnesses.json", "scripts/flip/tsc-rejected.json"],
+      ["jq", "empty", "scripts/flip/witnesses.json", "scripts/flip/host-witnesses.json", "scripts/flip/witnesses-retired.json", "scripts/flip/tsc-rejected.json"],
+    ],
+  },
+  "witnesses": {
+    why:
+      "every flip witness against the recorded Chrome run (endstage-report.md 1a): where Chrome fired, a " +
+      "finding must cover it, whatever the row's kind; no tsrs and no Chrome (`--recorded`)",
+    command: [
+      "node", "scripts/flip/check.mjs", "all", "--recorded",
+      "--bin", join(ROOT, DEBUG_CHECKER), "--typefacts", join(ROOT, TYPEFACTS),
     ],
   },
   "rule-pages": {
@@ -328,7 +336,7 @@ export const UNIVERSAL = [
  * selecting only some is how a red gate reached a push, for `tsc-oracle-gate`
  * and then for `repro-causes` (R1's `clean-interval-hook`).
  */
-export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit"];
+export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"];
 
 /**
  * One row of the mapping, as a prefix test.
@@ -461,7 +469,7 @@ export const ROWS = [
   { prefix: "docs/rules/", owner: "the rule pages", checks: ["doc-budget", "rule-pages"] },
   // The flip's working files: nothing else reads them, and `scripts/flip/` goes
   // with the flip. The notes and the plan are prose, the rest are its tools.
-  { prefix: "scripts/flip/", owner: "the flip's tools (read by no build, gate or test)", checks: ["flip-tools"] },
+  { prefix: "scripts/flip/", owner: "the flip's tools and witnesses (the `witnesses` gate)", checks: ["flip-tools", "witnesses"] },
   { prefix: "scripts/flip/notes/", owner: "prose read by no check", checks: [] },
   { prefix: "scripts/flip/PLAN.md", owner: "prose read by no check", checks: [] },
   // `.gitignore` decides what git lists, and three checks ask git: the dialect
@@ -753,6 +761,7 @@ export const LANES = {
   "ownership-gate": "gates",
   "tsc-oracle-gate": "gates",
   "obligation-audit": "gates",
+  "witnesses": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the

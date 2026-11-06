@@ -542,6 +542,7 @@ fn call_result_reads(
             read.symbol.to_string(),
         )) {
             result.push(ReactiveRead {
+                withdrawn_slot: false,
                 pending_open: false,
                 kind: read
                     .kind
@@ -2321,6 +2322,7 @@ pub(super) fn dependency_getter_obligations(
                 let execution =
                     semantic_execution_role(file, span, &allowed, entities, symbol_names, lookup);
                 reads.push(ReactiveRead {
+                    withdrawn_slot: false,
                     pending_open: false,
                     summary_attributed: false,
                     transported: true,

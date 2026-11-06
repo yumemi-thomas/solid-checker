@@ -637,6 +637,11 @@ function render(program, instrument) {
       within({ entry: null, inDefault: false }, () => { for (const stmt of component.hoisted) out.push(stmtText(stmt, 0)); });
       out.push("");
     }
+    // `top`: statements at module scope before the component, whose signals stay in its body (ADR 0803: a patch that runs first).
+    if (component.top) {
+      within({ entry: null, inDefault: false }, () => { for (const stmt of component.top) out.push(stmtText(stmt, 0)); });
+      out.push("");
+    }
     out.push(`${component.mount ? "" : "export "}function ${component.name}(${parameter}) {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) if (!hosted.has(sig.name) && !component.hoisted) out.push(`${INDENT}${signalLine(sig)}`);

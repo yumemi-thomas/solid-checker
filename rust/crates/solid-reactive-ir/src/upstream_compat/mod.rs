@@ -94,7 +94,8 @@ impl ReactiveReadIndex {
                         && !read.callee_callback_timing
                         && !read.callback_invocation_unproven
                         && !read.missing_jsx_census
-                        && !read.transported,
+                        && !read.transported
+                        && !read.withdrawn_slot,
                 });
         }
         for reads in by_path.values_mut() {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node scripts/flip/check.mjs <SCxxxx|all> [--bin <checker>] [--typefacts <producer>] [--tsc <tsrs>] [--jobs N] [--chrome]
+// node scripts/flip/check.mjs <SCxxxx|all> [--bin <checker>] [--typefacts <producer>] [--tsc <tsrs>] [--jobs N] [--chrome | --recorded]
 // Unpacks scripts/flip/witnesses.json into a temp dir, runs the checker on each witness of the rule, and judges it:
 //   clean   the site was certified and the runtime complained: must now report the rule, or the `closedBy` code at `closedAt` (line, blocker), never certify.
 //   warn    the rule claimed a violation the runtime contradicts: must no longer be a violation of that rule.
@@ -7,6 +7,9 @@
 //   regress not certified today: must stay not certified.
 //   pref    a preference rule's unproved site: must report the rule, uncertifiable.
 // Every witness is type-checked first: a program tsc rejects is no defect (invariant 1), so it fails here, whatever the checker says.
+// Every kind: where the recorded run fired a code a rule claims, some finding must cover it (judge.mjs, the pattern lane's judge).
+// `--recorded` (make verify, which has no tsrs and no Chrome): judges the checker against the recorded runtime and skips the type
+//   check; a witness's type result depends only on its bytes and the pinned install. `--chrome` re-runs both.
 //   host    hydrate or server host, from scripts/flip/host-witnesses.json (notes/ssr/report.md): `runtime` is what each side measured. A rule's
 //           violation needs a code it claims on a path the selection runs; a code a rule claims needs a finding of that rule. `open` names the
 //           rule whose commit closes it. `check.mjs HOST` runs them; `--chrome` does not, they have their own hosts.
@@ -19,7 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { availableParallelism, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { resolveTsc, requireTypeChecker, tsconfigFor, typecheck, typecheckBatch } from "../fuzz/typecheck.mjs";
-import { codeRules, ruleHasRuntimeCounterpart } from "../fuzz/codes.mjs";
+import { judgeWitness, vanishedRows } from "./judge.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
 const argv = process.argv.slice(2);
@@ -27,12 +30,12 @@ const opt = (k, d) => { const i = argv.indexOf(k); return i < 0 ? d : argv[i + 1
 const rule = argv[0] ?? "all";
 const bin = opt("--bin", join(repo, "rust/target/release/solid-checker-rust"));
 const typefacts = opt("--typefacts", join(repo, "bin/solid-typefacts"));
-const tsc = resolveTsc(opt("--tsc"));
-requireTypeChecker(tsc);
+const recorded = argv.includes("--recorded");
+if (recorded && argv.includes("--chrome")) throw new Error("--recorded and --chrome exclude each other");
+const tsc = recorded ? null : resolveTsc(opt("--tsc"));
+if (!recorded) requireTypeChecker(tsc);
 if (!existsSync(bin) || !existsSync(typefacts)) throw new Error(`no checker at ${bin} or no producer at ${typefacts}: make build-checker-release`);
 const install = process.env.FLIP_INSTALL ?? join(repo, "scripts/runtime-oracle-install");
-/** A blocker is kebab-case words and an optional `:detail`; a function's name says where, not what is missing (ADR 0680). */
-export const isNamedBlocker = (context) => /^[a-z0-9]+(-[a-z0-9]+)+(:.*)?$/s.test(context ?? "") && !String(context).startsWith("proof-step-unnamed");
 const W = { ...JSON.parse(readFileSync(join(here, "witnesses.json"), "utf8")), ...JSON.parse(readFileSync(join(here, "host-witnesses.json"), "utf8")) };
 const jobs = Number(opt("--jobs", Math.max(1, Math.floor(availableParallelism() / 2))));
 // Real path: tsrs prints resolved paths, and the batch answer matches them against these directories.
@@ -47,9 +50,12 @@ for (const id of ids) {
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(Object.keys(files)));
 }
 if (!existsSync(join(work, "node_modules"))) symlinkSync(join(install, "node_modules"), join(work, "node_modules"));
-const checked = await typecheckBatch(ids.map(dirOf), { tsc, timeoutMs: 600000 });
 const types = new Map();
-for (const id of ids) types.set(id, checked?.get(resolve(dirOf(id))) ?? await typecheck(dirOf(id), { tsc }));
+if (recorded) for (const id of ids) types.set(id, { ok: true });
+else {
+  const checked = await typecheckBatch(ids.map(dirOf), { tsc, timeoutMs: 600000 });
+  for (const id of ids) types.set(id, checked?.get(resolve(dirOf(id))) ?? await typecheck(dirOf(id), { tsc }));
+}
 const runChecker = (dir, mode) => new Promise((done) => {
   const child = spawn(bin, ["--format", "json", "--internal", "--project", "tsconfig.json", ...mode], { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts } });
   let stdout = "", stderr = "";
@@ -66,32 +72,8 @@ async function judge(id) {
       : ["--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   const r = await runChecker(dir, mode);
   let out; try { out = JSON.parse(r.stdout); } catch { rows.push(`ERROR ${id}: ${(r.stderr ?? "").slice(0, 200)}`); fail++; return; }
-  const own = (out.findings ?? []).filter((f) => f.id === w.rule || (w.rule === "SC2004" && f.id === "SC2005"));
-  const now = (out.findings ?? []).map((f) => `${f.id}/${f.kind[0]}@${f.primaryLocation?.line}`);
-  const was = w.before?.findings ?? [];
-  // ADR 0680: an uncertifiable with no named blocker is a silent gap in the row itself, whatever the witness asks of it.
-  const unnamed = (out.findings ?? []).filter((f) => f.kind === "uncertifiable" && !isNamedBlocker(f.analysisContext));
-  if (unnamed.length) { fail++; rows.push(`FAIL blocker ${id}: ${unnamed.map((f) => `${f.id}@${f.analysisContext ?? ""}`).join(" ")}`); return; }
-  let ok;
-  if (w.host) {
-    const seen = [...(w.runtime.client ?? []), ...(w.runtime.server ?? [])];
-    const claimed = new Set(seen.flatMap((code) => codeRules[code] ?? []));
-    const unearned = (out.findings ?? []).filter((f) => f.kind === "violation" && ruleHasRuntimeCounterpart(f.rule) && !claimed.has(f.rule));
-    // One rule of a code covers it: STRICT_READ_UNTRACKED maps to four, and a program shows one of them.
-    const missed = seen.filter((code) => (codeRules[code] ?? []).length && !(out.findings ?? []).some((f) => codeRules[code].includes(f.rule)));
-    ok = !unearned.length && !missed.length;
-    if (!ok) { fail++; rows.push(`FAIL host    ${id}: ${w.open ? `open (${w.open}) ` : ""}unearned ${unearned.map((f) => f.id).join(" ") || "none"}, missed ${missed.join(" ") || "none"}; ${now.join(" ") || "no findings"}`); }
-    return;
-  }
-  // `closedBy`: the census closes the row, under SC9012. A row of its own needs that finding, or a proved violation: an unrelated
-  // uncertifiable elsewhere in the program must not pass a witness (`endstage-report.md` 1a).
-  // `closedAt`: the line and blocker of the row that covers the runtime site, read by hand; a `closedBy` row without it fails.
-  if (w.kind === "clean") ok = w.closedBy ? Boolean(w.closedAt) && (out.findings ?? []).some((f) => f.id === w.closedBy && f.primaryLocation?.line === w.closedAt.line && (f.analysisContext ?? "").split(":")[0] === w.closedAt.blocker) : w.rule === "SC9012" ? (out.findings ?? []).some((f) => f.id === "SC9012" || f.kind === "violation") : own.length > 0;
-  else if (w.kind === "pref") ok = own.some((f) => f.kind === (w.proved ? "violation" : "uncertifiable"));
-  else if (w.kind === "warn") ok = !own.some((f) => f.kind === "violation");
-  else if (w.kind === "keep") ok = was.filter((f) => f.startsWith(w.rule)).every((f) => now.includes(f));
-  else ok = out.status !== "certified";
-  if (!ok) { fail++; rows.push(`FAIL ${w.kind.padEnd(7)} ${id}: ${out.status} ${now.join(" ") || "no findings"}`); }
+  const verdict = judgeWitness(w, out);
+  if (!verdict.ok) { fail++; rows.push(`FAIL ${(w.host ? "host" : w.kind).padEnd(7)} ${id}: ${verdict.why}`); }
 }
 let next = 0;
 await Promise.all(Array.from({ length: Math.min(jobs, ids.length) }, async () => { while (next < ids.length) await judge(ids[next++]); }));
@@ -113,6 +95,19 @@ if (argv.includes("--chrome")) {
   }
 }
 rmSync(work, { recursive: true, force: true });
+// Rows may not vanish against the merge base with main (`WITNESS_BASE` overrides), or a retired row names an ADR (judge.mjs).
+const retired = JSON.parse(readFileSync(join(here, "witnesses-retired.json"), "utf8"));
+if (rule === "all") {
+  const base = process.env.WITNESS_BASE ?? spawnSync("git", ["merge-base", "HEAD", "origin/main"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  const at = (file) => { const r = spawnSync("git", ["show", `${base}:scripts/flip/${file}`], { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28 }); return r.status === 0 ? JSON.parse(r.stdout) : null; };
+  const was = base ? at("witnesses.json") : null;
+  if (!was) console.log(`witnesses: no witnesses.json at base ${base || "(none)"}, no row compared`);
+  else {
+    const before = { ...was, ...(at("host-witnesses.json") ?? {}) };
+    for (const why of vanishedRows(before, W, retired, readFileSync(join(repo, "docs/decisions.md"), "utf8"))) { fail++; rows.push(`VANISHED ${why}`); }
+  }
+}
+console.log(`witnesses: ${retired.length} retired`);
 for (const line of rows.sort()) console.log(line);
 console.log(`${ids.length - fail} of ${ids.length} hold${rule === "all" ? "" : ` for ${rule}`}`);
 process.exitCode = fail ? 1 : 0;

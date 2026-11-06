@@ -17,6 +17,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-accessor-slots-vetoed/patched.tsx",
+      "start": 327,
+      "end": 328,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots-vetoed/patched.tsx",
       "start": 408,
       "end": 409,
       "fixes": 0

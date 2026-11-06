@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/hook-object/body-write.tsx",
+      "start": 110,
+      "end": 118,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/hook-object/body-write.tsx",
+      "start": 139,
+      "end": 144,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/hook-object/use-count.ts",
+      "start": 134,
+      "end": 139,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/hook-object/use-count.ts",
+      "start": 141,
+      "end": 149,
+      "fixes": 0
+    }
+  ]
+}

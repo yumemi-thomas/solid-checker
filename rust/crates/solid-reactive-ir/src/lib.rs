@@ -499,6 +499,11 @@ pub struct ReactiveRead {
     /// because its backing is open: the read is reactive either way (ADR 0665).
     #[serde(default, skip_serializing_if = "is_false")]
     pub pending_open: bool,
+    /// ADR 0803: the read's source, or the source backing it, is a slot a
+    /// visible write to array iteration withdrew: the read is held, never a
+    /// proven read.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub withdrawn_slot: bool,
     /// The untracked-rendering role rests on a *missing* compiler fact: the
     /// narrowest JSX region containing the read carries no census entry, so
     /// the producer never reported how — or whether — that expression is

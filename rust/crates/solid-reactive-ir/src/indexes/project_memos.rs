@@ -310,17 +310,18 @@ impl Memo<BuildSchema> for ParameterCompletionSlot {
 }
 
 whole_program! {
-    /// ADR 0349: whether the Promise and array-iteration premises hold, as
-    /// `(promise, array_iteration)`.
-    IntrinsicsTripwires, 39, intrinsics, "intrinsics", (bool, bool),
-    cycle: (false, false),
+    /// ADR 0349: whether the Promise and array-iteration premises hold, and
+    /// (ADR 0803) no iterator member or intrinsic key is written, as
+    /// `(promise, array_iteration, iterator_members)`.
+    IntrinsicsTripwires, 39, intrinsics, "intrinsics", (bool, bool, bool),
+    cycle: (false, false, false),
     direct: |lookup| {
         let found = super::intrinsics::tripwires(lookup);
-        (found.promise, found.array_iteration)
+        (found.promise, found.array_iteration, found.iterator_members)
     },
     |ctx| Ok(ctx.project(|lookup| {
         let found = super::intrinsics::tripwires(lookup);
-        (found.promise, found.array_iteration)
+        (found.promise, found.array_iteration, found.iterator_members)
     }))
 }
 

@@ -85,6 +85,9 @@ pub(crate) const LOADING_HOLD_UNPROVEN: &str = "loading-hold-unproven";
 pub(crate) const EFFECT_OWNER_UNPROVEN: &str = "effect-owner-unproven";
 pub(crate) const PACKAGE_SOURCE_UNAVAILABLE: &str = "package-source-unavailable";
 pub(crate) const FUNCTION_CALL_TARGET_UNRESOLVED: &str = "function-call-target-unresolved";
+/// ADR 0803: the program writes the array iterator visibly, so a primitive's
+/// array pattern may not hold the primitive's own slots.
+pub(crate) const TUPLE_ITERATION_WRITTEN: &str = "tuple-iteration-written";
 pub(crate) const CREATED_ACCESSOR_READ_UNPROVEN: &str = "created-accessor-read-unproven";
 
 // `value_use.rs`: where a proven source leaves what the analysis follows.

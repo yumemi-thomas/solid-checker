@@ -265,6 +265,9 @@ pub(crate) struct SourceDiscoveryContribution {
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
     pub(crate) value_form_stores: Vec<SymbolId>,
+    /// ADR 0803: the sources and setters a primitive's array pattern names
+    /// (`const [s, set] = createSignal(1)`), exact only while iteration is.
+    pub(crate) array_slot_sources: Vec<SymbolId>,
 }
 
 #[derive(Clone)]
@@ -673,6 +676,10 @@ pub(crate) struct LocalAccessSources {
     pub(crate) source_async_options: HashMap<SymbolId, crate::source_discovery::AsyncSourceOptions>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) server_rendering: crate::source_discovery::ServerRenderingPremise,
+    /// ADR 0803: the slots a write to array iteration withdrew. A file's
+    /// chunk holds every reference of one, not only the symbols it records
+    /// as dependencies, so a move here reuses no chunk.
+    pub(crate) withdrawn_array_slots: HashSet<SymbolId>,
 }
 
 impl LocalAccessSources {

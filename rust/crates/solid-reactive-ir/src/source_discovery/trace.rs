@@ -83,6 +83,8 @@ pub(crate) enum StateKey {
     Uses(Arc<str>, Span),
     /// Some analyzed file exports the symbol.
     Exported(SymbolId),
+    /// ADR 0803: a primitive's array-pattern slot a write to iteration withdrew.
+    Withdrawn(SymbolId),
 }
 
 /// The fingerprint of an answer.
