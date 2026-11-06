@@ -148,10 +148,59 @@ Base `879eca007` reports, branch `claude/flip-r2`, ADRs 0780-0789. Scratch `/tmp
 | P6, P5, P10 (ADR 0780) | `b05 b06 d7-export-star-as -store`, and `Api.flush()` SC2008, which the new binding found | `h18`, `onLoad` in a control-flow callback | 139 to 130 open |
 ## R3
 
-Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).
+Branch `claude/flip-r3`, pushed to `origin/claude/flip-r3` (since 2026-11-06 the landing rule: never push flip-reads; part 8 merges hourly). Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).
 
 | Step | State | Moved | Notes |
 |---|---|---|---|
 | 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
+| 2, SC2003 silent tail | `bfd336ce8`, ADR 0790; `0ccd0aa2e` (3 patterns) | +372 / -2 SC2003 U, -1 SC9012 U, 0 V moved | 44 Chrome-warning probes: base silent on 36, now 5 proved V, 39 U. False positive fixed: a write root took its first token's symbol. Demand for argumentless write-root calls. Grid: 168 FC + 48 FP on r3base, 0 on the fix; patterns v09, v10, d6-comma closed |
+| smoke refresh | `3b4e446bc` | n/a | reselected from a full VM run at bfd336ce8, 406 leaving programs named; V-D1 removed, attributed to 061f71bd2 (ADR 0718) by id; 5 entries added, open before R3 |
+| 3, P8 | `ff0e75ed6`, ADR 0791, narrowed | 0 | U: a delete behind an optional chain (p9, p10). Not closed: p1-p8 (computed key, index, required `T \| undefined`, `unknown`), owed a producer answer, below |
 
 **Method for old/new fuzz checks (owner, 2026-11-06): id sets, in the VM.** Never a whole grid while fixing. (1) Build the id set: the step's new fuzz shapes, the rows that moved, the rediscovery ids. From a finished run, `scripts/fuzz/rerun-ids.mjs <run dir> --out <dir> --outcomes … --grids …` writes `{ generator, seed, ids }` manifests; a manifest can also be written by hand, and `legal.mjs` refuses an id it does not generate, so build legal ids from `legalCells` + `recallLegalShapes` + `legalId` (scratch `tools/lg-ids.mjs`). `matrix.mjs`/`legal.mjs --grid --recall --seed 1 --codes C --contexts … --ids <manifest> --confirm-with-chrome --checker-bin <bin>` generate only those. (2) Run both builds in the `sc` Colima VM: `FUZZ_VM_PROFILE=sc scripts/fuzz/vm.sh sync` (new build: the clone at this checkout), the old build as a worktree of its commit under `/mnt/lima-colima/sc/<tag>` with its own `CARGO_TARGET_DIR` (`cargo +1.99.1 build --release -p solid-facts-backend --bin solid-checker-rust`), then one `vm.sh detach <log> bash <script>` running every command in sequence (a detach syncs first: never a second one while a run uses the clone), `vm.sh pull <vm dir> <host dir>`, diff by id. Host paths under `/Users/…` are mounted at the same path in the VM; `~` there is the guest's home. A macOS run past 30 minutes in the background is killed (`focus-old` stopped at 20,250 of 25,914).
+
+### R3 handoff, head `ff0e75ed6` (2026-11-06)
+
+Pushed to `origin/claude/flip-r3`. Tree clean. Context ran out; next agent: start step 4 after a plain merge of `origin/claude/flip-reads` and a build.
+
+**Done.** Step 1 (`4d9924344`). Step 2 (`bfd336ce8`, ADR 0790) and its follow-up (`0ccd0aa2e`). Smoke refresh (`3b4e446bc`). Step 3 narrowed (`ff0e75ed6`, ADR 0791). Merge of flip-reads at `8ff25dca5`. Commit messages carry the measurements.
+
+**open-defects.json changes, attributed by id in the VM.**
+- Removed V-D1 (lg- noop-*, false-positive): fixed by `061f71bd2` (W, ADR 0718). 061f71bd2^: 53 FP and 22 unexecuted of 75; at 061f71bd2: 0 and 0.
+- Removed patterns api/v09-store-write-nullish, api/v10-store-write-let, values/d6-comma: certified FC on 80db411e5, fine on bfd336ce8 (ADR 0790).
+- Added, all open on 80db411e5 too:
+  - PENDING_ASYNC_FORBIDDEN_SCOPE async-value-member (member-tag getter);
+  - RESOLVE / UNTIL / CAUGHT_REACTIVE_READ handed-flush (g2d named hand-off);
+  - CAUGHT_REACTIVE_READ mount-named (false positive).
+
+**P8's producer question (p1-p8 open).**
+- `delete st["a"]`, `st.rec[key]`, `st.rec.k`, `st.items[0]`, `st.o["c"]`, `st.nick` (required `string | undefined`), `st.u` (`unknown`): tsc accepts each without `exactOptionalPropertyTypes`, and Chrome warns on each.
+- Type Facts gives a computed operand no entity: `demand_plan.rs` `collect_delete_spans` skips it.
+- A static operand's entity carries only `writableOptionalProperty` (apps/solid-typefacts `type_facts.rs` `writable_optional_property_at`): `Property | Optional` and not readonly, else `false`. It carries no symbol, no domain and no compiler options. So `delete st.b` (TS2790) and `delete st.nick` / `st.u` (accepted) both read `false`.
+- An uncertifiable there is visible to the ownership gate, which then fails `delete-required-property/001` (invariant 1). Tried and reverted.
+- Owed: a tri-state producer answer mirroring `checkDeleteExpression`: resolved property symbol (none for an index signature or a non-literal key), readonly, strictNullChecks, exactOptionalPropertyTypes, `any`/`unknown`/`never`. Demand computed operands as well.
+- Then the consumer gives V for an accepted optional literal key, U where tsc accepts and the store is linked, and silence where tsc rejects.
+- Probes: scratch `s3/cases/p1-p10, n1, n2, c1, c2, q1`.
+
+**Left, in order.**
+- Step 4 (the `outside` entries). Leads are in `~/EDF/tmp/flipr3/prep-steps-3-4.md`: read only, untested, reproduce in Chrome and tsc yourself.
+  - 214, 215, 218, 219 are mostly closed by ADR 0790. They still need shapes (`sw-object-root`, `sw-generator`, `sw-assign-copy`, `sw-param-array-pattern`, `sw-foreach-pattern`, `sw-loop-head`, `sw-assign-alias`), plus one VM build of `1232c2f2c^` to turn their `outside` into ids.
+  - 217's `.bind(...)()` and `Reflect.apply`: R1 added NET_STORE_CALLS shapes (`net-push-bind`, `net-push-reflect`), so check what is still certified before writing code.
+  - The 13 stale reasons: drafts in the prep file.
+- Step 5: SC2001 and SC4002 wording in lib.rs.
+
+**Blocker.** 198/199 (g2d: `[1].map(hf)` in tracked JSX) need `local_access.rs` `handed_role` / `reports_untracked_read`. Not R3's file; the census handed-flush false cleans are the same cause.
+
+**Owner items.**
+- mx-census false positive `mx-caught-reactive-read-mount-named-async-direct-none`: SC5001 violation at a `try { a1(); } catch {}` under a module-level `render(f1, el)`, Chrome silent. The same on 80db411e5.
+- Certified false cleans `mx-resolve-in-reactive-scope-handed-flush-x-direct-none` and `mx-until-in-reactive-scope-handed-flush-x-direct-none` (g2d cause).
+- The 7 mx-census harness rows, which are the 7 inconclusive oracle runs. 6 are mount-named, where `page.waitForFunction` timed out at 12 s; 1 is flw-settled-report-error, where the browser bootstrap did not bind. `fuzz-smoke` exits 2 on them, so the patterns lane needs its own run (`patterns.mjs`).
+
+**Method.**
+- Fuzz checks run as id sets in the `sc` VM. Write manifests with scratch `tools/mx-ids.mjs` (`recallShapes` + `shapeId`), `tools/lg-ids.mjs`, or `tools/smoke-ids.mjs` (a smoke run's flagged ids, with each grid's own args).
+- Old build: the VM worktree `/mnt/lima-colima/sc/r3base`, binary `/mnt/lima-colima/sc/r3base-target/release/solid-checker-rust` (80db411e5). Worktrees `wt-061f71bd2[p]` and `tgt-061f71bd2[p]` are there too.
+- New build: the clone after `vm.sh sync` (`rust/target/release`).
+- One `vm.sh detach` per batch. Clear your own `ram/scratch/focus-*` and `ram/tmp/*` when the tmpfs fills: a smoke run refuses under about 5 GiB free.
+- `patterns.mjs --only` takes one substring before the merge at `8ff25dca5`, and a comma list after it.
+- Corpus sweeps on macOS: about a minute each. Baselines: `sweep-r3base.json` (21,674 U, 377 V), `sweep-m3.json` (merge, 24,659 U, 377 V).
+- Probes: scratch `tools/probe.mjs <dir> --bin <checker> [--chrome]` (tsc + checker + Chrome) and `tools/one.sh` (one case).
