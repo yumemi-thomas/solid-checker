@@ -33,7 +33,7 @@ import { codeRules, declinesCode, ignoredRules, policyOf, withholdingRules } fro
 import { generateLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
 import { axesKey, cellList, generateShape, gridShapes, recallShapes } from "./matrix.mjs";
 import { CONTROL_LAYERS, FILE_LAYERS, LAYERS, PAIR_LAYERS, RECALL_LAYERS } from "./misuse.mjs";
-import { DEPTH_FORMS, HANDOFF_FORMS } from "./model.mjs";
+import { CHAIN_FORMS, DEPTH_FORMS, HANDOFF_FORMS } from "./model.mjs";
 import { typecheckKeyOf } from "./pipeline.mjs";
 import { fnv } from "./rng.mjs";
 import { requireTypeChecker, resolveTsc, typecheck, typecheckBatch } from "./typecheck.mjs";
@@ -57,6 +57,7 @@ export const TWIN_LAYERS = {
   "try-finally": "`try {} finally { … }`", label: "`outer: { …; break outer; }`", generator: "`(function* () { …; yield 1; })().next()`: the body runs up to the yield at `.next()`",
   ...Object.fromEntries(HANDOFF_FORMS.map((layer) => [layer, "a function handed on by name and called once at once (forEach, Array.from, sort of two, call, apply, Reflect.apply, a tag, a wrapper, a member, an assigned member, a declaration)"])),
   ...Object.fromEntries(DEPTH_FORMS.map((layer) => [layer, "N arrows, each called where it is written"])),
+  ...Object.fromEntries(CHAIN_FORMS.map((layer) => [layer, "N named helpers, or a callback N helpers hand on"])),
   // The pair grids' composites (misuse.mjs PAIR_LAYERS): both parts run their body once, in place.
   ...Object.fromEntries(PAIR_LAYERS.map((layer) => [layer, "a hand-off form inside the module helper's callback: each calls its body once, at once"])),
 };

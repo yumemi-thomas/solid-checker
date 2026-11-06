@@ -1713,7 +1713,8 @@ fn unplaced_blocker(
     lookup: &SemanticLookup<'_>,
     ownerless: bool,
 ) -> Option<&'static str> {
-    runs_unplaced_through_callers(file, site, lookup, 4, ownerless).or_else(|| {
+    let mut memo = rustc_hash::FxHashMap::default();
+    runs_unplaced_through_callers(file, site, lookup, 4, ownerless, &mut memo).or_else(|| {
         runs_unplaced_exhaustive(file, site, lookup, ownerless)
             .then_some(crate::blockers::FUNCTION_RUN_UNPLACED)
     })
@@ -1725,12 +1726,33 @@ fn unplaced_blocker(
 /// member does, which no call edge places either. The blocker it answers with:
 /// ADR 0750, a climb that had callers left to ask past `depth` (or whose
 /// in-place climb was cut) is undecided, never placed.
+///
+/// Asks each site once per remaining depth: a helper many sites reach costs one
+/// walk, not `sites^depth`, and the answer is the same (`walk_memo`). `ownerless`
+/// is one value for a whole walk, so it needs no place in the key.
 fn runs_unplaced_through_callers(
     file: &FileFacts,
     site: Span,
     lookup: &SemanticLookup<'_>,
     depth: usize,
     ownerless: bool,
+    memo: &mut UnplacedMemo,
+) -> Option<&'static str> {
+    crate::walk_memo::memoized(memo, (file.path.to_string(), site, depth), |memo| {
+        runs_unplaced_once(file, site, lookup, depth, ownerless, memo)
+    })
+}
+
+/// One site, asked at one remaining depth.
+type UnplacedMemo = rustc_hash::FxHashMap<(String, Span, usize), Option<&'static str>>;
+
+fn runs_unplaced_once(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    ownerless: bool,
+    memo: &mut UnplacedMemo,
 ) -> Option<&'static str> {
     // ADR 0710: with `ownerless`, a site a primitive's synchronous callback
     // runs (other than `untrack`'s) has the owner that primitive sets, and a
@@ -1755,7 +1777,7 @@ fn runs_unplaced_through_callers(
             let Some(depth) = depth.checked_sub(1) else {
                 return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
             };
-            return runs_unplaced_through_callers(file, climb.at, lookup, depth, ownerless);
+            return runs_unplaced_through_callers(file, climb.at, lookup, depth, ownerless, memo);
         }
         Some(_) | None => site,
     };
@@ -1784,7 +1806,7 @@ fn runs_unplaced_through_callers(
     };
     let mut answer = None;
     for (caller, call) in calls {
-        match runs_unplaced_through_callers(caller, call.span, lookup, depth, ownerless) {
+        match runs_unplaced_through_callers(caller, call.span, lookup, depth, ownerless, memo) {
             Some(crate::blockers::FUNCTION_RUN_UNPLACED) => {
                 return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
             }

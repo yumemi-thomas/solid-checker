@@ -270,6 +270,12 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         let mut visited = HashSet::default();
         self.derived_objects(file, span, 24, &mut visited, &mut objects);
         let mut getters = Vec::new();
+        // Past the walk's bound the value may be any object: the site itself
+        // stands for what was not walked.
+        if objects.iter().any(|(path, _)| path.is_empty()) {
+            objects.retain(|(path, _)| !path.is_empty());
+            getters.push(location(file.path.shared(), span));
+        }
         for (path, object) in objects {
             if self.facts.dependency_source_root(&path).is_none() {
                 continue;
@@ -325,7 +331,11 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         objects: &mut Vec<(String, Span)>,
     ) {
         let span = file.ast.peel_ts_sugar_span(span);
-        if depth == 0 || !visited.insert(location(file.path.shared(), span)) {
+        if depth == 0 {
+            objects.push((String::new(), span));
+            return;
+        }
+        if !visited.insert(location(file.path.shared(), span)) {
             return;
         }
         if let Some(choice) = file.ast.conditional_at(span) {
@@ -364,6 +374,10 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             let mut receivers = Vec::new();
             self.derived_objects(file, member.object, depth - 1, visited, &mut receivers);
             for (path, object) in receivers {
+                if path.is_empty() {
+                    objects.push((path, object));
+                    continue;
+                }
                 let Some(object_file) = self.lookup.file_by_path(&path) else {
                     continue;
                 };

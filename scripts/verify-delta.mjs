@@ -325,9 +325,10 @@ export const UNIVERSAL = [
 /**
  * Every gate that reads the checker's findings. A path that can move a finding
  * selects all of them: `scripts/verify.sh`'s gates lane runs them together, and
- * selecting only some is how a red gate reached a push.
+ * selecting only some is how a red gate reached a push, for `tsc-oracle-gate`
+ * and then for `repro-causes` (R1's `clean-interval-hook`).
  */
-export const FINDING_GATES = ["coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit"];
+export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit"];
 
 /**
  * One row of the mapping, as a prefix test.
@@ -524,7 +525,7 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = [...FINDING_GATES, "repro-causes", "ir-edit-fuzz"].some((check) => selected.has(check));
+  const needsChecker = [...FINDING_GATES, "ir-edit-fuzz"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
@@ -538,7 +539,7 @@ export function planFor(paths) {
     ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
-    ...[...FINDING_GATES, "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
+    ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),

@@ -196,7 +196,7 @@ function oracle(options, extra) {
   // The manifest's ids name the programs of the shards' mode: a recall grid regenerates them in it (a manifest from before `recall` is full).
   const recall = options.grid.endsWith("-recall") && manifest.recall !== "lean" ? ["--recall-full"] : [];
   const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, ...recall, "--ids", partManifest, "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
-    "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs(), ...extra];
+    "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs({ allCores: Boolean(process.env.CI) }), ...extra];
   console.log(`${label}: the runtime differential on ${ids.length} of the grid's ${manifest.ids.length} oracle programs`);
   return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
 }

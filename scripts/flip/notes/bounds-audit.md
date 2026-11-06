@@ -165,19 +165,16 @@ the bound each answers no proof (`Unplaced`, `true` = a root or unread, `Unrun`,
 `owners/bindings.rs:272`, `symbols.rs` ×5, `lib.rs:2167` (fixpoints bounded by their size). Probes c2001-70, d2002-20,
 d3002-20: U. No change.
 
-## Not fixed (open)
+## Open bounds, closed by R (ADR 0695)
 
-Listed in docs/open-work.md section 1.
-
-- `execution_role.rs:598` `dynamic_component_entry` (32 climbs, partial path). The fix is `Some(false)` past the loop (an
-  Unknown read role; `None` would keep `UntrackedRendering`). Not built: no crossing input (probe `dyn-34` never reaches it).
-- `local_access.rs:2845` `may_run_in_leaf_owner_within` (3): a risk search cut to false; probe `lo-5` is already uncertifiable
-  through the general dispatch obligation, so no crossing input shows it.
-- `local_access.rs:5090` `value_reaches` (4): callers use it both ways (`value_reaches_async_source` with `&&` and `!`); a fix
-  needs a tri-state at each caller (R's async-read code).
-- `accessor_provenance/resolver_dependencies.rs:328` `derived_objects` (24): fewer getter obligations past 24 hops.
-- Unverified, low reach: `typed_sources.rs:73` (8 views), `resolver_values.rs:522` (`context_origin`), `route_components.rs:564`
-  (32 nested routes), `interproc/obligations.rs:630` (64 members), `read_context.rs:472`.
+- `dynamic_component_entry` (32 climbs): **crossed**. 33 nested `flush(fn)` in a dynamic-only body kept a rendering role, a V whose hint promised a warning; Chrome quiet at 33 and 40. Past the loop it now answers `Some(false)`, U. Fixture `dynamic-entry-limit`: 30 V, 33 U.
+- `derived_objects` (24): the site stands for the unread objects past the bound (R's hunk). Probed `const` alias chains of a getter at 20, 23, 24, 25, 30: U with the same blocker on both sides, so no chain tried crosses it. The hunk stays as the fail-closed answer, with no crossing test.
+- `route_components.rs` `definitions` (32): nested `children` at 30, 33, 40: U with the same blocker. A route it misses is a component with no mount.
+- `read_context.rs` `value_is_function`: `const` alias chains at 2, 8, 12, 20: certified at 2, U from 8 on, a handed-member row, no clean at the bound.
+- `interproc/obligations.rs` `direct_protocol_parameters` (64): `for (const f of p.m.m…)` at 2, 60, 63, 64, 65, 70: certified on all, **and Chrome warns on all**. So it is no bound effect: the iterator's `yield c` hands the accessor on. A live false clean for the census (`value-through-generator`), which must carry `hops-2` and `hops-70` from scratch `lim1/` as its test.
+- `typed_sources.rs` `push_view_candidates` (8), `resolver_values.rs` `context_origin`: not crossed. Read only: each stops adding a candidate or a transport, and the census or the handed net answers what is left. Rest on the census; recheck once it lands.
+- `may_run_in_leaf_owner_within` (3), `value_reaches` (4): both in `local_access.rs`, which R1 owns. Not changed here. R's draft (`w0/p-bounds.diff`) has the exact walk for `value_reaches` and unplaced rows at `CALL_ATTRIBUTED_DEPTH`; a depth-limit answer of true there moved 13 true V, so take the exact walk. `may_run_in_leaf_owner_within` has no crossing input: `lo-5` is U through the general obligation.
+- **New, found by the `chain-N` shapes:** `report_helper_reads` stopped at 3 helpers and returned, 70 false cleans in `memo-async-loop`, `*-for-await`, `then-named`. Now uncertifiable, all 70 by id, followed to the end, each helper once; past `MAX_REGION_DEPTH`, `search-depth-limit`.
 
 Also seen, not bounds: `cleanup.rs:224` drops the UnresolvedCallback obligation when the call has no validity fact (a missing
 fact answers silent); `effect_phase.rs` `instance_of`/`follow_export` `Unknown` for an unresolved hop answers silent (only

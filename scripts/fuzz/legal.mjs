@@ -227,7 +227,7 @@ export async function runLegal(options) {
     // As matrix.mjs: with every runtime cached no Vitest batch runs, so the workers' share goes to the checker; and chunk k's fast
     // path runs while chunk k+1 is type-checked and checked. Each chunk's records and verdicts are what `evaluate` gives it.
     const plain = (list) => list.map(({ program, built }) => ({ program, built }));
-    const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
+    const run = config.allCores && runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
     if (run !== config) console.error(`legal: every program's runtime is cached; checker concurrency ${run.concurrency}`);
     // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
     if (run !== config) await setExecutorChecks(run);

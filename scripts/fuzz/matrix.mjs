@@ -901,7 +901,7 @@ async function sweep(options, config, out) {
   const started = Date.now();
   // With every program's runtime cached no Vitest batch runs, so the workers' share of the machine goes to the checker: the same budget.
   const plain = (list) => list.map(({ program, built }) => ({ program, built }));
-  const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
+  const run = config.allCores && runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
   if (run !== config) console.error(`matrix: every program's runtime is cached; checker concurrency ${run.concurrency} (${config.concurrency} + the ${config.workers} idle workers)`);
   // The executor's own limit too (exec.mjs setExecutorChecks), back to the grid's after the evaluation.
   if (run !== config) await setExecutorChecks(run);

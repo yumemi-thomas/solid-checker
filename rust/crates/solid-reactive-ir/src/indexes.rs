@@ -941,6 +941,9 @@ pub(super) struct SemanticLookup<'a> {
     /// the accessors): plain caches, so a hot flag read replays nothing.
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
+    /// [`Self::project_may_dispose`], part of `Section::ProjectPrimitives`'
+    /// value, because any file's call moves it.
+    project_may_dispose: OnceLock<bool>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
@@ -1294,6 +1297,7 @@ impl<'a> SemanticLookup<'a> {
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
             project_primitives: OnceLock::new(),
+            project_may_dispose: OnceLock::new(),
             callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: crate::base::reads::Recorded::new(),
@@ -1424,6 +1428,55 @@ impl<'a> SemanticLookup<'a> {
                 .values()
                 .filter_map(|name| self.dialect.primitive(name.as_str()))
                 .collect()
+        })
+    }
+
+    /// ADR 0695: whether code anywhere in the project can dispose an owner on a
+    /// stack it chooses, which runs a cleanup there: a `getOwner` or
+    /// `createOwner`, a `createRoot` callback that takes its `dispose` or is not
+    /// a literal, or a `render`, `hydrate` or `onCleanup` whose result is kept
+    /// (`onCleanup` returns a handle). File by file it would miss a cleanup in
+    /// a helper and an unrelated `getOwner` would answer for it (`b1`, `b4`,
+    /// `b2`).
+    pub(crate) fn project_may_dispose(&self) -> bool {
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
+        self.may_dispose()
+    }
+
+    fn may_dispose(&self) -> bool {
+        use solid_dialect::Primitive;
+        *self.project_may_dispose.get_or_init(|| {
+            let primitives = self.project_primitives();
+            if primitives.contains(&Primitive::GetOwner)
+                || primitives.contains(&Primitive::CreateOwner)
+            {
+                return true;
+            }
+            [
+                Primitive::CreateRoot,
+                Primitive::Render,
+                Primitive::Hydrate,
+                Primitive::OnCleanup,
+            ]
+            .iter()
+            .any(|primitive| primitives.contains(primitive))
+                && self.files().iter().any(|file| {
+                    file.ast.calls.iter().any(|call| {
+                        match self.primitive_at_call(file, call.span) {
+                            Some(Primitive::Render | Primitive::Hydrate | Primitive::OnCleanup) => {
+                                !call.result_discarded
+                            }
+                            Some(Primitive::CreateRoot) => {
+                                call.arguments.first().is_none_or(|callback| {
+                                    file.ast
+                                        .function_at(file.ast.peel_ts_sugar_span(callback.span))
+                                        .is_none_or(|function| !function.parameters.is_empty())
+                                })
+                            }
+                            _ => false,
+                        }
+                    })
+                })
         })
     }
 
@@ -1939,6 +1992,7 @@ impl<'a> SemanticLookup<'a> {
                 for primitive in primitives {
                     text(&mut hasher, &primitive);
                 }
+                hasher.update([u8::from(self.may_dispose())]);
             }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(

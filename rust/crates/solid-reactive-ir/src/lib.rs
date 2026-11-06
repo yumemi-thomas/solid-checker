@@ -102,6 +102,7 @@ mod timings;
 mod upstream_compat;
 mod valid_use_server;
 mod value_identity;
+mod walk_memo;
 
 pub use owners::function_binding_name;
 
