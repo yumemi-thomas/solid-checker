@@ -358,13 +358,6 @@
    "certified": true
   },
   {
-   "id": "census/f08-decorator-read",
-   "item": "section-4 census:f",
-   "outcome": "no-run",
-   "codes": [],
-   "why": "entry: Invalid or unexpected token"
-  },
-  {
    "id": "census/f10-getter-this-chain",
    "item": "section-4 census:f",
    "outcome": "false-clean",
@@ -372,15 +365,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "census/h03-mutation-observer",
-   "item": "section-4 census:h",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "missing-owner"
-   ]
   },
   {
    "id": "census/k12-createRoot-returns-accessor",
@@ -644,24 +628,6 @@
    "certified": true
   },
   {
-   "id": "types/b05-errorboundary",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/b06-loadingboundary",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/b15-accessor-default-param",
    "item": "T-other",
    "outcome": "false-clean",
@@ -752,29 +718,6 @@
    "certified": true
   },
   {
-   "id": "types/e807-map-name-empty",
-   "item": "T-other",
-   "outcome": "no-run",
-   "codes": [],
-   "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e807-map-name-empty/App.tsx"
-  },
-  {
-   "id": "types/e911-on-colon",
-   "item": "T-other",
-   "outcome": "no-run",
-   "codes": [],
-   "why": "entry: Failed to fetch dynamically imported module: http://127.0.0.1:5173/cases/types--e911-on-colon/App.tsx"
-  },
-  {
-   "id": "types/f18-reflect-apply",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/f26-accessor-as-callback",
    "item": "T-other",
    "outcome": "false-clean",
@@ -793,15 +736,6 @@
    ]
   },
   {
-   "id": "types/h04-reflect-apply-setter",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/h08-setter-as-cb",
    "item": "T-other",
    "outcome": "false-clean",
@@ -816,15 +750,6 @@
    "outcome": "false-clean",
    "codes": [
     "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/h18-iframe-show-cb",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
    ],
    "certified": true
   },
@@ -955,15 +880,6 @@
    "certified": true
   },
   {
-   "id": "values/d3-reflect-apply",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d3-sources-const",
    "item": "V-D3",
    "outcome": "false-clean",
@@ -1081,24 +997,6 @@
    "certified": true
   },
   {
-   "id": "values/d7-export-star-as",
-   "item": "V-D7",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/d7-export-star-as-store",
-   "item": "V-D7",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": true
-  },
-  {
    "id": "values/d7-window-member",
    "item": "V-D7",
    "outcome": "false-clean",
@@ -1173,33 +1071,6 @@
   {
    "id": "values/d9-this-getter-store",
    "item": "V-D9",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-bind-cast-arg",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-bind-cast-noarg",
-   "item": "V-D3",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "values/t3-call-cast",
-   "item": "V-D3",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"

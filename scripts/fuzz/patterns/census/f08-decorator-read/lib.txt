@@ -1,1 +1,0 @@
-"ESNext", "DOM", "DOM.Iterable", "ESNext.Decorators"

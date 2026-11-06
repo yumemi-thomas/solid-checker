@@ -107,6 +107,7 @@ Pushed. Tree clean. Fresh Opus 5.5 high agent: read this section first. Census r
 
 | Merge 7 | `cd131fc23`, W's final head, ADR 0752 | +258 SC2009 U, all compass-ui, 257 in test files, 0 V moved, `sweep-t4.json`, 21,875 U, 377 V, 0 unnamed | `make verify` green, `check.mjs all` 296 of 336, same 40, HOST 25 of 25, patterns 139 open. W's note calls the project inferay `ui`; this machine's manifest names it compass-ui. `value_reaches` is R's, W says why in `bounds-audit.md` |
 | Step 2 | case 32, `verify-delta` | 0 moved, no analysis change | Case 32's `props.n = 1` removal dropped a negative control: restored as two cases, exported U, closed twin silent, 141 cases hold. `FINDING_GATES`: every path that can move a finding selects coverage, ownership, tsc-oracle and obligation-audit; solid-facts and the dialect rows selected none of them before |
+| SC1001 `flush(fn)` | ADR 0694, the owner's ruling | 0 moved in the corpus; `pos-flush-fn`: 72 of 2,514 programs, 84 SC1001 rows V to U, 0 outcomes | now uncertifiable: a store Get that only leads to a write, `write-path-read-unproven`. Kept V: a real read, `+=`, an alias, a project `push`. `expected-silent.json` does not fit: the judge excuses the no-window hint, so no old build fails, and the judge stayed untouched |
 **Baselines.** Build `rk2/`, sweep `sweep-k2.json`: 21,616 U, 377 V, 0 unnamed, 0 exit errors. Patterns 139 open (3 FP, 133 FC, 3 no run). `make verify` green on this tree through verify-delta's escalation, in the lanes as written. Set `SOLID_CHECKER_TSRS_BIN=/Users/thomas/Documents/Github/tsrs/target/release/tsrs` for old-revision judges (scratch `judge.sh <rev> <bindir>`).
 
 **Merge first.** `origin/claude/flip-writes` moved 2 commits past the last merge: `138ff86e7` (ADR 0750, a walk past its depth limit is undecided) and `91311857e` (ADR 0751, a value chain past its limit). They overlap step 6 below. W took 0750 and 0751, so continue from 0752 if R's range runs out.
@@ -137,6 +138,14 @@ Patches were cut before the merges: apply with `git apply --3way`, and `git add`
 
 **Traps from this session.** Grid processes read `scripts/fuzz/*.mjs` live: no edit there while a grid runs. A `silenceMeasured` fallback was withdrawn on the owner's word: a finding's line needs its own counter. verify-delta skips `tsc-oracle` unless a path escalates: `8833e6bfa` went out with that gate red. `make coverage` shows one row per fixture: compare snapshots row by row. The commit message of `976e73028` rests on grids from before its last two edits; rerun the whole set after the census.
 
+## R2 (agent), from 2026-11-06
+
+Base `879eca007` reports, branch `claude/flip-r2`, ADRs 0780-0789. Scratch `/tmp/sc-scratch.noindex/flip-r2`: `gate-times.tsv`, helpers `bld.sh`, `sw.sh`, `one.sh`, `ids.mjs` (id manifests for a subset of mx-recall), `defs.py`.
+
+| Family | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| List: 9 programs, 3 no-run | `a11`'s twin confirmed (STRICT_READ_UNTRACKED); `h03` is NO_OWNER_EFFECT, SC4001 stands; `e807` runs | | `e911` (`on:click` is TS2322) and `f08` (the plugin leaves `@dec` in, no way to run it; SC1001 U at its site) deleted |
+| P6, P5, P10 (ADR 0780) | `b05 b06 d7-export-star-as -store`, and `Api.flush()` SC2008, which the new binding found | `h18`, `onLoad` in a control-flow callback | 139 to 130 open |
 ## R3
 
 Branch `claude/flip-r3`, delivered to `claude/flip-reads`. Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).

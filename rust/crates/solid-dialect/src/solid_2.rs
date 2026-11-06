@@ -2433,6 +2433,9 @@ impl Dialect for Solid2 {
                 | Primitive::Children
                 | Primitive::MapArray
                 | Primitive::RepeatMap
+                // ADR 0780: the same, from `solid-js/internal`.
+                | Primitive::CreateErrorBoundary
+                | Primitive::CreateLoadingBoundary
         )
     }
 

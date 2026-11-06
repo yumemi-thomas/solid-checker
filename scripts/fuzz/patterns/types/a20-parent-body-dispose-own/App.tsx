@@ -13,6 +13,6 @@ const click = async () => { (globalThis as any).__b().click(); };
 export function App() {
   const o = getOwner()!;
   onCleanup(() => { c(); });
-  o.dispose();
+  (o as any).dispose();
   return <p />;
 }

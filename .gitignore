@@ -823,6 +823,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/undecided-flush-callback/node_modules/**
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/**
+!fixtures/reactive-ir/flush-write-path/node_modules/
+!fixtures/reactive-ir/flush-write-path/node_modules/**
 !fixtures/reactive-ir/write-past-possible-await/node_modules/
 !fixtures/reactive-ir/write-past-possible-await/node_modules/**
 !fixtures/reactive-ir/write-past-layered-await/node_modules/
@@ -1055,6 +1057,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/absent-guard-prop/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/
 !fixtures/reactive-ir/handed-call-results/node_modules/**
+!fixtures/reactive-ir/handed-net-guards/node_modules/
+!fixtures/reactive-ir/handed-net-guards/node_modules/**
+!fixtures/reactive-ir/handed-net/node_modules/
+!fixtures/reactive-ir/handed-net/node_modules/**
 !fixtures/reactive-ir/created-accessors/node_modules/
 !fixtures/reactive-ir/created-accessors/node_modules/**
 !fixtures/reactive-ir/plain-container-receiver/node_modules/
@@ -1065,3 +1071,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/bounds-value-depth-limit/node_modules/**
 !fixtures/reactive-ir/bounds-budget-limit/node_modules/
 !fixtures/reactive-ir/bounds-budget-limit/node_modules/**
+!fixtures/reactive-ir/export-star-as-solid/node_modules/
+!fixtures/reactive-ir/export-star-as-solid/node_modules/**
+!fixtures/reactive-ir/boundary-accessors/node_modules/
+!fixtures/reactive-ir/boundary-accessors/node_modules/**
+!fixtures/reactive-ir/control-flow-denied-handler/node_modules/
+!fixtures/reactive-ir/control-flow-denied-handler/node_modules/**

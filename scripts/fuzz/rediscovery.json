@@ -4148,6 +4148,216 @@
   "rediscovered": "rm5 false-clean, the fix recall-gap: all 152 by id"
  },
  {
+  "finding": "a member past the first step of a handed value (`props.o.go(1)` in a memo, `props.o.go()` in a body, `o: any`): certified, Chrome writes or reads",
+  "found": "SC9012 research n1-n9, the matrix's `nested` form",
+  "fixed": "ADR 0770",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-body-net-nested-direct-none"
+  ],
+  "rediscovered": "rbase false-clean on 18 of 18 net-nested, the fix recall-gap; patterns net/n4-prop-nested-any; net-nested-read stays agree (the read has its SC1001)"
+ },
+ {
+  "finding": "a setter, action or async source handed to a helper's parameter at a tracked position: certified, Chrome writes, acts or warns the boundary",
+  "found": "SC9012 research a1, a9, a13, r1-r11, and the generated net-param-member (helper declared in the memo), which the report did not name: `SiteExclusions::at` excluded the member call lexically",
+  "fixed": "ADR 0771",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-memo-net-param-direct-none",
+   "mx-reactive-write-in-owned-scope-memo-net-param-member-direct-none",
+   "mx-reactive-write-in-owned-scope-effect-compute-net-param-helper-direct-none"
+  ],
+  "rediscovered": "rbase false-clean on 36 of 36 of each, the fix recall-gap; guards net-param-plain, -unused, -later stay certified"
+ },
+ {
+  "finding": "an action handed to a helper's parameter in a memo: certified, Chrome reports ACTION_CALLED_IN_OWNED_SCOPE",
+  "found": "SC9012 research a9",
+  "fixed": "ADR 0771",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-memo-net-param-action-direct-none"
+  ],
+  "rediscovered": "rbase false-clean on 36 of 36, the fix recall-gap"
+ },
+ {
+  "finding": "an async source read through a helper's parameter in JSX, called there or from a local function, with no boundary: certified, Chrome warns",
+  "found": "SC9012 research a13, r11; the wrapper layers by the generator",
+  "fixed": "ADR 0771",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-net-peek-direct-none",
+   "mx-async-outside-loading-boundary-jsx-net-peek-wrapper-none",
+   "mx-async-outside-loading-boundary-show-net-peek-member-direct-none"
+  ],
+  "rediscovered": "rbase false-clean on 72 of 72, the fix recall-gap; patterns net/a13-pending-async-body, net/r11-async-jsx"
+ },
+ {
+  "finding": "a hook called through `.call` or `.bind`: its result's members certified in a memo, Chrome writes",
+  "found": "SC9012 research c11, c12",
+  "fixed": "ADR 0772",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-body-net-hook-call-direct-none",
+   "mx-reactive-write-in-owned-scope-memo-net-hook-bind-direct-none"
+  ],
+  "rediscovered": "rbase false-clean on 36 of 36 of each, the fix recall-gap"
+ },
+ {
+  "finding": "a hook behind a rebound `let` or a computed member (`hooks[0]()`), declared at module level: its result's members certified in a memo, Chrome writes",
+  "found": "SC9012 research c7, c9",
+  "fixed": "ADR 0772",
+  "grid": "patterns",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "net/c7-let",
+   "net/c9-array"
+  ],
+  "rediscovered": "rbase NEW false-clean in the pattern lane, the fix fine",
+  "outside": "a text variant writes the hook inside the component, where the build before already answers uncertifiable (net-hook-rebound, net-hook-computed: 36 of 36 recall-gap on both): a context cannot hoist a module-level hook, so the pattern lane holds the failing shape"
+ },
+ {
+  "finding": "`c ? useThing : useThing`, closed on the checker by ADR 0689 with no fuzzer shape or fixture holding it",
+  "found": "SC9012 research section 1",
+  "fixed": "ADR 0689",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-net-hook-chosen-read-direct-none"
+  ],
+  "rediscovered": "rm5 false-clean on 36 of 36 of each, this build recall-gap; fixture handed-call-results; patterns net/c1-cond-alias, net/c13-cond-read"
+ },
+ {
+  "finding": "`Array.prototype.push.bind(st)()`, held or not, `Reflect.apply(push, st, [1])`, and `.apply` with a list no fact shows: certified, Chrome warns the store write",
+  "found": "SC9012 research s6, s8; rediscovery entry `sort.call: not tried`; the held `.apply` by reading dispatch_invokes",
+  "fixed": "ADR 0773",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-net-push-bind-direct-none",
+   "mx-store-write-outside-setter-body-net-push-held-direct-none",
+   "mx-store-write-outside-setter-handler-net-push-reflect-direct-none",
+   "mx-store-write-outside-setter-body-net-push-apply-held-direct-none"
+  ],
+  "rediscovered": "rbase false-clean, the fix recall-gap; patterns types/f18-reflect-apply, types/h04-reflect-apply-setter, values/d3-reflect-apply left open-defects.json"
+ },
+ {
+  "finding": "a reactive value through `.call`, `.bind` or `Reflect.apply` behind a cast: certified, Chrome warns",
+  "found": "open-defects values/t3-bind-cast-arg, values/t3-bind-cast-noarg, values/t3-call-cast",
+  "fixed": "ADR 0773",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/t3-bind-cast-arg",
+   "values/t3-bind-cast-noarg",
+   "values/t3-call-cast"
+  ],
+  "rediscovered": "patterns: left open-defects.json on this build, rbase holds them open",
+  "outside": "the three programs are the audit's own, in patterns/values: the cast is the shape, and a text variant adds nothing the net-push variants do not hold"
+ },
+ {
+  "finding": "`c ? useThing : useThing`, the write half",
+  "found": "SC9012 research section 1",
+  "fixed": "ADR 0689",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-memo-net-hook-chosen-direct-none"
+  ],
+  "rediscovered": "rm5 false-clean on 36 of 36, this build recall-gap"
+ },
+ {
+  "finding": "createErrorBoundary and createLoadingBoundary from solid-js/internal return a memo's accessor; a read in a body certified, Chrome warns (b05, b06, a list fix: the old programs imported them from solid-js, which tsc rejects)",
+  "found": "T-other, patterns report P6",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-created-error-boundary-direct-none",
+   "mx-strict-read-untracked-body-created-loading-boundary-direct-none",
+   "mx-strict-read-untracked-root-created-error-boundary-alias-none"
+  ],
+  "rediscovered": "rt4 false-clean on all 72 created-*-boundary programs, the fix agree on all 72"
+ },
+ {
+  "finding": "`export * as Solid from \"solid-js\"` named no primitive: a read of a source made through it, and a store write, certified; Chrome warns (d7-export-star-as, -store)",
+  "found": "V-D7, patterns report P5",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-star-as-signal-direct-none",
+   "mx-strict-read-untracked-body-star-as-memo-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on all 72 star-as-* programs, the fix agree on all 72"
+ },
+ {
+  "finding": "`export * as Solid from \"solid-js\"`: a store made through it, written outside its setter, certified",
+  "found": "V-D7, patterns report P5",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-star-as-store-direct-none",
+   "mx-store-write-outside-setter-handler-star-as-store-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean on all 36, the fix agree on all 36"
+ },
+ {
+  "finding": "`Api.flush()` in an apply, with `import { Api } from \"./m\"` and `export * as Api from \"solid-js\"`, certified: no property symbol was demanded, so the package root and the instance proof had no answer. Found by the new reexport-ns-as binding, not on any list",
+  "found": "the fuzzer, this slice's own shape",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-effect-apply-x-reexport-ns-as-none",
+   "mx-flush-in-effect-callback-effect-apply-rerun-x-reexport-ns-as-none"
+  ],
+  "rediscovered": "rt4 and the first fix false-clean, the final fix agree; 2,712 reexport-ns-as programs over every API code: 0 false cleans, 0 false positives"
+ },
+ {
+  "finding": "An inline onLoad in a control-flow callback answered DeferredCallback before the denied-event arm, so a read in it certified; Chrome warns (h18)",
+  "found": "T-other, patterns report P10",
+  "fixed": "ADR 0780",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-load-for-signal-direct-none",
+   "mx-strict-read-untracked-dny-load-show-signal-direct-none",
+   "mx-strict-read-untracked-dny-load-show-store-link-direct-none"
+  ],
+  "rediscovered": "rt4 false-clean, the fix recall-gap (now uncertifiable): the 52 dny-load-for and dny-load-show programs"
+ },
+ {
+  "finding": "ADR 0694, owner's ruling: SC1001 V on a store Get that only leads to a write, in flush(fn) in a body only dynamic() mounts. The same write in the body is uncertifiable, so the path Get claimed more than the write",
+  "found": "owner's ruling on the 72 pos-flush-fn programs, 2026-11-06",
+  "fixed": "ADR 0694",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-pos-flush-fn-nested-assign-direct-none-m-dynamic",
+   "mx-store-write-outside-setter-pos-flush-fn-nested-push-direct-none-m-dynamic",
+   "mx-store-write-outside-setter-pos-flush-fn-nested-assign-wrapper-closure-m-dynamic"
+  ],
+  "rediscovered": "focus on STORE_WRITE_OUTSIDE_SETTER, mx-recall, pos-flush-fn, rt4 against rt7, by id: 2,514 programs, 72 finding sets moved, 60 one SC1001 row and 12 two, V to U, SC2003 V on all 72, 0 outcomes moved. No old build fails: the judge rates a claim Chrome shows silent as agree on both builds, and the owner said not to change it. The moved findings are the check. Pattern programs returns/flush-dyn-path-get and returns/flush-dyn-real-read keep both shapes in the smoke set; fixture flush-write-path pins each answer"
+ },
+ {
+  "finding": "a helper's standard-typed member call at a tracked position over a prop whose value is a setter behind a cast: certified, Chrome writes. Three process tests pinned that clean",
+  "found": "verify on the merged tree, by writing a witness for the tests ADR 0771 moved",
+  "fixed": "ADR 0771",
+  "grid": "patterns",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "net/prop-std-method-tracked"
+  ],
+  "rediscovered": "rbase NEW false-clean in the pattern lane, the fix fine",
+  "outside": "the value is a cast literal in a parent's attribute: a context cannot write a parent, so the pattern lane holds it"
+ },
+ {
   "finding": "SC2003 silent past its flow's rows: a destructured loop binding, declarator or parameter, the rest, a nested identity, a function literal called in place, Object.entries and fromEntries, a conditional, array or awaited root, a let, a delete through a call, .then, Map.get: certified, Chrome warns STORE_WRITE_OUTSIDE_SETTER",
   "found": "research-sc9012.md section 2 (W's leftovers and 17 more), R3's probes",
   "fixed": "ADR 0790",

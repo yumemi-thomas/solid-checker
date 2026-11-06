@@ -714,9 +714,10 @@ fn local_declaration_dispatch_rejects_escapes() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 1, "{rows:#?}");
+    // ADR 0771: `{ slice: setS } as unknown as readonly number[]` writes there.
+    assert_eq!(rows.len(), 2, "{rows:#?}");
     for (marker, expression, unresolved) in [
-        ("function LocalDeclaration", "pageSlice(props.items)", false),
+        ("function LocalDeclaration", "pageSlice(props.items)", true),
         (
             "function EscapedDeclaration",
             "pageSlice(props.items)",
@@ -1003,23 +1004,26 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 9, "{rows:#?}");
+    // ADR 0771: a tracked position decides reads. A prop's value may write
+    // through the helper (patterns net/prop-std-method-tracked), so every
+    // tracked caller keeps the obligation; an event or a timer does not.
+    assert_eq!(rows.len(), 17, "{rows:#?}");
     for (name, occurrence, unresolved) in [
-        ("DirectTracked", 0, false),
-        ("LocalTracked", 0, false),
-        ("ComponentProperty", 0, false),
-        ("ChainedTracked", 0, false),
+        ("DirectTracked", 0, true),
+        ("LocalTracked", 0, true),
+        ("ComponentProperty", 0, true),
+        ("ChainedTracked", 0, true),
         ("MixedCalls", 0, true),
         ("EscapedHelper", 0, true),
         // ADR 0320: the call follows an await reached on every path.
         ("AsyncHelper", 0, false),
         ("RecursiveHelper", 0, true),
-        ("ClearedTracking", 0, false),
+        ("ClearedTracking", 0, true),
         ("ShadowedHelper", 0, true),
-        ("ShadowedHelper", 1, false),
-        ("WrappedCallee", 0, false),
+        ("ShadowedHelper", 1, true),
+        ("WrappedCallee", 0, true),
         // ADR 0516: a `let` nothing reassigns holds its helper, resolved.
-        ("MutableHelper", 0, false),
+        ("MutableHelper", 0, true),
         ("StoredCaller", 0, true),
         ("GetterDefaultCaller", 0, true),
         ("JsxDefaultCaller", 0, true),
@@ -1117,7 +1121,7 @@ fn local_dispatch_eval_and_depth_limits_keep_obligations() {
             bounded.push_str(&format!("const h{index} = () => h{}();\n", index - 1));
         }
         bounded.push_str(&format!(
-            "return <div>{{h{}().length}}</div>;\n}}\n",
+            "return <button onClick={{() => h{}()}} />;\n}}\n",
             depth - 1
         ));
     }

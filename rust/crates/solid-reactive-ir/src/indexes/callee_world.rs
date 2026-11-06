@@ -290,6 +290,30 @@ pub(crate) fn namespace_member_property(file: &FileFacts, callee: Span) -> Optio
     namespace.then_some(member.property)
 }
 
+/// The property of a static member of a named import (`Api.flush`, with
+/// `export * as Api from "solid-js"` behind it, ADR 0780). Whether the import
+/// is a namespace is the export's to say, so this only finds the property.
+pub(crate) fn imported_member_property(file: &FileFacts, callee: Span) -> Option<Span> {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    if file.ast.computed_members.binary_search(&callee).is_ok() {
+        return None;
+    }
+    let member = file.ast.member_at(callee)?;
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    let declaration = file.ast.reference_declaration(receiver)?;
+    file.ast
+        .imports
+        .iter()
+        .any(|import| {
+            !import.type_only
+                && import
+                    .bindings
+                    .iter()
+                    .any(|binding| !binding.type_only && binding.local.span == declaration)
+        })
+        .then_some(member.property)
+}
+
 /// Whether the function a namespace member's symbol names is its exported
 /// value: a function, not a method, whose binding is current.
 pub(crate) fn namespace_member_value_is_current(

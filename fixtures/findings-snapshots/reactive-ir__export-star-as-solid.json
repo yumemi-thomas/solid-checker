@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/export-star-as-solid/App.tsx",
+      "start": 107,
+      "end": 113,
+      "fixes": 0
+    }
+  ]
+}

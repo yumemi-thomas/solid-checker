@@ -353,7 +353,17 @@ pub(crate) fn collect_project<'facts>(
         }
     }
     for obligation in interprocedural.dispatch_obligations.iter() {
-        draft.push_defect(obligation.clone());
+        let Some((call, context)) = crate::interproc::held_at_tracked_call(obligation) else {
+            draft.push_defect(obligation.clone());
+            continue;
+        };
+        if analyzed_file(ctx, obligation.location.path.as_ref())
+            .is_some_and(|file| local_access_context.tracked_call_hands_effect(file, call))
+        {
+            let mut kept = obligation.clone();
+            kept.analysis_context = context.to_owned();
+            draft.push_defect(kept);
+        }
     }
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.
@@ -397,11 +407,33 @@ pub(crate) fn collect_project<'facts>(
         .iter()
         .map(|read| read.location.clone())
         .collect::<HashSet<_>>();
+    // ADR 0771: so may a read a helper makes at a tracked position through a
+    // value it was handed, with no boundary to catch it (`<p>{peek(a)}</p>`).
+    let attributed_at_tracked = |read: &crate::ReactiveRead| {
+        read.execution == crate::ExecutionRole::TrackedJsx
+            && read.origin.is_some()
+            && analyzed_file(ctx, read.location.path.as_ref()).is_some_and(|file| {
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(read.location.start_byte),
+                    u32::try_from(read.location.end_byte),
+                ) else {
+                    return true;
+                };
+                crate::owners::read_loading_cover(
+                    ctx.semantic_lookup,
+                    file,
+                    solid_facts::core::Span::new(start, end),
+                    ctx.symbol_names,
+                ) != crate::owners::LoadingCover::Covered
+            })
+    };
     let synthesized = draft
         .reads
         .iter()
         .filter(|read| {
-            (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+            (read.execution.reports_untracked_read()
+                || read.execution.reports_unplaced()
+                || attributed_at_tracked(read))
                 && !async_rows.contains(&read.location)
                 // Local access decided the rows of a component's own source;
                 // these are the sources it could not see: transported, in
@@ -482,7 +514,7 @@ pub(crate) fn collect_project<'facts>(
             invocation_context_unproven: false,
             mount_unresolved: false,
             settle_unproven: false,
-            call_attributed: false,
+            call_attributed: read.execution == crate::ExecutionRole::TrackedJsx,
             creation_pass_unproven: false,
             root_pass_unproven: false,
             carrier_run_unproven: false,
@@ -502,6 +534,40 @@ pub(crate) fn collect_project<'facts>(
                 .store_declared_may_be_raw(&read.declaration)
         {
             read.uncertain = true;
+        }
+    }
+    // ADR 0694: in a body only `dynamic()` mounts, a write itself is
+    // uncertifiable, so a store Get that only leads to one claims no more.
+    for read in &mut draft.reads {
+        if read.kind.as_ref() != "store-path"
+            || read.execution != crate::ExecutionRole::UntrackedUnwindowed
+            || read.is_uncertifiable()
+        {
+            continue;
+        }
+        let place = |location: &typefacts::Location| {
+            Some((
+                analyzed_file(ctx, location.path.as_ref())?,
+                solid_facts::core::Span::new(
+                    u32::try_from(location.start_byte).ok()?,
+                    u32::try_from(location.end_byte).ok()?,
+                ),
+            ))
+        };
+        // A row attributed at a call of a helper stands for the Get in it.
+        let (Some((file, span)), Some((get_file, get))) = (
+            place(&read.location),
+            place(read.origin.as_ref().unwrap_or(&read.location)),
+        ) else {
+            continue;
+        };
+        if crate::execution_role::dynamic_component_entry(file, span, ctx.semantic_lookup)
+            == Some(true)
+            && !ctx.semantic_lookup.site_in_undecided_component(file, span)
+            && upstream_compat::serves_write_path(get_file, get, ctx.semantic_lookup)
+        {
+            read.uncertain = true;
+            read.via = crate::blockers::WRITE_PATH_VIA.into();
         }
     }
     // ADR 0570: a read not proven to run in the pass that created its source

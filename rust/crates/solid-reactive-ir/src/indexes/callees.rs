@@ -365,7 +365,9 @@ impl<'a> SemanticLookup<'a> {
             return Some(root);
         }
         let peeled = file.ast.peel_ts_sugar_span(callee);
-        let named = super::callee_world::namespace_member_property(file, peeled).unwrap_or(peeled);
+        let named = super::callee_world::namespace_member_property(file, peeled)
+            .or_else(|| super::callee_world::imported_member_property(file, peeled))
+            .unwrap_or(peeled);
         if file.ast.call_at(named).is_some() {
             return None;
         }

@@ -193,6 +193,9 @@ pub(crate) struct HandedTables<'a, 'l> {
     >,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
+    /// ADR 0771: at a tracked position a read of a settled accessor is legal,
+    /// so the accessors that count are these.
+    pub(crate) async_only: Option<&'a HashSet<SymbolId>>,
 }
 
 /// Whether `member`'s object is a local literal that declares an accessor.
@@ -331,7 +334,8 @@ pub(crate) fn handed_value(
     // read, write or act. The value's symbol is the one a call of it
     // resolves to (through an import).
     let is_source = |symbol: &str| {
-        t.accessors.contains_key(symbol)
+        (t.accessors.contains_key(symbol)
+            && t.async_only.is_none_or(|sources| sources.contains(symbol)))
             || t.setters.contains_key(symbol)
             || t.actions.contains_key(symbol)
     };
@@ -515,8 +519,24 @@ fn handed_call(
             .into_iter()
             .any(|value| handed_value(t, file, value, depth));
     }
-    // F-B: a function chosen at run time (`const hook = c ? useA : useB`).
-    let chosen = file
+    let callee_member = file.ast.member_at(callee);
+    // ADR 0772: which function a computed member holds is unknown (`hooks[0]()`).
+    if callee_member.is_some_and(|member| {
+        file.ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+    }) {
+        return true;
+    }
+    // ADR 0772: `useA.call(null)` and `useA.bind(null)` answer as `useA`, a
+    // standard method's (`Array.prototype.slice.call(p.xs)`) below.
+    if callee_member.is_some_and(|member| {
+        function_prototype_dispatch(t.lookup, file, call) && !rooted_at_global(file, member.object)
+    }) {
+        return true;
+    }
+    let callee_binding = file
         .ast
         .reference_declaration(callee)
         .and_then(|declaration| {
@@ -524,10 +544,21 @@ fn handed_call(
                 .bindings
                 .iter()
                 .find(|binding| binding.names.iter().any(|name| name.span == declaration))
-        })
+        });
+    // ADR 0772: what a rebound binding holds at the call is unknown.
+    if callee_binding.is_some_and(|binding| !binding.immutable) {
+        return true;
+    }
+    // F-B: a function chosen at run time (`const hook = c ? useA : useB`).
+    let chosen = callee_binding
         .and_then(|binding| binding.initializer)
         .unwrap_or(callee);
     if !file.ast.composite_callee_operands(chosen).is_empty() {
+        return true;
+    }
+    // ADR 0772: a method of a handed value (`props.api.use()`), which a
+    // standard method's own arm below also asks.
+    if callee_member.is_some_and(|member| handed_value(t, file, member.object, depth)) {
         return true;
     }
     // F-B: a standard call hands on what it was given (`m.get("f")`).
@@ -539,6 +570,37 @@ fn handed_call(
                 .ast
                 .member_at(callee)
                 .is_some_and(|member| handed_value(t, file, member.object, depth)))
+}
+
+/// ADR 0772: whether `call` is `Function.prototype`'s `call`, `apply` or `bind`.
+pub(crate) fn function_prototype_dispatch(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    lookup
+        .standard_library_declaration(file, call, typefacts::CallKind::Call)
+        .is_some_and(|declaration| {
+            matches!(
+                declaration.qualified_name.as_ref(),
+                "Function.call"
+                    | "Function.apply"
+                    | "Function.bind"
+                    | "CallableFunction.call"
+                    | "CallableFunction.apply"
+                    | "CallableFunction.bind"
+            )
+        })
+}
+
+/// Whether the member chain at `span` starts at a name no declaration in the
+/// file binds (`Array.prototype.sort`).
+fn rooted_at_global(file: &solid_facts::FileFacts, span: solid_facts::core::Span) -> bool {
+    let mut root = file.ast.peel_ts_sugar_span(span);
+    while let Some(member) = file.ast.member_at(root) {
+        root = file.ast.peel_ts_sugar_span(member.object);
+    }
+    file.ast.reference_declaration(root).is_none()
 }
 
 /// Whether the class `callee` names has a field holding a handed value.
@@ -2159,6 +2221,8 @@ impl LocalAccessContext<'_, '_> {
     /// ADR 0688: `Array.prototype.sort.call(store)`. The callee resolves to
     /// `Function.call`, whose target no fact gives, so a reactive value handed
     /// to it reaches code nothing here reads: an obligation, never silence.
+    /// ADR 0773: so do `.bind(store)()` and `Reflect.apply(sort, store, [])`,
+    /// and an `.apply` whose argument list no fact shows.
     fn push_function_call_target_obligation(
         &self,
         file: &solid_facts::FileFacts,
@@ -2166,50 +2230,43 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
     ) {
         let ast = &file.ast;
-        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
-            return;
-        };
-        if !matches!(file.source_text(member.property), Some("call" | "apply"))
-            || !dispatch_invokes(file, call)
-            || self
-                .lookup
-                .function_called_at(file.path.as_str(), member.object)
-                .is_some()
-            || self
-                .lookup
-                .callee_symbol(file, member.object)
-                .is_some_and(|symbol| {
-                    self.setters.contains_key(symbol)
-                        || self.actions.contains_key(symbol)
-                        || self.accessors.contains_key(symbol)
-                })
-        {
-            return;
-        }
-        let standard = self
+        let reflected = self
             .lookup
             .standard_library_declaration(file, call, typefacts::CallKind::Call)
-            .is_some_and(|declaration| {
-                matches!(
-                    declaration.qualified_name.as_ref(),
-                    "Function.call"
-                        | "Function.apply"
-                        | "CallableFunction.call"
-                        | "CallableFunction.apply"
-                )
-            });
+            .is_some_and(|declaration| declaration.qualified_name.as_ref() == "Reflect.apply");
+        if !reflected {
+            let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+                return;
+            };
+            if !function_prototype_dispatch(self.lookup, file, call)
+                || self
+                    .lookup
+                    .function_called_at(file.path.as_str(), member.object)
+                    .is_some()
+                || self
+                    .lookup
+                    .callee_symbol(file, member.object)
+                    .is_some_and(|symbol| {
+                        self.setters.contains_key(symbol)
+                            || self.actions.contains_key(symbol)
+                            || self.accessors.contains_key(symbol)
+                    })
+            {
+                return;
+            }
+        }
         let reactive = call.arguments.iter().any(|argument| {
-            let value = ast.peel_ts_sugar_span(argument.span);
-            let root = ast
-                .member_at(value)
-                .map_or(value, |member| ast.peel_ts_sugar_span(member.object));
+            let mut root = ast.peel_ts_sugar_span(argument.span);
+            while let Some(member) = ast.member_at(root) {
+                root = ast.peel_ts_sugar_span(member.object);
+            }
             self.lookup.callee_symbol(file, root).is_some_and(|symbol| {
                 self.setters.contains_key(symbol)
                     || self.actions.contains_key(symbol)
                     || self.accessors.contains_key(symbol)
             })
         });
-        if !standard || !reactive {
+        if !reactive {
             return;
         }
         result.dispatch_obligations.push(crate::StaticDefect {
@@ -2322,11 +2379,15 @@ impl LocalAccessContext<'_, '_> {
                 return;
             }
             // F-B: a call of what a call handed back (`m.get("f")!()`, `make()()`).
-            if file
-                .ast
-                .call_at(file.ast.peel_ts_sugar_span(call.callee))
-                .is_some()
-                && self.handed_member_callee(file, call.callee)
+            // ADR 0770: or a member no type names (`props.o.go()`, `o: any`).
+            let peeled = file.ast.peel_ts_sugar_span(call.callee);
+            if (file.ast.call_at(peeled).is_some()
+                || (file.ast.member_at(peeled).is_some()
+                    && self
+                        .lookup
+                        .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                        .is_none()))
+                && self.handed_callee(file, call.callee)
             {
                 let execution = read_execution_role(
                     file,
@@ -2801,7 +2862,7 @@ impl LocalAccessContext<'_, '_> {
                 .lookup
                 .standard_library_declaration(file, call, typefacts::CallKind::Call)
                 .is_none()
-            && self.handed_member_callee(file, call.callee)
+            && self.handed_callee(file, call.callee)
         {
             let execution = read_execution_role(
                 file,
@@ -3571,6 +3632,17 @@ impl LocalAccessContext<'_, '_> {
         {
             return false;
         }
+        self.handed_callee(file, callee)
+    }
+
+    /// ADR 0770: [`Self::handed_member_callee`] at any member depth, for a
+    /// call whose standard-library method is already ruled out: what
+    /// `props.o.go()` runs is as unknown as what `props.go()` does.
+    fn handed_callee(
+        &self,
+        file: &solid_facts::FileFacts,
+        callee: solid_facts::core::Span,
+    ) -> bool {
         handed_value(
             &HandedTables {
                 lookup: self.lookup,
@@ -3581,6 +3653,7 @@ impl LocalAccessContext<'_, '_> {
                 setters: self.setters,
                 actions: self.actions,
                 props_reactivity: self.props_reactivity,
+                async_only: None,
             },
             file,
             callee,
@@ -4658,6 +4731,36 @@ impl LocalAccessContext<'_, '_> {
             );
         }
         result.dispatch_obligations
+    }
+
+    /// ADR 0771: whether an argument of the call at `call`, at a tracked
+    /// position, holds what a helper may write with, act on or suspend on
+    /// through its parameter: a setter, an action, an async source, or a value
+    /// a caller supplied.
+    pub(crate) fn tracked_call_hands_effect(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: solid_facts::core::Span,
+    ) -> bool {
+        let Some(call) = file.ast.call_at(call) else {
+            return true;
+        };
+        let tables = HandedTables {
+            lookup: self.lookup,
+            entities: self.entities,
+            prop_sources: self.prop_sources,
+            source_kinds: self.source_kinds,
+            accessors: self.accessors,
+            setters: self.setters,
+            actions: self.actions,
+            props_reactivity: self.props_reactivity,
+            async_only: Some(self.async_sources),
+        };
+        // One step down: at the full depth `handed_value` leaves a bare
+        // source name to the row its own call has.
+        call.arguments
+            .iter()
+            .any(|argument| handed_value(&tables, file, argument.span, HANDED_DEPTH - 1))
     }
 
     /// Calls whose callee accessor transport resolves to a setter or an
