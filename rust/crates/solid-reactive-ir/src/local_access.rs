@@ -3541,36 +3541,14 @@ impl LocalAccessContext<'_, '_> {
         span: solid_facts::core::Span,
         depth: usize,
     ) -> bool {
-        if containing_leaf_owner(file, span, self.entities, self.symbol_names, self.lookup)
-            .is_some()
-            || file.ast.functions.iter().any(|leaf| {
-                leaf.span.contains(span)
-                    && containing_leaf_owner(
-                        file,
-                        leaf.span,
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                    )
-                    .is_some()
-            })
-        {
-            return true;
-        }
-        if depth == 0 {
-            return false;
-        }
-        let Some(function) = containing_ast_function(&file.ast, span) else {
-            return false;
-        };
-        let Some(name) = function_binding_name(file, function) else {
-            return false;
-        };
-        file.ast.identifiers.iter().any(|identifier| {
-            identifier.role == solid_facts::ast::IdentifierRole::Reference
-                && file.ast.reference_declaration(identifier.span) == Some(name.span)
-                && self.may_run_in_leaf_owner_within(file, identifier.span, depth - 1)
-        })
+        may_run_in_leaf_owner(
+            file,
+            span,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+            depth,
+        )
     }
 
     /// Whether the callee, or the binding it names, is typed as a Solid
@@ -9710,4 +9688,58 @@ pub(crate) fn unreached_write_may_run(
             crate::execution_role::SiteReach::new(lookup).site(file, span),
             crate::execution_role::Reach::Unreached(_)
         )
+}
+
+/// Whether `span` is inside a leaf owner's callback (`onSettled`,
+/// `createTrackedEffect`), where a pending async read is forbidden, or in a
+/// named local function a reference inside one names, `depth` names deep.
+pub(crate) fn may_run_in_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if containing_leaf_owner(file, span, entities, symbol_names, lookup).is_some()
+        || file.ast.functions.iter().any(|leaf| {
+            leaf.span.contains(span)
+                && containing_leaf_owner(file, leaf.span, entities, symbol_names, lookup).is_some()
+        })
+    {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    // The innermost function a name holds, through any IIFE written around
+    // the span (it runs where it is written); any other anonymous function
+    // runs where it is handed, which this does not follow.
+    let mut enclosing = file.ast.functions_containing(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.span.end - function.span.start);
+    for function in enclosing {
+        if let Some(name) = function_binding_name(file, function) {
+            return file.ast.identifiers.iter().any(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && file.ast.reference_declaration(identifier.span) == Some(name.span)
+                    && may_run_in_leaf_owner(
+                        file,
+                        identifier.span,
+                        entities,
+                        symbol_names,
+                        lookup,
+                        depth - 1,
+                    )
+            });
+        }
+        let invoked = file
+            .ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == function.span);
+        if !invoked {
+            return false;
+        }
+    }
+    false
 }

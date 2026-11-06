@@ -189,3 +189,5 @@ A body `clientOnly` loads, or `lazy` where a server pass exists, is uncertifiabl
 A source whose compute returns `any`, or may throw `NotReadyError`, is uncertifiable, blocker `async-provenance-unproven`, as its SC1001 is: the same text is pending in one program and settled in another (ADR 0665).
 
 A member tag of a same-file `const` holder ADR 0342 accounts (`<Ui.Panel value={data()} />`) renders the stored function, so its pending getter reaches the child's prop as a plain tag's does. A prop read in a leaf owner whose callers do not exclude a pending getter is SC9012 `prop-pending-unproven` (ADR 0823).
+
+A destructure of a props object reads every slot it binds and asks the same question (ADR 0824): a caller's async getter outside tracked JSX, or in a leaf owner, is SC9012 `async-prop-getter`; an open caller set in a leaf owner is `prop-pending-unproven`.

@@ -370,6 +370,54 @@ fn component_props_destructure(
                 ctx.symbol_names,
                 ctx.semantic_lookup,
             );
+            // ADR 0823: a destructure reads every slot it binds. In a leaf
+            // owner a pending getter there is PENDING_ASYNC_FORBIDDEN_SCOPE;
+            // the callers either exclude one or the read is an obligation.
+            // As ADR 0509 asks of `props.x`: a getter of an async source
+            // outside tracked JSX, or in a leaf owner; an open caller set in
+            // a leaf owner.
+            if let Some(declaration) = &prop_declaration {
+                let leaf = || {
+                    crate::local_access::may_run_in_leaf_owner(
+                        file,
+                        binding.pattern,
+                        ctx.entities,
+                        ctx.symbol_names,
+                        ctx.semantic_lookup,
+                        3,
+                    )
+                };
+                let names = (binding.names.len() <= binding.object_slots.len()).then(|| {
+                    binding
+                        .object_slots
+                        .iter()
+                        .map(|slot| slot.property.to_string())
+                        .collect::<Vec<_>>()
+                });
+                let context = match tables.props_pending(declaration, names) {
+                    1 if role != crate::ExecutionRole::TrackedJsx || leaf() => {
+                        Some("async-prop-getter")
+                    }
+                    2 if leaf() => Some(crate::blockers::PROP_PENDING_UNPROVEN),
+                    _ => None,
+                };
+                if let Some(context) = context {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                            callee: binding
+                                .initializer
+                                .and_then(|span| file.source_text(span))
+                                .unwrap_or("this props object")
+                                .to_owned(),
+                            member: None,
+                        },
+                        location: location(file.path.shared(), binding.pattern),
+                        analysis_context: context.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
+            }
             // Fresh-at-call-time contexts: tracked scopes re-run and
             // re-subscribe; event handlers, deferred/leaf callbacks, effect
             // apply, untrack, and directive application read current values

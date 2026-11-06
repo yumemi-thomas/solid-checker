@@ -255,6 +255,45 @@ impl PropsReactivityIndex {
         }
     }
 
+    /// ADR 0823, for a destructure: 1 when some visible caller passes one of
+    /// `names` (every prop, for `None`) a getter of an async source, 0 when
+    /// every caller is enumerated and none may pass a pending getter for
+    /// them, 2 otherwise.
+    pub(crate) fn pending_answer(&self, declaration: &Location, names: Option<&[String]>) -> u64 {
+        let passed = match self.by_declaration.get(declaration) {
+            Some(
+                PropsReactivity::Enumerated { passed, .. }
+                | PropsReactivity::Escaping { passed, .. },
+            ) => passed,
+            None => return 2,
+        };
+        let asked = |name: &str| names.is_none_or(|names| names.iter().any(|n| n == name));
+        if passed
+            .iter()
+            .any(|(name, passed)| asked(name) && passed.async_getter)
+        {
+            return 1;
+        }
+        match (names, self.by_declaration.get(declaration)) {
+            (Some(names), _) => {
+                if names
+                    .iter()
+                    .all(|name| self.pending_excluded(declaration, name))
+                {
+                    0
+                } else {
+                    2
+                }
+            }
+            (None, Some(PropsReactivity::Enumerated { unresolved, .. }))
+                if self.caller_proof && unresolved.is_empty() =>
+            {
+                0
+            }
+            (None, _) => 2,
+        }
+    }
+
     /// ADR 0509: whether some visible call site passes `name` a getter that
     /// calls an async source.
     pub(crate) fn async_getter(&self, declaration: &Location, name: &str) -> bool {

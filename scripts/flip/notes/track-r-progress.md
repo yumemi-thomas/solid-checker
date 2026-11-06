@@ -175,6 +175,7 @@ Same branch and worktree, scratch `$S` as R2. Baseline: build `rp9e`, sweep `swe
 |---|---|---|---|
 | P7 landed (ADRs 0821, 0822) | as R2b's row | as R2b's row; `WindowQuery` in `dependency-source-proxy-store` (was silent) | build `p7i`: +361 U, -1 U, 0 V; witnesses 300 of 336, same 36 census ids as `p9e` |
 | Member tag (ADR 0823) | a same-file sealed holder's tag is a call site: `async-prop-getter`, SC1001 V (`n1 n3 n4 n5`), literal clean (`n2`, `m4`) | a leaf-owner prop read whose callers do not exclude a pending getter, `prop-pending-unproven` (`m5 m6 m8-m11`) | grids: mx-src 60 FC to 0, mx-combo 26 FC to 0, 0 FP; legal 84, 0 FP. Corpus +51 U, -10 U same-start, 0 V |
+| Props destructure (ADR 0824) | | `const { v } = props` with a pending getter outside tracked JSX or in a leaf owner, `async-prop-getter`; open callers in a leaf, `prop-pending-unproven` | async-value-dstr 84 ids: 60 FC to 0, 0 FP; legal 84, 0 FP. Corpus 0 moved |
 
 ## R2 handoff, 2026-11-06
 
