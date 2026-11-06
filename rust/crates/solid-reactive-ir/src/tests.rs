@@ -252,6 +252,72 @@ fn projected_references_include_every_alias_member_without_retaining_unrelated_s
     assert_eq!(projected.len(), 1);
 }
 
+/// ADR 0826: `@solidjs/router`'s `import { createOwner } from "solid-js"`
+/// misses rc.21's typings, so it aliases the checker's one unknown symbol,
+/// the root every unresolved project import shares. Its declaration names
+/// no root; Solid's own declaration of the export still does.
+#[test]
+fn an_unresolved_import_inside_a_solid_package_names_no_root() {
+    let symbol = |id: &str, target: &str, declarations: Vec<Declaration>| SymbolFact {
+        id: id.into(),
+        alias_target: target.into(),
+        declarations: declarations.into(),
+        references: Vec::new().into(),
+    };
+    let router = "/p/node_modules/@solidjs/router/dist/index.js";
+    let signals = "/p/node_modules/@solidjs/signals/dist/dev.js";
+    let table = typescript_table(
+        1,
+        Vec::new(),
+        Vec::new(),
+        vec![
+            symbol("unknown", "", Vec::new()),
+            symbol(
+                "router-import",
+                "unknown",
+                vec![declaration("createOwner", router, 10)],
+            ),
+            symbol(
+                "project-import",
+                "unknown",
+                vec![declaration("css", "/p/src/App.tsx", 10)],
+            ),
+            symbol(
+                "absent-import",
+                "absent",
+                vec![declaration("createEffect", router, 30)],
+            ),
+            symbol(
+                "signals-owner",
+                "",
+                vec![declaration("createOwner", signals, 10)],
+            ),
+            symbol(
+                "solid-import",
+                "signals-owner",
+                vec![declaration("createOwner", "/p/src/App.tsx", 40)],
+            ),
+        ],
+        Vec::new(),
+    );
+    let interner = SymbolInterner::from_table(&table);
+    let (aliases, _) = alias_roots_and_source_declarations(
+        &table,
+        &interner,
+        &std::collections::HashMap::default(),
+    );
+    let names = symbol_names(&table, &aliases, &interner, &solid_dialect::Solid2);
+
+    assert_eq!(aliases["project-import"].as_str(), "unknown");
+    assert!(!names.contains_key("unknown"));
+    assert!(!names.contains_key("absent"));
+    assert_eq!(
+        names.get("signals-owner").map(|name| name.as_str()),
+        Some("createOwner")
+    );
+    assert_eq!(names.len(), 1);
+}
+
 #[test]
 fn exact_runtime_redirects_replace_declaration_alias_roots() {
     let table = typescript_table(
@@ -526,6 +592,7 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
         runtime_identity: "".into(),
         declared_keys: None,
         writable_optional_property: false,
+        delete_operand_rejected: false,
     };
     let old = typescript_table(
         1,
@@ -680,6 +747,7 @@ fn exact_index_patch_adds_and_removes_an_alias_like_a_rebuild() {
         library_types: None,
         declared_keys: None,
         writable_optional_property: false,
+        delete_operand_rejected: false,
         reference_space: None,
         runtime_identity: "".into(),
     };
@@ -844,6 +912,7 @@ fn exact_index_patch_refuses_a_retained_id_that_gains_or_loses_an_alias() {
         library_types: None,
         declared_keys: None,
         writable_optional_property: false,
+        delete_operand_rejected: false,
         reference_space: None,
         runtime_identity: "".into(),
     };

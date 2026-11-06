@@ -1,0 +1,1 @@
+{ "name": "fixture", "private": true, "type": "module", "dependencies": { "fz-dep": "1.0.0", "fz-globals": "1.0.0", "solid-js": "2.0.0-rc.21" } }

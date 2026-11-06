@@ -2,9 +2,32 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-namespace-named-reads/App.tsx",
+      "start": 214,
+      "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-namespace-named-reads/App.tsx",
+      "start": 345,
+      "end": 349,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-namespace-named-reads/escapes.ts",
       "start": 408,

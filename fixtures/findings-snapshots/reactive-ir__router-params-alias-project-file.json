@@ -15,6 +15,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/reactive-ir/router-params-alias-project-file/App.tsx",
       "start": 260,

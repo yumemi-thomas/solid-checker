@@ -5,6 +5,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
       "start": 2117,

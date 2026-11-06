@@ -15,6 +15,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/own-setter-wrapper-identity/setter.ts",
       "start": 202,

@@ -185,7 +185,7 @@ pub(crate) fn classify_effect_call(
             v2_effect_function_status(file, argument, slot, lookup)
         })
     } else {
-        ProofStatus::No
+        suppressed_effect_function_status(file, call, apply, slot, lookup)
     };
     // The shipped build reads `createEffect`'s apply argument before creating
     // the effect node: it throws on `=== undefined`, then dereferences
@@ -205,6 +205,40 @@ pub(crate) fn classify_effect_call(
         server_entry_possible,
         owner_registration,
     )
+}
+
+/// ADR 0830: a call TypeScript rejects is TypeScript's, unless both
+/// compilers suppress the diagnostic that rejection makes. An absent apply is
+/// TS2554 at the callee (tsgo `get_error_node_for_call_node`: the callee, or a
+/// member callee's name); a bad apply value is TS2345 at that argument. Each
+/// is judged only on one line, where `tsc_silence_at` decides it, and then as
+/// a value no type vouches for (as under a cast). Anything else stays silent.
+fn suppressed_effect_function_status(
+    file: &FileFacts,
+    call: &CallFact,
+    apply: Option<&ArgumentFact>,
+    slot: solid_dialect::EffectFunctionSlot,
+    lookup: &SemanticLookup<'_>,
+) -> ProofStatus {
+    let rejected = lookup
+        .resolved_callee_call(file, call.callee)
+        .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Recovery);
+    if !rejected {
+        return ProofStatus::No;
+    }
+    let silent_on_one_line = |span: solid_facts::core::Span| {
+        file.line_of(span.start) == file.line_of(span.end.saturating_sub(1).max(span.start))
+            && file.tsc_silence_at(span.start) == solid_facts::TscSilence::Silent
+    };
+    match apply {
+        None if silent_on_one_line(call.callee) => ProofStatus::Proven,
+        Some(argument) if silent_on_one_line(argument.span) => {
+            let mut unvouched = argument.clone();
+            unvouched.runtime_type_escape = true;
+            v2_effect_function_status(file, &unvouched, slot, lookup)
+        }
+        _ => ProofStatus::No,
+    }
 }
 
 /// A proof that fails only when a function the call returns runs

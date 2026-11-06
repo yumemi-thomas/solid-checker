@@ -364,6 +364,17 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             if exact {
                 exact_rows.insert(binding.names[0].span);
             }
+            // ADR 0821: an exported `const` copy of a `const` holds it too:
+            // the fact leaves it out for its reference census, and this row
+            // asks only what the binding holds.
+            let exact = exact
+                || (binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| const_variable(file, identifier.span)));
             let import = !exact
                 && binding.immutable
                 && binding.shape == solid_facts::ast::BindingShape::Identifier
@@ -526,7 +537,9 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
     rows.written = written;
     // Pass 10: the project functions JSX tags render, and the exports.
     for (ordinal, element) in file.ast.jsx_elements.iter().enumerate() {
-        if let Some((target_file, target)) = trace::render_target(lookup, file, element.name.span) {
+        if let Some((target_file, target)) = trace::render_target(lookup, file, element.name.span)
+            .or_else(|| compound_member_target(lookup, file, element))
+        {
             rows.renders.push((
                 u32::try_from(ordinal).expect("fewer than 2^32 elements"),
                 target_file,
@@ -550,6 +563,97 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
     exports.dedup();
     rows.exports = exports;
     rows
+}
+
+/// ADR 0823: the holder binding and stored member value a member tag of
+/// `file` names (`<ui.C>`, `<ui.inner.C>`), when the holder is a `const` of
+/// this file and ADR 0342's census accounts the value: a closed literal,
+/// every reference a tag, so the slot holds that value when the tag runs.
+/// An imported holder, and any other, names nothing here.
+pub(super) fn compound_member_value<'f>(
+    lookup: &SemanticLookup<'_>,
+    file: &'f FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<(&'f solid_facts::ast::BindingFact, Span)> {
+    element.member_object?;
+    let name = element.name.span;
+    let text = file.source_text(name)?;
+    let mut segments = text.split('.');
+    let first = segments.next()?;
+    let keys = segments.collect::<Vec<_>>();
+    if keys.is_empty() {
+        return None;
+    }
+    let leftmost = Span::new(name.start, name.start + u32::try_from(first.len()).ok()?);
+    let declaration = file.ast.reference_declaration(leftmost)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.names[0].span == declaration
+    })?;
+    let mut value = file.ast.peel_ts_sugar_span(binding.initializer?);
+    for key in keys {
+        let literal = value;
+        let mut own = file.ast.object_properties.iter().filter(|property| {
+            literal.contains(property.span)
+                && !property.computed
+                && file.source_text(property.key) == Some(key)
+                && !file.ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && literal.contains(outer.span)
+                        && outer.value.contains(property.span)
+                })
+        });
+        let property = own.next()?;
+        if own.next().is_some() {
+            return None;
+        }
+        value = file.ast.peel_ts_sugar_span(property.value);
+    }
+    lookup
+        .compound_value(file.path.as_str(), value)
+        .then_some((binding, value))
+}
+
+/// [`compound_member_value`]'s function: the anonymous function stored
+/// there, or the one its identifier names.
+pub(super) fn compound_member_target(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<(Arc<str>, Span)> {
+    let (_, value) = compound_member_value(lookup, file, element)?;
+    if let Some(function) = file.ast.function_at(value) {
+        return Some((file.path.shared(), function.span));
+    }
+    // A shorthand `{ C }` gives the property's symbol at the value: the
+    // binder's declaration names the function written in this file.
+    if let Some(declaration) = file.ast.reference_declaration(value) {
+        if let Some(function) = file.ast.functions.iter().find(|function| {
+            function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        }) {
+            return Some((file.path.shared(), function.span));
+        }
+        if let Some(function) = file.ast.bindings.iter().find_map(|binding| {
+            (binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declaration)
+                .then(|| {
+                    binding
+                        .initializer
+                        .and_then(|value| file.ast.function_at(file.ast.peel_ts_sugar_span(value)))
+                })
+                .flatten()
+        }) {
+            return Some((file.path.shared(), function.span));
+        }
+    }
+    trace::render_target(lookup, file, value)
 }
 
 /// Pass 1: a former tuple-slot source candidate (ADR 0172's withdrawn
@@ -861,6 +965,17 @@ pub(super) fn typed_rows(
         }
     }
     rows
+}
+
+/// ADR 0821: `span` is a reference to a `const` variable of `file`.
+fn const_variable(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .reference_declaration(file.ast.peel_ts_sugar_span(span))
+        .is_some_and(|declaration| {
+            file.ast.bindings.iter().any(|binding| {
+                binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+            })
+        })
 }
 
 /// ADR 0511: `span` is a reference to a named, runtime (not type-only)

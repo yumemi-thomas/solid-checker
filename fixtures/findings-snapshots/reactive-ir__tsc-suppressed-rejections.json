@@ -1,0 +1,188 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Block.ts",
+      "start": 301,
+      "end": 313,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 224,
+      "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 277,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 277,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 328,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 680,
+      "end": 692,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 680,
+      "end": 692,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 785,
+      "end": 794,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 859,
+      "end": 871,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Nocheck.ts",
+      "start": 208,
+      "end": 220,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Positions.tsx",
+      "start": 403,
+      "end": 408,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Positions.tsx",
+      "start": 403,
+      "end": 408,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Positions.tsx",
+      "start": 441,
+      "end": 446,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Positions.tsx",
+      "start": 505,
+      "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Positions.tsx",
+      "start": 555,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Positions.tsx",
+      "start": 789,
+      "end": 794,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "blocker": "solid-call-rejected-unchecked",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Server.ts",
+      "start": 293,
+      "end": 297,
+      "fixes": 0
+    }
+  ]
+}

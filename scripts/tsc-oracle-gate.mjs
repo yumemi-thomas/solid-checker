@@ -150,6 +150,27 @@ const validate = (testCase, index) => {
   if (testCase.programBoundary !== undefined && testCase.programBoundary !== "closed") {
     failures.push(`${label}: programBoundary must be "closed" when present`);
   }
+  // `checkerByPass`: the checker's side differs between the strict and loose
+  // projects only where TypeScript's does. A required-property `delete` is
+  // TS2790 under strictNullChecks and accepted without it, so the checker is
+  // silent in the one and must not be in the other (ADR 0829). The same-subject
+  // audit below still refuses a reporting pass where TypeScript reports.
+  if (testCase.checkerByPass !== undefined) {
+    const byPass = testCase.checkerByPass;
+    if (!byPass || Array.isArray(byPass) || typeof byPass !== "object") {
+      failures.push(`${label}: checkerByPass must be an object`);
+    } else {
+      for (const [pass, value] of Object.entries(byPass)) {
+        if (pass !== "strict" && pass !== "loose") {
+          failures.push(`${label}: checkerByPass names an unknown project ${JSON.stringify(pass)}`);
+        } else if (value !== "reports" && value !== "silent") {
+          failures.push(`${label}: checkerByPass.${pass} must be "reports" or "silent"`);
+        } else if (value === testCase.checker) {
+          failures.push(`${label}: checkerByPass.${pass} repeats 'checker'; declare only a difference`);
+        }
+      }
+    }
+  }
   if (!EXPECTATIONS.has(testCase.expect)) {
     return stop(`${label}: unknown expectation ${JSON.stringify(testCase.expect)}`);
   }
@@ -217,9 +238,10 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
   } else {
     for (const [name, findings] of targetByPass) {
       const reports = findings.length > 0;
-      if (reports !== (testCase.checker === "reports")) {
+      const expected = testCase.checkerByPass?.[name] ?? testCase.checker;
+      if (reports !== (expected === "reports")) {
         failures.push(
-          testCase.checker === "reports"
+          expected === "reports"
             ? `${label}: declared 'checker: "reports"' but ${expectedRule} is silent in the ${name} project.` +
                 `\n    Findings seen: ${observedRules.length ? observedRules.join(", ") : "none"}.`
             : `${label}: declared 'checker: "silent"' but ${expectedRule} fired in the ${name} project.`,
@@ -233,7 +255,7 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
             ].join(", ")}.`,
         );
       }
-      const expectedCount = testCase.checker === "reports" ? (testCase.checkerCount ?? 1) : 0;
+      const expectedCount = expected === "reports" ? (testCase.checkerCount ?? 1) : 0;
       if (findings.length !== expectedCount) {
         failures.push(
           `${label}: ${name} emitted ${findings.length} ${expectedRule} finding(s), expected ` +

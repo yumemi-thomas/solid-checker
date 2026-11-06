@@ -106,11 +106,54 @@ pub(crate) const VALUE_BOUND_HELD: &str = "value-bound-held";
 pub(crate) const VALUE_FORWARDED: &str = "value-forwarded";
 pub(crate) const VALUE_ROOT_IN_HELPER: &str = "value-root-in-helper";
 pub(crate) const VALUE_USE_UNCLASSIFIED: &str = "value-use-unclassified";
+/// `export default` of a literal or a call: no binding names it, so no importer
+/// is walked (W's census review H1).
+pub(crate) const VALUE_EXPORTED_UNNAMED: &str = "value-exported-unnamed";
 pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-premise";
 /// ADR 0694: a store Get that only leads to a write, in a window no read in
 /// that body is proven in. `via` carries it: the row reads as through this.
 pub(crate) const WRITE_PATH_READ_UNPROVEN: &str = "write-path-read-unproven";
 pub(crate) const WRITE_PATH_VIA: &str = "a write's path";
+/// ADR 0820: a generator's body past its first suspension, on a stepping the
+/// walk does not prove.
+pub(crate) const GENERATOR_STEPPED: &str = "generator-stepped";
+/// ADR 0822: a Get of a value a selected package produces where the walk over
+/// its source ends: a class, a proxy, a call nothing resolves, an accessor
+/// installed at run time.
+pub(crate) const DEPENDENCY_VALUE_UNFOLLOWED: &str = "dependency-value-unfollowed";
+/// ADR 0822: importing a package installs a function on a global, and that
+/// function may read a source wherever it is called.
+pub(crate) const DEPENDENCY_GLOBAL_READ: &str = "dependency-global-read";
+/// ADR 0823: a prop read in a leaf owner (createTrackedEffect, onSettled)
+/// whose callers do not prove the value is no pending async getter: an
+/// unseen caller, or a visible one passing a value nothing classifies.
+pub(crate) const PROP_PENDING_UNPROVEN: &str = "prop-pending-unproven";
+/// ADR 0825: the producer attributes a Solid primitive to a value no import
+/// confirms (ADR 0711): which function it is, and so what reaches it, is open.
+pub(crate) const PRIMITIVE_IDENTITY_UNPROVEN: &str = "primitive-identity-unproven";
+/// ADR 0827: a runtime use of an import the compiler did not resolve (a
+/// missing module, an export its target lacks): what the value is, and so
+/// what any call, read, tag or write through it does, is unknown.
+pub(crate) const IMPORT_UNRESOLVED: &str = "import-unresolved";
+/// ADR 0829: a store `delete` whose operand is neither proven optional and
+/// writable nor proven rejected by TypeScript (a computed or index key, a
+/// required `T | undefined`, `unknown`): whether `tsc` accepts it, and so
+/// whether it is this rule's, is open.
+pub(crate) const DELETE_OPERAND_UNPROVEN: &str = "delete-operand-unproven";
+/// ADR 0830: a call of a Solid primitive TypeScript rejects (an absent or
+/// non-callable apply, a cleanup that is no function, a target `refresh` or
+/// `affects` refuses) on a line a `@ts-ignore`, `@ts-expect-error` or
+/// `@ts-nocheck` may silence, or in JavaScript `tsc` may not check. Nothing
+/// may report it, and the runtime may throw or warn there.
+pub(crate) const SOLID_CALL_REJECTED_UNCHECKED: &str = "solid-call-rejected-unchecked";
+/// ADR 0703: an `httpStatus`/`httpHeader` call below a `Loading` boundary in a
+/// project that server-renders: whether the boundary settles before the shell
+/// flush (the head applies) or after it (the call is dropped) is open.
+pub(crate) const BOUNDARY_SETTLE_ORDER_UNPROVEN: &str = "boundary-settle-order-unproven";
+/// ADR 0427: an export of a module-level `"use server"` file whose value no
+/// fact shows to be a function (a call of a project wrapper): registration
+/// throws at server boot unless it is one.
+pub(crate) const SERVER_EXPORT_VALUE_UNPROVEN: &str = "server-export-value-unproven";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";
@@ -216,6 +259,10 @@ pub(crate) const fn for_async_read(read: &crate::AsyncRead) -> &'static str {
         CREATION_PASS_UNPROVEN
     } else if read.provenance_open {
         ASYNC_PROVENANCE_UNPROVEN
+    } else if read.settle_unproven {
+        // ADR 0518: a top-level `await` may settle the source before the
+        // read; the last hole, so a row with an earlier one keeps its name.
+        SOURCE_PENDING_UNPROVEN
     } else {
         PROOF_STEP_UNNAMED
     }

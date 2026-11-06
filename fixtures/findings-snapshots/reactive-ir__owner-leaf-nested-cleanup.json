@@ -55,6 +55,7 @@
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
       "start": 1332,

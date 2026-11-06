@@ -162,9 +162,9 @@ function render(program, instrument) {
   // A line the site runs from (`const wrapUse = () => { … };`) has a counter of its own in the twin, so a finding there is measured there.
   const auxLine = (node, line) => {
     if (!line.includes(AUX)) return line;
-    if (!siteIndex.has(node)) return line.replace(AUX, "");
-    const counter = instrument ? `__h(${allocate("auto", "aux", pathOf.get(node))}); ` : "";
-    return line.replace(AUX, () => `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}${counter}`);
+    if (!siteIndex.has(node)) return line.replaceAll(AUX, "");
+    // Each marker its own counter: a site text over lines (ADR 0830) may hold one beside the wrapper's.
+    return line.replaceAll(AUX, () => `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}${instrument ? `__h(${allocate("auto", "aux", pathOf.get(node))}); ` : ""}`);
   };
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
@@ -293,7 +293,8 @@ function render(program, instrument) {
       case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
-      case "use": return siteCall(e, uses.get(e).text);
+      // A site text over lines (a directive above the call, ADR 0830) marks the line its runtime frame sits in with AUX.
+      case "use": return siteCall(e, auxLine(e, uses.get(e).text));
       case "ref": return packageHelpers.has(e.name) ? accessOf(packageHelpers.get(e.name)).callee : nsHelpers.has(e.name) ? `H.${e.name}` : e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
@@ -391,6 +392,16 @@ function render(program, instrument) {
       case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
+      // ADR 0820: the site in a generator's body, the iterator stepped here.
+      case "gen-await": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gen-yield": return `async function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gen-iife": return `for await (const _y of (async function* () ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])})()) void _y;`;
+      case "gen-wrap": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}const wrap = () => gen();\n${ind(depth)}for await (const _y of wrap()) void _y;`;
+      case "gen-delegate": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}async function* outer() { yield* gen(); }\n${ind(depth)}for await (const _y of outer()) void _y;`;
+      case "gen-next": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}await gen().next();`;
+      case "gen-sync-loop": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
+      case "gen-prefix": return `async function* gen() ${block(c.body, depth, null, [], ["await Promise.resolve();", "yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gen-drain": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) void _y;\n${ind(depth)}await Promise.resolve();`;
       default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); if (c.form.startsWith("chain-") || c.form.startsWith("forward-")) return chainText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }
   }

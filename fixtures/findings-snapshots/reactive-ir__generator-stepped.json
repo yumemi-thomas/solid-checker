@@ -1,0 +1,157 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 520,
+      "end": 521,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 533,
+      "end": 537,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 785,
+      "end": 786,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 1056,
+      "end": 1057,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 1282,
+      "end": 1283,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 1350,
+      "end": 1364,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 1499,
+      "end": 1500,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2243,
+      "end": 2251,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2254,
+      "end": 2260,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2263,
+      "end": 2272,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2275,
+      "end": 2283,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2286,
+      "end": 2292,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2295,
+      "end": 2304,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped/App.tsx",
+      "start": 2307,
+      "end": 2314,
+      "fixes": 0
+    }
+  ]
+}

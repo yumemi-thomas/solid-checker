@@ -5,6 +5,7 @@
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 78,
@@ -15,6 +16,7 @@
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 192,
@@ -22,9 +24,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 200,
+      "end": 205,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 216,
@@ -32,9 +46,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 230,
+      "end": 235,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 246,
@@ -42,9 +68,32 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 257,
+      "end": 262,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 273,
+      "end": 278,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 294,
@@ -52,9 +101,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 307,
+      "end": 312,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 404,
@@ -62,9 +123,32 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-as-parameter-default",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 412,
+      "end": 417,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 468,
+      "end": 479,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 578,
@@ -75,6 +159,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 658,

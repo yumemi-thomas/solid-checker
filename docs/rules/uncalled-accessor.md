@@ -16,6 +16,11 @@ in **both** dialects:
 | a class object value | TS2322 against 2.0's `Record<string, boolean>` (the only dialect where the position was enabled) |
 | a computed property access | TS2538 "cannot be used as an index type" |
 
+Where `tsc` reports nothing at one of them, or at an arithmetic or bitwise
+operand (a `// @ts-ignore` or `@ts-expect-error` that may cover the line, a
+`@ts-nocheck`, JavaScript), the position is no longer TypeScript's: the result
+is uncertifiable, `solid-call-rejected-unchecked`, never a violation (ADR 0830).
+
 Three are positions TypeScript **permits**, and they are the most common real
 spellings of the bug, so the rule keeps them:
 

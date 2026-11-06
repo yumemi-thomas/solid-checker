@@ -15,7 +15,14 @@ overload is release-dependent: `@solidjs/signals` rc.0-rc.5 declare
 one-argument call (or an exact one-element spread) is TS2554 and this rule is
 silent on it — the call resolves to no published signature. Those spellings
 are reported only where the installed release still declares the overload
-(measured on rc.3; the tsc oracle now installs only rc.9). An absent
+(measured on rc.3; the tsc oracle now installs only rc.9). Where both
+compilers suppress that TS2554 on the callee's line, or TS2345 on a one-line
+apply argument (`// @ts-ignore` or `@ts-expect-error` above it, a leading
+`// @ts-nocheck`), nothing reports the call: it is judged as if it type-checked
+and the value as one no type vouches for, so an absent or non-callable apply is
+a violation (ADR 0830). A directive on another line proves nothing. Where only
+one compiler may suppress it, or in JavaScript, the call is an `SC9012`
+uncertifiable result, `solid-call-rejected-unchecked`. An absent
 apply function throws `MISSING_EFFECT_FN` in dev; a cast-hidden non-function
 crashes when the runtime reads `.effect` off it or calls it. Raw `undefined`,
 `null`, primitive, array, and invalid object arguments are already rejected by

@@ -5,6 +5,7 @@
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rule-negatives/Await.tsx",
       "start": 664,
@@ -15,10 +16,22 @@
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rule-negatives/Await.tsx",
       "start": 689,
       "end": 699,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rule-negatives/Props.tsx",
+      "start": 688,
+      "end": 690,
       "fixes": 0
     }
   ]

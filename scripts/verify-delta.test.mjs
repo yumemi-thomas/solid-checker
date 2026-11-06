@@ -45,19 +45,19 @@ test("every check a row or the universal set names actually exists", () => {
 
 test("each table row claims its own owner's paths", () => {
   const expected = [
-    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
-    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "wasm-compile"]],
-    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit"]],
+    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
+    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "wasm-compile"]],
+    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"]],
     [
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
-      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "ir-edit-fuzz"],
+      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz"],
     ],
-    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
-    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
+    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "guard-count"]],
+    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "guard-count"]],
     [
       "apps/solid-typefacts/src/session.rs",
-      ["typefacts", "backend-staleness", "coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "ir-edit-fuzz", "wasm-parity"],
+      ["typefacts", "backend-staleness", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz", "wasm-parity"],
     ],
     ["apps/solid-typefacts/tests/process.rs", ["typefacts"]],
     ["apps/solid-typefacts/testdata/forms/tsconfig.json", ["typefacts"]],
@@ -98,13 +98,16 @@ test("a mapped change set runs preflight checks before building and testing", ()
     // binary would hide the source change under test.
     "build-typefacts",
     ...UNIVERSAL,
+    "guard-count",
     "build-debug",
     "ir-lib",
     "write-walk-strategies",
     "coverage",
+    "repro-causes",
     "ownership-gate",
     "tsc-oracle-gate",
     "obligation-audit",
+    "witnesses",
     "ir-read-lint",
     "ir-edit-fuzz",
     "wasm-compile",
@@ -133,10 +136,13 @@ test("a path that can move a finding selects every gate that reads findings", ()
   }
   // scripts/verify.sh's gates lane is the authority: a gate it runs on findings is listed here too.
   const lane = readFileSync(join(ROOT, "scripts/verify.sh"), "utf8");
-  for (const script of ["coverage.mjs", "ownership-gate.mjs", "tsc-oracle-gate.mjs", "obligation-audit.mjs"]) {
+  for (const script of ["coverage.mjs", "uncertifiable-causes.mjs", "ownership-gate.mjs", "tsc-oracle-gate.mjs", "obligation-audit.mjs"]) {
     assert.ok(lane.includes(script), script);
   }
-  assert.equal(FINDING_GATES.length, 4);
+  // Read from the lane, not listed: `repro-causes` reached a push because a list like the one above left it out.
+  const gatesLane = lane.slice(lane.indexOf("gates_lane() {"), lane.indexOf("\n}\n", lane.indexOf("gates_lane() {")));
+  const laneSteps = [...gatesLane.matchAll(/lane_step ([a-z-]+)/g)].map((match) => match[1]);
+  assert.deepEqual(laneSteps, FINDING_GATES);
 });
 
 test("a change that needs no checker skips the debug build", () => {
@@ -237,7 +243,7 @@ test("the flip's notes are prose, and its tools reach their own check", () => {
   for (const path of ["scripts/flip/check.mjs", "scripts/flip/witnesses.json"]) {
     const plan = planFor([path]);
     assert.equal(plan.full, false, path);
-    assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "flip-tools"]);
+    assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "flip-tools", "build-debug", "witnesses"]);
   }
 });
 
@@ -379,7 +385,7 @@ test("a real non-ASCII path git has to escape is read, not thrown on", () => {
     }
     // ...and every one of them lands on the fixtures row rather than escalating.
     for (const name of names) {
-      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate"], name);
+      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "guard-count"], name);
     }
   });
 });

@@ -712,6 +712,52 @@ fn returned_literal_body_facts_project_reads_only_at_invocation() {
     assert_eq!(rows[0]["kind"], "violation");
 }
 
+/// ADR 0827: every runtime use of an import the compiler did not resolve is
+/// open, `import-unresolved`, and nothing of a resolved import is.
+#[test]
+fn unresolved_import_uses_are_open() {
+    let Some(findings) = diagnostic_fixture("import-unresolved") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/import-unresolved/App.tsx");
+    let resolved = source.find("export function Resolved").unwrap() as u64;
+    let rows = findings
+        .iter()
+        .filter(|row| row["analysisContext"] == "import-unresolved")
+        .collect::<Vec<_>>();
+    let subjects = rows
+        .iter()
+        .map(|row| row["coverageSubject"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    // Body call, effect argument, default import call, write, namespace
+    // member, handler write, JSX call, tag.
+    assert_eq!(
+        subjects,
+        [
+            "helper",
+            "helper",
+            "missingDefault",
+            "store",
+            "Missing",
+            "store",
+            "helper",
+            "Helper"
+        ],
+        "{rows:#?}"
+    );
+    for row in rows {
+        assert_eq!(row["id"], "SC9012");
+        assert_eq!(row["kind"], "uncertifiable");
+        assert!(
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/App.tsx"))
+                && row["primaryLocation"]["startByte"].as_u64() < Some(resolved),
+            "{row:#?}"
+        );
+    }
+}
+
 #[test]
 fn local_declaration_dispatch_rejects_escapes() {
     let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
@@ -810,6 +856,32 @@ fn nested_parameter_members_require_closed_values_at_every_level() {
                                 .is_some_and(|message| message.contains("read through")))
             })
             .collect::<Vec<_>>();
+        // ADR 0692: the value-use census holds `count`, the second argument,
+        // open at its own position beside the member-dispatch row. Both rows,
+        // exactly, so a further census row there fails this test.
+        if name == "NestedMethodArguments" {
+            let at = selected
+                .iter()
+                .map(|row| {
+                    (
+                        row["analysisContext"].as_str().unwrap_or_default(),
+                        row["primaryLocation"]["line"].as_u64().unwrap_or_default(),
+                        row["primaryLocation"]["column"]
+                            .as_u64()
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                at,
+                [
+                    ("parameter-member-path-unresolved", 140, 33),
+                    ("value-to-unresolved-callee", 140, 63),
+                ],
+                "{name}: {selected:#?}"
+            );
+            continue;
+        }
         assert_eq!(
             selected.len(),
             usize::from(expected.is_some()),
@@ -1382,19 +1454,18 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
         return;
     };
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (fixture, expected, kind, code, flags) in [
+    // ADR 0822: `WindowQuery`'s `typeof window` branch is live, so the walk
+    // over dep-query ends at its Proxy: SC9012 U, never silent. `FoldedQuery`
+    // stays the proved SC1001 V.
+    for (fixture, expected, flags) in [
         (
             "returned-store-proxy",
-            4,
-            "uncertifiable",
-            "SC9012",
+            vec![("uncertifiable", "SC9012"); 4],
             Vec::new(),
         ),
         (
             "dependency-source-proxy-store",
-            1,
-            "violation",
-            "SC1001",
+            vec![("uncertifiable", "SC9012"), ("violation", "SC1001")],
             vec![
                 "--runtime-target",
                 "browser",
@@ -1428,13 +1499,23 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
             .collect::<Vec<_>>();
-        assert_eq!(reads.len(), expected, "{fixture}: {rows:#?}");
-        assert!(
-            reads
-                .iter()
-                .all(|row| row["kind"] == kind && row["id"] == code),
-            "{fixture}: {rows:#?}"
-        );
+        let mut found = reads
+            .iter()
+            .map(|row| (row["kind"].as_str().unwrap(), row["id"].as_str().unwrap()))
+            .collect::<Vec<_>>();
+        found.sort_unstable();
+        assert_eq!(found, expected, "{fixture}: {rows:#?}");
+        for row in reads
+            .iter()
+            .filter(|row| fixture == "dependency-source-proxy-store" && row["id"] == "SC9012")
+        {
+            assert!(
+                row["analysisContext"]
+                    .as_str()
+                    .is_some_and(|context| context.starts_with("dependency-value-unfollowed")),
+                "{fixture}: {row:#?}"
+            );
+        }
     }
 }
 
@@ -2838,18 +2919,28 @@ fn searches_past_their_budget_are_uncertifiable() {
     let optimistic =
         include_str!("../../../../fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx");
     let short = rows_at(&findings, "App.tsx", line_of(app, "fa1({ read: a })"));
+    // ADR 0692: the value-use census follows `a` through `fa1`'s parameter;
+    // the chain runs past its 8 hops, so the census answers open beside the
+    // forwarding loop's row.
     assert_eq!(
         short,
-        [(
-            "SC9012",
-            "uncertifiable",
-            "parameter-member-targets-diverge"
-        )]
+        [
+            (
+                "SC9012",
+                "uncertifiable",
+                "parameter-member-targets-diverge"
+            ),
+            ("SC9012", "uncertifiable", "value-forwarded"),
+        ]
     );
     let long = rows_at(&findings, "App.tsx", line_of(app, "fb1({ read: a })"));
+    // ADR 0692: the census on the same chain, past its 8 hops.
     assert_eq!(
         long,
-        [("SC9012", "uncertifiable", "parameter-use-unmodeled")]
+        [
+            ("SC9012", "uncertifiable", "parameter-use-unmodeled"),
+            ("SC9012", "uncertifiable", "value-forwarded"),
+        ]
     );
     let past = rows_at(
         &findings,

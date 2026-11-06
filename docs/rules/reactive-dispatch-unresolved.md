@@ -190,6 +190,28 @@ function may hand its parameter on to such a callee (ADR 0370).
 To let the analysis see the call, keep the receiving function in the project,
 or provide analyzable runtime source for the package under the declared host.
 
+## The value-use census (ADR 0692)
+
+Every reference of a proven source is followed, or it is this rule's uncertifiable, naming the position:
+
+| `analysisContext` | Position |
+|---|---|
+| `value-held-in-binding` | a `let`, an assignment, or a name no row reads |
+| `value-held-in-member` | a member assignment |
+| `value-through-logical` | a value of `? :`, `&&`, `\|\|`, `??` or a comma that goes on |
+| `value-in-class-field` | a class field or `this.x` |
+| `value-through-generator`, `value-through-await`, `value-through-new` | `yield`, `await`, `new` |
+| `value-as-parameter-default` | a parameter's default |
+| `value-in-carrier` | a spread, an iteration, a nested literal, a standard call that keeps or copies it, a primitive's value slot |
+| `value-to-unresolved-callee` | an unresolved call, a tag, a method's or a handed function's result |
+| `value-from-primitive-callback` | what a primitive's callback returns, unless the primitive answers it (`createRoot`) |
+| `value-bound-held` | `.bind` not called on the spot |
+| `value-forwarded` | a second hop |
+| `value-root-in-helper` | a store or props root a helper received |
+| `value-use-unclassified` | anything else, the default: `throw`, a computed key, a walk's limit |
+
+A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
+
 ## What keeps a leaf callback open
 
 The leaf walk follows each call in the callback's synchronous extent to a
@@ -235,3 +257,9 @@ An unresolved package boundary remains uncertifiable.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — a reactive read is proven to execute untracked
+
+A Get of a value a selected package makes where the walk over its source ends (an accessor installed at run time, a class getter, a proxy, a call nothing resolves) is `dependency-value-unfollowed`, and importing a package that installs a function that may read a source on a global is `dependency-global-read` (ADR 0822).
+
+A prop read in a leaf owner (`createTrackedEffect`, `onSettled`) is `prop-pending-unproven` unless every caller is enumerated and none may pass a pending async getter: an unseen caller, an unresolved tag, or a value nothing classifies can (ADR 0823).
+
+A value the type facts attribute to a Solid primitive is named only when an import of a Solid module confirms it (ADR 0711); otherwise the row is `primitive-identity-unproven`, named by the value's own text (ADR 0825). An unresolved import is no primitive at all: a Solid package's own unresolved import names nothing (ADR 0826). Each runtime use of an import the compiler did not resolve (a missing module, an export its target lacks) is open, `import-unresolved`: nothing says what the value is (ADR 0827).

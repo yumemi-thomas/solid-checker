@@ -64,8 +64,40 @@ fn poisoned() -> bool {
     std::env::var_os("TSRS_ARENA_POISON").is_some_and(|value| value == "1")
 }
 
+/// Set in the child [`rebuild_and_update_loops_do_not_accumulate`] runs itself as.
+const CHILD: &str = "SOLID_TYPEFACTS_MEMORY_TEST_CHILD";
+
 #[test]
 fn rebuild_and_update_loops_do_not_accumulate() {
+    // The arena bounds below measure what the edits keep, not how many pool
+    // threads the scheduler wakes: the loops run in a child of this test
+    // binary with a one-thread tsrs pool.
+    if std::env::var_os(CHILD).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "rebuild_and_update_loops_do_not_accumulate",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .env("RAYON_NUM_THREADS", "1")
+            .env(solid_typefacts::passes::ENV_WORKERS, "1")
+            .output()
+            .unwrap();
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+        print!("{}", String::from_utf8_lossy(&output.stdout));
+        assert!(
+            output.status.success(),
+            "the measured child failed: {}",
+            output.status
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+            "the measured child ran no test"
+        );
+        return;
+    }
     let root =
         std::env::temp_dir().join(format!("solid-typefacts-rs-memory-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
@@ -165,18 +197,20 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     // nothing reused (TSRS_ARENA_POISON=1), 1,000 edits grew the arena by
     // about 1.25 GiB, against the 8 MiB bound below.
     //
-    // The bound covers the edits from the first rebase to 100 past the
-    // second (1,124), not the edits before the first: the arena counts
-    // capacity its pools keep for reuse (released slabs, up to 64 MiB, and
-    // spare thread arenas, never released), and a rebase holds the old and
-    // the new chain at once, so the first one can raise that high-water mark
-    // once. How far depends on scheduling: under 24 extra busy processes the
-    // first rebase stepped 2 to 14 MiB in each of 8 runs (11 MiB failed the
-    // old #100 to #1,100 bound twice), and no other round of those runs grew
-    // at all; idle runs do not step. Over 4,100 edits (4 rebases) under the
-    // same load, later rebases added 0 to 2 MiB and the total settled at
-    // 91 to 92 MiB in 3 runs. A leak grows with the edits, a high-water mark
-    // does not.
+    // The bound covers the edits from 100 past the first rebase to 100 past
+    // the second (1,024): both samples in the same phase, and the first
+    // rebase, which holds the old and the new chain at once, before either.
+    // The arena counts capacity its pools keep for reuse (released slabs, up
+    // to 64 MiB, and spare thread arenas, never released). Under 24 extra busy
+    // processes the first rebase stepped 2 to 14 MiB in each of 8 runs, and
+    // with every pool worker warmed first a later rebase still grew 9 MiB in
+    // `make verify`'s parallel lanes: how many threads take a chunk, and when,
+    // is the scheduler's. So the loops run in a child with one tsrs pool
+    // thread (`RAYON_NUM_THREADS=1`, read when tsrs builds its pool) and one
+    // per-file pass worker, where that growth cannot depend on the load.
+    // Over 4,100 edits (4 rebases) under the same load, later rebases added
+    // 0 to 2 MiB and the total settled at 91 to 92 MiB in 3 runs. A leak
+    // grows with the edits, a high-water mark does not.
     let body: String = (0..200)
         .map(|n| format!("export function f{n}(x: number): number {{ return x + {n}; }}\n"))
         .collect();
@@ -198,9 +232,9 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         project.release_analysis_state();
         if rebased {
             rebases.push(round);
-            if rebases.len() == 1 {
-                arena_a = arena_kib();
-            }
+        }
+        if rebases.len() == 1 && round == rebases[0] + 100 {
+            arena_a = arena_kib();
         }
         if rebases.len() == 2 && round == rebases[1] + 100 {
             arena_b = arena_kib();
@@ -213,7 +247,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         "the edits crossed two rebases: {rebases:?}"
     );
     eprintln!(
-        "big edits: rebases at #{} and #{}, {arena_a} KiB after the first, {arena_b} KiB 100 edits past the second",
+        "big edits: rebases at #{} and #{}, {arena_a} KiB 100 edits past the first, {arena_b} KiB 100 edits past the second",
         rebases[0], rebases[1]
     );
 
@@ -248,7 +282,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     );
     assert!(
         arena_b.saturating_sub(arena_a) <= 8 * 1024,
-        "1,124 edits of a 10 KB file (across a rebase) grew the arena by {} KiB",
+        "1,024 edits of a 10 KB file (across a rebase) grew the arena by {} KiB",
         arena_b.saturating_sub(arena_a)
     );
     // Without freeing, 270 more rebuilds would add ~2.4 GiB and 90 more updates

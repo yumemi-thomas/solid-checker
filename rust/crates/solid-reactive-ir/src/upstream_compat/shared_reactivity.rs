@@ -31,9 +31,9 @@
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
-use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole};
 use solid_facts::core::Span;
+use solid_facts::{FileFacts, TscSilence};
 use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
 use super::{
@@ -1114,21 +1114,32 @@ fn uncalled_accessor(
         if is_called(file, identifier.span) {
             continue;
         }
-        let (position, proven) = if is_argument(file, identifier.span) {
+        let coerced = crate::blockers::ACCESSOR_VALUE_COERCED;
+        let (position, proven, blocker) = if is_argument(file, identifier.span) {
             if !standard_value_argument(file, context, identifier.span) {
                 continue;
             }
-            ("a standard-library value parameter", false)
+            ("a standard-library value parameter", false, coerced)
         } else if let Some(position) = value_position(file, identifier.span) {
             // `(c as any).toString = …`: stringifying no longer gives the
             // source, so the position proves nothing.
-            (position, !member_written(file, context, symbol))
+            (position, !member_written(file, context, symbol), coerced)
         } else if let Some(position) = open_position(file, identifier.span) {
-            (position, false)
+            (position, false, coerced)
         } else if standard_value_argument(file, context, identifier.span) {
-            ("a standard-library value parameter", false)
+            ("a standard-library value parameter", false, coerced)
         } else if erased_loose_equality(file, context, identifier.span) {
-            ("a loose equality", false)
+            ("a loose equality", false, coerced)
+        } else if let Some(position) = type_owned_position(file, identifier.span)
+            && file.tsc_may_be_silent_within(identifier.span)
+        {
+            // ADR 0830: a position TypeScript closes, on a line a directive
+            // may silence or in JavaScript: nothing reports it there.
+            (
+                position,
+                false,
+                crate::blockers::SOLID_CALL_REJECTED_UNCHECKED,
+            )
         } else {
             continue;
         };
@@ -1141,7 +1152,7 @@ fn uncalled_accessor(
             analysis_context: if proven {
                 String::new()
             } else {
-                crate::blockers::ACCESSOR_VALUE_COERCED.to_owned()
+                blocker.to_owned()
             },
             fixes: vec![],
             uncertain: !proven,
@@ -5700,15 +5711,24 @@ fn no_store_delete(
     defects: &mut Vec<StaticDefect>,
 ) {
     for &target in &file.ast.deleted_targets {
-        let Some(member) = file.peel_parentheses(target) else {
-            continue;
+        // A type assertion on the operand (`delete store.v!`, `delete (store.v
+        // as T)`) is TS2703 at the operand. ADR 0830: where tsc says nothing
+        // there (a directive, `@ts-nocheck`), the delete runs as `delete
+        // store.v` and reaches the trap: judge the member under it. Where one
+        // compiler may be silent, the operand is unproven.
+        let (member, sugar) = match file.peel_parentheses(target) {
+            Some(member) => (member, TscSilence::Reports),
+            None => {
+                let member = file.ast.peel_ts_sugar_span(target);
+                match file.tsc_silence_at(member.start) {
+                    TscSilence::Reports => continue,
+                    silence => (member, silence),
+                }
+            }
         };
-        // A computed key reaches the same trap, but Type Facts answers no
-        // optionality for an element access, so whether TypeScript rejects
-        // it (TS2790) is open: silent until the producer answers (P8).
-        if file.ast.member_at(member).is_none()
-            || file.ast.computed_members.binary_search(&member).is_ok()
-        {
+        // A computed key reaches the same trap (ADR 0829): the producer's
+        // rejection proof decides it below, as for a static key.
+        if file.ast.member_at(member).is_none() {
             continue;
         }
         let Some(root) = member_root(file, member) else {
@@ -5780,16 +5800,35 @@ fn no_store_delete(
             continue;
         }
         let path = file.path.as_str();
-        let uncertain = match context.lookup.entity_at(path, member) {
-            None => true,
-            Some(entity) if !entity.writable_optional_property => continue,
-            Some(_) => match chain_links_verdict(file, context, member, root) {
+        // ADR 0829: TypeScript rejects the delete (TS18011, TS2704, TS2790,
+        // the producer's proof under this program's options, in a file tsc
+        // checks): the defect is TypeScript's, silent (invariant 1). An
+        // operand not proven writable-optional and not proven rejected (a
+        // computed or index key, a required `T | undefined`, `unknown`) may
+        // well type-check: uncertifiable, never silent.
+        //
+        // ADR 0830: the rejection is reported at the operand. Where both
+        // compilers suppress it there, nothing reports the delete and it
+        // reaches the trap: the operand is a property the producer resolved,
+        // judged as a writable one. Where only one may, it stays unproven.
+        let entity = context.lookup.entity_at(path, member);
+        let rejected = entity.is_some_and(|entity| entity.delete_operand_rejected);
+        let silence = file.tsc_silence_at(member.start);
+        if rejected && silence == TscSilence::Reports && tsc_reports_in(file) {
+            continue;
+        }
+        let operand_unproven = sugar == TscSilence::Maybe
+            || !(entity.is_some_and(|entity| entity.writable_optional_property)
+                || rejected && silence == TscSilence::Silent);
+        let uncertain = operand_unproven
+            || match chain_links_verdict(file, context, member, root) {
                 None => continue,
                 Some(past_root) => past_root,
-            },
-        };
+            };
         let analysis_context = if optional {
             crate::blockers::STORE_OPERATION_MAY_NOT_WRITE
+        } else if operand_unproven {
+            crate::blockers::DELETE_OPERAND_UNPROVEN
         } else {
             standing.blocker().unwrap_or_default()
         };
@@ -5941,6 +5980,43 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
+}
+
+/// ADR 0830: the positions [`value_position`]'s narrowing gave to TypeScript
+/// (a type-checked native attribute, a class object's value, a computed key)
+/// and the operators that reject a function (arithmetic, bitwise, relational).
+fn type_owned_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+    let ast = &file.ast;
+    for element in &ast.jsx_elements {
+        if !is_lowercase_led(text(file, element.name.span)) {
+            continue;
+        }
+        for attribute in element.attributes.iter().filter(|a| a.namespace.is_none()) {
+            if attribute.expression == Some(span)
+                && super::jsx_name_is_type_checked(text(file, attribute.name))
+            {
+                return Some("a native JSX attribute");
+            }
+            if text(file, attribute.name) == "class"
+                && let Some(object) = attribute.expression
+                && ast
+                    .object_properties
+                    .iter()
+                    .any(|property| property.value == span && object.contains(property.span))
+            {
+                return Some("a class object value");
+            }
+        }
+    }
+    if ast.computed_members.iter().any(|member| {
+        ast.member_at(*member)
+            .is_some_and(|member| member.property == span)
+    }) {
+        return Some("a computed member key");
+    }
+    ast.coercing_operands
+        .contains(&span)
+        .then_some("an arithmetic or bitwise operand")
 }
 
 /// A key written as a plain identifier: ASCII letters, digits, `_` or `$`, not

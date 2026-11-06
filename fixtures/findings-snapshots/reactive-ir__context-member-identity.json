@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity/App.tsx",
+      "start": 308,
+      "end": 314,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity/App.tsx",
+      "start": 316,
+      "end": 327,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -15,6 +37,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-identity/App.tsx",
       "start": 774,
@@ -25,6 +48,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-member-identity/App.tsx",
       "start": 831,
@@ -35,6 +59,7 @@
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-member-identity/tabs.ts",
       "start": 185,

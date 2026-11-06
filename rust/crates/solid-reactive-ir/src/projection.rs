@@ -234,6 +234,24 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         ),
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
+            member: None,
+        } if defect.analysis_context == crate::blockers::IMPORT_UNRESOLVED => (
+            format!(
+                "{callee} is imported, but the compiler did not resolve the import, so what the value is, and what a call, read or write through it does here, cannot be proven"
+            ),
+            "Make the imported module and its export resolvable (generate it, install it, or declare its types), so solid-checker can see the value.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN => (
+            format!(
+                "{callee} is used as a value, and which function it is cannot be proven: the type facts attribute a Solid primitive to it, but no import of a Solid module names it, so the calls that reach it are not followed"
+            ),
+            "Import the value by name from its module, so its identity is exact, or make that module's source available to solid-checker.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
             member: Some(member),
         } if defect.analysis_context == crate::PRIMITIVE_RESULT_METHOD => (
             format!(
@@ -796,6 +814,18 @@ pub fn project_findings(
     findings.retain_mut(|finding| {
         program.execution_paths.apply_deferred_mount(finding);
         !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
+    });
+    // ADR 0822: a Get a violation proves needs no open row for its value.
+    let proved = findings
+        .iter()
+        .filter(|finding| finding.kind == "violation")
+        .map(|finding| finding.primary_location.clone())
+        .collect::<crate::HashSet<_>>();
+    findings.retain(|finding| {
+        !finding
+            .analysis_context
+            .starts_with(crate::blockers::DEPENDENCY_VALUE_UNFOLLOWED)
+            || !proved.contains(&finding.primary_location)
     });
     // ADR 0680: after every step that may make a row uncertifiable.
     for finding in &mut findings {

@@ -26,6 +26,12 @@ evaluated at module scope, and a JSX-returning function bound to a call's result
 are not placed: a write there is uncertifiable, never a violation. An exported
 capitalized function stays a component by module surface (ADR 0331).
 
+A closure handed to a helper inside a `createRoot` body or a `runWithOwner(owner, …)`
+callback (`createRoot(() => hc1(() => set(1)))`, written in a handler) may run on that
+callback's stack, under its owner: the handler's permissive role is no proof for it, and its
+own entries decide (ADR 0828). A helper chain that only forwards and calls it proves the
+violation under a root; under a bound owner the write is uncertifiable.
+
 A `createRenderEffect` apply callback is only partly such a scope. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, so a
 write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body, a

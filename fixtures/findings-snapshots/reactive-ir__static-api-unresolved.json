@@ -2,9 +2,32 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 915,
+      "end": 922,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 966,
+      "end": 971,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
       "start": 1177,

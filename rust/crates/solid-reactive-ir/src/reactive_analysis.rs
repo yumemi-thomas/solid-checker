@@ -389,6 +389,99 @@ pub(crate) fn collect_project<'facts>(
             draft.push_defect(kept);
         }
     }
+    // The census: every reference of a proven source is followed, or an
+    // obligation naming where it went.
+    let mut callables = ctx
+        .accessors
+        .keys()
+        .chain(ctx.setters.keys())
+        .chain(ctx.actions.keys())
+        .chain(ctx.prop_sources.keys())
+        .collect::<Vec<_>>();
+    callables.sort_unstable();
+    callables.dedup();
+    let mut census = crate::value_use::Census::new(
+        ctx.semantic_lookup,
+        ctx.entities,
+        ctx.symbol_names,
+        callables.iter().map(|symbol| symbol.as_ref()).collect(),
+        &interprocedural.source_call_targets,
+        crate::attribution::ExportedCallers::new(
+            ctx.semantic_lookup,
+            ctx.aliases,
+            ctx.symbols_by_root,
+        ),
+        draft
+            .reads
+            .iter()
+            .map(|read| &read.location)
+            .chain(draft.writes.iter().map(|write| &write.location))
+            .chain(
+                draft
+                    .action_invocations
+                    .iter()
+                    .map(|action| &action.location),
+            )
+            .chain(handed.iter().map(|obligation| &obligation.location))
+            .chain(draft.static_defects.iter().map(|defect| &defect.location)),
+    );
+    for symbol in callables.iter().copied() {
+        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
+            let root = ctx.prop_sources.contains_key(symbol)
+                || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);
+            let pending = ctx.async_sources.contains(symbol);
+            let open = if root {
+                census.root_use(&reference, pending)
+            } else {
+                census.callable_use(&reference, ctx.accessors.contains_key(symbol), pending)
+            };
+            let Some(blocker) = open else {
+                continue;
+            };
+            handed.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: ctx
+                        .symbol_names
+                        .get(symbol)
+                        .map_or_else(|| "this value".to_owned(), ToString::to_string),
+                    member: None,
+                },
+                location: reference,
+                analysis_context: blocker.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+    // P13: a source with no name has no reference to start from.
+    for file in ctx.semantic_lookup.files() {
+        for call in &file.ast.calls {
+            let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            if !ctx.dialect.creates_reactive_source(primitive) {
+                continue;
+            }
+            let Some(blocker) = census.created_use(
+                file,
+                call.span,
+                ctx.dialect.returns_store(primitive),
+                ctx.dialect.returns_reactive_tuple(primitive),
+            ) else {
+                continue;
+            };
+            handed.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: "this value".to_owned(),
+                    member: None,
+                },
+                location: call.span.location(file.path.as_str()),
+                analysis_context: blocker.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.
     let covered = |obligation: &crate::StaticDefect| {
@@ -400,7 +493,8 @@ pub(crate) fn collect_project<'facts>(
         };
         // Only a row whose role is reported speaks for the call; a read row
         // only for an obligation raised for a possible read.
-        let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ;
+        let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
+            || obligation.analysis_context.starts_with("value-");
         draft.reads.iter().any(|read| {
             read_only
                 && over(&read.location)
@@ -789,6 +883,30 @@ pub(crate) fn collect_project<'facts>(
     let compat_started = Instant::now();
     upstream_compat::check_project(ctx, draft);
     timings.upstream_compat = compat_started.elapsed();
+    // ADR 0692: upstream's `package-callee` row, pushed last, holds the same
+    // reference open as the census row before it (`observe(count)`): one
+    // SC9012 per span, the ported one kept.
+    let uncaptured = draft
+        .static_defects
+        .iter()
+        .filter(|defect| {
+            matches!(
+                defect.kind,
+                crate::StaticDefectKind::ReactiveSourceUncaptured { .. }
+            )
+        })
+        .map(|defect| defect.location.clone())
+        .collect::<HashSet<_>>();
+    if !uncaptured.is_empty() {
+        draft.static_defects.retain(|defect| {
+            !(defect.analysis_context.starts_with("value-")
+                && matches!(
+                    defect.kind,
+                    crate::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+                )
+                && uncaptured.contains(&defect.location))
+        });
+    }
     interprocedural.factory_instances
 }
 

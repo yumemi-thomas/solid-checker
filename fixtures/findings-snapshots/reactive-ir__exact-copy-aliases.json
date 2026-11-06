@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 166,
+      "end": 171,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 174,
+      "end": 179,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -12,9 +34,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 344,
+      "end": 352,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
       "start": 393,
@@ -25,6 +59,62 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 568,
+      "end": 573,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 576,
+      "end": 581,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 792,
+      "end": 800,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 1010,
+      "end": 1015,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 1018,
+      "end": 1023,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
       "severity": "warning",
       "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
       "start": 1027,
@@ -32,13 +122,36 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 1188,
+      "end": 1196,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
       "start": 1201,
       "end": 1209,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 1355,
+      "end": 1360,
       "fixes": 0
     },
     {

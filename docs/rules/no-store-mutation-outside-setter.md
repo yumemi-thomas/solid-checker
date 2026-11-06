@@ -144,13 +144,19 @@ Not reported, deliberately:
 - `delete` of a required or readonly property: tsc reports TS2790 (under
   strictNullChecks) or TS2704. Only a property the checker marks optional and
   not readonly (`v?: T`, `Partial<T>`) is reported, through the Type Fact
-  `writableOptionalProperty`. Where that fact is false, which is no claim (an
-  element access `store["v"]` or `store.rec[k]`, an index signature, a
-  non-optional `T | undefined`, which tsc accepts without
-  `exactOptionalPropertyTypes`, an `unknown`), the rule is silent: an open
-  miss, since Type Facts cannot tell those from TS2790 (docs/open-work.md). A type
+  `writableOptionalProperty`. An operand TypeScript is proven to reject
+  (`deleteOperandRejected`: TS2790, TS2704, TS18011 under the program's own
+  options) is silent. Any other operand (an element access `store["v"]` or
+  `store.rec[k]`, an index signature, a non-optional `T | undefined`, which tsc
+  accepts without `exactOptionalPropertyTypes`, an `unknown`) is uncertifiable,
+  `delete-operand-unproven` (ADR 0829). A type
   assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
-  TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
+  TS2703, silent. Where both compilers suppress the rejection on the
+  operand's own line (`// @ts-ignore` or `@ts-expect-error` above it, a
+  leading `// @ts-nocheck`), nothing reports the delete and it reaches the
+  trap: the operand is judged as the member under the assertion, and a
+  rejected one as proven (ADR 0830). Where only one compiler may suppress it,
+  or the file is JavaScript, it is uncertifiable. A link that may be `undefined` or `null` (`store.o.b` with `o?:`)
   is TS18048/TS18047: both silent. Any other chain past the root
   (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
   proves nothing at run time. An optional chain may skip the delete:

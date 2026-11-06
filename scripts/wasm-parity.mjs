@@ -899,8 +899,12 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     const start = source.indexOf("useLabel(name)");
     // ADR 0665: the package's memo is typed `any` here, so its read's provenance is open.
     const later = source.indexOf("label()");
+    // ADR 0692: `name` handed to the package's `useLabelMemo` is the census's
+    // `value-forwarded` uncertifiable.
+    const handed = source.indexOf("useLabelMemo(name)") + "useLabelMemo(".length;
     const expectedRows = [
       { id: "SC1001", rule: "strict-read-untracked", kind: "violation", path: join(tree.root, "App.tsx"), startByte: start, endByte: start + "useLabel(name)".length },
+      { id: "SC9012", rule: "reactive-dispatch-unresolved", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: handed, endByte: handed + "name".length },
       { id: "SC5003", rule: "async-outside-loading-boundary", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: later, endByte: later + "label()".length },
     ];
     equalToNative(label("dotdot-fixture"), at("dotdot-fixture"), native["dotdot-fixture"]);

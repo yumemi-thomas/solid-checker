@@ -248,6 +248,60 @@ impl PropsReactivityIndex {
         }
     }
 
+    /// ADR 0823: every caller is enumerated, and none passes `name` a value
+    /// that may be a pending async getter: no getter of an async source, and
+    /// no value the classification leaves unresolved.
+    pub(crate) fn pending_excluded(&self, declaration: &Location, name: &str) -> bool {
+        match self.by_declaration.get(declaration) {
+            Some(PropsReactivity::Enumerated {
+                unresolved, passed, ..
+            }) if self.caller_proof => {
+                !unresolved.contains(name)
+                    && passed.get(name).is_none_or(|passed| !passed.async_getter)
+            }
+            _ => false,
+        }
+    }
+
+    /// ADR 0823, for a destructure: 1 when some visible caller passes one of
+    /// `names` (every prop, for `None`) a getter of an async source, 0 when
+    /// every caller is enumerated and none may pass a pending getter for
+    /// them, 2 otherwise.
+    pub(crate) fn pending_answer(&self, declaration: &Location, names: Option<&[String]>) -> u64 {
+        let passed = match self.by_declaration.get(declaration) {
+            Some(
+                PropsReactivity::Enumerated { passed, .. }
+                | PropsReactivity::Escaping { passed, .. },
+            ) => passed,
+            None => return 2,
+        };
+        let asked = |name: &str| names.is_none_or(|names| names.iter().any(|n| n == name));
+        if passed
+            .iter()
+            .any(|(name, passed)| asked(name) && passed.async_getter)
+        {
+            return 1;
+        }
+        match (names, self.by_declaration.get(declaration)) {
+            (Some(names), _) => {
+                if names
+                    .iter()
+                    .all(|name| self.pending_excluded(declaration, name))
+                {
+                    0
+                } else {
+                    2
+                }
+            }
+            (None, Some(PropsReactivity::Enumerated { unresolved, .. }))
+                if self.caller_proof && unresolved.is_empty() =>
+            {
+                0
+            }
+            (None, _) => 2,
+        }
+    }
+
     /// ADR 0509: whether some visible call site passes `name` a getter that
     /// calls an async source.
     pub(crate) fn async_getter(&self, declaration: &Location, name: &str) -> bool {
@@ -746,6 +800,23 @@ pub(super) fn classify_one_component(
             *reference.path == *use_file.path.as_str()
                 && (element.name.span == span || element.closing_name == Some(span))
         });
+        // ADR 0823: stored in a compound holder whose every tag pass 10
+        // resolved, the reference is how those tags render it.
+        if !jsx_use
+            && compound_render_reference(
+                facts,
+                lookup,
+                entities,
+                inputs,
+                closed,
+                reference,
+                span,
+                (file, function.span),
+                &component_uses,
+            )
+        {
+            continue;
+        }
         if !jsx_use {
             // Passed as a value, aliased, or re-exported: this hands the
             // component to callers that cannot be seen. It does not unwrite
@@ -1199,20 +1270,114 @@ pub(super) fn reference_is_export_specifier(
     span: solid_facts::core::Span,
     path: &str,
 ) -> bool {
+    files_at(facts, path).any(|file| {
+        file.ast.exports.iter().any(|export| {
+            export.module.is_none()
+                && export
+                    .specifiers
+                    .iter()
+                    .chain(export.declarations.iter())
+                    .any(|specifier| specifier.local.span == span)
+        })
+    })
+}
+
+/// The analyzed files at `path`; a caller records the read
+/// ([`super::trace::read_path`]).
+fn files_at<'f>(facts: &'f ProjectFacts, path: &str) -> impl Iterator<Item = &'f FileFacts> {
     facts
         .files
         .iter()
-        .filter(|file| file.path.as_str() == path)
-        .any(|file| {
-            file.ast.exports.iter().any(|export| {
-                export.module.is_none()
-                    && export
-                        .specifiers
-                        .iter()
-                        .chain(export.declarations.iter())
-                        .any(|specifier| specifier.local.span == span)
-            })
-        })
+        .filter(move |file| file.path.as_str() == path)
+}
+
+/// ADR 0823: whether `span`, a reference to the component at `target`, is a
+/// value an ADR 0342 holder of `reference.path` stores, the holder's every
+/// other reference a tag of that file that pass 10 resolved (so each tag
+/// naming this value is among `uses`), and no caller outside the program can
+/// reach the holder.
+#[allow(clippy::too_many_arguments)]
+fn compound_render_reference(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    inputs: &ComponentInputs<'_>,
+    closed: bool,
+    reference: &Location,
+    span: solid_facts::core::Span,
+    target: (&FileFacts, solid_facts::core::Span),
+    uses: &[(&FileFacts, &solid_facts::ast::JsxElementFact)],
+) -> bool {
+    super::trace::read_path(lookup, reference.path.as_ref());
+    let Some(holder_file) = files_at(facts, reference.path.as_ref()).next() else {
+        return false;
+    };
+    if !lookup.compound_value(holder_file.path.as_str(), span) {
+        return false;
+    }
+    let Some(binding) = holder_file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|value| value.contains(span))
+    }) else {
+        return false;
+    };
+    let declaration = binding.names[0].span;
+    let Some(holder) = entities.get(&location(holder_file.path.shared(), declaration)) else {
+        return false;
+    };
+    if !closed && inputs.exported(holder) {
+        return false;
+    }
+    let references = super::trace::references(lookup, holder.as_str());
+    if references.is_empty() {
+        return false;
+    }
+    for other in &references {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(other.start_byte),
+            u32::try_from(other.end_byte),
+        ) else {
+            return false;
+        };
+        let other_span = solid_facts::core::Span::new(start, end);
+        if *other.path != *holder_file.path.as_str() {
+            return false;
+        }
+        if other_span == declaration
+            || reference_is_export_specifier(facts, other_span, holder_file.path.as_str())
+        {
+            continue;
+        }
+        let Some(element) = holder_file.ast.jsx_elements.iter().find(|element| {
+            element.name.span.start == start
+                || element.closing_name.is_some_and(|name| name.start == start)
+        }) else {
+            return false;
+        };
+        let Some((tagged, value)) =
+            super::post_rows::compound_member_value(lookup, holder_file, element)
+        else {
+            return false;
+        };
+        if tagged.declaration != binding.declaration {
+            return false;
+        }
+        if value == span
+            && (super::post_rows::compound_member_target(lookup, holder_file, element)
+                != Some((target.0.path.shared(), target.1))
+                || !uses.iter().any(|(use_file, used)| {
+                    use_file.path.as_str() == holder_file.path.as_str()
+                        && used.name.span == element.name.span
+                }))
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// Classifies one expression a call site passes for a prop (or renders as a

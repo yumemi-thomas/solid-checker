@@ -25,6 +25,7 @@
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
+      "blocker": "store-write-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/projection-writes/App.tsx",
       "start": 711,

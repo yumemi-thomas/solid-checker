@@ -123,12 +123,17 @@ fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut
         return;
     }
     for &target in &file.ast.deleted_targets {
-        let Some(member) = file.peel_parentheses(target) else {
+        // ADR 0830: an operand under a type assertion where a directive may
+        // silence TS2703 is judged as the member it wraps.
+        let Some(member) = file.peel_parentheses(target).or_else(|| {
+            let member = file.ast.peel_ts_sugar_span(target);
+            (file.tsc_silence_at(member.start) != solid_facts::TscSilence::Reports)
+                .then_some(member)
+        }) else {
             continue;
         };
-        if file.ast.member_at(member).is_none()
-            || file.ast.computed_members.binary_search(&member).is_ok()
-        {
+        // ADR 0829: a computed operand too, for the rejection proof.
+        if file.ast.member_at(member).is_none() {
             continue;
         }
         spans.writable_optional_property_spans.insert(member);

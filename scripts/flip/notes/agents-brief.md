@@ -23,7 +23,7 @@ solid-checker: a Rust engine that proves Solid 2 reactivity defects. Read `AGENT
 - `sc-heavy` is the one-at-a-time lock. Use it for `make verify`, sweeps, full coverage and release builds. Never nest it: a script that already takes the lock, wrapped again, deadlocks forever.
 - The helpers in `/tmp/sc-scratch.noindex/flip-reads/` (`bld.sh`, `sw.sh`, `chk.sh`, `verify-seq.sh`) hardcode the Track R worktree and its output paths. Copy them to your scratch and change every path. Do not run them as they are.
 - Grid processes read `scripts/fuzz/*.mjs` live.
-- `make verify`'s memory test `rebuild_and_update_loops_do_not_accumulate` can fail in parallel lanes. Its limit must not change. See `/tmp/sc-scratch.noindex/flip-reads/verify-seq.sh`.
+- `make verify`'s memory test `rebuild_and_update_loops_do_not_accumulate` measures in a child with one tsrs pool thread and one pass worker (Part 12), so it no longer depends on lane load: plain `make verify` again. Its limit must not change; if it fails, stop and tell the coordinator.
 
 ## Sharing the branch
 Everyone delivers to `claude/flip-reads`. At each green commit: `git fetch origin`, merge `origin/claude/flip-reads` into your branch, rerun `make verify-delta` and the sweep on the merged tree, then `git push origin HEAD:claude/flip-reads`. If the push is rejected, merge again. Do this often, at least per family, so conflicts stay small.

@@ -146,6 +146,9 @@ pub fn prepare_rows(
         if entity.writable_optional_property {
             target.writable_optional_property = true;
         }
+        if entity.delete_operand_rejected {
+            target.delete_operand_rejected = true;
+        }
         if entity.reference_space.is_some() {
             target.reference_space = entity.reference_space;
         }

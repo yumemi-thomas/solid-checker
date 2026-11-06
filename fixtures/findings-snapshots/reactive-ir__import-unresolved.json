@@ -1,0 +1,104 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 550,
+      "end": 556,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 575,
+      "end": 581,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 615,
+      "end": 629,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 646,
+      "end": 651,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 661,
+      "end": 668,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 715,
+      "end": 720,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 752,
+      "end": 758,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/App.tsx",
+      "start": 769,
+      "end": 775,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/import-unresolved/local.ts",
+      "start": 99,
+      "end": 110,
+      "fixes": 0
+    }
+  ]
+}

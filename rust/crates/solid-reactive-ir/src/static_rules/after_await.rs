@@ -88,6 +88,16 @@ struct Member {
     conditional: Option<AfterAwaitObligation>,
 }
 
+/// A generator's call: the file and function it is written in, the call, and
+/// the generator's file and function.
+type GeneratorCall<'f> = (
+    &'f FileFacts,
+    &'f FunctionFact,
+    &'f CallFact,
+    &'f FileFacts,
+    &'f FunctionFact,
+);
+
 /// What one member's walk has recorded so far.
 struct Walk<'m> {
     member: &'m Member,
@@ -121,6 +131,9 @@ struct Reach<'f, 'a> {
     facts_by_end: HashMap<(&'f str, u64), Vec<&'f AsyncFunctionFact>>,
     done: HashSet<(String, u64, u64)>,
     pre: PreAwait<'f, 'a>,
+    /// Whether any function of the project is a generator: only then may a
+    /// computation step one (ADR 0820).
+    has_generators: bool,
 }
 
 pub(super) fn run<'a>(
@@ -172,6 +185,11 @@ pub(super) fn run<'a>(
         },
         done: HashSet::default(),
         pre: PreAwait::new(ctx),
+        has_generators: ctx
+            .facts
+            .files
+            .iter()
+            .any(|file| file.ast.functions.iter().any(|function| function.generator)),
     };
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
@@ -185,6 +203,7 @@ pub(super) fn run<'a>(
                 && !reach.has_promise_seed(function)
                 && !reach.has_implicit_suspension(function)
                 && !reach.has_try_handler(function)
+                && !reach.steps_generator(function)
             {
                 continue;
             }
@@ -201,10 +220,18 @@ pub(super) fn run<'a>(
             // computation and stays silent, so every read is an obligation.
             let conditional = owner_may_be_disposed(ctx, &reach.files, &function)
                 .then_some(AfterAwaitObligation::OwnerMayBeDisposed);
+            // ADR 0820: past a generator's leading `yield` nothing is tracked.
+            let windows = if ast_function(&reach.files, &function)
+                .is_some_and(|(file, function)| leading_yield(file, function))
+            {
+                Vec::new()
+            } else {
+                vec![Rc::clone(&function)]
+            };
             let mut queue = vec![Member {
-                function: Rc::clone(&function),
+                function,
                 context,
-                windows: vec![function],
+                windows,
                 conditional,
             }];
             while let Some(member) = queue.pop() {
@@ -287,7 +314,7 @@ fn unlisted_async_computations(
             let Some(function) = file.ast.function_at(span) else {
                 continue;
             };
-            if !function.r#async || function.generator {
+            if !function.r#async {
                 continue;
             }
             let Some(boundary) = file
@@ -300,6 +327,7 @@ fn unlisted_async_computations(
                         && written_directly_in(&file.ast, function, **point)
                 })
                 .map(|point| point.start)
+                .chain(first_yield_end(file, function))
                 .min()
             else {
                 continue;
@@ -418,6 +446,63 @@ fn synchronous_prefix(file: &FileFacts, function: &FunctionFact) -> Span {
         .min()
         .unwrap_or(function.body.end);
     Span::new(function.body.start, end)
+}
+
+/// ADR 0820: where a generator's body stops running on the stack that stepped
+/// it first: the end of its first `yield` written in it, the operand included.
+fn first_yield_end(file: &FileFacts, function: &FunctionFact) -> Option<u32> {
+    if !function.generator {
+        return None;
+    }
+    file.ast
+        .yields
+        .iter()
+        .filter(|point| {
+            function.body.contains(point.span)
+                && written_directly_in(&file.ast, function, point.span)
+        })
+        .map(|point| point.span.end)
+        .min()
+}
+
+/// A generator that may give up the stack at a `yield` before anything else
+/// suspends it: its straight-line reads are no window of the computation.
+fn leading_yield(file: &FileFacts, function: &FunctionFact) -> bool {
+    first_yield_end(file, function).is_some_and(|end| synchronous_prefix(file, function).end >= end)
+}
+
+/// A call that is the operand of a `for await` written in the function: the
+/// loop's first `next()` is on the spot, and every later step is the loop's.
+fn for_await_operand(file: &FileFacts, call: &CallFact) -> bool {
+    file.ast.iterated_operands.contains(&call.span)
+        && !file
+            .ast
+            .yields
+            .iter()
+            .any(|point| point.delegate && point.span.contains(call.span))
+        && file
+            .ast
+            .implicit_suspensions
+            .iter()
+            .any(|suspension| suspension.end == call.span.end && suspension.start < call.span.start)
+}
+
+/// A sync generator's call that is a `for…of` operand with no suspension of
+/// `function` in the loop: the loop drains it on one stack.
+fn drained_in_place(file: &FileFacts, function: &FunctionFact, call: &CallFact) -> bool {
+    file.ast.iterated_operands.contains(&call.span)
+        && file.ast.loop_statements.iter().any(|lp| {
+            lp.contains(call.span)
+                && written_directly_in(&file.ast, function, *lp)
+                && !file
+                    .ast
+                    .awaits
+                    .iter()
+                    .chain(&file.ast.implicit_suspensions)
+                    .any(|point| {
+                        lp.contains(*point) && written_directly_in(&file.ast, function, *point)
+                    })
+        })
 }
 
 /// The operand span of an `await`. Of nested awaits that share an end
@@ -582,6 +667,14 @@ fn mark_uncertain(draft: &mut ProgramDraft, mark: usize, reason: &AfterAwaitObli
         if let StaticDefectKind::ReactiveReadAfterAwait { obligation, .. } = &mut defect.kind {
             defect.uncertain = true;
             obligation.get_or_insert_with(|| reason.clone());
+            if *reason == AfterAwaitObligation::GeneratorStepped
+                && !crate::blockers::named(&defect.analysis_context)
+            {
+                defect.analysis_context = crate::blockers::with_detail(
+                    crate::blockers::GENERATOR_STEPPED,
+                    &defect.analysis_context,
+                );
+            }
         }
     }
 }
@@ -961,6 +1054,8 @@ impl<'f, 'a> Reach<'f, 'a> {
                         )
                         || loop_suspension_start(file, ast_function)
                             .is_some_and(|start| candidate.span.start >= start)
+                        || first_yield_end(file, ast_function)
+                            .is_some_and(|end| candidate.span.start >= end)
                         || file.ast.awaits.iter().any(|awaited| {
                             awaited.end <= candidate.span.start
                                 && written_directly_in(&file.ast, ast_function, *awaited)
@@ -1086,6 +1181,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             }
             self.after_implicit_suspension(draft, &mut walk, mark, file, ast_function);
             self.report_unplaced_functions(draft, &mut walk, file, ast_function);
+            self.follow_generators(draft, &mut walk, queue, file, ast_function);
         }
         if let Some(reason) = &member.conditional {
             mark_uncertain(draft, mark, reason);
@@ -1134,9 +1230,12 @@ impl<'f, 'a> Reach<'f, 'a> {
         // a suspension on a later pass, as may everything after the loop: from
         // the loop's start every read is an obligation (the first pass's reads
         // before the `await` are dependencies, ADR 0195, never violations).
+        // ADR 0820: a generator's body past its first `yield` runs when its
+        // iterator is stepped again: off this stack, on whoever steps it.
         let Some(boundary) = implicit
             .into_iter()
             .chain(loop_suspension_start(file, function))
+            .chain(first_yield_end(file, function))
             .min()
         else {
             return;
@@ -1184,7 +1283,145 @@ impl<'f, 'a> Reach<'f, 'a> {
                 self.visit_template(draft, walk, file, template, 0);
             }
         }
-        mark_uncertain(draft, mark, &AfterAwaitObligation::SuspensionUnplaced);
+        let reason = if function.generator {
+            AfterAwaitObligation::GeneratorStepped
+        } else {
+            AfterAwaitObligation::SuspensionUnplaced
+        };
+        mark_uncertain(draft, mark, &reason);
+    }
+
+    /// ADR 0820: the project function a call runs, exactly: a literal callee,
+    /// an exact function, or a closed object's member.
+    fn called_function(
+        &self,
+        file: &'f FileFacts,
+        call: &CallFact,
+    ) -> Option<(&'f FileFacts, &'f FunctionFact)> {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if let Some(function) = file.ast.function_at(callee) {
+            return Some((file, function));
+        }
+        let lookup = self.ctx.semantic_lookup;
+        let (target, function) = if let Some(member) = file.ast.member_at(callee) {
+            if file.ast.computed_members.contains(&member.span) {
+                return None;
+            }
+            lookup.closed_member_function(file, member)?
+        } else {
+            lookup.function_called_at(file.path.as_str(), callee)?
+        };
+        let target = *self.files.get(target.path.as_str())?;
+        target
+            .ast
+            .functions
+            .iter()
+            .find(|candidate| candidate.span == function.span)
+            .map(|function| (target, function))
+    }
+
+    /// ADR 0820: a generator a member calls, there or in a function it calls.
+    /// `for await` steps its iterator from the member's continuation, so an
+    /// async generator is a member of the flight: reads after its first
+    /// `await` follow the proof that holds for an `async` helper (a `for
+    /// await` written in the member) and reads after its first `yield` are
+    /// obligations. Any other stepping (`it.next()`, a value handed on, a loop
+    /// in a helper) makes the whole member an obligation. A sync generator
+    /// stepped across one of the member's suspensions runs past its first
+    /// `yield` on the continuation; a loop that drains it on one stack does not.
+    fn follow_generators(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) {
+        if !self.has_generators {
+            return;
+        }
+        walk.carried = Carried::Held;
+        let calls = self.generator_calls(file, function);
+        let suspends = file
+            .ast
+            .awaits
+            .iter()
+            .chain(&file.ast.implicit_suspensions)
+            .any(|point| {
+                function.body.contains(*point) && written_directly_in(&file.ast, function, *point)
+            });
+        for (in_file, holder, call, target_file, target) in calls {
+            let direct = holder.span == function.span
+                && written_directly_in(&in_file.ast, holder, call.span);
+            if target.r#async {
+                let leading = leading_yield(target_file, target);
+                let exact = direct
+                    && !leading
+                    && for_await_operand(in_file, call)
+                    && self
+                        .ctx
+                        .semantic_lookup
+                        .function_value_is_current(target_file, target);
+                let tracking = std::mem::replace(&mut walk.untracked, leading);
+                self.enqueue(
+                    walk,
+                    queue,
+                    target_file,
+                    target,
+                    (!exact).then_some(AfterAwaitObligation::GeneratorStepped),
+                );
+                walk.untracked = tracking;
+            } else if suspends
+                && !(direct && drained_in_place(in_file, holder, call))
+                && let Some(boundary) = first_yield_end(target_file, target)
+            {
+                let mark = draft.static_defects.len();
+                let mut past = target.clone();
+                past.body = Span::new(boundary, target.body.end);
+                self.report_region(draft, walk, target_file, &past, 0);
+                mark_uncertain(draft, mark, &AfterAwaitObligation::GeneratorStepped);
+            }
+        }
+    }
+
+    /// The generators `function` calls and keeps the iterator of, there or in
+    /// a function it calls exactly, each call with the function it is in.
+    fn generator_calls(
+        &self,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) -> Vec<GeneratorCall<'f>> {
+        let mut calls = Vec::new();
+        let mut seen = HashSet::default();
+        let mut stack = vec![(file, function)];
+        while let Some((in_file, holder)) = stack.pop() {
+            for call in in_file.ast.calls_within(holder.body) {
+                if call.construct {
+                    continue;
+                }
+                let Some((target_file, target)) = self.called_function(in_file, call) else {
+                    continue;
+                };
+                if !target.generator {
+                    if seen.insert((target_file.path.as_str(), target.span)) {
+                        stack.push((target_file, target));
+                    }
+                } else if !call.result_discarded {
+                    calls.push((in_file, holder, call, target_file, target));
+                }
+            }
+        }
+        calls
+    }
+
+    /// Whether a member's walk has a generator to follow: it is one with a
+    /// `yield`, or it reaches a call of one.
+    fn steps_generator(&self, function: &AsyncFunctionFact) -> bool {
+        self.has_generators
+            && ast_function(&self.files, function).is_some_and(|(file, function)| {
+                first_yield_end(file, function).is_some()
+                    || !self.generator_calls(file, function).is_empty()
+            })
     }
 
     /// The callbacks a call runs inline: an immediately invoked function
@@ -1202,7 +1439,15 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         if depth > MAX_REGION_DEPTH {
+            // ADR 0750: past the depth the walk follows.
+            let mark = draft.static_defects.len();
             self.push_unfollowed(draft, walk, file, call, call.callee);
+            for defect in &mut draft.static_defects[mark..] {
+                defect.analysis_context = crate::blockers::with_detail(
+                    crate::blockers::SEARCH_DEPTH_LIMIT,
+                    &defect.analysis_context,
+                );
+            }
             return;
         }
         let ctx = self.ctx;
@@ -1461,7 +1706,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .to_owned(),
                     },
                     location: location(file.path.shared(), argument.span),
-                    analysis_context: walk.member.context.clone(),
+                    // A callee whose body cannot be read.
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED,
+                        &walk.member.context,
+                    ),
                     fixes: vec![],
                     uncertain: false,
                 }),
@@ -1521,12 +1770,28 @@ impl<'f, 'a> Reach<'f, 'a> {
             };
             (helper_file, helper, false)
         };
-        if helper.generator
-            || (!member
-                && (helper.method_name.is_some()
-                    || !ctx
-                        .semantic_lookup
-                        .function_value_is_current(helper_file, helper)))
+        // ADR 0820: an iterator stepped past this suspension runs the
+        // generator's first segment here, and nothing places the stepping.
+        if helper.generator {
+            if !call.result_discarded
+                && let Some(helper_file) = self.files.get(helper_file.path.as_str()).copied()
+                && walk.stack_helpers.insert((
+                    helper_file.path.to_string(),
+                    u64::from(helper.span.start),
+                    u64::from(helper.span.end),
+                ))
+            {
+                let mark = draft.static_defects.len();
+                self.report_prefix(draft, walk, helper_file, helper, depth);
+                mark_uncertain(draft, mark, &AfterAwaitObligation::GeneratorStepped);
+            }
+            return;
+        }
+        if !member
+            && (helper.method_name.is_some()
+                || !ctx
+                    .semantic_lookup
+                    .function_value_is_current(helper_file, helper))
         {
             return;
         }
@@ -1583,7 +1848,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         draft: &mut ProgramDraft,
         walk: &mut Walk<'_>,
         file: &'f FileFacts,
-        function: &'f FunctionFact,
+        function: &FunctionFact,
         depth: usize,
     ) {
         walk.placed.insert((file.path.to_string(), function.span));
@@ -1791,7 +2056,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                     callee: file.source_text(tag).unwrap_or("this tag").to_owned(),
                 },
                 location: location(file.path.shared(), tag),
-                analysis_context: walk.member.context.clone(),
+                // ADR 0750: past the depth the walk follows.
+                analysis_context: crate::blockers::with_detail(
+                    crate::blockers::SEARCH_DEPTH_LIMIT,
+                    &walk.member.context,
+                ),
                 fixes: vec![],
                 uncertain: false,
             });
@@ -2044,7 +2313,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .to_owned(),
                     },
                     location: location(file.path.shared(), argument.span),
-                    analysis_context: walk.member.context.clone(),
+                    // A callee whose body cannot be read.
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED,
+                        &walk.member.context,
+                    ),
                     fixes: vec![],
                     uncertain: false,
                 }),

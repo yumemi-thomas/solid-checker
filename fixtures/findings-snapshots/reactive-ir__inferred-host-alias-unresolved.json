@@ -1,4 +1,16 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "import-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/inferred-host-alias-unresolved/src/main.ts",
+      "start": 91,
+      "end": 96,
+      "fixes": 0
+    }
+  ]
 }

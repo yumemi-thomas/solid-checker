@@ -4,7 +4,7 @@
 //   flipReadContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
 //   FLIP_READ_LEGAL     { [code]: [context, ...] }, appended to that code's recallLegal
 //   FLIP_READ_VARIANTS  { [code]: { [variant]: { kind, contexts } } }, a source of that kind, in those contexts, added to the code's recall variants
-import { apiSignal, button, call, child, decl, domExpr, expr, fn, iife, jsxExpr, mounted, num, prim, ref, ret } from "./model.mjs";
+import { apiSignal, button, call, child, ctl, decl, domExpr, expr, fn, iife, jsxExpr, mounted, num, prim, ref, ret } from "./model.mjs";
 
 // ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
 export const STATIC_SOURCES = {
@@ -84,22 +84,27 @@ export const FLIP_READ_CONTEXTS = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn"],
   PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named"],
+  // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop"],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING, ...Object.keys(ITER_SAME)],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, ...Object.keys(ITER_SAME)],
+  // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
+  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
+  // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
+  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
+  // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", ...Object.keys(ITER_PATCHES)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
@@ -165,6 +170,15 @@ export const SUB_VALUE_WRITES = {
   "sw-comma": { ...SUB_WRITE, text: (o) => `(Math.random(), ${o}).v = 7;` },
   // ADR 0791: a delete behind an optional chain, tsc-clean, warns.
   "sw-delete-optional-chain": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}?.v;` },
+  // ADR 0829: a computed key, an array index, an open key: tsc-clean, warn; the build before certified each (P8).
+  "sw-delete-computed": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}["v"];` },
+  "sw-delete-index": { ...SUB_WRITE, text: (o) => `delete ${o}.items[0];` },
+  "sw-delete-open-key": { ...SUB_WRITE, text: (o) => `const k: number = 0; delete ${o}.items[k];` },
+  // ADR 0830: a delete tsc rejects (TS2703 under an assertion, TS2790 on a required member) under a directive: tsc reports
+  // nothing, the proxy warns. The build before certified the first two (and, before ADR 0829, the third).
+  "sw-delete-nonnull-ignored": { ...SUB_WRITE, kind: "store-opt", text: (o) => `// @ts-ignore\n${AUX}delete ${o}.v!;` },
+  "sw-delete-as-expect-error": { ...SUB_WRITE, kind: "store-opt", text: (o) => `// @ts-expect-error\n${AUX}delete (${o}.v as number | undefined);` },
+  "sw-delete-required-ignored": { ...SUB_WRITE, text: (o) => `// @ts-ignore\n${AUX}delete ${o}.a.v;` },
   // ADR 0790, research-sc9012.md section 2's t5, t13, t22, t33, dl8: roots no row described, each U now.
   "sw-object-root": { ...SUB_WRITE, text: (o) => `({ s: ${o}.a }).s.v = 7;` },
   "sw-generator": { ...SUB_WRITE, text: (o) => `function* swGen() { yield ${o}.a; } for (const x of swGen()) x.v = 7;` },
@@ -228,6 +242,8 @@ const PEEK = { kind: "async", contexts: ["jsx", "show"] };
 export const NET_PENDING = {
   "net-peek": { ...PEEK, text: (o) => `const peek = (g: () => number) => g(); void peek(${o});` },
   "net-peek-member": { ...PEEK, text: (o) => `const peek = (h: { go: () => number }) => h.go(); void peek({ go: ${o} });` },
+  // W's census review H3: a tracked position excused a pending accessor reached through a pattern over a holder.
+  "net-pattern-pending": { ...PEEK, text: (o) => `const v = { c: ${o} }; const { c: h } = v; void h();` },
 };
 // ADR 0802: no fact calls these sources async, and each is pending by what its compute reads. Chrome warns on each; each certified before.
 const OPEN_MEMO = "const useM = (g: () => number) => createMemo(() => g());";
@@ -278,6 +294,89 @@ export const SETTER_READS = {
   "setter-fn-apply": { ...SETTER_STORE, kind: "plain", contexts: ["effect-apply"], text: (o) => `setSw2((d) => { d.n = ${o}(); });` },
 };
 
+// ADR 0692: the census. Each hands the accessor to a position no row followed, then reads it. The generated program's component is an
+// `export function`: at module scope a test would prove nothing about the export arm, whose span is the whole statement.
+const USE_READ = { kind: "plain", contexts: ["body", "effect-apply", "root"] };
+export const VALUE_USES = {
+  "use-let": { ...USE_READ, text: (o) => `let h = ${o}; void h();` },
+  "use-member": { ...USE_READ, text: (o) => `const b: { h?: () => number } = {}; b.h = ${o}; void b.h();` },
+  "use-logical": { ...USE_READ, text: (o) => `const h = ${o} || ${o}; void h();` },
+  "use-comma": { ...USE_READ, text: (o) => `const h = (void 0, ${o}); void h();` },
+  "use-class": { ...USE_READ, text: (o) => `class H { t = ${o}; } void new H().t();` },
+  "use-new": { ...USE_READ, text: (o) => `class H { t: () => number; constructor(t: () => number) { this.t = t; } } void new H(${o}).t();` },
+  "use-default": { ...USE_READ, text: (o) => `const f = (h = ${o}) => h(); void f();` },
+  "use-map": { ...USE_READ, text: (o) => `const m = new Map([["k", ${o}]]); void m.get("k")!();` },
+  "use-array-at": { ...USE_READ, text: (o) => `const a = [${o}]; void a.at(0)!();` },
+  "use-bound": { ...USE_READ, text: (o) => `const b = ${o}.bind(null); void b();` },
+  "use-tagged": { ...USE_READ, text: (o) => `const t = (_: TemplateStringsArray, h: () => number) => h(); void t\`\${${o}}\`;` },
+  "use-spread": { ...USE_READ, text: (o) => `((h: () => number) => void h())(...([${o}] as [() => number]));` },
+  "use-iife": { ...USE_READ, text: (o) => `const h = (() => ${o})(); void h();` },
+  "use-nested": { ...USE_READ, text: (o) => `const w = { v: { v: ${o} } }; void w.v.v();` },
+  "use-forward": { ...USE_READ, text: (o) => `const f0 = (g: () => number) => g(); const f1 = (g: () => number) => f0(g); void f1(${o});` },
+  "use-root": { ...USE_READ, imports: ["createRoot"], text: (o) => `const h = createRoot(() => ${o}); void h();` },
+  "use-untrack": { ...USE_READ, imports: ["untrack"], text: (o) => `const h = untrack(() => ${o}); void h();` },
+  "use-yield": { ...USE_READ, text: (o) => `function* g() { yield ${o}; } void g().next().value!();` },
+  "use-yield-delegate": { ...USE_READ, text: (o) => `function* g() { yield ${o}; } function* g2() { yield* g(); } void g2().next().value!();` },
+  "use-chosen": { ...USE_READ, text: (o) => `const useA = () => ({ read: ${o} }); const hook = Math.random() >= 0 ? useA : useA; void hook().read();` },
+  // The default, reached by no table: 1c's forms.
+  "use-throw": { ...USE_READ, text: (o) => `try { throw ${o}; } catch (e) { void (e as () => number)(); }` },
+  "use-throw-operand": { ...USE_READ, text: (o) => `try { void (1 + (() => { throw ${o}; })()); } catch (e) { void (e as () => number)(); }` },
+  "use-throw-hook": { ...USE_READ, text: (o) => `const u = () => ${o}; try { throw u(); } catch (e) { void (e as () => number)(); }` },
+  "use-throw-created": { ...USE_READ, imports: ["createMemo"], text: (o) => `void ${o}; try { throw createMemo(() => 1); } catch (e) { void (e as () => number)(); }` },
+  // A `Followed` that was no proof: no binding or row names the call or the tag.
+  "use-class-return": { ...USE_READ, text: (o) => `class K { f() { return ${o}; } } void new K().f()();` },
+  "use-pattern-hop": { ...USE_READ, text: (o) => `const v = { c: ${o} }; const { c: h } = v; void h();` },
+  "use-slot-return": { ...USE_READ, text: (o) => `const v = { f: () => ${o} }; void v.f()();` },
+  "use-fn-alias": { ...USE_READ, text: (o) => `const f = () => ${o}; const g = f; void g()();` },
+  "use-tag": { ...USE_READ, text: (o) => `const H = ${o} as unknown as () => null; void (<H />);` },
+  // P13: no binding, so no reference starts the walk.
+  "use-created-values": { ...USE_READ, imports: ["createMemo"], text: (o) => `void ${o}; void (Object.values({ a: createMemo(() => 1) })[0] as () => number)();` },
+  "use-created-json": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; void JSON.stringify(createStore({ a: 1 })[0]);` },
+  // W's census review: H1, `export default` of a literal or a creating call, whose importers nothing walked. The export is App's own and
+  // a helper module imports it, so the obligation lands in App.tsx, the only file the grid judge reads.
+  "use-export-default-array": { ...USE_READ, importLines: ['const [dxc] = createSignal(1);', 'export default [dxc] as const;', 'import { readDxa } from "./dxa";'], files: { "dxa.ts": 'import d from "./App";\nexport const readDxa = () => { try { throw d[0]; } catch (e) { void (e as () => number)(); } };\n' }, text: (o) => `void ${o}; readDxa();` },
+  "use-export-default-object": { ...USE_READ, importLines: ['const [dxc] = createSignal(1);', 'export default { c: dxc };', 'import { readDxo } from "./dxo";'], files: { "dxo.ts": 'import d from "./App";\nexport const readDxo = () => { try { throw d.c; } catch (e) { void (e as () => number)(); } };\n' }, text: (o) => `void ${o}; readDxo();` },
+  "use-export-default-created": { ...USE_READ, imports: ["createMemo"], importLines: ['export default createMemo(() => 1);', 'import { readDxm } from "./dxm";'], files: { "dxm.ts": 'import d from "./App";\nexport const readDxm = () => { try { throw d; } catch (e) { void (e as () => number)(); } };\n' }, text: (o) => `void ${o}; readDxm();` },
+  // H2: inside a parameter hop, a pattern over a holder needed no row.
+  "use-param-pattern": { ...USE_READ, text: (o) => `const run = (f: () => number) => { const v = { f }; const { f: g } = v; return g(); }; void run(${o});` },
+  // H4: a store root's member reached through a holder slot needed no row.
+  "use-store-holder-member": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; const [st] = createStore({ a: 1 }); const v = { st }; void v.st.a;` },
+  // H5: a bare child is what its parent does with it; `For` calls it as the mapper.
+  "use-child-for": { ...USE_READ, imports: ["For"], text: (o) => `const el = <For each={[1]}>{${o}}</For>; void (el as unknown as () => unknown)();` },
+  // P12 (R2b's held patterns): a store a hook returns, read through the hook's call; and a `let` export of an accessor.
+  "use-hook-store-member": { ...USE_READ, imports: ["createStore"], importLines: ['const [hsm] = createStore({ v: 1 });', 'const useHsm = () => hsm;'], text: (o) => `void ${o}; void useHsm().v;` },
+  // The hook is App's own export and another module reads through it, so the obligation lands in App.tsx, the file the grid judge reads.
+  "use-hook-store-module": { ...USE_READ, imports: ["createStore"], importLines: ['const [hse] = createStore({ v: 1 });', 'export function useHse() { return hse; }', 'import { readHse } from "./hse";'], files: { "hse.ts": 'import { useHse } from "./App";\nexport const readHse = () => useHse().v;\n' }, text: (o) => `void ${o}; void readHse();` },
+  "use-export-let": { ...USE_READ, importLines: ['const [elc] = createSignal(1);', 'export let elRead = elc;', 'import { readEl } from "./el";'], files: { "el.ts": 'import { elRead } from "./App";\nexport const readEl = () => elRead();\n' }, text: (o) => `void ${o}; void readEl();` },
+};
+const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
+export const VALUE_WRITES = {
+  "use-write-throw": { ...USE_WRITE, text: () => `${SET} try { throw w; } catch (e) { (e as (v: number) => void)(1); }` },
+  "use-write-let": { ...USE_WRITE, text: () => `${SET} let g = w; g(1);` },
+  "use-write-map": { ...USE_WRITE, text: () => `${SET} new Map([["k", w]]).get("k")!(1);` },
+};
+// ADR 0821: a `const` copy of a source another module exports. Every reference to it is outside the file that holds the source.
+const EXPORT_COPY = {
+  kind: "plain",
+  importLines: ['import { copied, copiedStore } from "./export-copy";'],
+  files: { "export-copy.ts": 'import { createSignal, createStore } from "solid-js";\nconst [c] = createSignal(1);\nconst [st] = createStore({ v: 1 });\nexport const copied = c;\nexport const copiedStore = st;\n' },
+};
+export const EXPORT_COPY_READS = {
+  "export-copy-signal": { ...EXPORT_COPY, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "void copied();" },
+  "export-copy-store": { ...EXPORT_COPY, contexts: ["body", "root"], legal: ["memo", "effect-compute"], text: () => "void copiedStore.v;" },
+};
+export const EXPORT_COPY_WRITES = {
+  "export-copy-write": { ...EXPORT_COPY, contexts: ["body", "handler"], text: () => "copiedStore.v = 2;" },
+};
+
+// misuse.mjs `AUX`: in a site text over lines, it marks the line the runtime frame sits in (print.mjs `auxLine`).
+const AUX = "@@AUX@@";
+// ADR 0830: the one-argument `createEffect` is TS2554, which a directive silences; Chrome then throws MISSING_EFFECT_FN.
+const SUPPRESSED_EFFECT = { kind: "plain", contexts: ["body", "root", "handler"], imports: ["createEffect"] };
+export const SUPPRESSED_EFFECTS = {
+  "one-arg-ts-ignore": { ...SUPPRESSED_EFFECT, text: () => `// @ts-ignore\n${AUX}createEffect(() => 1);` },
+  "one-arg-expect-error": { ...SUPPRESSED_EFFECT, text: () => `// @ts-expect-error\n${AUX}createEffect(() => 1);` },
+};
 // ADR 0803: a slot a write to array iteration withdrew, held in another module (`slots.ts`) and used in App.tsx through the holders the
 // corpus spells (an IIFE's tuple, a `let`, a `const` alias, a hook's object, an object or class instance, a prop's value). The iterator is
 // written back unchanged (`iter-same`), so the use runs and Chrome warns; f11b000cd had no row at the use (corpus list m11, 35 lines).
@@ -314,13 +413,14 @@ const SLOT_WRITES = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([na
 ]));
 
 export const FLIP_READ_VARIANTS = {
+  MISSING_EFFECT_FN: SUPPRESSED_EFFECTS,
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
-  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...SLOT_READS },
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...SLOT_WRITES },
+  STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
   CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
-  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES },
+  STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
 
@@ -380,6 +480,14 @@ export function flipReadContext(context, stmts, kit) {
     const h = kit.name("f");
     return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
   }
+  if (context === "cleanup-mount" || context === "cleanup-mount-mixed" || context === "handler-mount") {
+    const [k, d, b] = [kit.name("K"), kit.name("f"), kit.name("b")];
+    const holder = decl(k, fn([...stmts, ret(domExpr("<i />"))]));
+    const mount = `createRoot(() => <${k} />)`;
+    if (context === "handler-mount") return { body: [holder], view: [button(b, [expr(domExpr(mount, undefined, ["createRoot"]))])] };
+    const root = decl(d, domExpr(`createRoot((r) => { onCleanup(() => { ${mount}; }); return r; })`, undefined, ["createRoot", "onCleanup"]));
+    return { body: [holder, root, ...(context === "cleanup-mount-mixed" ? [expr(domExpr(mount))] : [])], view: [button(b, [expr(domExpr(`${d}()`))])] };
+  }
   const iterPatch = ITER_PATCHES[context] ?? ITER_SAME[context];
   if (iterPatch) return { top: [expr(domExpr(iterPatch))], body: stmts, view: [] };
   if (context === "cast-late-foreach") {
@@ -402,6 +510,13 @@ export function flipReadContext(context, stmts, kit) {
   if (context === "arm-tag") {
     const k = kit.name("K");
     return { body: [decl(k, fn([...stmts, ret(domExpr("<i />"))]))], view: [mounted(kit.name("v"), domExpr(`{isServer ? <${k} /> : null}`, ["isServer"]))] };
+  }
+  if (context.startsWith("gen-")) {
+    const effect = context === "gen-await-effect";
+    const body = [ctl(effect ? "gen-await" : context, stmts), ret(num(1))];
+    if (effect) return { body: [expr(prim("effect", fn(body, { async: true }), { apply: fn([]) }))], view: [] };
+    const m = kit.name("m");
+    return { body: [decl(m, prim("memo", fn(body, { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
   }
   if (context === "then-named") {
     const [f, m] = [kit.name("f"), kit.name("m")];

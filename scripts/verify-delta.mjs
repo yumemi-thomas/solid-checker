@@ -221,14 +221,28 @@ export const CHECKS = {
   },
   "flip-tools": {
     why:
-      "nothing in the build, the gates or the tests reads scripts/flip/, so a typo there would surface only " +
-      "when someone runs it. check.mjs itself needs a release build and fails by design until both tracks " +
-      "merge, so this checks that its scripts parse and its data is JSON, no more",
+      "run.mjs and tsc.mjs run only by hand (Chrome, tsrs), so this checks that the flip's scripts parse " +
+      "and its data is JSON; `witnesses` runs check.mjs",
     commands: [
       ["node", "--check", "scripts/flip/check.mjs"],
       ["node", "--check", "scripts/flip/run.mjs"],
       ["node", "--check", "scripts/flip/tsc.mjs"],
-      ["jq", "empty", "scripts/flip/witnesses.json", "scripts/flip/tsc-rejected.json"],
+      ["jq", "empty", "scripts/flip/witnesses.json", "scripts/flip/host-witnesses.json", "scripts/flip/witnesses-retired.json", "scripts/flip/tsc-rejected.json"],
+    ],
+  },
+  "guard-count": {
+    why:
+      "the one-way uncertifiable count (endstage-report.md 1b): the ledger matches the snapshots, and a fall " +
+      "against the base names an ADR, a proof and a fixture on each side",
+    command: ["node", "scripts/guard/count.mjs"],
+  },
+  "witnesses": {
+    why:
+      "every flip witness against the recorded Chrome run (endstage-report.md 1a): where Chrome fired, a " +
+      "finding must cover it, whatever the row's kind; no tsrs and no Chrome (`--recorded`)",
+    command: [
+      "node", "scripts/flip/check.mjs", "all", "--recorded",
+      "--bin", join(ROOT, DEBUG_CHECKER), "--typefacts", join(ROOT, TYPEFACTS),
     ],
   },
   "rule-pages": {
@@ -325,9 +339,10 @@ export const UNIVERSAL = [
 /**
  * Every gate that reads the checker's findings. A path that can move a finding
  * selects all of them: `scripts/verify.sh`'s gates lane runs them together, and
- * selecting only some is how a red gate reached a push.
+ * selecting only some is how a red gate reached a push, for `tsc-oracle-gate`
+ * and then for `repro-causes` (R1's `clean-interval-hook`).
  */
-export const FINDING_GATES = ["coverage", "ownership-gate", "tsc-oracle-gate", "obligation-audit"];
+export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"];
 
 /**
  * One row of the mapping, as a prefix test.
@@ -377,7 +392,7 @@ export const ROWS = [
   {
     prefix: "fixtures/",
     owner: "fixtures or expected findings",
-    checks: ["coverage", "ownership-gate"],
+    checks: ["coverage", "ownership-gate", "guard-count"],
   },
   // The cases the two oracle gates read.
   ...["fixtures/tsc-oracle/", "fixtures/obligation-cases/"].map((prefix) => ({
@@ -388,7 +403,7 @@ export const ROWS = [
   {
     prefix: "fixtures/uncertifiable-repro/",
     owner: "the uncertifiable reproduction set (ADR 0446)",
-    checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes"],
+    checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes", "guard-count"],
   },
   ...["scripts/repro-budget.mjs", "scripts/repro-budget.test.mjs"].map((prefix) => ({
     prefix,
@@ -460,7 +475,8 @@ export const ROWS = [
   { prefix: "docs/rules/", owner: "the rule pages", checks: ["doc-budget", "rule-pages"] },
   // The flip's working files: nothing else reads them, and `scripts/flip/` goes
   // with the flip. The notes and the plan are prose, the rest are its tools.
-  { prefix: "scripts/flip/", owner: "the flip's tools (read by no build, gate or test)", checks: ["flip-tools"] },
+  { prefix: "scripts/guard/", owner: "the one-way uncertifiable count and its ledger", checks: ["guard-count"] },
+  { prefix: "scripts/flip/", owner: "the flip's tools and witnesses (the `witnesses` gate)", checks: ["flip-tools", "witnesses"] },
   { prefix: "scripts/flip/notes/", owner: "prose read by no check", checks: [] },
   { prefix: "scripts/flip/PLAN.md", owner: "prose read by no check", checks: [] },
   // `.gitignore` decides what git lists, and three checks ask git: the dialect
@@ -524,21 +540,21 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = [...FINDING_GATES, "repro-causes", "ir-edit-fuzz"].some((check) => selected.has(check));
+  const needsChecker = [...FINDING_GATES, "ir-edit-fuzz"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
     // is already current.
     "build-typefacts",
     ...UNIVERSAL,
-    ...["doc-budget", "flip-tools", "rule-pages"].filter((id) => selected.has(id)),
+    ...["doc-budget", "flip-tools", "rule-pages", "guard-count"].filter((id) => selected.has(id)),
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
-    ...[...FINDING_GATES, "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
+    ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
@@ -752,6 +768,7 @@ export const LANES = {
   "ownership-gate": "gates",
   "tsc-oracle-gate": "gates",
   "obligation-audit": "gates",
+  "witnesses": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the
@@ -760,6 +777,7 @@ export const LANES = {
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
   "doc-budget": "preflight",
+  "guard-count": "preflight",
   "flip-tools": "preflight",
   "rule-pages": "rust",
   // Builds nothing and needs no checker; ~3 minutes, so a preflight-lane neighbour would delay the gates: its own lane.

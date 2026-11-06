@@ -750,6 +750,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // different discard, and the outer one has to survive it.
         let expression = statement.expression.span();
         let returned = self.concise_arrow_bodies.last() == Some(&expression);
+        if !returned {
+            self.inert_operands.push(span(expression));
+        }
         let enclosing = if returned {
             self.discarded_expression.take()
         } else {
@@ -2739,6 +2742,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         use oxc_syntax::operator::BinaryOperator;
         // Every binary operator yields a number, bigint, string or boolean.
         self.primitive_results.push(span(expression.span));
+        if matches!(
+            expression.operator,
+            BinaryOperator::StrictEquality | BinaryOperator::StrictInequality
+        ) {
+            self.inert_operands.push(span(expression.left.span()));
+            self.inert_operands.push(span(expression.right.span()));
+        }
 
         if matches!(
             expression.operator,
@@ -2846,6 +2856,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         }
         if expression.operator == UnaryOperator::Delete {
             self.deleted_targets.push(span(expression.argument.span()));
+        }
+        if matches!(
+            expression.operator,
+            UnaryOperator::Void | UnaryOperator::Typeof
+        ) {
+            self.inert_operands.push(span(expression.argument.span()));
         }
 
         // Every unary operator here accepts a function operand in TypeScript

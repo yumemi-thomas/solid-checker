@@ -55,6 +55,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/other-rules/src/attr-namespace-data.tsx",
       "start": 293,

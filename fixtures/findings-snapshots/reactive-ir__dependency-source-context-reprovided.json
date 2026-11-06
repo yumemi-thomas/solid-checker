@@ -5,6 +5,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-context-reprovided/App.tsx",
       "start": 143,

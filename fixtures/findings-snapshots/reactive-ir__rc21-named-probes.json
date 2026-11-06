@@ -35,6 +35,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-named-probes/App.tsx",
       "start": 412,

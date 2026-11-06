@@ -5,6 +5,7 @@
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",
+      "blocker": "package-source-unavailable",
       "severity": "error",
       "path": "fixtures/reactive-ir/router-params/variants/preload-arrow/App.tsx",
       "start": 33,

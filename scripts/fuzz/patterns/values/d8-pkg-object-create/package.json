@@ -1,0 +1,15 @@
+{
+ "name": "probe",
+ "private": true,
+ "type": "module",
+ "dependencies": {
+  "fz-pkg": "1.0.0",
+  "solid-js": "2.0.0-rc.21",
+  "@solidjs/web": "2.0.0-rc.21",
+  "@solidjs/signals": "2.0.0-rc.21"
+ },
+ "devDependencies": {
+  "@solidjs/vite-plugin": "*",
+  "vite": "*"
+ }
+}

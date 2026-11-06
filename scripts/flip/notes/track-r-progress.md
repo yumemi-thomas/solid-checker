@@ -109,6 +109,7 @@ Pushed. Tree clean. Fresh Opus 5.5 high agent: read this section first. Census r
 | Step 2 | case 32, `verify-delta` | 0 moved, no analysis change | Case 32's `props.n = 1` removal dropped a negative control: restored as two cases, exported U, closed twin silent, 141 cases hold. `FINDING_GATES`: every path that can move a finding selects coverage, ownership, tsc-oracle and obligation-audit; solid-facts and the dialect rows selected none of them before |
 | SC1001 `flush(fn)` | ADR 0694, the owner's ruling | 0 moved in the corpus; `pos-flush-fn`: 72 of 2,514 programs, 84 SC1001 rows V to U, 0 outcomes | now uncertifiable: a store Get that only leads to a write, `write-path-read-unproven`. Kept V: a real read, `+=`, an alias, a project `push`. `expected-silent.json` does not fit: the judge excuses the no-window hint, so no old build fails, and the judge stayed untouched |
 | Bounds and P2 | ADR 0695 | +329 U (289 sites), -2 U, 0 V moved, `sweep-b10.json`, 22,202 U, 377 V | now uncertifiable: a read in a cleanup with a disposer in the project, a called handle, a function no primitive placed, a forwarded callback, a read past 32 dynamic climbs. Also now uncertifiable: a chain past 3 helpers after an await (70 false cleans, found by `chain-N`, measured by id, 0 proved). Proved silent kept: `untrack(fn)`, `onSettled(fn)`, an action's step. Also proved silent: a closure only a host keeps with no sync dispatch in the project, and a compute's returned closure an apply only `void`s. The draft as written lost 3 true V and gave +642 U: narrowed, not landed that way. `value_reaches`, `may_run_in_leaf_owner_within`: `local_access.rs`, R1's |
+| Round 1 | part 8 integrates: R2 to `c6677ddac` plus item 7, R3 to `63c15d6df`, memory review items 2, 3, 5, 6, 8, `focus.mjs` cap. R1's `8428ec497` dropped: `clean-interval-hook` | 24,515 to 25,343 U, 377 V, 0 V moved, 0 unnamed, `sweep-m5.json` | `check.mjs all` 299 of 336, 37 kind clean, HOST 25 of 25, patterns 92 open (2 FP, 90 FC). The runaway was `composite_callee_walk` on `i++`. F1 and its two memos stay on `claude/flip-r2-wip` |
 **Baselines.** Build `rk2/`, sweep `sweep-k2.json`: 21,616 U, 377 V, 0 unnamed, 0 exit errors. Patterns 139 open (3 FP, 133 FC, 3 no run). `make verify` green on this tree through verify-delta's escalation, in the lanes as written. Set `SOLID_CHECKER_TSRS_BIN=/Users/thomas/Documents/Github/tsrs/target/release/tsrs` for old-revision judges (scratch `judge.sh <rev> <bindir>`).
 
 **Merge first.** `origin/claude/flip-writes` moved 2 commits past the last merge: `138ff86e7` (ADR 0750, a walk past its depth limit is undecided) and `91311857e` (ADR 0751, a value chain past its limit). They overlap step 6 below. W took 0750 and 0751, so continue from 0752 if R's range runs out.
@@ -148,6 +149,7 @@ Base `879eca007` reports, branch `claude/flip-r2`, ADRs 0780-0789. Scratch `/tmp
 | List: 9 programs, 3 no-run | `a11`'s twin confirmed (STRICT_READ_UNTRACKED); `h03` is NO_OWNER_EFFECT, SC4001 stands; `e807` runs | | `e911` (`on:click` is TS2322) and `f08` (the plugin leaves `@dec` in, no way to run it; SC1001 U at its site) deleted |
 | P6, P5, P10 (ADR 0780) | `b05 b06 d7-export-star-as -store`, and `Api.flush()` SC2008, which the new binding found | `h18`, `onLoad` in a control-flow callback | 139 to 130 open |
 | P3, P4, F3 (ADR 0781) | | lying cast and patched global: `d01-cast d07 x30 e107 e108`, `t3-*-cast`, F3 no longer a false positive | 3 new held rows, `p3-cast-*`: an assertion away from the receiver, certified, Chrome warns. Needs the owner |
+| F1, `e703` (ADR 0782) | `s1`, `s2`, `e703`, `g12`: write legal, the only mount is in a cleanup; `b-handed`, `d-mixed`, `s4` stay V | | |
 ## R3
 
 Branch `claude/flip-r3`, pushed to `origin/claude/flip-r3` (since 2026-11-06 the landing rule: never push flip-reads; part 8 merges hourly). Scratch `~/EDF/tmp/flipr3` (`gate-times.tsv`, `bins/`, `s1/`...). Base build `bins/r3base` (80db411e5).
@@ -155,6 +157,118 @@ Branch `claude/flip-r3`, pushed to `origin/claude/flip-r3` (since 2026-11-06 the
 | Step | State | Moved | Notes |
 |---|---|---|---|
 | 1, 136 `LOADING_ON_OUTSIDE_HOLD` | judge only, no Rust | `mx-recall` LOADING_ON_OUTSIDE_HOLD, `r3base`: before 136 wrong-rule + 422 recall-gap, after 558 recall-gap; the 136 all carry `detail.holeCorroborated` (128 declined by the claiming rule, 8 by SC9012) | Artifact removed where it arises: `classify.mjs runtimeEvents` dropped the diagnostic's `loc`. `matrix.mjs` accepts a placeless code whose `loc` line opens a node enclosing the site and no other use site. `loc` is not in `positions` |
+
+## R2b, from 2026-11-06
+
+Branch `claude/flip-r2`, worktree `t3-7c67e91b`, ADRs 0820-0829. Baseline on the merged tree: build `rm1`, `sweep-m1.json`.
+
+| Family | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P7 (ADRs 0821, 0822) | `export const` copy of a signal or store, read or written elsewhere; `d8-pkg-types-lie-plain` | a package's Get the walk does not close, `dependency-value-unfollowed`; a global a package installs, `dependency-global-read` | export-copy 108 FC to 108 V, legal 72 clean. Lane: 15 d8 closed, 3 `d8-pkg-plain-*` stay open. Corpus +361 U, 0 V |
+| P9, `f02` (ADR 0820) | read after an `await` in an async generator a `for await` in the compute steps: `f02`, `f1`, `f6`, `f8`, `f13`, `f16` | past a `yield`, a wrapper, `next()`, `yield*`, an inline generator, a sync generator across an await, blocker `generator-stepped` | 1,488 ids: old 1,092 FC, new 0 FC, 0 FP, 200 V, 1,288 U. Legal 0 FP of 1,316. Corpus 0 moved. Patterns 89 open |
+
+## R2c, from 2026-11-06
+
+Same branch and worktree, scratch `$S` as R2. Baseline: build `rp9e`, sweep `sweep-p9e.json` (= `sweep-m1.json`, 0 moved).
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P7 landed (ADRs 0821, 0822) | as R2b's row | as R2b's row; `WindowQuery` in `dependency-source-proxy-store` (was silent) | build `p7i`: +361 U, -1 U, 0 V; witnesses 300 of 336, same 36 census ids as `p9e` |
+| Member tag (ADR 0823) | a same-file sealed holder's tag is a call site: `async-prop-getter`, SC1001 V (`n1 n3 n4 n5`), literal clean (`n2`, `m4`) | a leaf-owner prop read whose callers do not exclude a pending getter, `prop-pending-unproven` (`m5 m6 m8-m11`) | grids: mx-src 60 FC to 0, mx-combo 26 FC to 0, 0 FP; legal 84, 0 FP. Corpus +51 U, -10 U same-start, 0 V |
+| Props destructure (ADR 0824) | | `const { v } = props` with a pending getter outside tracked JSX or in a leaf owner, `async-prop-getter`; open callers in a leaf, `prop-pending-unproven` | async-value-dstr 84 ids: 60 FC to 0, 0 FP; legal 84, 0 FP. Corpus 0 moved |
+| primitive-value (ADR 0825) | the 2 rows an import confirms keep the primitive's name | 78 rows: `primitive-identity-unproven`, same sites, still U | corpus 0 moved, 78 relabelled |
+
+### R2c handoff, 2026-11-06
+
+Head on `claude/flip-r2`: P7 `afcee743f`, lint `f6de3eb2f`, member tag `328763a21`, props destructure `44f848399`, primitive-value (ADR 0825) the commit holding this section. ADRs used: 0821-0825; 0826-0829 left. All landed with verify-delta, witnesses (300 of 336, the 36 census ids), sweep and `make verify` green. Baseline for the next slice: build `rpv1`, sweep `sweep-pv1.json`.
+
+**Helpers added in `$S`:** `srcids.mjs` (mx-src or combo id manifest by regex), `lgsrc.mjs` (lg-src legal ids), `snapdiff.mjs` (a fixture's full finding diff against its snapshot: coverage's report caps its lists), `moved.mjs` (sweep rows grouped by blocker).
+
+**Open, not done:**
+- Imported compound holder (`import { Ui } from "./ui"; <Ui.C />`): U `prop-pending-unproven`, not proved; needs the holder file's literal through a recorded read.
+- `primitive-identity-unproven`: why hoxxes-briefing, inferay, spookysoftware-www facts attribute `createOwner` to unresolved imports is not traced; W's ADR 0711 has the same root for calls.
+- Lost proof: `dependency-source-window-realm` under `--runtime-realm window`, 3 V to 3 U in `f2e5f60e0` (open-work.md).
+- Held for the integrator (census or `shared_reactivity.rs`): `use().v` on a returned store, `export let read = c` (open-defects P12); `d8-pkg-plain-*` (a store handed to a package function).
+- Smoke: `smoke/mx-src.json` gained 60 `async-value-dstr` ids by hand; reselect from a full run at the final stage.
+
+**Traps found:** `push_defect` keeps one SC9012 per start byte, so a new obligation hides another at the same start (sites stay U). For a shorthand `{ C }` the value's symbol is the property's: use `reference_declaration`. `run.mjs` copies only `App.tsx`. A coverage fixture's stubs must be staged (`git add`) before coverage counts them as tracked.
+
+## R2d, from 2026-11-07
+
+Same branch, worktree and scratch `$S` as R2c. Baseline: build `rpv1`, sweep `sweep-pv1.json`.
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| primitive identity (ADR 0826) | root cause: `symbol_names` named the unknown symbol (root of every unresolved import) after `@solidjs/router`'s unresolved `import { createOwner } from "solid-js"`; a root with no declaration is named by nothing | | corpus `pi1` vs `pv1`: 0 V moved, -82 U (SC9012 78, SC3001 2, SC6001 2), +8 SC9012 U once hidden by one row per start. Witnesses 300 of 336, same fails. Coverage 0 moved |
+| unresolved import (ADR 0827), the coordinator's challenge to 0826 | | every runtime use of an import the compiler did not resolve, `import-unresolved` (was certified: JSX call, body read, effect argument, tag, write) | corpus `iu1` vs `pi1`: +7,109 U, 0 removed, 0 V moved. Coverage: 15 fixtures, additions only, read |
+| forward closure in a root or owner callback in a handler (ADR 0828), W's early grid | `pos-handler-root` forward-2/13: 38 V | `pos-handler-owner` forward-2/13: 38 U | 76 ids: 76 FC to 0; legal 2,242: 0 FP, 0 differ; corpus 0 moved; coverage 0 moved |
+| P8 delete operands (ADR 0829), producer `deleteOperandRejected` | | p1-p8 and every operand neither proven optional nor proven rejected, `delete-operand-unproven` | 108 ids: 108 FC to 0; pattern d6-delete-computed fixed; corpus +19 U, 0 V; coverage 6 fixtures, additions only |
+
+### R2d handoff, 2026-11-07
+
+Landed on `claude/flip-r2`: `7404519da` (ADR 0826), `a16831776` (0827), `3876b5453`, `62afefe38` (0828), `abeb2027e` (wasm-parity w4 row); `make verify` green on `abeb2027e`. ADR 0829 is P8, uncommitted in the tree; full patch `$S/p8-wip2.patch` (against `abeb2027e`). Build `rp8b`, sweep `sweep-p8b.json`.
+
+**P8 state.** Producer `deleteOperandRejected` (Wire v25, protocol 90, `delete_operand_rejected_at` in apps/solid-typefacts `type_facts.rs`), consumer in `no_store_delete`, demand at computed operands, fixture `store-delete/Unproven.tsx`, three `flip-read.mjs` variants (108 ids: 108 FC to 0), pattern d6-delete-computed moved to rediscovery, docs and ADR written. Gates passed: test-typefacts, typefacts crate, coverage (6 fixtures, additions only, read, updated), ownership-gate 95, witnesses 300/336, sweep +19 U 0 V. **Approved by the coordinator (2026-11-07), both explicit:** (1) `$S/p8-pins.patch`, already applied in the tree: protocol test 89 to 90; schema pins v24 to v25 (producer and typefacts tests, apps session.rs and transitions.rs); wasm-parity `w7BadHandshake` protocol 89 to 90 (its README's rule); `writable_optional_property_demands_are_static_delete_operands` renamed `..._member_delete_operands`, 2 to 3 for the newly demanded computed operand; two added tests (`demanded_delete_operand_rejected_answers_typescripts_delete_test`, `delete_operand_rejected_round_trips_on_v25_and_is_omitted_on_frozen_schemas`). List each in the commit message with the approval. (2) tsc-oracle case 128 (fixtures/tsc-oracle/rule-cases.json, `delete store.req.id; delete store.user.nick`): NOT yet edited. As approved: `req.id` stays the strict, silent, `removed-because-redundant` case; `nick` moves to its own case expecting U; the loose project expects U for both. Write it in the gate's format (read fixtures/tsc-oracle/README.md and the gate script first), no other case changes.
+
+**Then for R2e, in order:** apply (2); rerun the tsc-oracle gate, `make verify-delta BASE=abeb2027e`, and `make verify` (sc-heavy + sc-guard 12); commit P8 (ADR 0829) alone; tell Part 11 the tip. Next, coordinator's item: a TS2790 rejection covered by `// @ts-ignore` or `@ts-expect-error` is a false clean (tsc reports nothing there): make it U `delete-operand-unproven`, with a fuzz shape or probe, old build fails, new passes. Then steps 3 to 5 (d8-pkg-plain-*, imported compound holder, window-realm proof).
+
+**Traps.** zsh: `$R:c` is a modifier, write `${R}:`; `$ids` does not split, use `sh -c`. `git apply --3way` stages part of a patch: save with `git diff HEAD`. verify-delta skips WASM parity for analysis-only paths: run `make verify` before handing a tip on. `chk.sh` renders `App`; grid cases export `C1`.
+
+## R2e, from 2026-11-07
+
+Same branch, worktree and scratch `$S` as R2d. Census merged in (9954cf5e9, from `origin/claude/flip-census` 4c81fcc00).
+
+| Step | Proved | Now uncertifiable | Rows |
+|---|---|---|---|
+| P8 landed (ADR 0829), `d8848fd18` | | as R2d's row | tsc-oracle gate gained `checkerByPass` (approved), case 128 split, `nick` appended (141) |
+| Suppressed rejections (ADR 0830), `e528d1841` | one-arg `createEffect`, `createEffect(c, 5)`, `delete store.v!`/`(store.v as T)` under an exact directive or a leading `@ts-nocheck` | `refresh`/`affects` targets, an apply's or `onSettled`'s returned non-cleanup, a two-line block directive, JavaScript: `solid-call-rejected-unchecked` | fuzz 180 FC (d8848) to 0, 180 agree; corpus 0 moved; oracle cases 142-145 (approved); print.mjs `auxLine` on site text (0 of 407,172 programs changed) |
+| Schema 91 + d8-pkg (`a82d5eed3`) | | `d8-pkg-plain-*`: U `value-to-unresolved-callee` by the census | patterns 3 FC (e528) to 0; corpus 0 moved vs the integrator's `sweep-m12a`: 36,314 U, 377 V |
+| SC1005 typed positions, SC7007 arity under a directive (`0a28b067d`, docs `0d4fc51c7`) | | the four SC1005 positions and SC7007's rejected call, `solid-call-rejected-unchecked` | corpus 0 moved; `innerhtml` (runtime writes it as an attribute), draggable (retired), SC9012 invalid call stay silent, reasons in open-work |
+
+### R2e handoff, 2026-11-07
+
+Tip `0d4fc51c7` on `claude/flip-r2`, green: `make verify` 0 on `0a28b067d` (its follow-up is docs only, verify-delta 0). Build `rt2`, sweep `sweep-t2.json` (= `sweep-a82.json`). Note: `ed7a520fd` was amended into `0a28b067d` (the rediscovery entry); the integrator was told to merge `ed7a520fd`: merge `0a28b067d` and `0d4fc51c7` instead. No more amends.
+
+**FileFacts helpers (ADR 0830):** `tsc_silence_at(offset)` (Silent / Maybe / Reports, tsgo's walk and tsc 5's, exact only where both agree), `tsc_may_be_silent_within(span)`, `tsc_may_be_silent_somewhere()`, `line_of`. A V may rest only on Silent at the diagnostic's own line; a U may use `may_be_silent_within`. P8's file-wide `tsc_reports_in` stays as it was (approval needed to narrow it).
+
+**Next, in order:**
+1. Imported compound holder `<Ui.C />` (R2d step 4). Probed on rt2 (`$S/work/uic-open`, `uic-closed`): U `prop-pending-unproven` in both. Only the closed program (ADR 0352, a private manifest) can be proved: an imported holder is exported, and ADR 0823 accepts an exported holder only when `closed`. Plan: `post_rows.rs` `compound_member_value` resolves an imported leftmost segment to the holder file's `const` binding (through the import, a recorded read: `trace::read_path` of the holder file, ir-read-lint counts raw cross-file reads); `props_reactivity.rs` `compound_render_reference` today returns false for any holder reference outside the holder's file (`*other.path != *holder_file.path`): accept an import specifier and a resolved member tag in an importing file. Same-file Chrome truth: ADR 0823's n1, n3-n5. Fuzz: a two-file holder shape (`files`), old fails, new passes.
+2. Coordinator's item (after `<Ui.C />`): R1e's `wd-*` fuzz shapes (claude/flip-r1 at 7788b7295, flip-read.mjs), 72 false cleans: a primitive's slot held across modules (IIFE return, class field, a `let` read, an alias read) in `slots.ts`, used in `App.tsx`. On the census tree each has a U at the holder in `slots.ts` but no row at the `App.tsx` use. The rule: the obligation sits at the use, so every use the census or transport reaches gets its own row (U, or V with proof). First merge `origin/claude/flip-census` 040a01944 into flip-r2 (it must carry both the census and 7788b7295). Then: old build fails, new passes by those ids, rediscovery entry.
+3. Window-realm proof (R2d step 5): `dependency-source-window-realm` under `--runtime-realm window`, 3 V to 3 U in `f2e5f60e0` (open-work). Not started.
+4. Owed, not mine unless asked: the census's V for a store handed to a helper (`value-root-in-helper`, `value-to-unresolved-callee`; open-work).
+
+**Helpers added in `$S`:** `gen1.mjs` (print a generated recall program by id regex), `genall.mjs` (id to program hash for codes, any scripts/fuzz dir: diff two generators), `outc.py` (grid outcomes by variant), `run1.sh` (checker --internal on a prepared project), `add-red.py` (append a rediscovery entry by text). `$S/genhead` is HEAD's scripts at e528 with node_modules linked.
+
+**Traps:** a site text over lines needs `AUX` on the statement's line (flip-read.mjs `AUX`), or every program is `not-fired`. A heredoc'd Python with `\"` inside a JSON string fails: write the script to a file. `run.mjs` copies only `App.tsx` (inline helpers for Chrome). A sweep needs a baseline on the same census state: the integrator's is `/Users/thomas/dev/sc-scratch.noindex/flip-reads/sweep-m12a.json`.
+
+## R2 handoff, 2026-11-06
+
+For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.
+
+**Done and gated:** the list, P5, P6, P10 (ADR 0780); P3, P4, F3 (ADR 0781); F1 (ADR 0782); memory review items 4 and 7 and the handle fan-out, memoized by span and depth. ADR numbers left: 0783-0789. Patterns 120 open, 0 false positives.
+
+**Left, in order:** P9 and `f02`; P7; member tag; `primitive-value`. Plans: `research-patterns.md`, `research-sc9012.md` section 3.
+
+**Check first.** `$S/safe.sh` refuses a tree with `8428ec497` and without `10da57271`. Merge `origin/claude/flip-reads` only after part 8 reports round 1, then one build, no full gate run. If part 8 says this branch broke the merged tree, that comes first.
+
+**Machine rules, owner's, current.** Every run that starts `solid-checker-rust`: `$S/g.sh <command>` (load under 30, `sc-heavy`, `sc-guard.sh 12`; report if the guard fires). One heavy check at a time. Sweeps `--jobs 3`. Release builds bare with `CARGO_BUILD_JOBS=6`. No `focus.mjs` or `make fuzz-focus` until part 8 caps it: ids only.
+
+**Helpers in `$S`.** `bld.sh <tag>` makes `r<tag>`. `sw.sh <tag> <prev>`, `lane.sh <tag> [only,only]`, `cov.sh <tag> [update]`, `vd.sh <tag> <base>`, `lib.sh <tag>`, `chk.sh <cases> <bindir>` (wrap in `g.sh`), `probe.sh` (tsc, Chrome, checker), `one.sh` and `lg.sh` (mx-recall and lg-recall subsets), `ids.mjs` (id manifest by regex), `defs.py rm|add` (open-defects and rediscovery by text), `union.py` was lost in the reboot: rewrite it if a merge conflicts. Baselines: build `rca`, sweep `sweep-ca.json`, old-build `rbase` (c6677ddac).
+
+**P9 and `f02`, from reading, unbuilt.** `after_await.rs:287` skips an async generator as an entry and `:1506` returns on a generator helper, and a `for await` operand sits before its own suspension, so no region reaches it. Plan: a pass beside `unlisted_async_computations`: for each tracked compute, each call in it whose `function_called_at` is an async generator, every accessor read after the generator's first await or yield is a `ReactiveReadAfterAwait` with `GeneratorStepped`. `file.ast.yields` for the yield boundary. Stays quiet: `q4`, a read before the first suspension. Check `q2`, already U, for a duplicate row.
+
+**P7, from reading, unbuilt.** The report's `resolver_dependencies.rs` is not at that path: find it with `rg --files rust`. Programs `values/d8-pkg-getter-export`, `-side-effect-import`, `-types-lie-plain`.
+
+**Traps.**
+- A report's line is a lead: F1's named site is never reached. Use the role log, `SOLID_CHECKER_IR_ROLE_LOG=<file>`.
+- `functions_owning` is not innermost first.
+- ADR 0367: no decision reads type text, `descriptor_text_gate` fails it. Ask the producer for a fact.
+- `ir-read-lint` counts raw cross-file reads: route one through an existing helper.
+- The fuzz model refuses `call(member(dom))` and `call(dom)`: hand the callback by name with `domExpr`.
+- A local memo needs depth in its key if the bound changes the answer, and recorded reads as in `returned_invocation_sites_memo`.
+
+**For the owner, leave as they are:** `types/p3-cast-*` (an assertion away from the receiver, held in open-defects), and the unknown-key global trade in `docs/open-work.md`.
+
 | 2, SC2003 silent tail | `bfd336ce8`, ADR 0790; `0ccd0aa2e` (3 patterns) | +372 / -2 SC2003 U, -1 SC9012 U, 0 V moved | 44 Chrome-warning probes: base silent on 36, now 5 proved V, 39 U. False positive fixed: a write root took its first token's symbol. Demand for argumentless write-root calls. Grid: 168 FC + 48 FP on r3base, 0 on the fix; patterns v09, v10, d6-comma closed |
 | smoke refresh | `3b4e446bc` | n/a | reselected from a full VM run at bfd336ce8, 406 leaving programs named; V-D1 removed, attributed to 061f71bd2 (ADR 0718) by id; 5 entries added, open before R3 |
 | 3, P8 | `ff0e75ed6`, ADR 0791, narrowed | 0 | U: a delete behind an optional chain (p9, p10). Not closed: p1-p8 (computed key, index, required `T \| undefined`, `unknown`), owed a producer answer, below |
@@ -225,6 +339,40 @@ Branch `claude/flip-r3`, pushed. Commits `a98bc8e58` (step 4, no checker change)
 - One mx-census smoke row moves better on every build since the merge (memo-shared false-clean to recall-gap): not R3b's, listed.
 - `python3` heredocs hang in this shell; use node.
 
+## Handoff at round 1 (part 8, integrator), 2026-11-06
+
+Stopped at the owner's 500k rule. Part 8's order is finished except the census. A new agent takes the integrator's job and the census.
+
+**Pushed head.** `claude/flip-reads` at `dd137e284`: 25,343 U, 377 V, 0 V moved against `f5fa5f5af` (24,515 U, 377 V), 0 exit errors, 0 unnamed, 92 open patterns (2 false positive, 90 false clean), `check.mjs all` 299 of 336, 37 kind clean, HOST 25 of 25. Holds R2 to `c6677ddac` plus item 7, R3 to `63c15d6df`, ADRs 0694, 0695, the composite walk fix, memory review items 2, 3, 5, 6, 8, the `focus.mjs` cap.
+
+**Not in that head.**
+- **R1, `8428ec497`, ADRs 0774-0779, including C6 and C1.** Dropped from round 1: `repro-causes` fails on `clean-interval-hook` (SC9012 `handed-member-read`, a hook's tuple accessor in JSX). Built alone it fails the same way, so it is R1's, not the merge's. `verify-delta` never selects `repro-causes`. R1b is on it in `t3-b3846b2a`. The fix is C1b's shape: an accessor that reaches only sync sources is proved clean. Do not relabel the case. Merge `claude/flip-r1` normally: this line was rebuilt without that merge, with no revert, so it is not a no-op.
+- `claude/flip-reads-with-r1` (`cdc49ac7f`) is the old head with R1 merged, kept for reference. At that tree: 27,229 U, 377 V, the VM's number, patterns 91 open, witnesses 301 of 336. Do not push it.
+- **R2's F1, `d2d45d470`, ADR 0782,** on `claude/flip-r2-wip`, not gated by its own message. The memos `fcf5abf1c` and `3fff4102a` stand on it and do not cherry-pick alone. Take the branch whole once R2 says F1 is ready.
+
+**The integrator's job.** R1b and R2 commit to local branches, R3 pushes `origin/claude/flip-r3`, nobody else pushes `claude/flip-reads`. About once an hour: merge what they have, then one set of gates on the result, read every moved violation, push, report commit and totals. A branch that fails: find it, build it alone to prove it, drop it from the round, tell the owner, land the rest. Union `blockers.rs`, `rediscovery.json`, `open-defects.json`, `cases.json`.
+
+**Scratch, which survives a reboot.** `/Users/thomas/dev/sc-scratch.noindex/flip-reads`. Never `/tmp`. All in sh, and these helpers exist because zsh does not split `$H`: `round.sh <tag> <prev-sweep>` is build, `patterns --update`, coverage, witnesses, HOST, sweep, diff; `covu.sh` updates snapshots; `v5.sh` is `verify-seq` writing a real exit to `t/vd-*.rc`; `mkverify.py` regenerates `verify-seq.sh` from `scripts/verify.sh`, so it cannot go stale; `union-red.py` unions `rediscovery.json`; `snapdiff.py` diffs snapshots row by row; `sweepdiff.py` lists every moved V with its source; `chk.sh` runs case dirs; `f.sh` runs a fixture; `gate-times.tsv` is the gate log. Baseline `sweep-base.json`, builds `rbase` (`f5fa5f5af`), `rm5` (this checker), `rr1` (R1 alone).
+
+**Rules in force.** Every checker run: `sc-heavy /Users/thomas/dev/sc-scratch.noindex/sc-guard.sh 12 <cmd>`, including tests that start it. Report if the guard fires; it has not. One heavy check at a time, sweeps `--jobs 3`, release builds bare with `CARGO_BUILD_JOBS=6`, load under 30 first (`waitload.sh`). Never `nohup` past the guard. Do not call `make fuzz-patterns`, it builds inside the lock: call `patterns.mjs`. `check.mjs --jobs 6`. `focus.mjs` is capped at 6 now.
+
+**The census, ADR 0692. Do not land it before R1b's C6 is in:** it sits in the same block of `reactive_analysis.rs` and trusts N1-N3, which are in.
+- The revision is `/Users/thomas/dev/sc-scratch.noindex/flip-reads/v2/value_use.rs` (934 lines), with `v2/census-block.rs`. It has never been compiled. Base, byte-identical to the 09:31 saved output: `/Users/thomas/dev/sc-scratch.noindex/recovered/value_use.rs`.
+- Applied there: the three bypasses of `endstage-report.md` 1c (`exported_directly`, the `++` arm dropped, `reference_use` exits answer `value-use-unclassified`), P11 (`Tag`, `Coerced` for holders), P12 (`returned` walks callers, `prop_reads`, `context_readers`, one hop), `created_use` for P13.
+- Still to do: add `mod value_use;`; the block goes after `open_members` in `reactive_analysis.rs`, and `p-census.diff`'s `read_only` hunk; loop over creating calls for `created_use`, whose holder is no binding, using `creates_reactive_source`, `store` by primitive, `tuple` for a call read through `[0]`; compile.
+- `primitive_results` holds only `++` and `--`, not the unary operators 1c says. Reading that report literally would be wrong there.
+- `gen-values.py` and `hold/fixtures` are lost. The shapes are saved in `v2/value-uses.mjs.txt`. Rewrite the fixture `value-use-census`, with each form at module scope, in `export function`, and in `export default function`: a module-scope test proves nothing about the export arm.
+- Confirmed in Chrome, certified before the census: `throw c` caught and called, at all three placements (scratch `ex1/`). Must end U: `throw`, `nested-operand`. `class-extends`, `computed-key` are quiet: they may go U.
+- `hops` (scratch `lim1/`): a live false clean at every depth through `yield c`, handed to the census as its test.
+- `check.mjs` needs a `closedBy` per the census note, not `status != certified`: an unrelated U must not pass a witness.
+- Over-reach to guard: `Object.keys(st)` is quiet.
+- Measure the rise and report it per project.
+
+**Left of the bounds.** `value_reaches`, `may_run_in_leaf_owner_within` in `local_access.rs`, R1b's file: draft gone with `/tmp`, the audit text in `bounds-audit.md` holds the design; use the exact walk, a depth-limit answer of true moved 13 true V. `typed_sources` views and `context_origin` wait for the census.
+
+**Open for the owner.** `flush(fn)` ruling done, ADR 0694; its `rediscovery.json` entry says no old build fails, because the judge rates both answers agree. Item 2 bounds depth, not fan-out: `sites^8` is the worst case left. `verify-delta` should select `repro-causes`: same hole as `tsc-oracle`, not done. `types/p3-cast-*` are R2's listed residual, for the owner.
+
+**Traps from this session.** A merge conflict on `open-defects.json` that takes one side drops the other's entries; `--update` puts them back without their `item` text: restore it. `bld.sh` used to copy a stale binary after a failed build; it refuses now. A task's "exit 0" is the shell's last command: read the `.rc` file. Chain with `&&`: a failed `git switch` let a cherry-pick run on the wrong branch once. A script with `cat` last hides the real exit. `====` in a zsh command line is an error and kills the rest.
 ## R1, the handed net
 
 Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget suspended (`235888b82`, owner). All now uncertifiable; nothing proved. Corpus +2,490 U, 0 V moved.
@@ -237,6 +385,22 @@ Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget 
 Traps: `excluded_role_holds` has a second caller, `SiteExclusions::at`, which the report missed: the generator found it. A held obligation is decided in `reactive_analysis`, because a result chunk may not read the setter tables unrecorded. `make verify` runs `diagnostics_process`, verify-delta does not unless it escalates. A fresh worktree needs `bun scripts/tsc-oracle.mjs provision --dialect all` and `bun scripts/fuzz/provision.mjs`. `$O/ids.mjs` plus `$O/idrun.sh` run one variant family in seconds, both builds.
 Not measured: N1 against N3 separately. Later proof: a helper's argument whose type holds no function.
 
+## Part 10 (integrator), handoff at the census landing, 2026-11-07
+
+Stopped at the owner's 500k rule after landing the census. A new agent takes the integrator's job here.
+
+**Landed on `claude/flip-census`.** ADR 0692 (census) and 0810 (`Object.keys`), with an audit of part 9's wip and W's review H1-H5. Corpus on build `cen24`: 28,429 U, 377 V (pre-census base `cb` 27,229; 0 sites cleared, +947). Witnesses 336/336 under the exact `closedAt` judge, HOST 25/25, patterns 1,210/1,217 (7 known-open false cleans). Not pushed yet: push after the first fully green merge.
+
+**Next, in order (coordinator's).** Merge `claude/flip-r1` at `7c733a10a`, then `claude/flip-r2` at `f7c4fc495` (R2c's ADRs to 0825; R2d continues there; `smoke/mx-src.json` is additions only, 1326 -> 1386 ids, confirmed). Each: guard by content (`composite_callee_walk`, `if !seen.insert(span) {` ... `total = false;`), union the append-only JSON lists by text, regenerate snapshots after reading every moved row, verify-delta, sweep against `sweep-cen24.json`, witnesses. Expect R2's 36 census-row witness failures to close; report any that do not. Then HANDOFF.md item 4.
+
+**Held for the census side (R2b's).** `use().v` store read (`r2-hook-store-member`, `-module`) and `export let read = c` (`r2-export-let-copy`), open-defects P12. Not yet taken: check them on `cen24` first (`scratch flip-r2/cases/p7u/u1-u6`); `export let` is a `let` binding, which `bound()` opens, so it may already be closed.
+
+**Known imprecision, fail-closed.** Cases [79]/[80] open at `store` because SC2003's row is pushed after the census (`upstream_compat::check_project` runs last in `collect_project`). Running the census after it would let SC2003's rows count; not done. The census's `has_row` sees reads, writes, actions, handed obligations and static defects pushed before it.
+
+**Fuzz judge fact.** `scripts/fuzz/checker.mjs parseFindings` keeps only `App.tsx` findings, so an uncertifiable in a helper file is judged certified (conservative for the judge, but a cross-file fix looks unfixed). H1's shapes export from App.tsx for that reason.
+
+**Scratch** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads`): `round.sh <tag> <prev-sweep>`, `fb.sh <tag> <fixture dirs>` (findings with blockers), `fz.sh` (id sets: `t/use-ids.json`, `t/w-ids.json`, `t/w1-ids.json`), `trace-patch.py` (applies a census trace to `value_use.rs` for a scratch build; restore the file after: `cp t/value_use.rs.fixed`), `classify.py <trace.tsv>`, `ftr.sh`, `wadv/cases` (W's 10 programs), `k10`-`k12` (Chrome probes). Builds `rcen14`-`rcen24`; `rcen18` is the pre-W build, `rcb` the pre-census base.
+
 ## R1c, landing R1b's batch (2026-11-06)
 
 Worktree t3-b3846b2a, branch `claude/flip-r1-wip` on `add797a82`, work uncommitted until the coordinator answers the test-pin question. Scratch `/Users/thomas/dev/sc-scratch.noindex/flip-r1` (`tools/`, `cases/c2-c6`, builds `rd1-rd3`, `rdbg6`, `rdbg7`).
@@ -247,6 +411,19 @@ Worktree t3-b3846b2a, branch `claude/flip-r1-wip` on `add797a82`, work uncommitt
 - Tried and withdrawn on the coordinator's challenge: accepting ADR 0282's census for an accessor slot. `cases/c3 p1` (Function handed to a parameter, called with a string) is certified then, Chrome warns. It also shows a pre-existing false positive on setter slots: pattern `types/s02-setter-slot-function-escaped`, open, held.
 - A fixture stub that types the accessor as `() => T` certifies a helper read the real typings hold (`handed-member-read`): `tuple-slot-function-obtained` has no helper case for that reason.
 - Pending the coordinator: 3 diagnostics_process pins (scratch `tools/diag-pins.diff`), then `make verify` and the landing commit. Catch-all test: belongs to the census module (`value_use.rs`, flip-census), not on this branch.
+
+## Part 11 (integrator), handoff, 2026-11-07
+
+Stopped near the 500k context rule at a green, pushed commit. A new agent takes the integrator's job here.
+
+**Landed and pushed** (`claude/flip-census` = `claude/flip-reads` = `81db5f9e0`), each with make verify exit 0 (verify-seq.sh, typefacts-test alone):
+`c2e158352` R1 7c733a10a (repro-causes green again; census defects from 86a9fae18 fixed under the coordinator's approval: tsc-oracle cases [4] [6] [21] `distinctFindings`, rule_quality_process pin of 8 census rows, wasm-parity dotdot row); `e394e3124` R2 abeb2027e (ADRs 0821-0828; `may_run_in_leaf_owner` = R2's free function with R1's exact walk; P12 closed as U with 3 new generator shapes); `3ec177fab` R2e d8848fd18 (ADR 0829); `81db5f9e0` docs (ADRs 0700-0721 facts and Owners restored, AGENTS.md rule, open-work [79]/[80] and PLAN's "Not checked"). Corpus on rm4: 36,314 U, 377 V, 0 unnamed blockers; witnesses 336/336, HOST 25/25, patterns 1,232/1,236 (4 held: p3-cast x3 FC, s02 FP).
+
+**Held: claude/flip-r1 f11b000cd (ADR 0803).** Backed out (coordinator): 35 uses of a withdrawn slot past its reference have no row (IIFE return, `let`, `const` alias, hook return, object/class, props), list in scratch `m11/adr0803-uses-without-row.tsv`, sent to R1d/R1e. Resolved unions saved: `m11/merge-f11b000cd-*` (flip-read.mjs and open-defects.json unions; snapshots regenerate). Merge R1's fixed tip, not f11b000cd alone; classify every emptied line with `m11/classify174d.py` (all of them, not a sample).
+
+**Next, in order.** (1) R1's fixed tip. (2) End-stage items, endstage-report.md: memory test (section 2: warm every worker, sample both sides at +100; no limit change; needs the coordinator's word on the diff), protections 1a-1d, doc budget back at the owner's sizes once the last merge is in (now decisions 584,878/590,000, open-work 90,893/95,000, docs 1,222,455/1,230,000, fixture READMEs 504,779/505,000: the three README facts, rows 11-13, need about 400 bytes more: ask). (3) [79]/[80]: open-work's entry; upstream-parity skill. (4) Census later proof B (refresh/affects targets, computed keys): open-work.
+
+**Machinery** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads/m11`): `gates2.sh <tag> <prev-sweep>` (every gate, sweep, make verify, each under sc-heavy + sc-guard 12; the old `gates.sh` starts with verify-delta, which escalates to the parallel verify and its memory-test flake); `rss.sh <tag> <stopfile>` (peak RSS); `snapcmp.py <theirs> <files>` (merged vs both parents: NEW in neither, LOST from both; check `-vs theirs` too, R1c's dedupe shows there); `resolve.py` (text unions); `fx1.sh <tag> <tsconfig> [runtime args]` (one fixture with blockers, from the repo root); `depth3-patch.py apply|restore` (scratch-build pattern: restore, then rebuild release before anything defaults to rust/target/release). open-defects.json is generated (indent 1): merge three-way by id, each side's removals kept, `grids` keyed by (idPrefix, code, item, variantPrefix). zsh: quote `"${rev}:path"` (`$rev:path` is a modifier). Builds rm1-rm4, r3d (scratch), rfw1 (R2's pre-census, copied).
 
 ### R1c handoff, after 7c733a10a (context limit)
 

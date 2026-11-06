@@ -45,6 +45,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/transported-setters-actions/App.tsx",
       "start": 808,
@@ -52,9 +53,65 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 366,
+      "end": 371,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 373,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 383,
+      "end": 387,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 488,
+      "end": 493,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 495,
+      "end": 503,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/transported-setters-actions/node_modules/solid-js/package.json",
       "start": 0,

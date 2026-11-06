@@ -62,6 +62,15 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
         suppression::suppression_comments(source, &parsed.program.comments);
     facts.typescript_directive_comment =
         suppression::typescript_directive_comment(source, &parsed.program.comments);
+    facts.typescript_directives =
+        suppression::typescript_directives(source, &parsed.program.comments);
+    facts.typescript_check_pragma =
+        suppression::typescript_check_pragma(source, &parsed.program.comments);
+    facts.typescript_nocheck_comment = parsed.program.comments.iter().any(|comment| {
+        source
+            .get(comment.span.start as usize..comment.span.end as usize)
+            .is_some_and(|text| text.contains("@ts-nocheck"))
+    });
     facts.unreachable_regions = unreachable::unreachable_regions(&parsed.program);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
@@ -182,6 +191,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) assignments: Vec<AssignmentFact>,
     pub(super) write_targets: Vec<Span>,
     pub(super) deleted_targets: Vec<Span>,
+    pub(super) inert_operands: Vec<Span>,
     pub(super) if_regions: Vec<IfRegionFact>,
     pub(super) jump_statements: Vec<Span>,
     pub(super) throw_statements: Vec<Span>,
@@ -432,6 +442,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
+            inert_operands: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             throw_statements: Vec::new(),
@@ -755,6 +766,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             assignments: self.assignments,
             write_targets: self.write_targets,
             deleted_targets: self.deleted_targets,
+            inert_operands: self.inert_operands,
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
             throw_statements: self.throw_statements,
@@ -768,6 +780,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             stray_directives: self.stray_directives,
             suppression_comments: Vec::new(),
             typescript_directive_comment: false,
+            typescript_directives: Vec::new(),
+            typescript_check_pragma: None,
+            typescript_nocheck_comment: false,
             unreachable_regions: Vec::new(),
             tagged_templates: self.tagged_templates,
             array_literal_elements: self.array_literal_elements,
