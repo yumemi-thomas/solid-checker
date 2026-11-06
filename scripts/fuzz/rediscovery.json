@@ -4146,5 +4146,18 @@
    "mx-strict-read-untracked-ref-named-store-dstr-assign-direct-closure"
   ],
   "rediscovered": "rm5 false-clean, the fix recall-gap: all 152 by id"
+ },
+ {
+  "finding": "ADR 0694, owner's ruling: SC1001 V on a store Get that only leads to a write, in flush(fn) in a body only dynamic() mounts. The same write in the body is uncertifiable, so the path Get claimed more than the write",
+  "found": "owner's ruling on the 72 pos-flush-fn programs, 2026-11-06",
+  "fixed": "ADR 0694",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-pos-flush-fn-nested-assign-direct-none-m-dynamic",
+   "mx-store-write-outside-setter-pos-flush-fn-nested-push-direct-none-m-dynamic",
+   "mx-store-write-outside-setter-pos-flush-fn-nested-assign-wrapper-closure-m-dynamic"
+  ],
+  "rediscovered": "focus on STORE_WRITE_OUTSIDE_SETTER, mx-recall, pos-flush-fn, rt4 against rt7, by id: 2,514 programs, 72 finding sets moved, 60 one SC1001 row and 12 two, V to U, SC2003 V on all 72, 0 outcomes moved. No old build fails: the judge rates a claim Chrome shows silent as agree on both builds, and the owner said not to change it. The moved findings are the check. Pattern programs returns/flush-dyn-path-get and returns/flush-dyn-real-read keep both shapes in the smoke set; fixture flush-write-path pins each answer"
  }
 ]
