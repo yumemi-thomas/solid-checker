@@ -444,7 +444,7 @@ pub struct AstFacts {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub typescript_directive_comment: bool,
     /// Every comment TypeScript registers as an `@ts-ignore` or
-    /// `@ts-expect-error` directive (facts schema 90): its first and last
+    /// `@ts-expect-error` directive (facts schema 91): its first and last
     /// line, zero-based, by ECMAScript line terminators. `exact` is set only
     /// when tsc 5 and tsgo agree that it is one: a one-line comment spelling
     /// `//`, an optional third `/`, spaces or tabs, then the directive (a
@@ -453,7 +453,7 @@ pub struct AstFacts {
     /// spans lines is never exact. See [`crate::FileFacts::tsc_silence_at`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub typescript_directives: Vec<TypescriptDirectiveFact>,
-    /// The file's `@ts-check`/`@ts-nocheck` pragma (facts schema 90), read as
+    /// The file's `@ts-check`/`@ts-nocheck` pragma (facts schema 91), read as
     /// both compilers read it: the last `// @ts-check` or `// @ts-nocheck`
     /// among the comments before the first token. `Some(false)` is a
     /// canonical `// @ts-nocheck` there with no `@ts-check` in any comment
@@ -461,7 +461,7 @@ pub struct AstFacts {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typescript_check_pragma: Option<bool>,
     /// Whether any comment of the file mentions `@ts-nocheck` (facts schema
-    /// 90), wherever it is: one the reading above does not take may still
+    /// 91), wherever it is: one the reading above does not take may still
     /// switch checking off, so every line may be unchecked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub typescript_nocheck_comment: bool,
@@ -1366,7 +1366,7 @@ pub enum IdentifierRole {
     Reference,
 }
 
-/// One TypeScript checking directive comment (facts schema 90).
+/// One TypeScript checking directive comment (facts schema 91).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TypescriptDirectiveFact {
