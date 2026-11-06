@@ -47,16 +47,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
-      "start": 629,
-      "end": 747,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
       "start": 683,
       "end": 706,
       "fixes": 0

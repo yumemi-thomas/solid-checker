@@ -4683,7 +4683,7 @@
   ],
   "rediscovered": "rc6b false-clean, this build recall-gap: 14 of 14; patterns net/c3-cbp-wrapper; guards net/g4b, net/g4c stay certified"
  },
- {"finding": "a value the census did not name: `throw`, a default, a tag, a spread, a method's result, an export's position: certified, Chrome warned", "found": "end-stage report 1c, census research P11-P13", "fixed": "ADR 0692", "grid": "mx-recall", "code": "STRICT_READ_UNTRACKED", "ids": ["mx-strict-read-untracked-body-use-default-direct-none", "mx-strict-read-untracked-body-use-tagged-direct-none", "mx-strict-read-untracked-body-use-spread-direct-none", "mx-strict-read-untracked-body-use-root-direct-none", "mx-strict-read-untracked-body-use-untrack-direct-none", "mx-strict-read-untracked-body-use-throw-direct-none", "mx-strict-read-untracked-body-use-throw-operand-direct-none", "mx-strict-read-untracked-body-use-throw-hook-direct-none", "mx-strict-read-untracked-body-use-throw-created-direct-none", "mx-strict-read-untracked-body-use-class-return-direct-none", "mx-strict-read-untracked-body-use-slot-return-direct-none", "mx-strict-read-untracked-body-use-fn-alias-direct-none", "mx-strict-read-untracked-body-use-tag-direct-none", "mx-strict-read-untracked-body-use-created-values-direct-none", "mx-strict-read-untracked-body-use-created-json-direct-none", "mx-reactive-write-in-owned-scope-body-use-write-throw-direct-none"], "rediscovered": "old build 772 certified false cleans of 1,782 `use-*` programs (STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE); this build 0, 1,706 runtime-confirmed answer uncertifiable; 72 not fired, 4 typed away"},
+ {"finding": "a value the census did not name: `throw`, a default, a tag, a spread, a method's result, an export's position: certified, Chrome warned", "found": "end-stage report 1c, census research P11-P13", "fixed": "ADR 0692", "grid": "mx-recall", "code": "STRICT_READ_UNTRACKED", "ids": ["mx-strict-read-untracked-body-use-default-direct-none", "mx-strict-read-untracked-body-use-tagged-direct-none", "mx-strict-read-untracked-body-use-spread-direct-none", "mx-strict-read-untracked-body-use-root-direct-none", "mx-strict-read-untracked-body-use-untrack-direct-none", "mx-strict-read-untracked-body-use-throw-direct-none", "mx-strict-read-untracked-body-use-throw-operand-direct-none", "mx-strict-read-untracked-body-use-throw-hook-direct-none", "mx-strict-read-untracked-body-use-throw-created-direct-none", "mx-strict-read-untracked-body-use-class-return-direct-none", "mx-strict-read-untracked-body-use-slot-return-direct-none", "mx-strict-read-untracked-body-use-fn-alias-direct-none", "mx-strict-read-untracked-body-use-tag-direct-none", "mx-strict-read-untracked-body-use-created-values-direct-none", "mx-strict-read-untracked-body-use-created-json-direct-none"], "rediscovered": "old build 772 certified false cleans of 1,782 `use-*` programs (STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE); this build 0, 1,706 runtime-confirmed answer uncertifiable; 72 not fired, 4 typed away"},
  {
   "finding": "A generator stepped from a tracked async compute: `for await (… of gen())` with a read after the generator's first await or yield, a wrapper's iterator, `yield*`, an inline generator, a sync generator stepped across the loop's await. UNTRACKED_READ_AFTER_AWAIT in Chrome, certified: no region reached the operand of a `for await`, and helpers returned on a generator",
   "found": "census/f02-async-generator-read-after-await, patterns report P9, R2's probes f1-f50",
@@ -4707,5 +4707,32 @@
    "mx-untracked-read-after-await-gen-sync-loop-x-direct-closure"
   ],
   "rediscovered": "flip-read.mjs gen-*, id subset gen1.json of 1,488 programs: rbase (c6677ddac) 1,092 false-clean, 396 recall-gap, the fix 0 false-clean, 0 false-positive (200 agree, 1,288 recall-gap, withholding). Legal gen-prefix, gen-drain on the fix: 0 false-positive of 1,316"
+ },
+ {
+  "finding": "the census answered followed with no proof: `export default` of a literal or a creating call (no importer walked), a pattern over a holder inside a parameter hop, a pending accessor at a tracked position, a store root's member through a holder slot, a bare accessor child of `For`: certified, Chrome warned",
+  "found": "W's adversarial census review H1-H5 (research-w-census-adversarial.md, origin/claude/flip-research-w 23e23436b), checked on cen18",
+  "fixed": "ADR 0692",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-export-default-array-direct-none",
+   "mx-strict-read-untracked-body-use-export-default-object-direct-none",
+   "mx-strict-read-untracked-body-use-export-default-created-direct-none",
+   "mx-strict-read-untracked-body-use-param-pattern-direct-none",
+   "mx-strict-read-untracked-body-use-store-holder-member-direct-none",
+   "mx-strict-read-untracked-body-use-child-for-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs use-export-default-*, use-param-pattern, use-store-holder-member, use-child-for, 486 programs (body, effect-apply, root): cen18 466 false-clean, cen19 0 false-clean, 466 recall-gap (uncertifiable), 18 not-fired, 2 typed-away. H3 (ASYNC_OUTSIDE_LOADING_BOUNDARY, net-pattern-pending) is outside: the grid's jsx and show contexts read the text inside an IIFE, which the old build already opened, so no generated program reaches a direct `{h()}`; fixture value-use-census Review.tsx PendingPattern pins it, and W's p08 certified on cen18 and answers uncertifiable on cen19. H1's programs export from App.tsx because the grid judge reads App.tsx findings only"
+ },
+ {
+  "finding": "the census's write side: a setter thrown and called from the catch, certified, Chrome reported REACTIVE_WRITE_IN_OWNED_SCOPE (split from the ADR 0692 STRICT_READ_UNTRACKED entry, whose grid does not generate this code's programs)",
+  "found": "end-stage report 1c, census research P11-P13",
+  "fixed": "ADR 0692",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-body-use-write-throw-direct-none"
+  ],
+  "rediscovered": "counted in the ADR 0692 STRICT_READ_UNTRACKED entry's use-* run: 1,782 programs, old build 772 certified false cleans, census build 0"
  }
 ]

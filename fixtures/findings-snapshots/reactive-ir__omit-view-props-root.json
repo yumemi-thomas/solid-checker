@@ -197,16 +197,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 3434,
-      "end": 3439,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
       "start": 3451,
       "end": 3456,
       "fixes": 0

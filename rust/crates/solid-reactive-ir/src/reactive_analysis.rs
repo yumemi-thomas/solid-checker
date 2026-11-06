@@ -383,6 +383,11 @@ pub(crate) fn collect_project<'facts>(
         ctx.symbol_names,
         callables.iter().map(|symbol| symbol.as_ref()).collect(),
         &interprocedural.source_call_targets,
+        crate::attribution::ExportedCallers::new(
+            ctx.semantic_lookup,
+            ctx.aliases,
+            ctx.symbols_by_root,
+        ),
         draft
             .reads
             .iter()
@@ -401,10 +406,11 @@ pub(crate) fn collect_project<'facts>(
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
                 || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);
+            let pending = ctx.async_sources.contains(symbol);
             let open = if root {
-                census.root_use(&reference)
+                census.root_use(&reference, pending)
             } else {
-                census.callable_use(&reference, ctx.accessors.contains_key(symbol))
+                census.callable_use(&reference, ctx.accessors.contains_key(symbol), pending)
             };
             let Some(blocker) = open else {
                 continue;
@@ -771,6 +777,30 @@ pub(crate) fn collect_project<'facts>(
     let compat_started = Instant::now();
     upstream_compat::check_project(ctx, draft);
     timings.upstream_compat = compat_started.elapsed();
+    // ADR 0692: upstream's `package-callee` row, pushed last, holds the same
+    // reference open as the census row before it (`observe(count)`): one
+    // SC9012 per span, the ported one kept.
+    let uncaptured = draft
+        .static_defects
+        .iter()
+        .filter(|defect| {
+            matches!(
+                defect.kind,
+                crate::StaticDefectKind::ReactiveSourceUncaptured { .. }
+            )
+        })
+        .map(|defect| defect.location.clone())
+        .collect::<HashSet<_>>();
+    if !uncaptured.is_empty() {
+        draft.static_defects.retain(|defect| {
+            !(defect.analysis_context.starts_with("value-")
+                && matches!(
+                    defect.kind,
+                    crate::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+                )
+                && uncaptured.contains(&defect.location))
+        });
+    }
     interprocedural.factory_instances
 }
 

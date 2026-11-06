@@ -157,16 +157,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
-      "start": 1188,
-      "end": 1191,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
       "start": 1222,
       "end": 1225,
       "fixes": 0

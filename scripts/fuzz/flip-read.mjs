@@ -201,6 +201,8 @@ const PEEK = { kind: "async", contexts: ["jsx", "show"] };
 export const NET_PENDING = {
   "net-peek": { ...PEEK, text: (o) => `const peek = (g: () => number) => g(); void peek(${o});` },
   "net-peek-member": { ...PEEK, text: (o) => `const peek = (h: { go: () => number }) => h.go(); void peek({ go: ${o} });` },
+  // W's census review H3: a tracked position excused a pending accessor reached through a pattern over a holder.
+  "net-pattern-pending": { ...PEEK, text: (o) => `const v = { c: ${o} }; const { c: h } = v; void h();` },
 };
 const STORE_CALL = { kind: "store-array", contexts: ["body", "handler"] };
 export const NET_STORE_CALLS = {
@@ -259,6 +261,17 @@ export const VALUE_USES = {
   // P13: no binding, so no reference starts the walk.
   "use-created-values": { ...USE_READ, imports: ["createMemo"], text: (o) => `void ${o}; void (Object.values({ a: createMemo(() => 1) })[0] as () => number)();` },
   "use-created-json": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; void JSON.stringify(createStore({ a: 1 })[0]);` },
+  // W's census review: H1, `export default` of a literal or a creating call, whose importers nothing walked. The export is App's own and
+  // a helper module imports it, so the obligation lands in App.tsx, the only file the grid judge reads.
+  "use-export-default-array": { ...USE_READ, importLines: ['const [dxc] = createSignal(1);', 'export default [dxc] as const;', 'import { readDxa } from "./dxa";'], files: { "dxa.ts": 'import d from "./App";\nexport const readDxa = () => { try { throw d[0]; } catch (e) { void (e as () => number)(); } };\n' }, text: (o) => `void ${o}; readDxa();` },
+  "use-export-default-object": { ...USE_READ, importLines: ['const [dxc] = createSignal(1);', 'export default { c: dxc };', 'import { readDxo } from "./dxo";'], files: { "dxo.ts": 'import d from "./App";\nexport const readDxo = () => { try { throw d.c; } catch (e) { void (e as () => number)(); } };\n' }, text: (o) => `void ${o}; readDxo();` },
+  "use-export-default-created": { ...USE_READ, imports: ["createMemo"], importLines: ['export default createMemo(() => 1);', 'import { readDxm } from "./dxm";'], files: { "dxm.ts": 'import d from "./App";\nexport const readDxm = () => { try { throw d; } catch (e) { void (e as () => number)(); } };\n' }, text: (o) => `void ${o}; readDxm();` },
+  // H2: inside a parameter hop, a pattern over a holder needed no row.
+  "use-param-pattern": { ...USE_READ, text: (o) => `const run = (f: () => number) => { const v = { f }; const { f: g } = v; return g(); }; void run(${o});` },
+  // H4: a store root's member reached through a holder slot needed no row.
+  "use-store-holder-member": { ...USE_READ, imports: ["createStore"], text: (o) => `void ${o}; const [st] = createStore({ a: 1 }); const v = { st }; void v.st.a;` },
+  // H5: a bare child is what its parent does with it; `For` calls it as the mapper.
+  "use-child-for": { ...USE_READ, imports: ["For"], text: (o) => `const el = <For each={[1]}>{${o}}</For>; void (el as unknown as () => unknown)();` },
 };
 const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
 export const VALUE_WRITES = {

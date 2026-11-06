@@ -112,16 +112,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/dynamic-import-holder.ts",
-      "start": 605,
-      "end": 614,
-      "fixes": 0
-    },
-    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "uncertifiable",

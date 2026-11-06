@@ -60,6 +60,16 @@
       "start": 183,
       "end": 193,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/r8.tsx",
+      "start": 230,
+      "end": 236,
+      "fixes": 0
     }
   ]
 }

@@ -795,6 +795,32 @@ fn nested_parameter_members_require_closed_values_at_every_level() {
                                 .is_some_and(|message| message.contains("read through")))
             })
             .collect::<Vec<_>>();
+        // ADR 0692: the value-use census holds `count`, the second argument,
+        // open at its own position beside the member-dispatch row. Both rows,
+        // exactly, so a further census row there fails this test.
+        if name == "NestedMethodArguments" {
+            let at = selected
+                .iter()
+                .map(|row| {
+                    (
+                        row["analysisContext"].as_str().unwrap_or_default(),
+                        row["primaryLocation"]["line"].as_u64().unwrap_or_default(),
+                        row["primaryLocation"]["column"]
+                            .as_u64()
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                at,
+                [
+                    ("parameter-member-path-unresolved", 140, 33),
+                    ("value-to-unresolved-callee", 140, 63),
+                ],
+                "{name}: {selected:#?}"
+            );
+            continue;
+        }
         assert_eq!(
             selected.len(),
             usize::from(expected.is_some()),
@@ -2747,18 +2773,28 @@ fn searches_past_their_budget_are_uncertifiable() {
     let optimistic =
         include_str!("../../../../fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx");
     let short = rows_at(&findings, "App.tsx", line_of(app, "fa1({ read: a })"));
+    // ADR 0692: the value-use census follows `a` through `fa1`'s parameter;
+    // the chain runs past its 8 hops, so the census answers open beside the
+    // forwarding loop's row.
     assert_eq!(
         short,
-        [(
-            "SC9012",
-            "uncertifiable",
-            "parameter-member-targets-diverge"
-        )]
+        [
+            (
+                "SC9012",
+                "uncertifiable",
+                "parameter-member-targets-diverge"
+            ),
+            ("SC9012", "uncertifiable", "value-forwarded"),
+        ]
     );
     let long = rows_at(&findings, "App.tsx", line_of(app, "fb1({ read: a })"));
+    // ADR 0692: the census on the same chain, past its 8 hops.
     assert_eq!(
         long,
-        [("SC9012", "uncertifiable", "parameter-use-unmodeled")]
+        [
+            ("SC9012", "uncertifiable", "parameter-use-unmodeled"),
+            ("SC9012", "uncertifiable", "value-forwarded"),
+        ]
     );
     let past = rows_at(
         &findings,

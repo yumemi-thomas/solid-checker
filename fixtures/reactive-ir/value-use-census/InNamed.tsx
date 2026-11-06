@@ -1,5 +1,5 @@
 // Inside `export function`: 1c, whose whole span is an export's.
-import { createRoot, createSignal, untrack } from "solid-js";
+import { createRoot, createSignal, createStore, untrack } from "solid-js";
 
 export function Named() {
   const [c, set] = createSignal(1);
@@ -35,5 +35,10 @@ export function Named() {
   { try { throw set; } catch {} }
   { let g = set; void g; }
   { void Object.values({ set }); }
+  { const o: any = { 0x1: c }; void o[1](); }
+  { const o: any = { "\x61": c }; void o.a(); }
+  { const o: any = { __proto__: { v: c } }; void o.v(); }
+  // ADR 0810's other side: these Get every value. Chrome warns.
+  { const [st] = createStore({ a: 1 }); void Object.entries(st); void Object.values(st); }
   return <p>x</p>;
 }

@@ -481,6 +481,25 @@
       "span": { "marker": "q.n" },
       "fix": { "behavior": "none" },
       "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        420,
+        422
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -522,6 +541,25 @@
       "severity": "warning",
       "span": {
        "marker": "row.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        228,
+        230
+       ]
       },
       "fix": {
        "behavior": "none"
@@ -1310,6 +1348,7 @@
    "ruleOptions": {},
    "presets": [],
    "enableRules": [],
+   "note": "The SC9012 row is the value-use census (ADR 0692): where `target` goes, not its type, so a distinct claim beside TS2345 (invariant 1); uncertifiable rows are internal (ADR 0328).",
    "expect": {
     "findings": [
      {
@@ -1328,6 +1367,26 @@
          }
         }
        ]
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        93,
+        99
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "distinct-claim",
+       "diagnostics": [],
+       "justification": "TS2345 is about the argument's type; the census row says where `target`'s value goes (into `affects`, a slot the census does not follow). A different claim about the same code, which invariant 1 allows. Uncertifiable, so internal only and never reported (ADR 0328)."
       }
      }
     ],
@@ -3160,6 +3219,25 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        119,
+        124
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -3178,7 +3256,27 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
+    "findings": [
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        119,
+        124
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
     "absent": [
      {
       "rule": "no-store-mutation-outside-setter"
@@ -3359,6 +3457,25 @@
       "severity": "error",
       "span": {
        "marker": "[{ a }]"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        62,
+        67
+       ]
       },
       "fix": {
        "behavior": "none"
@@ -3626,6 +3743,25 @@
       "severity": "warning",
       "span": {
        "marker": "v.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        415,
+        417
+       ]
       },
       "fix": {
        "behavior": "none"

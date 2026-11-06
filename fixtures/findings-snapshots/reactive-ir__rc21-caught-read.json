@@ -122,16 +122,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
-      "start": 1803,
-      "end": 1808,
-      "fixes": 0
-    },
-    {
       "rule": "caught-reactive-read",
       "code": "SC5008",
       "kind": "violation",

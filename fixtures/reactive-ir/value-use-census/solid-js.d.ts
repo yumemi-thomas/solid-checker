@@ -18,6 +18,7 @@ declare module "solid-js" {
   export function createTrackedEffect(fn: () => void): void;
   export function createRoot<T>(fn: (dispose: () => void) => T): T;
   export function createContext<T>(value?: T): ((props: { value: T; children?: unknown }) => unknown);
+  export function For<T extends readonly unknown[], U>(props: { each: T | undefined | null | false; fallback?: unknown; keyed?: true; children: (item: T[number], index: Accessor<number>) => U }): unknown;
   export function useContext<T>(context: unknown): T;
   export function untrack<T>(fn: () => T, label?: string | false): T;
   export function snapshot<T>(store: T): T;

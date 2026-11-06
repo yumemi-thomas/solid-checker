@@ -542,16 +542,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 6684,
-      "end": 6688,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -632,16 +622,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 7850,
-      "end": 7855,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -659,26 +639,6 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 8319,
       "end": 8324,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 8319,
-      "end": 8324,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 8499,
-      "end": 8503,
       "fixes": 0
     },
     {
@@ -852,16 +812,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
-      "start": 413,
-      "end": 418,
-      "fixes": 0
-    },
-    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -922,16 +872,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
-      "start": 1301,
-      "end": 1306,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -949,16 +889,6 @@
       "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
       "start": 1583,
       "end": 1593,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
-      "start": 1833,
-      "end": 1838,
       "fixes": 0
     },
     {
@@ -999,16 +929,6 @@
       "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
       "start": 2250,
       "end": 2260,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",
-      "start": 2445,
-      "end": 2450,
       "fixes": 0
     },
     {
@@ -1209,36 +1129,6 @@
       "path": "fixtures/reactive-ir/accessor-provenance/factory.ts",
       "start": 257,
       "end": 263,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/factory.ts",
-      "start": 382,
-      "end": 386,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/factory.ts",
-      "start": 513,
-      "end": 517,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/factory.ts",
-      "start": 601,
-      "end": 605,
       "fixes": 0
     },
     {

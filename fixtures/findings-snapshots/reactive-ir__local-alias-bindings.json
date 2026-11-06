@@ -237,8 +237,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
-      "start": 4418,
-      "end": 4420,
+      "start": 4382,
+      "end": 4384,
       "fixes": 0
     },
     {
@@ -249,16 +249,6 @@
       "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
       "start": 4433,
       "end": 4439,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
-      "start": 4482,
-      "end": 4484,
       "fixes": 0
     },
     {

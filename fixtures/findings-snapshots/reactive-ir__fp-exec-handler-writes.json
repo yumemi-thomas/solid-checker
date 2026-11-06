@@ -222,6 +222,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
+      "start": 419,
+      "end": 421,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -229,6 +239,16 @@
       "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
       "start": 646,
       "end": 660,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
+      "start": 711,
+      "end": 715,
       "fixes": 0
     },
     {

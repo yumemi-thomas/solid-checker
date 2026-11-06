@@ -309,3 +309,19 @@ Pushed `f5fa5f5af`. N1, N2, N3, `s6`, `s8`, ADRs 0770-0773, and the docs budget 
 
 Traps: `excluded_role_holds` has a second caller, `SiteExclusions::at`, which the report missed: the generator found it. A held obligation is decided in `reactive_analysis`, because a result chunk may not read the setter tables unrecorded. `make verify` runs `diagnostics_process`, verify-delta does not unless it escalates. A fresh worktree needs `bun scripts/tsc-oracle.mjs provision --dialect all` and `bun scripts/fuzz/provision.mjs`. `$O/ids.mjs` plus `$O/idrun.sh` run one variant family in seconds, both builds.
 Not measured: N1 against N3 separately. Later proof: a helper's argument whose type holds no function.
+
+## Part 10 (integrator), handoff at the census landing, 2026-11-07
+
+Stopped at the owner's 500k rule after landing the census. A new agent takes the integrator's job here.
+
+**Landed on `claude/flip-census`.** ADR 0692 (census) and 0810 (`Object.keys`), with an audit of part 9's wip and W's review H1-H5. Corpus on build `cen24`: 28,429 U, 377 V (pre-census base `cb` 27,229; 0 sites cleared, +947). Witnesses 336/336 under the exact `closedAt` judge, HOST 25/25, patterns 1,210/1,217 (7 known-open false cleans). Not pushed yet: push after the first fully green merge.
+
+**Next, in order (coordinator's).** Merge `claude/flip-r1` at `7c733a10a`, then `claude/flip-r2` at `f7c4fc495` (R2c's ADRs to 0825; R2d continues there; `smoke/mx-src.json` is additions only, 1326 -> 1386 ids, confirmed). Each: guard by content (`composite_callee_walk`, `if !seen.insert(span) {` ... `total = false;`), union the append-only JSON lists by text, regenerate snapshots after reading every moved row, verify-delta, sweep against `sweep-cen24.json`, witnesses. Expect R2's 36 census-row witness failures to close; report any that do not. Then HANDOFF.md item 4.
+
+**Held for the census side (R2b's).** `use().v` store read (`r2-hook-store-member`, `-module`) and `export let read = c` (`r2-export-let-copy`), open-defects P12. Not yet taken: check them on `cen24` first (`scratch flip-r2/cases/p7u/u1-u6`); `export let` is a `let` binding, which `bound()` opens, so it may already be closed.
+
+**Known imprecision, fail-closed.** Cases [79]/[80] open at `store` because SC2003's row is pushed after the census (`upstream_compat::check_project` runs last in `collect_project`). Running the census after it would let SC2003's rows count; not done. The census's `has_row` sees reads, writes, actions, handed obligations and static defects pushed before it.
+
+**Fuzz judge fact.** `scripts/fuzz/checker.mjs parseFindings` keeps only `App.tsx` findings, so an uncertifiable in a helper file is judged certified (conservative for the judge, but a cross-file fix looks unfixed). H1's shapes export from App.tsx for that reason.
+
+**Scratch** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads`): `round.sh <tag> <prev-sweep>`, `fb.sh <tag> <fixture dirs>` (findings with blockers), `fz.sh` (id sets: `t/use-ids.json`, `t/w-ids.json`, `t/w1-ids.json`), `trace-patch.py` (applies a census trace to `value_use.rs` for a scratch build; restore the file after: `cp t/value_use.rs.fixed`), `classify.py <trace.tsv>`, `ftr.sh`, `wadv/cases` (W's 10 programs), `k10`-`k12` (Chrome probes). Builds `rcen14`-`rcen24`; `rcen18` is the pre-W build, `rcb` the pre-census base.

@@ -67,16 +67,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
-      "start": 982,
-      "end": 987,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/tuple-slot-provenance/App.tsx",
       "start": 1071,
       "end": 1075,
       "fixes": 0

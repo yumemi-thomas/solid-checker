@@ -150,16 +150,6 @@
       "start": 487,
       "end": 492,
       "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
-      "start": 487,
-      "end": 492,
-      "fixes": 0
     }
   ]
 }

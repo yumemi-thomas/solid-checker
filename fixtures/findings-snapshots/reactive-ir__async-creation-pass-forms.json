@@ -660,26 +660,6 @@
       "start": 5087,
       "end": 5093,
       "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
-      "start": 5472,
-      "end": 5474,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
-      "start": 6410,
-      "end": 6412,
-      "fixes": 0
     }
   ]
 }

@@ -46,15 +46,6 @@
  ],
  "patterns": [
   {
-   "id": "census/f02-async-generator-read-after-await",
-   "item": "section-4 census:f",
-   "outcome": "false-clean",
-   "codes": [
-    "UNTRACKED_READ_AFTER_AWAIT"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/p3-cast-field",
    "item": "R2 P3 residual: the assertion is away from the receiver",
    "outcome": "false-clean",

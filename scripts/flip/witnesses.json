@@ -327,6 +327,7 @@
 "rule": "SC1002",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 7, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createSignal(1); const mp = new Map([[\"s\", s]]); export function App() { const m = createMemo(async () => { await wait(1); return mp.get(\"s\")!(); }); return <Loading fallback={<u />}><i>{m()}</i></Loading>; } export async function after() { await wait(20); }\n",
 "runtime": {
 "diagnostics": [
@@ -490,6 +491,7 @@
 "rule": "SC1003",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 6, "blocker": "value-root-in-helper" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst use = (p: { a: number }) => { const { a } = p; return a; }; function C(props: { a: number }) { const a = use(props); return <i>{a}</i>; } export function App() { const [s] = createSignal(1); return <C a={s()} />; }\n",
 "runtime": {
 "diagnostics": [
@@ -1338,6 +1340,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 7, "blocker": "value-root-in-helper" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); const w = (x: { a: number }) => { x.a = 2; }; export function App() { return <button id=\"b\" onClick={() => { w(s); }}>{s.a}</button>; } export async function after() { click(\"b\"); log(\"a\", s.a); }\n",
 "runtime": {
 "diagnostics": [
@@ -1357,6 +1360,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 7, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); const m = new Map([[\"s\", s]]); export function App() { return <button id=\"b\" onClick={() => { m.get(\"s\")!.a = 2; }}>x</button>; } export async function after() { click(\"b\"); }\n",
 "runtime": {
 "diagnostics": [
@@ -1374,6 +1378,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 7, "blocker": "value-in-class-field" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); class H { t = s; go() { this.t.a = 2; } } const h = new H(); export function App() { return <button id=\"b\" onClick={() => { h.go(); }}>x</button>; } export async function after() { click(\"b\"); }\n",
 "runtime": {
 "diagnostics": [
@@ -1482,6 +1487,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 7, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); const k = {}; const w = new WeakMap([[k, s]]); export function App() { return <button id=\"b\" onClick={() => { w.get(k)!.a = 2; }}>x</button>; } export async function after() { click(\"b\"); await wait(5); }\n",
 "runtime": {
 "diagnostics": [
@@ -2015,6 +2021,7 @@
 "rule": "SC2009",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 5, "blocker": "value-through-new" },
 "source": "import { createSignal, createMemo, createEffect, createTrackedEffect, onCleanup, onFlush, Loading, createStore, untrack, flush, action, createOptimistic, createContext, useContext } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nclass H { constructor(public f: (v: number) => void) {} go() { this.f(2); } } export function App() { const [o, setO] = createOptimistic<number>(async () => { await wait(400); return 1; }); const h = new H(setO as (v: number) => void); return <button id=\"b\" onClick={() => { h.go(); }}>x</button>; } export async function after() { click(\"b\"); await wait(5); }\n",
 "runtime": {
 "diagnostics": [
@@ -2034,6 +2041,7 @@
 "rule": "SC2009",
 "kind": "clean",
 "closedBy": "SC9012",
+"closedAt": { "line": 5, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createTrackedEffect, onCleanup, onFlush, Loading, createStore, untrack, flush, action, createOptimistic, createContext, useContext } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nexport function App() { const [o, setO] = createOptimistic<number>(async () => { await wait(400); return 1; }); const m = new Map([[\"s\", setO]]); return <button id=\"b\" onClick={() => { (m.get(\"s\") as (v: number) => void)(2); }}>x</button>; } export async function after() { click(\"b\"); await wait(5); }\n",
 "runtime": {
 "diagnostics": [
@@ -4437,6 +4445,7 @@
 "rule": "SC9012",
 "kind": "clean",
 "closedBy": "SC5001",
+"closedAt": { "line": 9, "blocker": "invocation-context-unproven" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nconst a = createMemo(async () => { await new Promise((r) => setTimeout(r, 40)); return 7; });\nexport function App() {\n  const go = () => { log(\"ran\", own()); a(); }; setTimeout(go, 0);\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [],
@@ -5181,6 +5190,7 @@
 "rule": "SC9012",
 "kind": "clean",
 "closedBy": "SC1001",
+"closedAt": { "line": 10, "blocker": "read-backing-unproven" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading, children } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nfunction Kid(props: { children: any }) { const k = children(() => props.children); createEffect(() => c2(), () => { log(\"apply\", own()); log(\"apply\", \"kids \" + String(k())); }); return <>{k()}</>; }\nexport function App() {\n\n  return <Kid>{c()}</Kid>;\n}\n",
 "runtime": {
 "diagnostics": [

@@ -34,5 +34,8 @@ const [c, set] = createSignal(1);
 { try { throw set; } catch {} }
 { let g = set; void g; }
 { void Object.values({ set }); }
+{ const o: any = { 0x1: c }; void o[1](); }
+{ const o: any = { "\x61": c }; void o.a(); }
+{ const o: any = { __proto__: { v: c } }; void o.v(); }
 
 export {};

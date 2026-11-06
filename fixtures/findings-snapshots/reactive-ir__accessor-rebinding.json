@@ -10,6 +10,26 @@
       "start": 237,
       "end": 242,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-rebinding/App.tsx",
+      "start": 313,
+      "end": 318,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-rebinding/App.tsx",
+      "start": 320,
+      "end": 325,
+      "fixes": 0
     }
   ]
 }

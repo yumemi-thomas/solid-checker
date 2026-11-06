@@ -316,6 +316,16 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/h2.tsx",
+      "start": 203,
+      "end": 207,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/n1.tsx",
       "start": 183,
       "end": 193,
@@ -406,9 +416,29 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/r1.tsx",
+      "start": 219,
+      "end": 225,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/run-local.tsx",
       "start": 219,
       "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/run-local.tsx",
+      "start": 225,
+      "end": 226,
       "fixes": 0
     },
     {

@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
-      "start": 696,
-      "end": 700,
-      "fixes": 0
-    },
-    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",

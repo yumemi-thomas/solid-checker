@@ -77,16 +77,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
-      "start": 564,
-      "end": 568,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
       "start": 874,
       "end": 888,
       "fixes": 0

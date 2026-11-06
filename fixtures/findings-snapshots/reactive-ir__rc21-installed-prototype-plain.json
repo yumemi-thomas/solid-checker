@@ -7,28 +7,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-plain/App.tsx",
-      "start": 587,
-      "end": 592,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-plain/App.tsx",
       "start": 626,
       "end": 631,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-plain/App.tsx",
-      "start": 648,
-      "end": 657,
       "fixes": 0
     }
   ]

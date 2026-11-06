@@ -52,16 +52,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
-      "start": 1062,
-      "end": 1069,
-      "fixes": 0
-    },
-    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -172,6 +162,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 2660,
+      "end": 2671,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -189,6 +189,16 @@
       "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
       "start": 2808,
       "end": 2819,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-refusals/App.tsx",
+      "start": 2992,
+      "end": 3000,
       "fixes": 0
     },
     {

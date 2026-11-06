@@ -1,5 +1,5 @@
 // The positions the census follows. Nothing here may answer a `value-*` blocker: the census's negative side.
-import { createEffect, createMemo, createSignal, merge } from "solid-js";
+import { createEffect, createMemo, createSignal, createStore, merge } from "solid-js";
 
 function useCount() {
   const [count, setCount] = createSignal(1);
@@ -21,6 +21,11 @@ export function Followed(props: { label?: string }) {
   void c;
   void (typeof c === "function");
   void (c === other);
+
+  // ADR 0810: own keys run no getter and answer no value. Chrome is quiet.
+  const [st] = createStore({ a: 1 });
+  void Object.keys(st);
+  void Object.getOwnPropertyNames(st);
 
   createEffect(c, (value) => void value);
   props = merge({ label: "x" }, props);

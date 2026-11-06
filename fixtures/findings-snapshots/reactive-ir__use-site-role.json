@@ -142,6 +142,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 273,
+      "end": 320,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -177,6 +187,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 1550,
+      "end": 1581,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 1705,
+      "end": 1762,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
       "start": 1894,
       "end": 1904,
       "fixes": 0
@@ -199,6 +229,16 @@
       "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
       "start": 2506,
       "end": 2518,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 3044,
+      "end": 3048,
       "fixes": 0
     }
   ]
