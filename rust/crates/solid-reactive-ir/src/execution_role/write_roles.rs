@@ -625,7 +625,7 @@ pub(super) fn stepped_generator_in_place(
 /// Whether a write under a proven owner runs in a disposal, for the release
 /// whose write guards stand down there ([`runs_in_disposal`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum DisposalReach {
+pub(crate) enum DisposalReach {
     /// Every run is inside a disposal: written in a callback that runs only
     /// while an owner is disposed, on a stack no await has left, or in a
     /// component only such a callback mounts (ADR 0782).
@@ -842,7 +842,23 @@ fn runs_in_disposal_within(
 /// way to the function, is [`DisposalReach::Only`]. A component with no site
 /// here is mounted by what this does not see, outside any disposal as ever
 /// before. A value handed on, or an export, may mount it anywhere.
+///
+/// Memoized per function and depth: every write in a component asks, and a
+/// mount site's climb fans out again (`sites^4` without it). The depth is part
+/// of the key because the answer depends on it: one kept per function would
+/// hand a caller near the bound the answer of one far from it.
 fn component_mount_reach(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> DisposalReach {
+    lookup.component_mount_reach_memo(file.path.as_str(), function.span, depth, || {
+        component_mount_reach_uncached(file, function, lookup, depth)
+    })
+}
+
+fn component_mount_reach_uncached(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,

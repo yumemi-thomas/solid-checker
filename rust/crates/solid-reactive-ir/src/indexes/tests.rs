@@ -99,6 +99,37 @@ fn with_lookup<T>(
     body(&lookup)
 }
 
+/// ADR 0782: the memo answers what the computation answered, per function and
+/// depth, and an answer computed in a probe is not kept.
+#[test]
+fn component_mount_reach_memo_is_kept_per_function_and_depth() {
+    use crate::execution_role::DisposalReach;
+    let source = "export function A() {} export function B() {}";
+    with_lookup(source, &[], |lookup| {
+        let a = Span::new(0, 10);
+        let b = Span::new(11, 20);
+        let runs = std::cell::Cell::new(0);
+        let ask = |span, depth, reach| {
+            lookup.component_mount_reach_memo(PATH, span, depth, || {
+                runs.set(runs.get() + 1);
+                reach
+            })
+        };
+        assert_eq!(ask(a, 0, DisposalReach::Only), DisposalReach::Only);
+        // A repeat computes nothing, whatever it would have answered.
+        assert_eq!(ask(a, 0, DisposalReach::NotIn), DisposalReach::Only);
+        assert_eq!(runs.get(), 1);
+        // Another depth or another function is its own question.
+        assert_eq!(ask(a, 4, DisposalReach::Unplaced), DisposalReach::Unplaced);
+        assert_eq!(ask(b, 0, DisposalReach::NotIn), DisposalReach::NotIn);
+        assert_eq!(runs.get(), 3);
+        let probed = super::memo_probes::as_probe(|| ask(b, 1, DisposalReach::Only));
+        assert_eq!(probed, DisposalReach::Only);
+        assert_eq!(ask(b, 1, DisposalReach::Unplaced), DisposalReach::Unplaced);
+        assert_eq!(runs.get(), 5);
+    });
+}
+
 #[test]
 fn exact_object_member_calls_require_a_closed_const_receiver() {
     for (source, admitted) in [

@@ -94,6 +94,18 @@ pub(super) type ReturnedInvocationSites = std::sync::Mutex<
     >,
 >;
 
+/// Per-build cache of `component_mount_reach`, by function and depth, with the
+/// reads each answer took ([`SemanticLookup::component_mount_reach_memo`]).
+pub(super) type ComponentMountReach = std::sync::Mutex<
+    HashMap<
+        (String, Span, usize),
+        (
+            crate::execution_role::DisposalReach,
+            crate::base::reads::Reads,
+        ),
+    >,
+>;
+
 /// Functions by `(path, span)`: the proven components, the escaped ones among
 /// them ([`SemanticLookup::escaped_component_functions`]), and the called
 /// functions that may also be rendered
@@ -883,6 +895,9 @@ pub(super) struct SemanticLookup<'a> {
     /// The invocation sites of each factory call's returned function, by
     /// file path and call span. Several passes ask the same factory call.
     returned_invocation_sites: ReturnedInvocationSites,
+    /// ADR 0782: where each proven component's mounts run, relative to a
+    /// disposal. Every write in the component asks.
+    component_mount_reach: ComponentMountReach,
     /// This build's views of the returned-invocation and returned-source memos.
     invocation_answers: returned_invocations::State,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
@@ -1252,6 +1267,7 @@ impl<'a> SemanticLookup<'a> {
             assigned_member_names: crate::base::reads::Recorded::new(),
             reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
+            component_mount_reach: ComponentMountReach::default(),
             invocation_answers: returned_invocations::State::default(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
@@ -2640,6 +2656,41 @@ impl<'a> SemanticLookup<'a> {
             .or_insert((computed, reads))
             .0
             .clone()
+    }
+
+    /// The memoised disposal reach of the component at `span` of `path`, asked
+    /// `depth` mounts deep. As [`Self::returned_invocation_sites_memo`]: a later
+    /// reader replays the reads the answer took, and an answer computed inside
+    /// a probe, whose reads are incomplete, is not kept.
+    pub(crate) fn component_mount_reach_memo(
+        &self,
+        path: &str,
+        span: Span,
+        depth: usize,
+        compute: impl FnOnce() -> crate::execution_role::DisposalReach,
+    ) -> crate::execution_role::DisposalReach {
+        let key = (path.to_owned(), span, depth);
+        let found = self
+            .component_mount_reach
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        if let Some((reach, reads)) = found {
+            crate::base::reads::replay(&reads);
+            return reach;
+        }
+        if probing() {
+            return compute();
+        }
+        // Computed outside the lock: the computation re-enters the lookup.
+        let (computed, reads) = crate::base::reads::record(compute);
+        self.component_mount_reach
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(key)
+            .or_insert((computed, reads))
+            .0
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
