@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dynamic-entry-limit/App.tsx",
+      "start": 969,
+      "end": 972,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dynamic-entry-limit/App.tsx",
+      "start": 1641,
+      "end": 1644,
+      "fixes": 0
+    }
+  ]
+}

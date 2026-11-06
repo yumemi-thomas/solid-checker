@@ -14,7 +14,7 @@
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
   walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
-  HANDOFF_FORMS, DEPTH_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  HANDOFF_FORMS, DEPTH_FORMS, CHAIN_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
   CBP_CALLS, CBP_FORMS, cbProp, namedButton,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
@@ -246,7 +246,7 @@ export const CONTROL_LAYERS = ["for", "while", "do", "switch", "try-catch", "try
 export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "module-ns"];
 // The saturation transforms (model.mjs): T1/T3 hand-off and member-assign layers (HANDOFF_FORMS) and T2 depth layers at the
 // 16-layer climb bound (DEPTH_FORMS), with the fixes they exposed (ADRs 0531, 0532, 0534).
-export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS];
+export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS];
 /**
  * The pair grids (`--pairs`, matrix.mjs `pairShapes`; Fable's report R7 and R10, Astra's proposal 1): two axes the recall grids cross
  * only with the base grid, crossed with each other as enumerated pairs, on the base contexts:
@@ -1204,7 +1204,7 @@ function valueBinding(bind, name) {
 
 /** Wraps `stmts` in a layer (a closure called in place, a helper taking the callback, an IIFE). */
 function applyLayer(layer, stmts, kit) {
-  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer) || DEPTH_FORMS.includes(layer)) return [ctl(layer, stmts)];
+  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer) || DEPTH_FORMS.includes(layer) || CHAIN_FORMS.includes(layer)) return [ctl(layer, stmts)];
   if (FILE_LAYERS.includes(layer)) return [expr(call(ref(kit.ensureHelper("call", { module: true, via: layer.slice("module-".length) })), [fn(stmts)]))];
   switch (layer) {
     case "closure": { const f = kit.name("f"); return [decl(f, fn(stmts)), expr(call(ref(f)))]; }

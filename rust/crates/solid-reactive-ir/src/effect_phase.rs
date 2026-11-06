@@ -324,6 +324,14 @@ impl<'l, 'a> Walk<'l, 'a> {
                     );
                     self.layer(file, at, helper_calls + 1)
                 }
+                crate::execution_role::LayerRun::FreshStack => None,
+                // ADR 0695: a callback a project or unknown callee may run here,
+                // on this stack, among whatever else it does with it (a
+                // forwarded callback): any origin is an obligation.
+                _ if self.lookup.primitive_at_call(file, call.span).is_none() => {
+                    self.stepped = true;
+                    self.layer(file, call.span, helper_calls + 1)
+                }
                 _ => None,
             };
         }

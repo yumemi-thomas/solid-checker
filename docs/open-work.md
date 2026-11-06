@@ -8,7 +8,7 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
-Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `dynamic_component_entry` (32), `may_run_in_leaf_owner_within` (3), `value_reaches` (4), `derived_objects` (24).
+Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `may_run_in_leaf_owner_within` (3), `value_reaches` (4). `typed_sources` views (8) and `context_origin` rest on the census.
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
 

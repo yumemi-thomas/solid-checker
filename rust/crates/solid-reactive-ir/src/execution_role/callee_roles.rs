@@ -695,7 +695,100 @@ pub(super) fn semantic_role_before_awaits(
                 ExecutionRole::Unknown
             );
         }
-        return role_arm!(default "callee_roles.allowed-unplaced-nested", ExecutionRole::DeferredCallback);
+        // ADR 0695: a cleanup runs at its owner's disposal, in no window, unless
+        // code in the project can dispose an owner on a stack of its own.
+        let disposal = super::write_roles::runs_in_disposal(file, span, lookup);
+        if disposal == super::write_roles::DisposalReach::Only {
+            return if lookup.project_may_dispose() {
+                role_arm!(
+                    "callee_roles.allowed-disposal-reachable",
+                    ExecutionRole::Unknown
+                )
+            } else {
+                role_arm!(
+                    "callee_roles.allowed-nested-disposal",
+                    ExecutionRole::DeferredCallback
+                )
+            };
+        }
+        // The value an effect's compute returns, where the apply never calls it.
+        if crate::owners::containing_ast_function(&file.ast, span)
+            .is_some_and(|function| returned_to_idle_apply(file, function, lookup))
+        {
+            return role_arm!(
+                "callee_roles.allowed-nested-never-called",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        // A function only a host keeps or a scheduler runs, in a project that
+        // dispatches nothing on its own stack (ADR 0535, `addEventListener`).
+        if let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+            && let Some(name) = crate::owners::function_binding_name(file, function)
+            && !lookup.synchronous_event_dispatch_present()
+        {
+            use crate::local_access::HandOff;
+            let mut hand_offs = Vec::new();
+            crate::local_access::binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+            if hand_offs
+                .iter()
+                .any(|hand_off| matches!(hand_off, HandOff::Retained | HandOff::FreshStack))
+                && hand_offs.iter().all(|hand_off| {
+                    matches!(
+                        hand_off,
+                        HandOff::Retained | HandOff::FreshStack | HandOff::Value
+                    )
+                })
+            {
+                return role_arm!(
+                    "callee_roles.allowed-nested-host-kept",
+                    ExecutionRole::DeferredCallback
+                );
+            }
+        }
+        // A cleanup that may run off a disposal: `onCleanup` hands out a handle,
+        // and a call of it runs the callback on the caller's stack (`a13`).
+        if crate::owners::containing_ast_function(&file.ast, span).is_some_and(|function| {
+            file.ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span) == Some(Primitive::OnCleanup)
+                })
+        }) {
+            return role_arm!(
+                "callee_roles.allowed-cleanup-off-disposal",
+                ExecutionRole::Unknown
+            );
+        }
+        // Proven off this stack: a function only events invoke, a fresh stack,
+        // a callback the engine runs on its own schedule.
+        if disposal == super::write_roles::DisposalReach::NotIn {
+            return role_arm!(
+                "callee_roles.allowed-nested-off-stack",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        // A callback a primitive takes is placed by that primitive's own
+        // arm, and a scheduler's runs on a fresh stack. Nothing above placed
+        // anything else, so no silence is proven.
+        if crate::owners::containing_ast_function(&file.ast, span)
+            .is_some_and(|function| function_placed_by_dialect(file, function.span, lookup))
+        {
+            return role_arm!(
+                "callee_roles.allowed-primitive-callback",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        if fresh_stack_callback_call(file, span, lookup).is_some() {
+            return role_arm!(
+                "callee_roles.allowed-nested-fresh-stack",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        return role_arm!(
+            "callee_roles.allowed-unplaced-nested",
+            ExecutionRole::Unknown
+        );
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
         // A read in a function nested in the flow callback that runs in
@@ -1723,6 +1816,47 @@ pub(super) fn fresh_stack_callback_role(
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
     fresh_stack_callback_call(file, span, lookup).map(|_| ExecutionRole::DeferredCallback)
+}
+
+/// ADR 0695: whether `function` is what a primitive's first callback returns
+/// directly (`createEffect(() => () => read(), …)`) and the literal apply beside
+/// it only `void`s the value it receives, so nothing calls `function`.
+fn returned_to_idle_apply(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(compute) = ast
+        .functions
+        .iter()
+        .find(|outer| outer.expression_body && ast.peel_ts_sugar_span(outer.body) == function.span)
+    else {
+        return false;
+    };
+    ast.arguments_containing(compute.span).any(|(call, index)| {
+        index == 0
+            && ast.peel_ts_sugar_span(call.arguments[0].span) == compute.span
+            && lookup.primitive_at_call(file, call.span).is_some()
+            && call.arguments.get(1).is_some_and(|apply| {
+                ast.function_at(ast.peel_ts_sugar_span(apply.span))
+                    .is_some_and(|apply| {
+                        apply.parameters.first().is_none_or(|parameter| {
+                            parameter.names.iter().all(|name| {
+                                ast.identifiers_within(apply.body).all(|identifier| {
+                                    ast.reference_declaration(identifier.span) != Some(name.span)
+                                        || file
+                                            .source
+                                            .get(..identifier.span.start as usize)
+                                            .is_some_and(|before| {
+                                                before.trim_end().ends_with("void")
+                                            })
+                                })
+                            })
+                        })
+                    })
+            })
+    })
 }
 
 /// The selected scheduler declaration enclosing a literal callback, following

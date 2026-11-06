@@ -77,6 +77,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
+      "start": 2159,
+      "end": 2166,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
+      "start": 2255,
+      "end": 2262,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
       "start": 2480,
       "end": 2487,
       "fixes": 0

@@ -97,6 +97,46 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 2944,
+      "end": 2952,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 3422,
+      "end": 3430,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 3628,
+      "end": 3636,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 3810,
+      "end": 3818,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
       "start": 4126,
       "end": 4134,
       "fixes": 0

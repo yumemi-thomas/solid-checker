@@ -667,6 +667,7 @@ pub(crate) fn dynamic_component_entry(
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
     let mut span = span;
+    let mut climbed = false;
     for _ in 0..32 {
         if let Some((climb, generator)) = in_place_run_site(file, span, lookup) {
             if generator || climb.suspended.is_some() || climb.in_list || climb.among_others {
@@ -696,9 +697,15 @@ pub(crate) fn dynamic_component_entry(
                 .then_some(call.span)
             });
         let Some(call) = inherited else {
+            climbed = true;
             break;
         };
         span = call;
+    }
+    // ADR 0695: a climb that stopped at its bound names no entry, and `None`
+    // would keep a rendering role, a warning Chrome does not give at 33 levels.
+    if !climbed {
+        return Some(false);
     }
     let function = containing_ast_function(&file.ast, span)?;
     let name = function_binding_name(file, function)?;

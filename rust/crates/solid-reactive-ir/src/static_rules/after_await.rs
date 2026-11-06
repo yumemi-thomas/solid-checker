@@ -100,6 +100,9 @@ struct Walk<'m> {
     placed: HashSet<(String, Span)>,
     /// Helpers whose member reads this walk has reported (ADR 0614).
     member_helpers: HashSet<(String, u64, u64)>,
+    /// ADR 0695: helpers whose straight-line reads this walk reached: a chain
+    /// is followed to its end, each helper once.
+    stack_helpers: HashSet<(String, u64, u64)>,
     /// How the promise chain being followed reaches the flight.
     carried: Carried,
     /// The chain being followed runs inside `untrack`: a helper it reaches
@@ -697,6 +700,14 @@ impl<'f, 'a> Reach<'f, 'a> {
                     || self
                         .ctx
                         .semantic_lookup
+                        .function_called_at(
+                            file.path.as_str(),
+                            file.ast.peel_ts_sugar_span(call.callee),
+                        )
+                        .is_some()
+                    || self
+                        .ctx
+                        .semantic_lookup
                         .resolved_callee_call(file, call.callee)
                         .and_then(standard_call_name)
                         .is_some_and(|name| {
@@ -757,6 +768,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             queued: HashSet::default(),
             placed: HashSet::default(),
             member_helpers: HashSet::default(),
+            stack_helpers: HashSet::default(),
             carried: Carried::Held,
             untracked: false,
             unproven: false,
@@ -1471,7 +1483,12 @@ impl<'f, 'a> Reach<'f, 'a> {
         depth: usize,
     ) {
         let ctx = self.ctx;
-        if call.construct || depth > 3 {
+        if call.construct {
+            return;
+        }
+        // ADR 0695: past the bound the chain is unread, and no silence.
+        if depth > MAX_REGION_DEPTH {
+            self.push_search_limit(draft, walk, file, call);
             return;
         }
         let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -1510,6 +1527,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                         .semantic_lookup
                         .function_value_is_current(helper_file, helper)))
         {
+            return;
+        }
+        if !walk.stack_helpers.insert((
+            helper_file.path.to_string(),
+            u64::from(helper.span.start),
+            u64::from(helper.span.end),
+        )) {
             return;
         }
         // ADR 0614: the helper's store and prop reads run on this stack too.
@@ -2028,6 +2052,18 @@ impl<'f, 'a> Reach<'f, 'a> {
         }
         if let Some((helper_file, helper)) = async_helper(ctx, file, call) {
             self.enqueue(walk, queue, helper_file, helper, None);
+            return;
+        }
+        // ADR 0695: a sync helper hands on the flight its chain returns
+        // (`const h1 = () => h0();`), as `untrack`'s callback does above.
+        if let Some((helper_file, helper)) = ctx
+            .semantic_lookup
+            .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+            .filter(|(_, helper)| !helper.r#async && !helper.generator)
+        {
+            for (inner, _) in chain_calls(helper_file, helper) {
+                self.expand(draft, walk, queue, helper_file, inner, depth + 1);
+            }
             return;
         }
         let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {

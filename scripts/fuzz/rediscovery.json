@@ -4159,5 +4159,62 @@
    "mx-store-write-outside-setter-pos-flush-fn-nested-assign-wrapper-closure-m-dynamic"
   ],
   "rediscovered": "focus on STORE_WRITE_OUTSIDE_SETTER, mx-recall, pos-flush-fn, rt4 against rt7, by id: 2,514 programs, 72 finding sets moved, 60 one SC1001 row and 12 two, V to U, SC2003 V on all 72, 0 outcomes moved. No old build fails: the judge rates a claim Chrome shows silent as agree on both builds, and the owner said not to change it. The moved findings are the check. Pattern programs returns/flush-dyn-path-get and returns/flush-dyn-real-read keep both shapes in the smoke set; fixture flush-write-path pins each answer"
+ },
+ {
+  "finding": "SC1002: report_helper_reads stopped at 3 helpers and returned, so a read 5 or 13 helpers below an await in a loop, a for await or a named then handler certified; Chrome reports UNTRACKED_READ_AFTER_AWAIT",
+  "found": "the chain-N shapes added for ADR 0695, 2026-11-06",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-memo-async-loop-x-direct-chain-5",
+   "mx-untracked-read-after-await-memo-async-loop-x-wrapper-chain-13",
+   "mx-untracked-read-after-await-then-named-x-direct-chain-5"
+  ],
+  "rediscovered": "focus on the chain and forward layers, 4 codes, 3,068 programs: rt9 exit 1, 70 false cleans; rb7 exit 0, 0 false cleans: by id all 70 are SC1002 uncertifiable, recall-gap, 0 proved"
+ },
+ {
+  "finding": "A callback helpers hand on and an effect phase or a read below it: no row placed it. The forward-N shapes read as certified or as a recall gap on the old build, with no finding at the site (ADR 0695)",
+  "found": "the bounds audit's forwarded-callback probes",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-signal-direct-forward-2"
+  ],
+  "rediscovered": "same run, by id: 588 finding sets moved from none to uncertifiable across STRICT_READ_UNTRACKED, PRIMITIVE_IN_EFFECT_CALLBACK and FLUSH_IN_EFFECT_CALLBACK at forward-2 and forward-13. The judge's outcome does not move: a recall gap on both builds, so the moved findings are the check"
+ },
+ {
+  "finding": "A read in a cleanup: allowed-unplaced-nested was a silent default, certified where Chrome warns (the 27 P2 patterns; b1 render's dispose, b2 another file, b3 a called handle, b4 a helper under createRoot)",
+  "found": "research-patterns.md P2, 2026-11-06",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-signal-direct-forward-2"
+  ],
+  "rediscovered": "fuzz-patterns, private run on rb6: rt9 fails all 27 as listed, the new build closes all 27, 0 new; open list 133 false cleans to 106. A grid generates no project disposer beside a cleanup read, so the shape stays in the pattern lane: types/a01-body and 26 others"
+ },
+ {
+  "finding": "The same forwarded callback under FLUSH_IN_EFFECT_CALLBACK (ADR 0695)",
+  "found": "the bounds audit's forwarded-callback probes",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-effect-apply-x-direct-forward-2"
+  ],
+  "rediscovered": "the forward-N rows of the entry above: from no finding to uncertifiable, a recall gap on both builds, so the moved findings are the check"
+ },
+ {
+  "finding": "The same forwarded callback under PRIMITIVE_IN_EFFECT_CALLBACK (ADR 0695)",
+  "found": "the bounds audit's forwarded-callback probes",
+  "fixed": "ADR 0695",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-effect-apply-memo-direct-forward-2"
+  ],
+  "rediscovered": "the forward-N rows of the entry above: from no finding to uncertifiable, a recall gap on both builds, so the moved findings are the check"
  }
 ]

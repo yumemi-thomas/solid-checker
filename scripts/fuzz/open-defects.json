@@ -450,159 +450,6 @@
    "certified": true
   },
   {
-   "id": "types/a01-body",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a02-apply-rerun",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/a03-show-cb",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/a04-apply-first",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a05-for-cb",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a06-labelled-untrack",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a08-rwo-null",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a09-component-under-root",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a10-render-dispose-apply",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/a11-createowner",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/a12-effect-cleanup-root",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/a13-cleanup-handle",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a14-prop-read",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a15-store-read",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a18-ref",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a19-cleanup-helper-read",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/a20-parent-body-dispose-own",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/b05-errorboundary",
    "item": "T-other",
    "outcome": "false-clean",
@@ -630,15 +477,6 @@
    "certified": true
   },
   {
-   "id": "types/c37-dispose-in-body-cleanup-read",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/d01-cast",
    "item": "T-other",
    "outcome": "false-clean",
@@ -646,15 +484,6 @@
     "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": true
-  },
-  {
-   "id": "types/d01-dispose-in-apply-cleanup-read",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
   },
   {
    "id": "types/d07-lying-thenable-cast",
@@ -691,15 +520,6 @@
    "rules": [
     "no-write-in-pure-computation"
    ]
-  },
-  {
-   "id": "types/e713-rwo-in-cleanup-read",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
   },
   {
    "id": "types/e804-accessor-label",
@@ -786,69 +606,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": true
-  },
-  {
-   "id": "types/i05-handle-closure",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/i06-handle-tuple",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/i07-handle-object",
-   "item": "T-other",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/i10-self-dispose-in-root",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/x01-cleanup-read-dispose-in-body",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/x02-cleanup-read-dispose-in-apply",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/x03-cleanup-read-dispose-in-show-callback",
-   "item": "T-D1",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
   },
   {
    "id": "types/x30-thenable-cast-to-promise",
