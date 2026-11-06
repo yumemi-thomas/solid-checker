@@ -375,6 +375,39 @@
       "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/hoisted.ts",
+      "start": 270,
+      "end": 271,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 701,
+      "end": 704,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 748,
+      "end": 752,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
       "start": 828,
       "end": 843,
@@ -477,6 +510,17 @@
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
       "start": 1705,
       "end": 1720,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 1762,
+      "end": 1767,
       "fixes": 0
     },
     {
@@ -818,6 +862,17 @@
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
       "start": 5275,
       "end": 5281,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 5512,
+      "end": 5526,
       "fixes": 0
     },
     {

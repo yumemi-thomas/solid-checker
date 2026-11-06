@@ -3186,6 +3186,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 40275,
+      "end": 40284,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 40277,
       "end": 40282,
       "fixes": 0

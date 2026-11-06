@@ -210,6 +210,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-local-merge.tsx",
+      "start": 75,
+      "end": 81,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-local-merge.tsx",
       "start": 177,
       "end": 182,
       "fixes": 0

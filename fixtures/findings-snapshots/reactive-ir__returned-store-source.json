@@ -390,6 +390,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-source/hook.ts",
+      "start": 2027,
+      "end": 2042,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/hook.ts",
       "start": 2036,
       "end": 2041,
       "fixes": 0

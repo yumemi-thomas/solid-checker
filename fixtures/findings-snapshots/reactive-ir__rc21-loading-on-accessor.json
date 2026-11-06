@@ -203,6 +203,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2812,
+      "end": 2855,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-accessor",
       "code": "SC5007",
       "kind": "violation",

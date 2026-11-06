@@ -74,6 +74,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/c1.tsx",
+      "start": 207,
+      "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c1.tsx",
       "start": 215,
       "end": 216,
       "fixes": 0
@@ -107,6 +118,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/c11.tsx",
+      "start": 207,
+      "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c11.tsx",
       "start": 215,
       "end": 216,
       "fixes": 0
@@ -131,6 +153,17 @@
       "path": "fixtures/reactive-ir/handed-net/c11.tsx",
       "start": 385,
       "end": 389,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c12.tsx",
+      "start": 207,
+      "end": 228,
       "fixes": 0
     },
     {
@@ -272,6 +305,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/c7.tsx",
+      "start": 207,
+      "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c7.tsx",
       "start": 215,
       "end": 216,
       "fixes": 0
@@ -305,6 +349,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/c9.tsx",
+      "start": 207,
+      "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c9.tsx",
       "start": 215,
       "end": 216,
       "fixes": 0
@@ -329,6 +384,17 @@
       "path": "fixtures/reactive-ir/handed-net/c9.tsx",
       "start": 398,
       "end": 402,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/h2.tsx",
+      "start": 88,
+      "end": 92,
       "fixes": 0
     },
     {
@@ -445,6 +511,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/r1.tsx",
+      "start": 153,
+      "end": 157,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "parameter-member-targets-diverge",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-net/r1.tsx",
@@ -461,6 +538,17 @@
       "path": "fixtures/reactive-ir/handed-net/r1.tsx",
       "start": 219,
       "end": 225,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/run-local.tsx",
+      "start": 162,
+      "end": 166,
       "fixes": 0
     },
     {

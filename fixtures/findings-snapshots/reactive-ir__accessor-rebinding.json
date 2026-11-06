@@ -19,6 +19,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-rebinding/App.tsx",
+      "start": 312,
+      "end": 326,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-rebinding/App.tsx",
       "start": 313,
       "end": 318,
       "fixes": 0

@@ -225,6 +225,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 2519,
+      "end": 2523,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-read-under-untrack",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
@@ -336,6 +347,17 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 4421,
+      "end": 4425,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 4551,
       "end": 4556,
       "fixes": 0
@@ -348,6 +370,17 @@
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 4613,
       "end": 4619,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 4613,
+      "end": 4617,
       "fixes": 0
     },
     {

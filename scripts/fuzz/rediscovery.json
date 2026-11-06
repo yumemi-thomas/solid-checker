@@ -5538,5 +5538,30 @@
    "mx-reactive-write-in-owned-scope-iter-same-wd-let-write-direct-none"
   ],
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): f11b000cd 96 false-clean, this build 72, the 24 of wd-alias-write and wd-let-write now rows. The 72 left (wd-iife, wd-class, wd-let-read, wd-alias-read across modules) are false cleans on 7c733a10a too with no iteration write; the census build r3d gives each a row (ADR 0821, value-held-in-binding, value-in-class-field). Fixture iteration-written-slots variants prop-value (store and signal backing, f11b000cd certified the store one) and open-compute. Found before landing: with the slots kept as sources a withdrawal no longer moved the tables, so the daemon reused a file chunk whose references it had held (process test returned_tuple_iteration_edits_match_cold_in_both_directions, shadow mismatch); the withdrawn set now keys the local-access cache"
+ },
+ {
+  "finding": "a source held across modules where no row reads it (an IIFE's tuple, a `let`, a class field) had its census row only at the holder in slots.ts; the read in App.tsx (`r()`, `box.r()`) had none, and the file certified while Chrome warns (coordinator: the obligation sits at the use)",
+  "found": "R1e, flip-read.mjs wd-* on the census tree (72 programs; wd-alias-read has rows after the census merge)",
+  "fixed": "ADR 0831",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-iter-same-wd-iife-read-direct-none",
+   "mx-strict-read-untracked-iter-same-wd-let-read-direct-none",
+   "mx-strict-read-untracked-iter-same-wd-class-read-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
+ },
+ {
+  "finding": "a source held across modules where no row reads it (an IIFE's tuple, a `let`, a class field) had its census row only at the holder in slots.ts; the write in App.tsx (`setR(2)`, `box.setR(2)`) had none, and the file certified while Chrome warns (coordinator: the obligation sits at the use)",
+  "found": "R1e, flip-read.mjs wd-* on the census tree (72 programs; wd-alias-read has rows after the census merge)",
+  "fixed": "ADR 0831",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-iter-same-wd-iife-write-direct-none",
+   "mx-reactive-write-in-owned-scope-iter-same-wd-class-write-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
  }
 ]

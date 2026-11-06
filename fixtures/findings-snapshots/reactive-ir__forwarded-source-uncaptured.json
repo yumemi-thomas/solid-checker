@@ -8,6 +8,39 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 499,
+      "end": 505,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 588,
+      "end": 594,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 849,
+      "end": 855,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
       "start": 930,
       "end": 935,
       "fixes": 0
@@ -87,6 +120,17 @@
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
       "start": 1017,
       "end": 1023,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/relay.ts",
+      "start": 217,
+      "end": 223,
       "fixes": 0
     }
   ]

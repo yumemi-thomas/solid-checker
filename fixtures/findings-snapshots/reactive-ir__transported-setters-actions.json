@@ -59,6 +59,17 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 364,
+      "end": 389,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
       "start": 366,
       "end": 371,
       "fixes": 0
@@ -83,6 +94,17 @@
       "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
       "start": 383,
       "end": 387,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
+      "start": 486,
+      "end": 505,
       "fixes": 0
     },
     {

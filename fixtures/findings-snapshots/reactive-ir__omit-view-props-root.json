@@ -333,6 +333,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/omit-view-props-root/Shadowed.tsx",
+      "start": 336,
+      "end": 340,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",

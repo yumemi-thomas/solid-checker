@@ -115,6 +115,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 488,
+      "end": 489,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
@@ -140,6 +151,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 610,
+      "end": 618,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 616,
       "end": 617,
       "fixes": 0
@@ -153,6 +175,17 @@
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 637,
       "end": 638,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 646,
+      "end": 647,
       "fixes": 0
     },
     {
@@ -184,6 +217,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 796,
+      "end": 799,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 797,
       "end": 798,
       "fixes": 0
@@ -206,8 +250,30 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 870,
+      "end": 878,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 875,
       "end": 876,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 954,
+      "end": 955,
       "fixes": 0
     },
     {
@@ -261,8 +327,30 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1150,
+      "end": 1161,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 1158,
       "end": 1159,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1245,
+      "end": 1250,
       "fixes": 0
     },
     {
@@ -324,6 +412,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1386,
+      "end": 1387,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
@@ -351,6 +450,17 @@
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 1471,
       "end": 1474,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1507,
+      "end": 1514,
       "fixes": 0
     },
     {
@@ -404,6 +514,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1639,
+      "end": 1647,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 1644,
       "end": 1645,
       "fixes": 0
@@ -426,8 +547,30 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 267,
+      "end": 293,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
       "start": 272,
       "end": 291,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 317,
+      "end": 337,
       "fixes": 0
     },
     {
@@ -478,6 +621,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 481,
+      "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
@@ -491,9 +645,31 @@
       "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 573,
+      "end": 579,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
       "start": 264,
       "end": 265,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 341,
+      "end": 349,
       "fixes": 0
     },
     {
@@ -516,6 +692,39 @@
       "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
       "start": 427,
       "end": 432,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 587,
+      "end": 593,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 628,
+      "end": 648,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 725,
+      "end": 728,
       "fixes": 0
     },
     {
@@ -577,11 +786,176 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 1102,
+      "end": 1105,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 271,
+      "end": 280,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 272,
+      "end": 273,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 275,
+      "end": 279,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 351,
+      "end": 352,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 400,
+      "end": 401,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 422,
+      "end": 423,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldSlots.ts",
+      "start": 434,
+      "end": 435,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 112,
+      "end": 120,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 126,
+      "end": 135,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 147,
+      "end": 154,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 165,
+      "end": 173,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 184,
+      "end": 189,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 195,
+      "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-use-unclassified",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Importer.tsx",
       "start": 390,
       "end": 397,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Importer.tsx",
+      "start": 431,
+      "end": 437,
       "fixes": 0
     },
     {
@@ -698,6 +1072,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 509,
+      "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
@@ -723,6 +1108,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 637,
+      "end": 645,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 643,
       "end": 644,
       "fixes": 0
@@ -736,6 +1132,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 666,
       "end": 667,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 675,
+      "end": 676,
       "fixes": 0
     },
     {
@@ -767,6 +1174,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 831,
+      "end": 834,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 832,
       "end": 833,
       "fixes": 0
@@ -789,8 +1207,30 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 909,
+      "end": 917,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 914,
       "end": 915,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 995,
+      "end": 996,
       "fixes": 0
     },
     {
@@ -844,8 +1284,30 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 1201,
+      "end": 1212,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 1209,
       "end": 1210,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 1298,
+      "end": 1303,
       "fixes": 0
     },
     {
@@ -934,6 +1396,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 1536,
       "end": 1539,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 1574,
+      "end": 1581,
       "fixes": 0
     },
     {
@@ -1061,6 +1534,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 528,
+      "end": 529,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
@@ -1086,6 +1570,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 656,
+      "end": 664,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 662,
       "end": 663,
       "fixes": 0
@@ -1099,6 +1594,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 685,
       "end": 686,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 694,
+      "end": 695,
       "fixes": 0
     },
     {
@@ -1130,6 +1636,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 850,
+      "end": 853,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 851,
       "end": 852,
       "fixes": 0
@@ -1152,8 +1669,30 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 928,
+      "end": 936,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 933,
       "end": 934,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 1014,
+      "end": 1015,
       "fixes": 0
     },
     {
@@ -1207,8 +1746,30 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 1220,
+      "end": 1231,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 1228,
       "end": 1229,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 1317,
+      "end": 1322,
       "fixes": 0
     },
     {
@@ -1297,6 +1858,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 1555,
       "end": 1558,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 1593,
+      "end": 1600,
       "fixes": 0
     },
     {
@@ -1424,6 +1996,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 517,
+      "end": 518,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
@@ -1449,6 +2032,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 645,
+      "end": 653,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 651,
       "end": 652,
       "fixes": 0
@@ -1462,6 +2056,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 674,
       "end": 675,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 683,
+      "end": 684,
       "fixes": 0
     },
     {
@@ -1493,6 +2098,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 839,
+      "end": 842,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 840,
       "end": 841,
       "fixes": 0
@@ -1515,8 +2131,30 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 917,
+      "end": 925,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 922,
       "end": 923,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 1003,
+      "end": 1004,
       "fixes": 0
     },
     {
@@ -1570,8 +2208,30 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 1209,
+      "end": 1220,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 1217,
       "end": 1218,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 1306,
+      "end": 1311,
       "fixes": 0
     },
     {
@@ -1660,6 +2320,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 1544,
       "end": 1547,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 1582,
+      "end": 1589,
       "fixes": 0
     },
     {
@@ -1787,6 +2458,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-class-field",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 559,
+      "end": 560,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
@@ -1812,6 +2494,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 687,
+      "end": 695,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 693,
       "end": 694,
       "fixes": 0
@@ -1825,6 +2518,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 716,
       "end": 717,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 725,
+      "end": 726,
       "fixes": 0
     },
     {
@@ -1856,6 +2560,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 881,
+      "end": 884,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 882,
       "end": 883,
       "fixes": 0
@@ -1878,8 +2593,30 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 959,
+      "end": 967,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 964,
       "end": 965,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1045,
+      "end": 1046,
       "fixes": 0
     },
     {
@@ -1933,8 +2670,30 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1251,
+      "end": 1262,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1259,
       "end": 1260,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1348,
+      "end": 1353,
       "fixes": 0
     },
     {
@@ -2032,6 +2791,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1624,
+      "end": 1631,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1626,
       "end": 1629,
       "fixes": 0
@@ -2066,6 +2836,17 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1751,
+      "end": 1770,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1762,
       "end": 1770,
       "fixes": 0
     },
@@ -2118,6 +2899,17 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 897,
+      "end": 898,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
       "start": 974,
       "end": 975,
       "fixes": 0
@@ -2140,8 +2932,30 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1247,
+      "end": 1248,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
       "start": 1407,
       "end": 1409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1420,
+      "end": 1424,
       "fixes": 0
     },
     {
@@ -2153,6 +2967,17 @@
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
       "start": 1619,
       "end": 1620,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-exported-unnamed",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewArray.tsx",
+      "start": 86,
+      "end": 90,
       "fixes": 0
     },
     {
@@ -2175,6 +3000,17 @@
       "path": "fixtures/reactive-ir/value-use-census/ReviewCreated.tsx",
       "start": 54,
       "end": 73,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-exported-unnamed",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewObject.tsx",
+      "start": 86,
+      "end": 95,
       "fixes": 0
     },
     {

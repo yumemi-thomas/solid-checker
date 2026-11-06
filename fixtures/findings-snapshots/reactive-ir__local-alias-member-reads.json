@@ -36,6 +36,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 1497,
+      "end": 1504,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
@@ -73,6 +84,17 @@
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 1918,
       "end": 1932,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 1918,
+      "end": 1930,
       "fixes": 0
     },
     {
@@ -114,6 +136,28 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 2323,
+      "end": 2335,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 2397,
+      "end": 2409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 2668,
       "end": 2674,
       "fixes": 0
@@ -136,6 +180,17 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 2885,
+      "end": 2897,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 3204,
       "end": 3207,
       "fixes": 0
@@ -148,6 +203,17 @@
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 3248,
       "end": 3260,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 3248,
+      "end": 3258,
       "fixes": 0
     },
     {
@@ -200,6 +266,17 @@
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 4402,
       "end": 4423,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 4402,
+      "end": 4414,
       "fixes": 0
     },
     {

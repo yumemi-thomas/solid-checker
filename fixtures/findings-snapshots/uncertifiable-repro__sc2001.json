@@ -41,6 +41,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package.ts",
+      "start": 376,
+      "end": 403,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package.ts",
       "start": 378,
       "end": 385,
       "fixes": 0
@@ -291,6 +302,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 893,
+      "end": 898,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
@@ -329,6 +351,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
       "start": 872,
       "end": 881,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-sibling-called.tsx",
+      "start": 544,
+      "end": 556,
       "fixes": 0
     },
     {
@@ -571,6 +604,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-conditional-spread.tsx",
       "start": 876,
       "end": 906,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 643,
+      "end": 648,
       "fixes": 0
     },
     {
@@ -890,6 +934,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-via-tag-member.tsx",
       "start": 1054,
       "end": 1062,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
+      "start": 555,
+      "end": 559,
       "fixes": 0
     },
     {

@@ -210,7 +210,7 @@ Every reference of a proven source is followed, or it is this rule's uncertifiab
 | `value-root-in-helper` | a store or props root a helper received |
 | `value-use-unclassified` | anything else, the default: `throw`, a computed key, a walk's limit |
 
-A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
+A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. The row stands at the reference and, too, at each use the walk ends at, in any file: an IIFE's result, a `let` and a class field are walked on to their uses (ADR 0831). Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
 
 ## What keeps a leaf callback open
 
