@@ -1,10 +1,11 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-function-obtained/body-read.tsx",
       "start": 94,
@@ -37,6 +38,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-slot-function-obtained/escaped.tsx",
+      "start": 492,
+      "end": 493,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "returned-callable-outside-source-universe",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-function-obtained/escaped.tsx",
@@ -59,7 +71,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-forwarded",
+      "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-function-obtained/hook.ts",
       "start": 107,

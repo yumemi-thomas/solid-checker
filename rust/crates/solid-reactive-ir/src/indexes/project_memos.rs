@@ -311,17 +311,17 @@ impl Memo<BuildSchema> for ParameterCompletionSlot {
 
 whole_program! {
     /// ADR 0349: whether the Promise and array-iteration premises hold, and
-    /// (ADR 0803) no iterator member or intrinsic key is written, as
-    /// `(promise, array_iteration, iterator_members)`.
+    /// (ADR 0803) no visible write can reach iteration, as
+    /// `(promise, array_iteration, visible_iteration)`.
     IntrinsicsTripwires, 39, intrinsics, "intrinsics", (bool, bool, bool),
     cycle: (false, false, false),
     direct: |lookup| {
         let found = super::intrinsics::tripwires(lookup);
-        (found.promise, found.array_iteration, found.iterator_members)
+        (found.promise, found.array_iteration, found.visible_iteration)
     },
     |ctx| Ok(ctx.project(|lookup| {
         let found = super::intrinsics::tripwires(lookup);
-        (found.promise, found.array_iteration, found.iterator_members)
+        (found.promise, found.array_iteration, found.visible_iteration)
     }))
 }
 

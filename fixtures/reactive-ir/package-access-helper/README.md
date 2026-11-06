@@ -43,3 +43,5 @@ The `exports` map's `@solid-primitives/source` condition names unshipped `src/`;
 ## tsc
 
 `solid-js.d.ts` is `dependency-source-package-accessor`'s stub plus `createStore` from `@solidjs/signals@2.0.0-rc.13` `store/index.d.ts`; it omits names the package's declarations import, hence `skipLibCheck`. `App.tsx`, `local-access.ts` and `local-calls.ts` pass strict `tsc --noEmit` (TypeScript 6.0.3) against the published 2.0.0-rc.13 typings and these declarations, so no finding duplicates a type error.
+
+Variant `eval`: `Eval.tsx`, moved here from this project. ADR 0803 (item 3): a direct `eval` anywhere in a project may patch array iteration, which withdraws every primitive's tuple slots in it; the eval cases live in `variants/eval` so the cases here keep their proofs, and the variant pins the withdrawal.

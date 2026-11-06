@@ -13,3 +13,7 @@ Variants (each `patch.ts` beside the same body):
 - `prop-value-intact` (negative): the same without `patch.ts`. Proved SC1001 twice.
 - `open-compute`: a memo whose compute calls a withdrawn slot. The slot may be any function, so the memo's provenance is open (ADR 0665): SC5003 uncertifiable, `async-provenance-unproven`, at the JSX read.
 - `open-compute-intact` (negative): the same without `patch.ts`. Certified.
+- `function-escaped`: a `Function` held in a parameter runs a string that patches iteration (pattern `types/s03`). No write spells it; ADR 0801's census (code from a string) withdraws the slots. Uncertifiable; Chrome quiet.
+- `compared-prototype` (negative): `!(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype`, a prototype only compared, as router and store code writes it. No intrinsic is handed on: proved SC2001; Chrome warns.
+- `uncalled-accessor` (review a9fc #7): `${count}` of a withdrawn slot. upstream_compat's uncalled-accessor arm takes `count` for the primitive's accessor; the static row is held by place: SC1005 uncertifiable, `tuple-iteration-written`. `uncalled-accessor-intact` (negative): proved SC1005.
+- `global-alias-hook` (review a9fc #1): the patch reaches `Array.prototype` through `const g = globalThis; g.Array.prototype` under a key no literal names, and the hook returns a 3-tuple the patch reorders (Chrome: `now` is the setter, REACTIVE_WRITE_IN_OWNED_SCOPE). The global object handed on withdraws the hook's slot: `now()` has its own row, uncertifiable.

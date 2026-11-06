@@ -1,0 +1,38 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "summary-read-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 386,
+      "end": 399,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 386,
+      "end": 399,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 393,
+      "end": 398,
+      "fixes": 0
+    }
+  ]
+}

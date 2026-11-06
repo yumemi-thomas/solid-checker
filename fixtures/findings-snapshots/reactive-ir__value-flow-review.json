@@ -13,21 +13,9 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-flow-review/App.tsx",
-      "start": 468,
-      "end": 476,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-flow-review/App.tsx",
       "start": 576,
@@ -38,11 +26,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "parameter-member-target-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-flow-review/App.tsx",
       "start": 576,
-      "end": 581,
+      "end": 583,
       "fixes": 0
     },
     {
@@ -144,21 +132,9 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-flow-review/App2.tsx",
-      "start": 718,
-      "end": 726,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-flow-review/App2.tsx",
       "start": 788,
@@ -169,11 +145,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "parameter-member-target-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-flow-review/App2.tsx",
       "start": 788,
-      "end": 793,
+      "end": 801,
       "fixes": 0
     },
     {

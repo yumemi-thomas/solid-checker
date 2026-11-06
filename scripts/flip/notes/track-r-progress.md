@@ -462,6 +462,7 @@ Worktree t3-b3846b2a, scratch `/Users/thomas/dev/sc-scratch.noindex/flip-r1` (`c
 - flip-read.mjs `wd-*` (iter-same, slot in `slots.ts`): f11b000cd 96 false-clean, this build 72. The 72 (cross-module IIFE, class, let-read, alias-read) certify on 7c733a10a with no iteration write too (Chrome warns); the census build r3d gives each a row. Not ADR 0803's; closed by the merge with flip-census.
 - solid-three store.ts:240 needs the census's `value-to-unresolved-callee`: to confirm on the merged tree.
 - Next: item 3 replayed onto this commit (`claude/flip-r1-item3-wip` b74a9ff88), then casts.
+- Item 3 landed on the branch as one commit (message has the numbers). Hidden side as the coordinator corrected it: code from a string, or Function / an array intrinsic handed on (`handed_on` in mutation_sites.rs). Eval cases of five fixtures moved to variants. Next: merge e0ab13884 (counts ledger), then item 4 (casts).
 
 ## Part 12 (integrator), handoff, 2026-11-07
 
