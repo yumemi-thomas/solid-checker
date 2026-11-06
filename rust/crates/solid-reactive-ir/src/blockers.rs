@@ -108,6 +108,9 @@ pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-pr
 /// that body is proven in. `via` carries it: the row reads as through this.
 pub(crate) const WRITE_PATH_READ_UNPROVEN: &str = "write-path-read-unproven";
 pub(crate) const WRITE_PATH_VIA: &str = "a write's path";
+/// ADR 0820: a generator's body past its first suspension, on a stepping the
+/// walk does not prove.
+pub(crate) const GENERATOR_STEPPED: &str = "generator-stepped";
 /// The last resort. `check.mjs` and `blockers.mjs` fail on it: a row that lands
 /// here has a hole nobody named, which is a defect in the row, not a blocker.
 pub(crate) const PROOF_STEP_UNNAMED: &str = "proof-step-unnamed";

@@ -342,15 +342,6 @@
    "certified": true
   },
   {
-   "id": "census/f02-async-generator-read-after-await",
-   "item": "section-4 census:f",
-   "outcome": "false-clean",
-   "codes": [
-    "UNTRACKED_READ_AFTER_AWAIT"
-   ],
-   "certified": true
-  },
-  {
    "id": "census/f10-getter-this-chain",
    "item": "section-4 census:f",
    "outcome": "false-clean",

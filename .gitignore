@@ -1089,3 +1089,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/standard-patches/node_modules/**
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
+!fixtures/reactive-ir/generator-stepped/node_modules/
+!fixtures/reactive-ir/generator-stepped/node_modules/**

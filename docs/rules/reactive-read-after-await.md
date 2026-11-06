@@ -155,7 +155,10 @@ Each of these keeps it from applying:
 - an argument that is not the literal function: `rows.map(makeRow(fn))` hands
   the callback to a wrapper; an opaque slot of an exact standard callback is
   an uncertifiable obligation;
-- a generator callback, which runs nothing when it is called;
+- a generator callback, which runs nothing when it is called. A generator the
+  computation steps runs on its flight: past an `await`, under a `for await`
+  written in the computation, the read is proved; past a `yield`, or stepped any
+  other way, it is an uncertifiable obligation (`generator-stepped`, ADR 0820);
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
 - a read inside or after `for await` (or after `await using`) is an
