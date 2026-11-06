@@ -142,6 +142,11 @@ export const SUB_VALUE_WRITES = {
   "sw-delete-computed": { ...SUB_WRITE, kind: "store-opt", text: (o) => `delete ${o}["v"];` },
   "sw-delete-index": { ...SUB_WRITE, text: (o) => `delete ${o}.items[0];` },
   "sw-delete-open-key": { ...SUB_WRITE, text: (o) => `const k: number = 0; delete ${o}.items[k];` },
+  // ADR 0830: a delete tsc rejects (TS2703 under an assertion, TS2790 on a required member) under a directive: tsc reports
+  // nothing, the proxy warns. The build before certified the first two (and, before ADR 0829, the third).
+  "sw-delete-nonnull-ignored": { ...SUB_WRITE, kind: "store-opt", text: (o) => `// @ts-ignore\n${AUX}delete ${o}.v!;` },
+  "sw-delete-as-expect-error": { ...SUB_WRITE, kind: "store-opt", text: (o) => `// @ts-expect-error\n${AUX}delete (${o}.v as number | undefined);` },
+  "sw-delete-required-ignored": { ...SUB_WRITE, text: (o) => `// @ts-ignore\n${AUX}delete ${o}.a.v;` },
   // ADR 0790, research-sc9012.md section 2's t5, t13, t22, t33, dl8: roots no row described, each U now.
   "sw-object-root": { ...SUB_WRITE, text: (o) => `({ s: ${o}.a }).s.v = 7;` },
   "sw-generator": { ...SUB_WRITE, text: (o) => `function* swGen() { yield ${o}.a; } for (const x of swGen()) x.v = 7;` },
@@ -332,7 +337,17 @@ export const EXPORT_COPY_WRITES = {
   "export-copy-write": { ...EXPORT_COPY, contexts: ["body", "handler"], text: () => "copiedStore.v = 2;" },
 };
 
+// misuse.mjs `AUX`: in a site text over lines, it marks the line the runtime frame sits in (print.mjs `auxLine`).
+const AUX = "@@AUX@@";
+// ADR 0830: the one-argument `createEffect` is TS2554, which a directive silences; Chrome then throws MISSING_EFFECT_FN.
+const SUPPRESSED_EFFECT = { kind: "plain", contexts: ["body", "root", "handler"], imports: ["createEffect"] };
+export const SUPPRESSED_EFFECTS = {
+  "one-arg-ts-ignore": { ...SUPPRESSED_EFFECT, text: () => `// @ts-ignore\n${AUX}createEffect(() => 1);` },
+  "one-arg-expect-error": { ...SUPPRESSED_EFFECT, text: () => `// @ts-expect-error\n${AUX}createEffect(() => 1);` },
+};
+
 export const FLIP_READ_VARIANTS = {
+  MISSING_EFFECT_FN: SUPPRESSED_EFFECTS,
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES },

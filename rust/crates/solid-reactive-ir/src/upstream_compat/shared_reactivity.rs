@@ -31,9 +31,9 @@
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
-use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole};
 use solid_facts::core::Span;
+use solid_facts::{FileFacts, TscSilence};
 use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
 use super::{
@@ -5700,8 +5700,20 @@ fn no_store_delete(
     defects: &mut Vec<StaticDefect>,
 ) {
     for &target in &file.ast.deleted_targets {
-        let Some(member) = file.peel_parentheses(target) else {
-            continue;
+        // A type assertion on the operand (`delete store.v!`, `delete (store.v
+        // as T)`) is TS2703 at the operand. ADR 0830: where tsc says nothing
+        // there (a directive, `@ts-nocheck`), the delete runs as `delete
+        // store.v` and reaches the trap: judge the member under it. Where one
+        // compiler may be silent, the operand is unproven.
+        let (member, sugar) = match file.peel_parentheses(target) {
+            Some(member) => (member, TscSilence::Reports),
+            None => {
+                let member = file.ast.peel_ts_sugar_span(target);
+                match file.tsc_silence_at(member.start) {
+                    TscSilence::Reports => continue,
+                    silence => (member, silence),
+                }
+            }
         };
         // A computed key reaches the same trap (ADR 0829): the producer's
         // rejection proof decides it below, as for a static key.
@@ -5783,11 +5795,20 @@ fn no_store_delete(
         // operand not proven writable-optional and not proven rejected (a
         // computed or index key, a required `T | undefined`, `unknown`) may
         // well type-check: uncertifiable, never silent.
+        //
+        // ADR 0830: the rejection is reported at the operand. Where both
+        // compilers suppress it there, nothing reports the delete and it
+        // reaches the trap: the operand is a property the producer resolved,
+        // judged as a writable one. Where only one may, it stays unproven.
         let entity = context.lookup.entity_at(path, member);
-        if entity.is_some_and(|entity| entity.delete_operand_rejected) && tsc_reports_in(file) {
+        let rejected = entity.is_some_and(|entity| entity.delete_operand_rejected);
+        let silence = file.tsc_silence_at(member.start);
+        if rejected && silence == TscSilence::Reports && tsc_reports_in(file) {
             continue;
         }
-        let operand_unproven = entity.is_none_or(|entity| !entity.writable_optional_property);
+        let operand_unproven = sugar == TscSilence::Maybe
+            || !(entity.is_some_and(|entity| entity.writable_optional_property)
+                || rejected && silence == TscSilence::Silent);
         let uncertain = operand_unproven
             || match chain_links_verdict(file, context, member, root) {
                 None => continue,
