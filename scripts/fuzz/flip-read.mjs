@@ -578,12 +578,17 @@ const FLOW_READ = { kind: "async", contexts: ["body"], bindings: ["direct"] };
 export const FLOW_PROP_READS = {
   "flow-static": { ...FLOW_READ, imports: ["Show"], text: (o) => `void (<Show when={/*@static*/ ${o}()}><i /></Show>);` },
   "flow-element": { ...FLOW_READ, imports: ["Show"], importLines: ["const FlowKid = (p: { y: unknown }) => <i>{String(p.y)}</i>;"], text: (o) => `void (<Show when={<FlowKid y={${o}()} />}><i /></Show>);` },
+  // Review R40: a labelled `untrack` sets `strictRead`, so a pending read throws inside `Show`'s memo.
+  "flow-untrack": { ...FLOW_READ, imports: ["Show", "untrack"], text: (o) => `void (<Show when={untrack(${o}, "x")}><i /></Show>);` },
   "flow-match": { ...FLOW_READ, imports: ["Match"], text: (o) => `void (<Match when={${o}()}><i /></Match> as any).when;` },
 };
 // ADR 0892: a read a flow prop's own computation holds: no pending-read throw, ASYNC_OUTSIDE_LOADING_BOUNDARY with no `Loading`.
 export const FLOW_PROP_HELD = {
   "flow-show": { ...PEEK, contexts: ["jsx"], imports: ["Show"], text: (o) => `return <Show when={${o}()}><i /></Show>;` },
   "flow-for": { ...PEEK, contexts: ["jsx"], imports: ["For"], text: (o) => `return <For each={[${o}()]}>{() => <i />}</For>;` },
+  // The h1 corpus forms: a read in a call's argument evaluates in the getter (rows stay U since review R40), and a flow element in a prop under `<Loading>`.
+  "flow-for-arg": { ...PEEK, contexts: ["jsx"], imports: ["For"], text: (o) => `return <For each={Array.from({ length: Number(${o}()) })}>{() => <i />}</For>;` },
+  "flow-prop-covered": { ...PEEK, contexts: [], legal: ["jsx"], imports: ["Loading", "Show"], importLines: ["const FlowProp = (p: { d: unknown }) => <i>{p.d as any}</i>;"], text: (o) => `return <Loading fallback={0}><FlowProp d={<Show when={${o}()}><i /></Show>} /></Loading>;` },
 };
 export const PENDING_SLOTS = {
   "pending-slot": { ...PEEK, text: (o) => `const useM = () => [${o}] as const; const [m] = useM(); void m();` },
@@ -623,6 +628,10 @@ export const SETTER_READS = {
 const USE_READ = { kind: "plain", contexts: ["body", "effect-apply", "root"] };
 export const VALUE_USES = {
   "use-let": { ...USE_READ, text: (o) => `let h = ${o}; void h();` },
+  // ADR 0894: `untrack(c, "x")` reads `c` in a strict window; with no label it sets none.
+  "use-read-foreach": { ...USE_READ, text: (o) => `[1].forEach(${o});` },
+  "use-untrack-label": { ...USE_READ, imports: ["untrack"], text: (o) => `void untrack(${o}, "x");` },
+  "use-untrack-plain": { ...USE_READ, contexts: [], legal: ["body"], imports: ["untrack"], text: (o) => `void untrack(${o});` },
   "use-member": { ...USE_READ, text: (o) => `const b: { h?: () => number } = {}; b.h = ${o}; void b.h();` },
   "use-logical": { ...USE_READ, text: (o) => `const h = ${o} || ${o}; void h();` },
   "use-comma": { ...USE_READ, text: (o) => `const h = (void 0, ${o}); void h();` },
@@ -700,6 +709,9 @@ export const VALUE_WRITES = {
   "use-write-throw": { ...USE_WRITE, text: () => `${SET} try { throw w; } catch (e) { (e as (v: number) => void)(1); }` },
   "use-write-let": { ...USE_WRITE, text: () => `${SET} let g = w; g(1);` },
   "use-write-map": { ...USE_WRITE, text: () => `${SET} new Map([["k", w]]).get("k")!(1);` },
+  // ADR 0894: a setter handed whole to a carrier that provably runs it; the empty receiver runs nothing.
+  "use-write-foreach": { ...USE_WRITE, text: () => `${SET} [1].forEach(w);` },
+  "use-write-foreach-empty": { ...USE_WRITE, contexts: [], legal: ["memo"], text: () => `${SET} ([] as number[]).forEach(w);` },
 };
 // ADR 0821: a `const` copy of a source another module exports. Every reference to it is outside the file that holds the source.
 const EXPORT_COPY = {

@@ -202,4 +202,4 @@ A member tag of a same-file `const` holder ADR 0342 accounts (`<Ui.Panel value={
 
 A destructure of a props object reads every slot it binds and asks the same question (ADR 0824): a caller's async getter outside tracked JSX, or in a leaf owner, is SC9012 `async-prop-getter`; an open caller set in a leaf owner is `prop-pending-unproven`.
 
-A read written in `Show`'s or `Match`'s `when` or `For`'s `each` on rc.21 is held by the component's own computation: no SC5001 (ADR 0892). A `/*@static*/` value, an element or function between, a spread on the tag and a `Match` outside a `Switch` stay open.
+A read written in `Show`'s or `Match`'s `when` or `For`'s `each` on rc.21 is held by the component's own computation: no SC5001 (ADR 0892). A `/*@static*/` value, an element or function between, an argument of a call, a spread on the tag and a `Match` outside a `Switch` stay open.

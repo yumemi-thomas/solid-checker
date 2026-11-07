@@ -1,4 +1,4 @@
-import { createMemo, For, Loading, Match, Show, Switch } from "solid-js";
+import { createMemo, For, Loading, Match, Show, Switch, untrack } from "solid-js";
 
 // ADR 0892: rc.21 reads these props in a computation of the component's own, so
 // a pending value suspends it: no SC5001. With no `Loading` the render still
@@ -73,6 +73,13 @@ export function ElementBetween() {
 export function MatchAlone() {
   const pending = createMemo(async () => 1);
   return <p>{String((<Match when={pending()}><i /></Match> as unknown as { when: unknown }).when)}</p>;
+}
+
+// Review R40: an argument of a call: a labelled `untrack` sets a strict window
+// inside `Show`'s memo (Chrome: PENDING_ASYNC_UNTRACKED_READ).
+export function LabelledUntrack() {
+  const pending = createMemo(async () => 1);
+  return <Show when={untrack(pending, "x")}><i /></Show>;
 }
 
 // A spread may supply anything for the tag.
