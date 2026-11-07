@@ -5740,6 +5740,18 @@
   "rediscovered": "cmp-async-gen* ids (76, Chrome confirmed): build rmg7 (b2e910572) 57 false cleans; r2: 0 (57 agree, 19 uncertifiable)"
  },
  {
+  "finding": "an `if (getOwner())` guard dropped SC4002's provider-free claim with the owner questions: the read runs only with an owner, so rc.21 throws CONTEXT_NOT_FOUND there (Chrome), certified (ADR 0866 amendment)",
+  "found": "Part 15's smoke on the census judge (c3b7cbf48)",
+  "fixed": "ADR 0866 amendment",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-flw-guard-early-x-direct-none",
+   "mx-context-not-found-flw-guard-probe-loop-x-direct-none"
+  ],
+  "rediscovered": "census ids flw-guard-{early,probe-loop,await,for-await,loop,yield} direct (6, Chrome confirmed): build r3 (bbd9bfbf3) 2 certified false cleans; r6: early agree (SC4002 V, corroborated), probe-loop SC4002 U at the site, the other 4 unchanged"
+ },
+ {
   "finding": "guarded_by_owner_probe looked only at `await` before the operation: a `for await` or a later loop iteration in the guarded block raised NO_OWNER_* in Chrome, with the requirement dropped and the file certified (ADR 0866)",
   "found": "the owner/scope scout (F5)",
   "fixed": "ADR 0866",
