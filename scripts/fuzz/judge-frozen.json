@@ -4508,5 +4508,135 @@
    }
   }
  ],
+ "siteRows": [
+  {
+   "id": "ADR0858/coded-throw-scored",
+   "note": "mx-async-outside-loading-boundary-patch-global: the body's read throws PENDING_ASYNC_UNTRACKED_READ, uncaught. The program's own result, scored: no finding claims it, so a certified secondary false clean (was harness).",
+   "input": {
+    "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+    "site": {
+     "id": "s1",
+     "line": 8,
+     "hit": 3
+    },
+    "typecheck": {
+     "ok": true
+    },
+    "checker": {
+     "ok": true,
+     "findings": []
+    },
+    "runtime": {
+     "diagnostics": [
+      {
+       "code": "PENDING_ASYNC_UNTRACKED_READ",
+       "message": "[PENDING_ASYNC_UNTRACKED_READ] Reading a pending async value directly in <Component>. Async values must be read within a tracking scope (JSX, a memo, or an effect's compute function).",
+       "positions": [
+        {
+         "file": "App.tsx",
+         "line": 8
+        }
+       ]
+      }
+     ],
+     "errors": [],
+     "witnesses": [],
+     "hits": {
+      "3": 1
+     },
+     "failure": {
+      "phase": "render",
+      "message": "[PENDING_ASYNC_UNTRACKED_READ] Reading a pending async value directly in <Component>. Async values must be read within a tracking scope (JSX, a memo, or an effect's compute function)."
+     }
+    }
+   },
+   "expected": {
+    "outcome": "not-fired",
+    "secondary": {
+     "PENDING_ASYNC_UNTRACKED_READ": "false-clean-certified"
+    }
+   }
+  },
+  {
+   "id": "ADR0858/uncoded-throw-harness",
+   "note": "mx-async-outside-loading-boundary-mount-named: an uncaught throw with no Solid code (a NotReadyError at module scope) stays harness.",
+   "input": {
+    "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+    "site": {
+     "id": "s1",
+     "line": 8,
+     "hit": 3
+    },
+    "typecheck": {
+     "ok": true
+    },
+    "checker": {
+     "ok": true,
+     "findings": []
+    },
+    "runtime": {
+     "diagnostics": [],
+     "errors": [],
+     "witnesses": [],
+     "hits": {
+      "3": 1
+     },
+     "failure": {
+      "phase": "module",
+      "message": ""
+     }
+    }
+   },
+   "expected": {
+    "outcome": "harness"
+   }
+  },
+  {
+   "id": "ADR0858/later-site-unexecuted",
+   "note": "A coded throw halts the page, a later step finds no element, and the site never ran: unexecuted.",
+   "input": {
+    "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+    "site": {
+     "id": "s1",
+     "line": 8,
+     "hit": 3
+    },
+    "typecheck": {
+     "ok": true
+    },
+    "checker": {
+     "ok": true,
+     "findings": []
+    },
+    "runtime": {
+     "diagnostics": [],
+     "errors": [
+      {
+       "kind": "window-error",
+       "message": "[PENDING_ASYNC_UNTRACKED_READ] Reading a pending async value directly in <Component>. Async values must be read within a tracking scope (JSX, a memo, or an effect's compute function).",
+       "phase": "exercise",
+       "positions": [
+        {
+         "file": "App.tsx",
+         "line": 6
+        }
+       ]
+      }
+     ],
+     "witnesses": [],
+     "hits": {
+      "3": 0
+     },
+     "failure": {
+      "phase": "halted",
+      "message": "reactivity halted: 1 step(s) found no element ([data-act=\"b1\"])"
+     }
+    }
+   },
+   "expected": {
+    "outcome": "unexecuted"
+   }
+  }
+ ],
  "changes": []
 }
