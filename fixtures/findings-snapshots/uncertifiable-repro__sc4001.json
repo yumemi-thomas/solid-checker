@@ -595,6 +595,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-dependency-getter.tsx",
+      "start": 124,
+      "end": 170,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "dependency-source-getter",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-dependency-getter.tsx",
