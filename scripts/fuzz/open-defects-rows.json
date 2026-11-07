@@ -2111,6 +2111,7 @@
    "mx-settled-cleanup-unowned-flw-guard-yield-x-extracted-iife": {"outcome":"false-clean","cause":"R-F1-open"},
    "mx-settled-cleanup-unowned-flw-owned-assigned-x-alias-handoff-call": {"outcome":"false-clean","certified":true,"cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-assigned-x-bind-helper": {"outcome":"false-clean","cause":"R-F2-open"},
+   "mx-settled-cleanup-unowned-flw-owned-assigned-x-call-helper": {"outcome":"false-clean","cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-assigned-x-destructured-closure-helper-m-for-item": {"outcome":"false-clean","certified":true,"cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-assigned-x-direct-handoff-sort": {"outcome":"false-clean","certified":true,"cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-assigned-x-direct-helper-m-dynamic": {"outcome":"false-clean","certified":true,"cause":"R-F2-open"},
@@ -2133,6 +2134,7 @@
    "mx-settled-cleanup-unowned-flw-owned-lib-x-ns-rest-closure": {"outcome":"false-clean","cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-lib-x-ns-rest-module-helper": {"outcome":"false-clean","cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-lib-x-reexport-ns-as-none": {"outcome":"false-clean","cause":"R-F2-open"},
+   "mx-settled-cleanup-unowned-flw-owned-lib-x-reexport-ns-iife": {"outcome":"false-clean","cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-lib-x-wrapper-module-barrel": {"outcome":"false-clean","cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-map-x-alias-handoff-foreach": {"outcome":"false-clean","certified":true,"cause":"R-F2-open"},
    "mx-settled-cleanup-unowned-flw-owned-map-x-alias-handoff-tagged": {"outcome":"false-clean","certified":true,"cause":"R-F2-open"},
@@ -3201,6 +3203,7 @@
    "mx-untracked-read-after-await-aw-helper-late-x-hook-member-iife-m-show-signal": {"outcome":"misplaced","cause":"R-misplaced"},
    "mx-untracked-read-after-await-aw-helper-late-x-hook-member-switch": {"outcome":"misplaced","cause":"R-misplaced"},
    "mx-untracked-read-after-await-aw-helper-late-x-hook-try-finally": {"outcome":"misplaced","cause":"R-misplaced"},
+   "mx-untracked-read-after-await-aw-helper-late-x-tuple-helper-m-for-item": {"outcome":"misplaced","cause":"R-misplaced"},
    "mx-untracked-read-after-await-then-named-x-tuple-forward-13": {"outcome":"false-clean","cause":"census"},
    "mx-untracked-read-after-await-then-named-x-tuple-forward-2": {"outcome":"false-clean","cause":"census"},
    "mx-untracked-read-after-await-then-named-x-wrapper-forward-13": {"outcome":"false-clean","cause":"census"}
