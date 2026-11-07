@@ -923,6 +923,24 @@
     "REACTIVE_WRITE_IN_OWNED_SCOPE"
    ],
    "certified": false
+  },
+  {
+   "id": "flip/st-tracked-handled-flush",
+   "item": "R3e: V in a helper a tracked effect runs under <Errored>: the boundary handles the throw and Chrome logs nothing. Kept here when b6b38884b took st-* out of the census",
+   "outcome": "false-positive",
+   "codes": [],
+   "rules": [
+    "leaf-owner-forbidden-call"
+   ]
+  },
+  {
+   "id": "flip/st-tracked-handled-sync-memo",
+   "item": "R3e: V in a helper a tracked effect runs under <Errored>: the boundary handles the throw and Chrome logs nothing. Kept here when b6b38884b took st-* out of the census",
+   "outcome": "false-positive",
+   "codes": [],
+   "rules": [
+    "sync-computation-received-async"
+   ]
   }
  ],
  "notGenerated": [
@@ -978,19 +996,12 @@
   "lg-recall/lg-strict-read-untracked-recv-replace-late-memo-hook-member-none-m-show-later": "C2",
   "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-label": "C2",
   "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-none": "C2",
-  "mx-census/mx-action-called-in-owned-scope-recv-replace-late-x-direct-none": "C2",
-  "mx-census/mx-flush-in-action-st-tracked-handled-x-direct-none": "R3e",
-  "mx-census/mx-flush-in-effect-callback-st-tracked-handled-x-direct-none": "R3e",
-  "mx-census/mx-flush-in-tracked-queue-callback-st-tracked-handled-x-direct-none": "R3e",
-  "mx-census/mx-missing-effect-fn-st-tracked-handled-cast-any-direct-none": "R3e",
-  "mx-census/mx-missing-effect-fn-st-tracked-handled-cast-fn-direct-none": "R3e",
-  "mx-census/mx-sync-node-received-async-st-tracked-handled-effect-direct-none": "R3e",
-  "mx-census/mx-sync-node-received-async-st-tracked-handled-memo-direct-none": "R3e"
+  "mx-census/mx-action-called-in-owned-scope-recv-replace-late-x-direct-none": "C2"
  },
  "ratchet": {
   "certified": 124,
   "certifiedF2": 0,
-  "falsePositive": 64,
+  "falsePositive": 65,
   "stackedClaim": 162,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -1003,18 +1014,18 @@
    "STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter": 6,
    "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": 10
   },
-  "unjudgedClaim": 2,
+  "unjudgedClaim": 3,
   "causes": {
    "R-not-legal": 663,
    "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`": 13,
-   "false-positive": 11,
+   "false-positive": 4,
    "createRoot inside onCleanup inside createRoot": 2,
-   "R-casts-stage2": 284,
-   "R-unplaced": 158,
-   "R-unjudged-unplaced": 2,
+   "R-casts-stage2": 292,
+   "R-unplaced": 157,
+   "R-unjudged-unplaced": 3,
    "R-stacked": 162,
    "R-other": 38,
-   "R-neighbour-U": 106,
+   "R-neighbour-U": 108,
    "R-misplaced": 43,
    "R-carrier": 191,
    "census": 96,

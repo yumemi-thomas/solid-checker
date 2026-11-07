@@ -3,6 +3,7 @@
 //! and the build's constants, and produces its entries in a deterministic
 //! order (never a hash map's iteration order).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use solid_facts::ast::{ArgumentLiteralFact, ImportKind, ModuleHazardKind, ModuleLoadKind};
@@ -854,18 +855,58 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
     patches
 }
 
-/// Whether a computed key is a symbol the global `Symbol` makes on the spot,
-/// which replaces no named member. `Symbol.replace` is not one: `replace` and
-/// `replaceAll` dispatch through it (ADR 0874).
+/// Whether a computed key is a symbol that names no member: one the global
+/// `Symbol` makes on the spot. A program that replaces `Symbol` reopens each
+/// such site ([`SYMBOL_SITE`]): this file cannot see that.
 fn symbol_key(file: &FileFacts, key: Span) -> bool {
-    let key = file.ast.peel_ts_sugar_span(key);
-    file.source_text(key).is_some_and(|text| {
-        (text.starts_with("Symbol(") || text.starts_with("Symbol."))
-            && !text.starts_with("Symbol.replace")
-    }) && file
-        .ast
-        .reference_declaration(Span::new(key.start, key.start + 6))
-        .is_none()
+    symbol_made_at(file, file.ast.peel_ts_sugar_span(key))
+}
+
+/// The well-known symbols no census member reads. Not `replace`, through which
+/// `replace` and `replaceAll` dispatch (ADR 0874), and not `species`, through
+/// which `map`, `filter` and `then` build the value a later member is called on.
+const MEMBERLESS_SYMBOLS: [&str; 13] = [
+    "iterator",
+    "asyncIterator",
+    "hasInstance",
+    "isConcatSpreadable",
+    "match",
+    "matchAll",
+    "search",
+    "split",
+    "toPrimitive",
+    "toStringTag",
+    "unscopables",
+    "dispose",
+    "asyncDispose",
+];
+
+/// Exactly `Symbol(…)` or `Symbol.for(…)` of the global `Symbol`, or a listed
+/// well-known symbol of it, at `at`: `Symbol("m").description` is a string.
+fn symbol_made_at(file: &FileFacts, at: Span) -> bool {
+    let ast = &file.ast;
+    let global_symbol = |span: Span| {
+        let span = ast.peel_ts_sugar_span(span);
+        file.source_text(span).map(str::trim) == Some("Symbol")
+            && ast.reference_declaration(span).is_none()
+    };
+    if let Some(call) = ast.call_at(at) {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        return !call.construct
+            && (global_symbol(callee)
+                || ast.member_at(callee).is_some_and(|member| {
+                    global_symbol(member.object)
+                        && ast.computed_members.binary_search(&member.span).is_err()
+                        && file.source_text(member.property) == Some("for")
+                }));
+    }
+    ast.member_at(at).is_some_and(|member| {
+        global_symbol(member.object)
+            && ast.computed_members.binary_search(&member.span).is_err()
+            && file
+                .source_text(member.property)
+                .is_some_and(|name| MEMBERLESS_SYMBOLS.contains(&name))
+    })
 }
 
 fn constant_key(value: &typefacts::ConstantValue) -> Option<&str> {
@@ -1204,9 +1245,77 @@ fn spelled_callee(text: &str, name: &str) -> bool {
 /// gains one. `Object.assign` copies, so it is the impostor census's no site,
 /// but it writes its target.
 fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
+    let (members, writers) = impostor_sites(file);
+    let mut members = members
+        .into_iter()
+        .map(|(member, _)| member)
+        .collect::<Vec<_>>();
+    let mut writers = writers;
+    members.sort_unstable();
+    members.dedup();
+    writers.sort_unstable();
+    writers.dedup();
+    members
+        .into_iter()
+        .map(standard_impostor)
+        .chain(writers.into_iter().map(standard_impostor_write))
+        .collect()
+}
+
+/// ADR 0875: the program's site that may hold `member` for each census key:
+/// the first by path and offset, as `(key, "path:line")`. A row names it.
+pub(crate) fn impostor_holders(files: &[FileFacts]) -> BTreeMap<&'static str, String> {
+    let mut first = BTreeMap::<&'static str, (&str, Span, &FileFacts)>::new();
+    for file in files {
+        for (member, span) in impostor_sites(file).0 {
+            let path = file.path.as_str();
+            let earlier = first
+                .get(member)
+                .is_some_and(|(held, at, _)| (*held, at.start) <= (path, span.start));
+            if !earlier {
+                first.insert(member, (path, span, file));
+            }
+        }
+    }
+    first
+        .into_iter()
+        .map(|(member, (path, span, file))| {
+            let start = usize::try_from(span.start).unwrap_or(0);
+            let line = file.source.as_bytes()[..start.min(file.source.len())]
+                .iter()
+                .filter(|byte| **byte == b'\n')
+                .count();
+            (member, format!("{path}:{}", line + 1))
+        })
+        .collect()
+}
+
+/// The census's detail on a withheld call of `member`: the site that holds it.
+pub(crate) fn impostor_detail(
+    member: &str,
+    holders: &BTreeMap<&'static str, String>,
+) -> Option<String> {
+    holders
+        .get(member)
+        .map(|site| format!("the program may put a function at `{member}`: {site}"))
+        .or_else(|| {
+            holders
+                .get(ANY_MEMBER)
+                .map(|site| format!("a key no fact names may be `{member}`: {site}"))
+        })
+        .or_else(|| {
+            holders
+                .get(SYMBOL_SITE)
+                .map(|site| format!("a symbol's site or a definer may hold `{member}`: {site}"))
+        })
+}
+
+/// Each census site of the file, by key, and the keys it writes on an object it
+/// did not make.
+fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static str>) {
     use solid_facts::ast::ClassElementKind;
     let ast = &file.ast;
-    let mut members: Vec<&'static str> = Vec::new();
+    let mut members: Vec<(&'static str, Span)> = Vec::new();
     let mut writers: Vec<&'static str> = Vec::new();
     let census_member = |key: CensusKey| match key {
         CensusKey::Named(name) => IMPOSTOR_MEMBERS
@@ -1214,7 +1323,7 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
             .find(|member| **member == name)
             .copied(),
         CensusKey::Unknown => Some(ANY_MEMBER),
-        CensusKey::Symbol => None,
+        CensusKey::Symbol => Some(SYMBOL_SITE),
     };
     // A `__proto__` write replaces every member at once; `self` and
     // `globalThis` are themselves keys a host receiver stands on.
@@ -1225,7 +1334,9 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
         }
         key => census_member(key),
     };
-    let mut note = |key: CensusKey| members.extend(census_member(key));
+    let mut note = |key: CensusKey, at: Span| {
+        members.extend(census_member(key).map(|member| (member, at)));
+    };
     let mut noted = Vec::new();
     let mut write = |key: CensusKey, object: Span| {
         if !fresh_object(file, object) {
@@ -1236,7 +1347,10 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
         if property.data && property.value_kind.is_proven_noncallable() {
             continue;
         }
-        note(census_key(file, property.key, property.computed));
+        note(
+            census_key(file, property.key, property.computed),
+            property.key,
+        );
     }
     for element in ast.classes.iter().flat_map(|class| &class.elements) {
         match element.kind {
@@ -1252,15 +1366,18 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
             _ => continue,
         }
         if element.computed {
-            note(CensusKey::Unknown);
+            note(CensusKey::Unknown, element.span);
         } else if let Some(key) = element.key {
-            note(census_key(file, key, false));
+            note(census_key(file, key, false), key);
         }
     }
     for export in ast.exports.iter().filter(|export| !export.type_only) {
         for specifier in export.specifiers.iter().chain(&export.declarations) {
             if !specifier.type_only {
-                note(CensusKey::Named(specifier.exported.to_string()));
+                note(
+                    CensusKey::Named(specifier.exported.to_string()),
+                    export.span,
+                );
             }
         }
     }
@@ -1299,7 +1416,7 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
             census_key(file, member.property, true)
         };
         write(key.clone(), member.object);
-        note(key);
+        note(key, target);
     }
     for call in &ast.calls {
         let Some(callee) = file
@@ -1329,13 +1446,13 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
         if spelled_callee(callee, "Reflect.set") {
             if !argument(2).is_some_and(|value| noncallable_value(file, value.span)) {
                 write_target(argument_key(1));
-                note(argument_key(1));
+                note(argument_key(1), call.span);
             }
         } else if spelled_callee(callee, "Object.defineProperty")
             || spelled_callee(callee, "Reflect.defineProperty")
         {
             write_target(argument_key(1));
-            note(argument_key(1));
+            note(argument_key(1), call.span);
         } else if spelled_callee(callee, "Object.defineProperties")
             || spelled_callee(callee, "Object.create")
         {
@@ -1348,14 +1465,14 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
                         if writes {
                             write_target(census_key(file, *key, false));
                         }
-                        note(census_key(file, *key, false));
+                        note(census_key(file, *key, false), call.span);
                     }
                 }
                 Some(_) => {
                     if writes {
                         write_target(CensusKey::Unknown);
                     }
-                    note(CensusKey::Unknown);
+                    note(CensusKey::Unknown, call.span);
                 }
             }
         } else if spelled_callee(callee, "Object.setPrototypeOf")
@@ -1379,7 +1496,7 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
                 write_target(CensusKey::Unknown);
             }
         } else if spelled_callee(callee, "Object.fromEntries") {
-            note(CensusKey::Unknown);
+            note(CensusKey::Unknown, call.span);
         } else if call.construct && spelled_callee(callee, "Proxy") {
             let traps_get = argument(1).is_none_or(|handler| {
                 !handler.exact_object_literal
@@ -1389,36 +1506,28 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
                         .any(|key| file.source_text(*key).map(str::trim) == Some("get"))
             });
             if traps_get {
-                note(CensusKey::Unknown);
+                note(CensusKey::Unknown, call.span);
             }
         }
     }
-    if ast.identifiers.iter().any(|identifier| {
+    if let Some(reflect) = ast.identifiers.iter().find(|identifier| {
         file.source_text(identifier.span) == Some("Reflect")
             && ast.reference_declaration(identifier.span).is_none()
             && !ast.any_member_with_object(identifier.span)
     }) {
-        note(CensusKey::Unknown);
+        note(CensusKey::Unknown, reflect.span);
     }
     writers.extend(noted.into_iter().filter_map(writer_member));
     // `Symbol.replace` read at all: it may become a key of any object.
-    if ast.members.iter().any(|member| {
+    if let Some(read) = ast.members.iter().find(|member| {
         file.source_text(member.span).map(str::trim) == Some("Symbol.replace")
             && ast
                 .reference_declaration(ast.peel_ts_sugar_span(member.object))
                 .is_none()
     }) {
-        members.push(SYMBOL_REPLACE);
+        members.push((SYMBOL_REPLACE, read.span));
     }
-    members.sort_unstable();
-    members.dedup();
-    writers.sort_unstable();
-    writers.dedup();
-    members
-        .into_iter()
-        .map(standard_impostor)
-        .chain(writers.into_iter().map(standard_impostor_write))
-        .collect()
+    (members, writers)
 }
 
 /// Whether the object at `span` is one this file makes on the spot: exactly
@@ -1449,8 +1558,12 @@ fn fresh_object(file: &FileFacts, span: Span) -> bool {
 }
 
 /// The global's own keys a host receiver stands on: a program may replace
-/// `self` and `globalThis`, unlike `window` and `document`.
-const HOST_KEYS: [&str; 2] = ["self", "globalThis"];
+/// `self` and `globalThis`, unlike `window` and `document`. `Symbol` is the one
+/// [`symbol_key`] stands on.
+const HOST_KEYS: [&str; 3] = ["self", "globalThis", "Symbol"];
+/// The census key of a site keyed by a symbol ([`symbol_key`]): no member, while
+/// the program leaves `Symbol` alone.
+const SYMBOL_SITE: &str = "@@symbol";
 /// The census key of a read of `Symbol.replace` ([`primitive_dispatch_standard`]).
 const SYMBOL_REPLACE: &str = "@@replace";
 
@@ -2086,9 +2199,24 @@ pub(crate) fn impostor_veto(
     if owner.is_empty() || !IMPOSTOR_MEMBERS.contains(&member) {
         return false;
     }
-    let patched =
-        |name: &str| hazard(Hazard::AnyStandardPatch) && patch_veto(name).into_iter().any(&hazard);
-    (hazard(standard_impostor(member))
+    // ADR 0875: `Symbol` replaced, a key a site took for a symbol may be a name.
+    let symbol_open = hazard(standard_impostor(SYMBOL_SITE))
+        && (hazard(standard_impostor_write("Symbol"))
+            || (hazard(Hazard::AnyStandardPatch)
+                && [
+                    standard_patch("", "Symbol"),
+                    standard_patch("", ANY_MEMBER),
+                    standard_patch("Symbol", "for"),
+                    standard_patch("Symbol", ANY_MEMBER),
+                ]
+                .into_iter()
+                .any(&hazard)));
+    let patched = |name: &str| {
+        symbol_open
+            || (hazard(Hazard::AnyStandardPatch) && patch_veto(name).into_iter().any(&hazard))
+    };
+    (symbol_open
+        || hazard(standard_impostor(member))
         || hazard(standard_impostor(ANY_MEMBER))
         || defined_reflectively(member)
         || (matches!(member, "replace" | "replaceAll")
@@ -2099,7 +2227,8 @@ pub(crate) fn impostor_veto(
             (owner, member),
             &patched,
             &|name| {
-                hazard(standard_impostor_write(name))
+                symbol_open
+                    || hazard(standard_impostor_write(name))
                     || hazard(standard_impostor_write(ANY_MEMBER))
                     || defined_reflectively(name)
             },

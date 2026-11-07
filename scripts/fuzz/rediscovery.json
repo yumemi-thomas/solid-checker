@@ -6817,5 +6817,19 @@
     "mx-strict-read-untracked-effect-apply-use-untrack-label-direct-none"
    ],
    "rediscovered": "STRICT_READ_UNTRACKED use-untrack-label (36 of the set, Chrome confirmed): build pa17 36 false clean; pa19 22 agree, 14 false clean with a named U (the read in a helper, open-work)"
-  }
+  },
+ {"finding":"CAUGHT_REACTIVE_READ with no SC5008 row where the read sits in a helper the try calls: a memo's stored error caught through one or two helpers, the direct read had its row","found":"R3e probe cases/mv/caller-try, while reading ADR 0893; coordinator's item","fixed":"SC5008 site loop (local_access.rs discover_caught_reads); now uncertifiable, not proved","grid":"mx-recall","code":"CAUGHT_REACTIVE_READ","ids":["mx-caught-reactive-read-effect-compute-caught-throw-helper-direct-none","mx-caught-reactive-read-memo-caught-throw-helper-direct-none","mx-caught-reactive-read-effect-compute-caught-throw-helper-2-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, 108 caught-throw-* ids: 3d7e53b87's k5 build 72 false-clean (8 Chrome-confirmed), 36 recall-gap; the fix 0 false-clean, 108 recall-gap (U, caught-read-unproven, 4 Chrome-confirmed)"},
+ {
+  "finding": "a chain of withheld `then`s (`q(p).then(() => 1).then(f)` on a receiver with no native claim, a `*` site in the program): `expand_standard` took the `!native_promise` branch and stopped, and `claim` reads no withheld call, so neither handler was walked; Chrome warns at the read in `f`",
+  "found": "review R39 of the merge cfabb02dc (read in code); the fuzz shape confirms it",
+  "fixed": "ADR 0874",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-then-withheld-chain-x-direct-none",
+   "mx-untracked-read-after-await-then-withheld-chain-store-link-direct-none",
+   "mx-untracked-read-after-await-then-withheld-chain-x-direct-none-m-show-signal"
+  ],
+  "rediscovered": "flip-read.mjs then-withheld-chain, matrix.mjs --grid --recall --ids, Chrome confirming: merged build rc1 (cfabb02dc) 7 false-clean; m22 0, 7 recall-gap"
+ }
 ]

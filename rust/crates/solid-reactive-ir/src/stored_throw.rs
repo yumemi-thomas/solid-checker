@@ -27,7 +27,7 @@ use crate::local_access::HandOff;
 use crate::static_api::StaticApiContext;
 
 /// Compute reads followed, and calls walked out of a function, per question.
-const THROW_DEPTH: usize = 6;
+const THROW_DEPTH: usize = 24;
 /// Component mounts followed to a boundary above.
 const MOUNT_DEPTH: usize = 4;
 
@@ -113,9 +113,19 @@ pub(crate) fn mark_owner_requirements(
     }
     // ADR 0641's tracked-effect row of `resolve` and `until`: the same throw.
     for operation in &mut draft.leaf_operations {
+        // `flush()` under a tracked effect throws FLUSH_IN_TRACKED_QUEUE_CALLBACK
+        // with no diagnostic, on every run.
+        let flush = operation.owner == "createTrackedEffect"
+            && matches!(operation.kind, crate::LeafOwnerOperationKind::Flush);
+        let thrower = if flush {
+            Some(Thrower::Always)
+        } else {
+            operation
+                .observer_guarded()
+                .then_some(Thrower::UnderObserver)
+        };
         if !operation.uncertain
-            && operation.observer_guarded()
-            && unobserved(&operation.location, Thrower::UnderObserver)
+            && thrower.is_some_and(|thrower| unobserved(&operation.location, thrower))
         {
             operation.uncertain = true;
             operation.computation_error_unobserved = true;
@@ -139,12 +149,9 @@ impl Walk<'_, '_> {
         if observer && crate::execution_role::past_suspension(file, site, lookup).is_some() {
             return ThrowEnd::Open;
         }
-        let climb = crate::execution_role::climb_in_place_layers(file, site, lookup);
-        // A climb that stopped proves nothing about what it did not read.
-        if climb.as_ref().is_some_and(|climb| climb.exhausted) {
-            return ThrowEnd::Unobserved;
-        }
-        let climb = climb.filter(|climb| !climb.in_list);
+        // A climb that stopped is walked on from where it stopped.
+        let climb = crate::execution_role::climb_in_place_layers(file, site, lookup)
+            .filter(|climb| !climb.in_list);
         if observer
             && climb
                 .as_ref()
@@ -288,28 +295,187 @@ impl Walk<'_, '_> {
         })
     }
 
-    /// A function that is only referenced here. If it runs, nothing read says
-    /// it runs at this position, or that what runs it lets the throw through:
-    /// a compute here still decides, and a report does not follow (R36).
+    /// A function that is only referenced here: its run is not at this
+    /// position. A compute here still decides. A report stands only where the
+    /// holder's body is followed to a direct call that reports (R36, R41).
     fn reference(&self, file: &FileFacts, reference: Span, depth: usize) -> ThrowEnd {
         match self.site(file, reference, depth) {
+            ThrowEnd::Reported if self.holder_reports(file, reference, depth) => ThrowEnd::Reported,
             ThrowEnd::Reported => ThrowEnd::Unobserved,
             end => end,
         }
     }
 
-    fn scheduler_reaches_host(&self, file: &FileFacts, reference: Span) -> bool {
+    /// `reference` is a whole argument of a project function, or a prop of a
+    /// project component, and that holder calls it directly at a position
+    /// that reports. Handing the parameter on follows the next holder.
+    fn holder_reports(&self, file: &FileFacts, reference: Span, depth: usize) -> bool {
+        let Some(depth) = depth.checked_sub(1) else {
+            return false;
+        };
         let lookup = self.context.lookup;
+        if let Some((call, index)) =
+            file.ast
+                .arguments_containing(reference)
+                .find(|(call, index)| {
+                    !call.arguments[..=*index]
+                        .iter()
+                        .any(|argument| argument.spread)
+                        && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == reference
+                })
+        {
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            return lookup
+                .function_called_at(file.path.as_str(), callee)
+                .is_some_and(|(holder_file, holder)| {
+                    self.parameter_reports(holder_file, holder, index, depth)
+                });
+        }
+        let Some((element, attribute)) = file
+            .ast
+            .jsx_elements
+            .iter()
+            .filter(|element| crate::owners::is_component_element(file, element))
+            .filter(|element| element.spreads.is_empty())
+            .filter_map(|element| {
+                element
+                    .attributes
+                    .iter()
+                    .find(|attribute| {
+                        attribute
+                            .expression
+                            .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == reference)
+                    })
+                    .map(|attribute| (element, attribute))
+            })
+            .next()
+        else {
+            return false;
+        };
+        let Some(name) = file.source_text(attribute.name) else {
+            return false;
+        };
+        lookup
+            .function_called_at(file.path.as_str(), element.name.span)
+            .is_some_and(|(holder_file, holder)| {
+                self.prop_reports(holder_file, holder, name, depth)
+            })
+    }
+
+    fn parameter_reports(
+        &self,
+        file: &FileFacts,
+        holder: &FunctionFact,
+        index: usize,
+        depth: usize,
+    ) -> bool {
+        use solid_facts::ast::BindingShape;
+        let Some(parameter) = holder.parameters.get(index) else {
+            return false;
+        };
+        if parameter.shape != BindingShape::Identifier {
+            return false;
+        }
+        let Some(name) = parameter.names.first() else {
+            return false;
+        };
+        !crate::indexes::binding_written(file, name.span)
+            && self.value_reports(file, name.span, depth)
+    }
+
+    /// The prop of a component: `props.run()`, or `run()` from a destructured
+    /// parameter.
+    fn prop_reports(
+        &self,
+        file: &FileFacts,
+        holder: &FunctionFact,
+        name: &str,
+        depth: usize,
+    ) -> bool {
+        use solid_facts::ast::BindingShape;
+        let Some(parameter) = holder.parameters.first() else {
+            return false;
+        };
+        match parameter.shape {
+            BindingShape::Object => parameter
+                .object_slots
+                .iter()
+                .find(|slot| &*slot.property == name)
+                .is_some_and(|slot| {
+                    !crate::indexes::binding_written(file, slot.local.span)
+                        && self.value_reports(file, slot.local.span, depth)
+                }),
+            BindingShape::Identifier => parameter.names.first().is_some_and(|props| {
+                file.ast
+                    .reference_identifiers_to(props.span)
+                    .any(|identifier| {
+                        file.ast.members.iter().any(|member| {
+                            file.ast.peel_ts_sugar_span(member.object) == identifier.span
+                                && file.source_text(member.property) == Some(name)
+                                && file.ast.calls.iter().any(|call| {
+                                    !call.construct
+                                        && file.ast.peel_ts_sugar_span(call.callee) == member.span
+                                        && self.site(file, call.span, depth) == ThrowEnd::Reported
+                                })
+                        })
+                    })
+            }),
+            _ => false,
+        }
+    }
+
+    /// The name declared at `declaration` holds the function: a direct call of
+    /// it that reports, or a whole argument handed to the next holder.
+    fn value_reports(&self, file: &FileFacts, declaration: Span, depth: usize) -> bool {
         file.ast
+            .reference_identifiers_to(declaration)
+            .any(|identifier| {
+                file.ast
+                    .calls
+                    .iter()
+                    .find(|call| {
+                        !call.construct
+                            && file.ast.peel_ts_sugar_span(call.callee) == identifier.span
+                    })
+                    .map_or_else(
+                        || self.holder_reports(file, identifier.span, depth),
+                        |call| self.site(file, call.span, depth) == ThrowEnd::Reported,
+                    )
+            })
+    }
+
+    /// A callback a scheduler runs. A timer's, a frame's or an observer's throw
+    /// reaches the host. A promise handler's rejects the promise `then`
+    /// returned: an unhandled rejection Chrome reports, unless the chain
+    /// catches it or something holds it (R37). Any other scheduler is not read
+    /// (`Scheduler.postTask` returns a promise, R43).
+    fn fresh_stack(&self, file: &FileFacts, reference: Span) -> ThrowEnd {
+        let lookup = self.context.lookup;
+        let Some(call) = file
+            .ast
             .arguments_containing(reference)
             .find(|(call, index)| {
                 file.ast.peel_ts_sugar_span(call.arguments[*index].span) == reference
             })
-            .and_then(|(call, _)| lookup.resolved_callee_call(file, call.callee))
-            .is_some_and(crate::runtime_semantics::scheduler_throw_reaches_host)
+            .map(|(call, _)| call)
+        else {
+            return ThrowEnd::Unobserved;
+        };
+        let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+            return ThrowEnd::Unobserved;
+        };
+        let reaches_host = crate::runtime_semantics::scheduler_throw_reaches_host(resolved)
+            || (crate::runtime_semantics::promise_handler_call(resolved)
+                && promise_chain_unheld(file, call, lookup));
+        match (reaches_host, self.thrower) {
+            (false, _) => ThrowEnd::Unobserved,
+            (true, Thrower::Always) => ThrowEnd::Reported,
+            (true, Thrower::UnderObserver) => ThrowEnd::Open,
+        }
     }
 
-    /// A `const` alias of the function: `const compute = inner`.
+    /// A `const` alias of the function: `const compute = inner`. A use that
+    /// neither calls nor hands it runs nothing (`void c`).
     fn alias_end(&self, file: &FileFacts, reference: Span, depth: usize) -> Option<ThrowEnd> {
         let binding = file
             .ast
@@ -318,32 +484,35 @@ impl Walk<'_, '_> {
                 binding.immutable && binding.shape == solid_facts::ast::BindingShape::Identifier
             })?;
         let name = binding.names.first()?;
-        let mut end = ThrowEnd::Open;
+        let lookup = self.context.lookup;
+        let mut end = None;
         for identifier in file.ast.reference_identifiers_to(name.span) {
             let at = identifier.span;
-            let entry = file
+            let argument = file.ast.arguments_containing(at).find(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+            });
+            let called = file
                 .ast
-                .arguments_containing(at)
-                .find(|(call, index)| {
-                    file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
-                })
-                .filter(|(call, _)| {
-                    self.context
-                        .lookup
-                        .primitive_at_call(file, call.span)
-                        .is_some()
-                })
-                .map_or_else(
-                    || self.reference(file, at, depth),
-                    |(call, index)| self.argument(file, call, index, at, depth),
-                );
+                .calls
+                .iter()
+                .find(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at);
+            let entry = match (called, argument) {
+                (Some(call), _) => self.site(file, call.span, depth),
+                (None, Some((call, index)))
+                    if lookup.primitive_at_call(file, call.span).is_some() =>
+                {
+                    self.argument(file, call, index, at, depth)
+                }
+                (None, Some(_)) => self.reference(file, at, depth),
+                (None, None) => continue,
+            };
             match entry {
                 ThrowEnd::Reported => return Some(ThrowEnd::Reported),
-                ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
-                ThrowEnd::Open => {}
+                ThrowEnd::Unobserved => end = Some(ThrowEnd::Unobserved),
+                ThrowEnd::Open => end = end.or(Some(ThrowEnd::Open)),
             }
         }
-        Some(end)
+        Some(end.unwrap_or(ThrowEnd::Unobserved))
     }
 
     /// The compute `creation` stores its error: reported where a proven read
@@ -433,13 +602,7 @@ impl Walk<'_, '_> {
                         self.site(file, call.span, depth)
                     }),
                 HandOff::Inline(carrier) => self.site(file, carrier, depth),
-                // Only a timer's and a microtask's throw is past the program;
-                // a promise handler's may be a `catch` or a `try` away (R37).
-                HandOff::FreshStack if !self.scheduler_reaches_host(file, reference) => {
-                    ThrowEnd::Unobserved
-                }
-                HandOff::FreshStack if self.thrower == Thrower::Always => ThrowEnd::Reported,
-                HandOff::FreshStack => ThrowEnd::Open,
+                HandOff::FreshStack => self.fresh_stack(file, reference),
                 _ => file
                     .ast
                     .arguments_containing(reference)
@@ -462,6 +625,50 @@ impl Walk<'_, '_> {
             }
         }
         end
+    }
+}
+
+/// `void call`: `result_discarded` leaves it out, and `void` yields `undefined`
+/// wherever it is written, so nothing can hold the call's value. Parentheses or
+/// a comment between read as held.
+fn voided(file: &FileFacts, call: &CallFact) -> bool {
+    file.source_text(Span::new(0, call.span.start))
+        .and_then(|before| before.trim_end().strip_suffix("void"))
+        .is_some_and(|before| {
+            !before.ends_with(|last: char| last.is_alphanumeric() || last == '_' || last == '$')
+        })
+}
+
+/// Whether the promise a standard `then`, `catch` or `finally` call returns
+/// ends unhandled: every link after it is a `then` with no rejection handler
+/// or a `finally`, and the last result goes nowhere.
+fn promise_chain_unheld(
+    file: &FileFacts,
+    call: &CallFact,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> bool {
+    let mut link = call;
+    loop {
+        let next = file.ast.calls.iter().find(|next| {
+            file.ast
+                .member_at(file.ast.peel_ts_sugar_span(next.callee))
+                .is_some_and(|member| file.ast.peel_ts_sugar_span(member.object) == link.span)
+        });
+        let Some(next) = next else {
+            return link.result_discarded || voided(file, link);
+        };
+        let passes = file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(next.callee))
+            .and_then(|member| file.source_text(member.property))
+            .is_some_and(|name| name == "finally" || (name == "then" && next.arguments.len() < 2))
+            && lookup
+                .resolved_callee_call(file, next.callee)
+                .is_some_and(crate::runtime_semantics::promise_handler_call);
+        if !passes {
+            return false;
+        }
+        link = next;
     }
 }
 

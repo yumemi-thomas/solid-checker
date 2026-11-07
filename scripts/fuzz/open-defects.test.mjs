@@ -110,6 +110,7 @@ describe("the row ledger (ADR 0815, R23)", () => {
     expect(finalBlockers({ rows: { grids: { g: { c: { outcome: "false-clean", cause: "R-alias-owner" } } } } })).toEqual(["g/c"]);
     expect(finalBlockers({ rows: { grids: { g: { c: { outcome: "secondary-false-clean", cause: "R-casts-stage2" } } } } })).toEqual(["g/c"]);
     expect(finalBlockers({ rows: { grids: { g: { d: { outcome: "false-positive", cause: "fam" } } } } })).toEqual(["g/d"]);
+    expect(finalBlockers({ rows: { grids: {} }, patterns: [{ id: "p/a", outcome: "false-positive" }, { id: "p/b", outcome: "false-clean" }, { id: "p/c", outcome: "false-clean", certified: true }] })).toEqual(["patterns/p/a", "patterns/p/c"]);
     expect(finalBlockers({ rows: { grids: { g: { e: { outcome: "false-clean", cause: "R" }, f: { outcome: "misplaced", cause: "fam" } } } } })).toEqual([]);
     expect(ledgerCounts(rows)).toMatchObject({ certified: 1, certifiedF2: 1 });
     if (process.env.FLIP_FINAL) expect(finalBlockers(readOpenDefects())).toEqual([]);
