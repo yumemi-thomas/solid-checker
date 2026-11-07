@@ -144,12 +144,6 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], code, "{name}");
             assert_eq!(rows[0]["kind"], kind, "{name}");
-            if name == "WrappedImmediate" {
-                let begin = rows[0]["primaryLocation"]["startByte"].as_u64().unwrap() as usize;
-                let end = rows[0]["primaryLocation"]["endByte"].as_u64().unwrap() as usize;
-                assert!(source[begin..end].contains("as () => void"));
-                continue;
-            }
             let callee = match name {
                 "StableTransportFalse" | "StableTransportTrue" | "StableTransportSpread" => {
                     start + source[start..end].find("register(").unwrap()
@@ -157,6 +151,12 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
                 "StableMemberReceiver" => {
                     start + source[start..end].find("target.register(").unwrap()
                 }
+                // A parameterless synchronous IIFE: the row stands on the call
+                // inside it, the line rc.21 raises the code from (d529b7692).
+                "ForbiddenImmediate" | "WrappedImmediate" => {
+                    start + source[start..end].find("onCleanup(").unwrap()
+                }
+                "UnknownImmediate" => start + source[start..end].find("unknown(").unwrap(),
                 _ => {
                     let anchor = source[start..end]
                         .find("    (")
