@@ -711,7 +711,7 @@ export const VALUE_WRITES = {
   "use-write-map": { ...USE_WRITE, text: () => `${SET} new Map([["k", w]]).get("k")!(1);` },
   // ADR 0894: a setter handed whole to a carrier that provably runs it; the empty receiver runs nothing.
   "use-write-foreach": { ...USE_WRITE, text: () => `${SET} [1].forEach(w);` },
-  "use-write-foreach-empty": { ...USE_WRITE, contexts: [], legal: ["body"], text: () => `${SET} ([] as number[]).forEach(w);` },
+  "use-write-foreach-empty": { ...USE_WRITE, contexts: [], legal: ["memo"], text: () => `${SET} ([] as number[]).forEach(w);` },
 };
 // ADR 0821: a `const` copy of a source another module exports. Every reference to it is outside the file that holds the source.
 const EXPORT_COPY = {
