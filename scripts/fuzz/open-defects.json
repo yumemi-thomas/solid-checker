@@ -38,26 +38,6 @@
    "note": "ADR 0669's named handler reaches a read with no row through `handoff-assign-*` (14) and an `or-assign` binding (6): an accessor held by assignment. The census owns the position"
   },
   {
-   "idPrefix": "mx-resolve-in-reactive-scope-",
-   "code": "RESOLVE_IN_REACTIVE_SCOPE",
-   "contexts": [
-    "handed-flush"
-   ],
-   "outcome": "false-clean",
-   "item": "g2d named hand-off",
-   "note": "`[1].map(Row)` in a tracked JSX IIFE, `Row` runs `flush(() => resolve(...))`: a function handed by name in tracked JSX gets no row (handed_role with reports_untracked_read, local_access.rs; research-sc9012.md section 3). Certified; the same on 80db411e5"
-  },
-  {
-   "idPrefix": "mx-until-in-reactive-scope-",
-   "code": "UNTIL_IN_REACTIVE_SCOPE",
-   "contexts": [
-    "handed-flush"
-   ],
-   "outcome": "false-clean",
-   "item": "g2d named hand-off",
-   "note": "As RESOLVE_IN_REACTIVE_SCOPE's handed-flush: `until` in a function `[1].map` runs in tracked JSX. Certified; the same on 80db411e5"
-  },
-  {
    "idPrefix": "mx-caught-reactive-read-",
    "code": "CAUGHT_REACTIVE_READ",
    "contexts": [
@@ -71,11 +51,28 @@
    "idPrefix": "mx-caught-reactive-read-",
    "code": "CAUGHT_REACTIVE_READ",
    "contexts": [
-    "mount-named"
+    "handed-flush-each",
+    "handed-flush-call",
+    "named-flush-call"
    ],
-   "outcome": "false-positive",
-   "item": "caught pending read under a named render",
-   "note": "Owner item. `const f1 = () => { try { a1(); } catch {} return <i />; }; render(f1, el)` at module level, `a1` an async memo: SC5001 (pending-async-unsuspendable-read) is a violation at the read, Chrome reports nothing there. The same on 80db411e5 and bfd336ce8, Chrome-confirmed (R3, smoke refresh)"
+   "outcome": "false-clean",
+   "item": "g2d named hand-off",
+   "partial": true,
+   "note": "ADR 0857's recall contexts: `Row` returns JSX and runs `flush(() => { try { read } catch {} })`, run by `[1].forEach(Row)`, `Row.call(null)` or `Row()` in a tracked JSX IIFE. The census takes `Row` for an escaped component (ADR 0331), so only an unrelated obligation remains (open-work). Measured on R3c's f9 (lean recall, every shape): 280 of 400, 280 of 400, 36 of 400 false cleans, none certified; flush-iife 0 of 400; the rest recall gaps. To R2g (ADR 0838)"
+  },
+  {
+   "idPrefix": "mx-async-outside-loading-boundary-",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "contexts": [
+    "handed-flush-each",
+    "handed-flush-call",
+    "named-flush-call",
+    "flush-iife"
+   ],
+   "outcome": "false-clean",
+   "item": "g2d named hand-off",
+   "partial": true,
+   "note": "ADR 0857's recall contexts, a pending read under `flush` in a function a tracked JSX IIFE runs. Measured on R3c's f9 (lean recall, every shape, 658 each): handed-flush-each 374, handed-flush-call 374 (each with an unrelated obligation only), named-flush-call 157 (150 certified), flush-iife 146 (144 certified) false cleans; the rest recall gaps or not-fired. To R2g (ADR 0838)"
   },
   {
    "idPrefix": "mx-async-outside-loading-boundary-",

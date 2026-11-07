@@ -26,23 +26,21 @@
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 397,
-      "end": 404,
+      "start": 403,
+      "end": 410,
       "fixes": 0
     },
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 693,
-      "end": 698,
+      "start": 706,
+      "end": 711,
       "fixes": 0
     },
     {
@@ -52,8 +50,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 831,
-      "end": 834,
+      "start": 844,
+      "end": 847,
       "fixes": 0
     },
     {
@@ -63,8 +61,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 1046,
-      "end": 1053,
+      "start": 1059,
+      "end": 1066,
       "fixes": 0
     },
     {
@@ -74,8 +72,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 1046,
-      "end": 1053,
+      "start": 1059,
+      "end": 1066,
       "fixes": 0
     },
     {
@@ -84,8 +82,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 1732,
-      "end": 1739,
+      "start": 1745,
+      "end": 1752,
       "fixes": 0
     },
     {
@@ -95,8 +93,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 1839,
-      "end": 1842,
+      "start": 1852,
+      "end": 1855,
       "fixes": 0
     },
     {
@@ -106,8 +104,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
-      "start": 2372,
-      "end": 2375,
+      "start": 2385,
+      "end": 2388,
       "fixes": 0
     }
   ]

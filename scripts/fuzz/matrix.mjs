@@ -26,8 +26,9 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { partlySilentRules, besideCode, codeOfThrown, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { partlySilentRules, besideCode, codeOfThrown, codeOfUncaught, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
+import { hitCount } from "./hits.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
 import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, sampleStrata, stratumOf, summarize } from "./runtime-diff.mjs";
@@ -54,7 +55,7 @@ import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "false-positive", "tsc-overlap"];
+export const OUTCOMES = ["typed-away", "harness", "unexecuted", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "false-positive", "tsc-overlap"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -132,8 +133,13 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
     const logged = codeOfThrown(String(text).replace(/^Error: /, ""));
     return logged ? [{ code: logged, source: "thrown", positions: [] }] : [];
   });
+  // ADR 0858: an uncaught throw that names a Solid code is the program's own runtime result, where Chrome placed it; a page halted by one (a
+  // later step found no element) carries that throw's code. Any other failure is the harness's.
+  const failure = runtime.failure ?? null;
+  const failureCode = failure ? codeOfUncaught(failure.message) ?? (failure.phase === "halted" ? (runtime.errors ?? []).map((error) => codeOfUncaught(error.message)).find(Boolean) ?? null : null) : null;
+  const failureTags = failureCode && codeOfUncaught(failure.message) ? [{ code: failureCode, source: "thrown", positions: failure.positions ?? [] }] : [];
   const known = runtimeEvents(runtime);
-  const events = [...known, ...[...thrownTags, ...loggedTags].filter((tag) => !known.some((event) => event.code === tag.code && event.source === "thrown"))].filter((event) => event.code === code);
+  const events = [...known, ...[...thrownTags, ...loggedTags, ...failureTags].filter((tag) => !known.some((event) => event.code === tag.code && event.source === "thrown"))].filter((event) => event.code === code);
   const attributed = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
   const atSite = events.filter((event) => attributed(event).some((position) => region.includes(position.line)));
   // A diagnostic with no authored position at all (or, for a placeless code, any position): Solid spoke and the harness cannot say
@@ -157,7 +163,9 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
       : checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable") ? "false-clean" : "false-clean-certified"])
     .filter(([, verdict]) => verdict !== "agree"));
   if (!atSite.length && !unplaced.length && !unattributed) {
-    if (runtime.failure && !events.length) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
+    if (runtime.failure && !events.length && !failureCode) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
+    // ADR 0858: the throw halted the page before the site ran: nothing was measured there, neither a pass nor a problem.
+    if (failureCode && !events.length && hitCount(runtime.hits, site?.hit) === 0) return { outcome: "unexecuted", detail: { why: `the page halted on ${failureCode} before the site ran` } };
     return { outcome: "not-fired", detail: { reported: [...new Set(runtimeEvents(runtime).map((event) => event.code))], misplaced: events.map((event) => attributed(event).map((p) => p.line)), ...(Object.keys(secondary).length ? { secondary } : {}) } };
   }
   const placed = atSite.length ? "placed" : "unplaced";
@@ -571,13 +579,13 @@ export function markdown(matrix, statuses) {
   const lines = [];
   lines.push(`# Misuse recall matrix`, "");
   lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.sampling === "grid" ? "one program per shape (variant, binding, layer)" : `${matrix.perCell} programs per cell`}. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
-  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`T\` tsc-overlap, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
+  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`T\` tsc-overlap, \`n\` not-fired, \`t\` typed-away, \`h\` harness, \`u\` unexecuted (a coded throw halted the page before the site ran). \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
   lines.push(`| code | ${contexts.join(" | ")} |`, `| --- | ${contexts.map(() => "---").join(" | ")} |`);
   for (const code of codes) {
     const cells = contexts.map((context) => {
       const cell = matrix.cells[`${code}|${context}`];
       if (!cell) return "";
-      const extras = [["W", cell["wrong-rule"]], ["P", cell["false-positive"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
+      const extras = [["W", cell["wrong-rule"]], ["P", cell["false-positive"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness], ["u", cell.unexecuted]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
       // A dagger: Chrome did not reproduce any of the sampled programs of this cell (the fast path's evidence stands alone).
       const unconfirmed = cell.chrome && cell.chrome.checked > 0 && cell.chrome.same === 0 ? " †" : "";
       return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}${unconfirmed}`;
@@ -657,7 +665,7 @@ export function offSiteRises(baseline, current) {
 }
 
 /** Outcomes that judge nothing about the checker: the type check rejected the program, or the run failed (the machine, not the program). */
-const UNJUDGED = new Set(["typed-away", "harness"]);
+const UNJUDGED = new Set(["typed-away", "harness", "unexecuted"]);
 
 /**
  * Compares a recorded matrix with a baseline for the same seeds. A cell fails when a program that was judged moves out of `agree`

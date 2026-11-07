@@ -200,6 +200,16 @@ export function codeOfThrown(message) {
 }
 
 /**
+ * ADR 0858: the Solid code an uncaught throw's message carries, or null: a `[CODE]` tag naming a code of the policy table, or a message
+ * `thrownCodes` knows. Such a throw is the program's own runtime result; any other failure is the harness's.
+ */
+export function codeOfUncaught(message) {
+  const text = String(message ?? "").replace(/^Error: /, "");
+  const tag = /^\[([A-Z][A-Z_]+)\]/.exec(text)?.[1];
+  return tag && codePolicy[tag] ? tag : codeOfThrown(text);
+}
+
+/**
  * Rules whose violation stands beside a code as a claim of its own, so it never names that code wrongly: an effect created in an apply throws
  * PRIMITIVE_IN_EFFECT_CALLBACK and is an unowned effect too, the leak a production build keeps (ADR 0483).
  */

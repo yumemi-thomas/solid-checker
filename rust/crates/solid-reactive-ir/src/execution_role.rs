@@ -171,6 +171,21 @@ fn callback_runs_outside_tracking(
     }
 }
 
+/// ADR 0857: whether the callback at `argument` runs during the call with the
+/// caller's listener: inline, and not one a listener-clearing primitive runs.
+pub(crate) fn callback_inherits_listener(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    argument: usize,
+    argument_count: usize,
+) -> bool {
+    dialect
+        .callback_semantics_at(primitive, argument, argument_count)
+        .execution
+        == Some(Execution::Inline)
+        && !callback_runs_outside_tracking(dialect, primitive, argument, argument_count)
+}
+
 /// The argument positions holding a callback that runs outside the
 /// surrounding tracking scope — an effect's apply argument, or a deferred
 /// executor's whole callback.

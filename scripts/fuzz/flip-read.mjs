@@ -4,7 +4,7 @@
 //   flipReadContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
 //   FLIP_READ_LEGAL     { [code]: [context, ...] }, appended to that code's recallLegal
 //   FLIP_READ_VARIANTS  { [code]: { [variant]: { kind, contexts } } }, a source of that kind, in those contexts, added to the code's recall variants
-import { apiSignal, button, call, child, ctl, decl, domExpr, expr, fn, iife, jsxExpr, mounted, num, prim, ref, ret } from "./model.mjs";
+import { apiSignal, button, call, child, ctl, decl, domExpr, expr, flush, fn, iife, jsx, jsxExpr, mounted, num, prim, ref, ret } from "./model.mjs";
 
 // ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
 export const STATIC_SOURCES = {
@@ -85,10 +85,19 @@ const ITER_PATCHES = {
   "iter-gpo-destructure": `const { getPrototypeOf: itGp } = Object; const itAP: any = itGp([]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
 };
 
+// ADR 0857: the census's `handed-flush` (misuse.mjs) through other entries. A function a tracked JSX expression runs (by a call, or by a
+// standard-library call that runs it inline) runs under the render effect's observer, and `flush(fn)` runs `fn` there. Then the legal
+// twins: a handler runs the same entry with no observer, an empty receiver runs nothing, and `<K />` renders the function as a component.
+const HANDED_FLUSH = ["handed-flush-each", "handed-flush-call", "named-flush-call", "flush-iife"];
+const HANDED_FLUSH_LEGAL = ["handed-flush-handler", "handed-flush-empty", "handed-flush-tag"];
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn"],
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn", ...HANDED_FLUSH],
+  RESOLVE_IN_REACTIVE_SCOPE: HANDED_FLUSH,
+  UNTIL_IN_REACTIVE_SCOPE: HANDED_FLUSH,
+  CAUGHT_REACTIVE_READ: HANDED_FLUSH,
   PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
@@ -113,6 +122,8 @@ export const FLIP_READ_LEGAL = {
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
+  RESOLVE_IN_REACTIVE_SCOPE: HANDED_FLUSH_LEGAL,
+  UNTIL_IN_REACTIVE_SCOPE: HANDED_FLUSH_LEGAL,
 };
 
 // ADR 0665: a source no type proves sync or async. Each is pending at the read; the build before took it for a settled signal.
@@ -463,6 +474,15 @@ const holderForms = (k) => ({
 });
 
 export function flipReadContext(context, stmts, kit) {
+  if (HANDED_FLUSH.includes(context) || HANDED_FLUSH_LEGAL.includes(context)) {
+    if (context === "flush-iife") return { body: [], view: [child(kit.name("v"), iife(fn([expr(flush(fn(stmts))), ret(num(1))])))] };
+    const k = kit.name("K");
+    const held = decl(k, fn([expr(flush(fn(stmts))), ret(jsx())]));
+    const entry = { "handed-flush-each": `[1].forEach(${k})`, "handed-flush-call": `${k}.call(null)`, "named-flush-call": `${k}()`, "handed-flush-handler": `[1].map(${k})`, "handed-flush-empty": `([] as number[]).map(${k})` }[context];
+    if (context === "handed-flush-tag") return { body: [held], view: [mounted(kit.name("v"), domExpr(`<${k} />`))] };
+    if (context === "handed-flush-handler") return { body: [held], view: [button(kit.name("b"), [expr(domExpr(entry))])] };
+    return { body: [held], view: [child(kit.name("v"), iife(fn([expr(domExpr(entry)), ret(num(1))])))] };
+  }
   if (context === "mount-named") {
     const h = kit.name("f");
     return { hoisted: [decl(h, fn([...stmts, ret(domExpr("<i />"))])), expr(domExpr(`render(${h}, document.createElement("div"));`, ["render"]))], body: [], view: [] };

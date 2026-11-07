@@ -28,6 +28,14 @@ uninitialized derived store refuses `Object.keys`, `in`, `hasOwn` and `for…in`
 (ADR 0635). `isPending`, `latest` and `isPending(() => p.a)` are probes: a strict
 read, no throw (ADR 0633).
 
+While a module evaluates (module scope, or a function `render` runs before it
+returns) no strict-read window is open: a pending read emits nothing and throws a
+plain `NotReadyError`. Uncaught, the module fails: a violation. A `catch` in that
+module may be on the stack and swallow it (Chrome is silent): **uncertifiable**,
+`async-read-caught` (ADR 0855). A component body, an apply and a labelled
+`untrack` emit `PENDING_ASYNC_UNTRACKED_READ` before they throw, so a `catch`
+there changes nothing.
+
 On rc.21 an unlabelled `untrack` in a component body does not hide a pending
 source that body created: `const v = untrack(() => memo())` throws as a direct
 read does, and so does a derived store or a projection the body made (ADR 0619).

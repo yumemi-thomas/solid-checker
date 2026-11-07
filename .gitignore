@@ -1129,3 +1129,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/show-child-pending-read/node_modules/**
 !fixtures/reactive-ir/handed-closure-pending-read/node_modules/
 !fixtures/reactive-ir/handed-closure-pending-read/node_modules/**
+!fixtures/reactive-ir/pending-read-caught-module/node_modules/
+!fixtures/reactive-ir/pending-read-caught-module/node_modules/**
+!fixtures/reactive-ir/resolve-inline-entries/node_modules/
+!fixtures/reactive-ir/resolve-inline-entries/node_modules/**
