@@ -789,101 +789,11 @@
    "certified": false
   },
   {
-   "id": "api/r06-values-at",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/r08-values-member",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/v01-store-map-get",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/v02-store-nullish",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/v08-store-write-map",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/v20-props-map-get",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/v21-props-nullish",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "api/v49-await-accessor",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
     "UNTRACKED_READ_AFTER_AWAIT"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/a05-object-assign",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/a19-globalthis",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/a21-map-call",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
    ],
    "certified": false
   },
@@ -898,24 +808,6 @@
   },
   {
    "id": "census/f10-getter-this-chain",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/k13-untrack-returns-accessor",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/k14-runWithOwner-returns-accessor",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
@@ -951,88 +843,7 @@
    "certified": false
   },
   {
-   "id": "returns/fc-04-param-handoff",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/fc-05-array-foreach",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/fc-15-sibling-this",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/q4-typed-module-field",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/r05-array-real-assign",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/r05c-array-real-assign-index",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/r05d-array-slot-closure-assign",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/t14-closure-over-object-field",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "returns/v11-for-of",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/b15-accessor-default-param",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
@@ -1050,29 +861,11 @@
    "certified": false
   },
   {
-   "id": "types/h14-default-param-setter",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d2n-slice-element-write",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
     "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d3-object-entries-fromentries",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
    ],
    "certified": false
   },
@@ -1087,15 +880,6 @@
   },
   {
    "id": "values/d3-options-destructure",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d3-param-default",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
@@ -1122,15 +906,6 @@
    "certified": false
   },
   {
-   "id": "values/d5-object-assign",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d5-object-values",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
@@ -1149,34 +924,7 @@
    "certified": false
   },
   {
-   "id": "values/d6-proxy-wrap",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d7-ambient-fn",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d7-window-member",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d8-pkg-global-named-fn",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
@@ -1194,56 +942,11 @@
    "certified": false
   },
   {
-   "id": "values/d8-pkg-side-effect-import",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d8-pkg-window-read",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d9-this-getter",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [
     "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d9-this-getter-store",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/r2-hook-store-module",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/t4-object-create-own",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
    ],
    "certified": false
   },
@@ -1310,13 +1013,12 @@
   "mx-census/mx-resolve-in-reactive-scope-flush-read-stored-x-direct-none": "R3d",
   "mx-census/mx-until-in-reactive-scope-flush-read-stored-x-direct-none": "R3d",
   "mx-census/mx-dynamic-static-promise-flush-read-stored-x-direct-none": "R3d",
-  "mx-census/mx-sync-node-received-async-apply-placed-twin-effect-direct-none": "R2h",
   "mx-recall/mx-primitive-in-forbidden-scope-tracked-root-alias-depth-17": "R5"
  },
  "ratchet": {
   "certified": 5,
-  "certifiedF2": 43,
-  "falsePositive": 5,
+  "certifiedF2": 56,
+  "falsePositive": 4,
   "stackedClaim": 165,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -1334,19 +1036,19 @@
    "R-not-legal": 663,
    "createRoot inside onCleanup inside createRoot": 2,
    "R-unplaced": 104,
-   "false-positive": 5,
+   "false-positive": 4,
    "R-unjudged-unplaced": 14,
    "R-stacked": 164,
    "R-F1-open": 8,
-   "R-neighbour-U": 106,
+   "R-neighbour-U": 103,
    "R-other": 43,
    "R-misplaced": 43,
-   "R-carrier": 224,
-   "census": 95,
+   "R-carrier": 191,
+   "census": 96,
    "g2d named hand-off": 34,
    "R-alias-call": 236,
-   "R-F2-open": 126,
-   "R-stop-named-U": 1052,
+   "R-F2-open": 178,
+   "R-stop-named-U": 493,
    "R-call-arg": 81,
    "R-placeless": 46,
    "R-near": 9
