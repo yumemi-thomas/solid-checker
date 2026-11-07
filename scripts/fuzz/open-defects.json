@@ -971,7 +971,7 @@
   },
   {
    "id": "flip/st-tracked-handled-sync-memo",
-   "item": "R3e: V in a helper a tracked effect runs under <Errored>: the boundary handles the throw and Chrome logs nothing. Kept here when b6b38884b took st-* out of the census",
+   "item": "R3e: a sync memo in a helper a tracked effect runs under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site, and the V beside it is the pair PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async. This lane has no stacked outcome, so it reads a false positive. Kept here when b6b38884b took st-* out of the census",
    "outcome": "false-positive",
    "codes": [],
    "rules": [
