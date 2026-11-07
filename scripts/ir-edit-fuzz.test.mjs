@@ -37,8 +37,8 @@ test("the same seed replays the same sequence", () => {
 
 test("every edit kind changes a representative file", () => {
   for (const [kind, edit] of Object.entries(EDIT_KINDS)) {
-    // Needs a calling file on disk; tested below.
-    if (kind === "retype-return") continue;
+    // Needs a calling file on disk; tested below. A value mount has its own site.
+    if (kind === "retype-return" || kind === "value-mount") continue;
     const next = edit({
       text: SAMPLE,
       path: "/p/Widget.tsx",
@@ -49,6 +49,16 @@ test("every edit kind changes a representative file", () => {
     assert.notEqual(next, null, kind);
     assert.notEqual(next, SAMPLE, kind);
   }
+});
+
+test("a value mount edit adds or removes the mount or its boundary, and only where the file has one", () => {
+  const ctx = { path: "/p/App.tsx", others: [], rand: seededRandom(1), serial: 0 };
+  const text = "<Dynamic component={Reported} />\n";
+  const next = EDIT_KINDS["value-mount"]({ ...ctx, text });
+  assert.notEqual(next, text);
+  assert.ok(next.includes("<Errored"));
+  assert.equal(EDIT_KINDS["value-mount"]({ ...ctx, text: next }), text);
+  assert.equal(EDIT_KINDS["value-mount"]({ ...ctx, text: SAMPLE }), null);
 });
 
 test("body keeps every byte offset; prefix shifts them; an import-free file has nothing to remove", () => {

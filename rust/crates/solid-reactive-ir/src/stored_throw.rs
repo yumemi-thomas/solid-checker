@@ -300,10 +300,44 @@ impl Walk<'_, '_> {
     /// holder's body is followed to a direct call that reports (R36, R41).
     fn reference(&self, file: &FileFacts, reference: Span, depth: usize) -> ThrowEnd {
         match self.site(file, reference, depth) {
-            ThrowEnd::Reported if self.holder_reports(file, reference, depth) => ThrowEnd::Reported,
+            ThrowEnd::Reported
+                if self.host_runs(file, reference, depth)
+                    || self.holder_reports(file, reference, depth) =>
+            {
+                ThrowEnd::Reported
+            }
             ThrowEnd::Reported => ThrowEnd::Unobserved,
             end => end,
         }
+    }
+
+    /// The host runs what is held here, past anything the program can catch
+    /// with: the function that is a JSX event handler (the compiler's role; one
+    /// kept inside a handler's body is not, R44), or a listener
+    /// `addEventListener` takes: a listener's throw is reported by the event
+    /// loop, even under a synchronous `dispatchEvent`. A `ref` runs during the
+    /// render, so a boundary above it decides (R47).
+    fn host_runs(&self, file: &FileFacts, at: Span, depth: usize) -> bool {
+        let lookup = self.context.lookup;
+        let role = |kind: CallbackRoleKind| {
+            file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == kind && file.ast.peel_ts_sugar_span(callback.span) == at
+            })
+        };
+        role(CallbackRoleKind::EventHandler)
+            || (role(CallbackRoleKind::DirectiveApply)
+                && self.site(file, at, depth) == ThrowEnd::Reported)
+            || file
+                .ast
+                .arguments_containing(at)
+                .find(|(call, index)| {
+                    *index == 1 && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+                })
+                .is_some_and(|(call, _)| {
+                    lookup
+                        .resolved_callee_call(file, call.callee)
+                        .is_some_and(crate::runtime_semantics::add_event_listener_call)
+                })
     }
 
     /// `reference` is a whole argument of a project function, or a prop of a
@@ -412,11 +446,7 @@ impl Walk<'_, '_> {
                         file.ast.members.iter().any(|member| {
                             file.ast.peel_ts_sugar_span(member.object) == identifier.span
                                 && file.source_text(member.property) == Some(name)
-                                && file.ast.calls.iter().any(|call| {
-                                    !call.construct
-                                        && file.ast.peel_ts_sugar_span(call.callee) == member.span
-                                        && self.site(file, call.span, depth) == ThrowEnd::Reported
-                                })
+                                && (self.use_reports(file, member.span, depth))
                         })
                     })
             }),
@@ -424,24 +454,25 @@ impl Walk<'_, '_> {
         }
     }
 
-    /// The name declared at `declaration` holds the function: a direct call of
-    /// it that reports, or a whole argument handed to the next holder.
+    /// The name declared at `declaration` holds the function.
     fn value_reports(&self, file: &FileFacts, declaration: Span, depth: usize) -> bool {
         file.ast
             .reference_identifiers_to(declaration)
-            .any(|identifier| {
-                file.ast
-                    .calls
-                    .iter()
-                    .find(|call| {
-                        !call.construct
-                            && file.ast.peel_ts_sugar_span(call.callee) == identifier.span
-                    })
-                    .map_or_else(
-                        || self.holder_reports(file, identifier.span, depth),
-                        |call| self.site(file, call.span, depth) == ThrowEnd::Reported,
-                    )
-            })
+            .any(|identifier| self.use_reports(file, identifier.span, depth))
+    }
+
+    /// The value at `at` is the function: a direct call of it that reports, a
+    /// handler or `ref` the host runs, or a whole argument or prop of the next
+    /// holder.
+    fn use_reports(&self, file: &FileFacts, at: Span, depth: usize) -> bool {
+        file.ast
+            .calls
+            .iter()
+            .find(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at)
+            .map_or_else(
+                || self.host_runs(file, at, depth) || self.holder_reports(file, at, depth),
+                |call| self.site(file, call.span, depth) == ThrowEnd::Reported,
+            )
     }
 
     /// A callback a scheduler runs. A timer's, a frame's or an observer's throw
@@ -752,23 +783,125 @@ fn handled_above(
     if lexical || called {
         return true;
     }
+    // A walk that stops proves nothing above it: open, as a bound is here.
     let Some(depth) = depth.checked_sub(1) else {
-        return false;
+        return true;
     };
     let Some(component) = crate::owners::containing_body_function(&file.ast, at) else {
         return false;
     };
-    if !lookup.program_closed
-        || lookup.function_component_status(file, component) != ComponentStatus::Proven
-        || !crate::owners::direct_render_sites(lookup, file, component).is_empty()
-    {
+    // A mount outside the analyzed code is open in an open program, for a
+    // component others can reach.
+    let exported = file.ast.exports_containing(component.span).next().is_some()
+        || crate::owners::function_binding_name(file, component)
+            .is_some_and(|name| crate::indexes::binding_exported(file, name.span));
+    if !lookup.program_closed && exported {
+        return false;
+    }
+    match lookup.function_component_status(file, component) {
+        ComponentStatus::Proven => {}
+        ComponentStatus::Uncertain => return true,
+        ComponentStatus::No => return false,
+    }
+    if !crate::owners::direct_render_sites(lookup, file, component).is_empty() {
         return false;
     }
     let mounts = lookup.function_call_sites(file.path.as_str(), component.span);
-    !mounts.is_empty()
-        && mounts
-            .iter()
-            .all(|(caller, tag)| handled_above(caller, *tag, lookup, depth))
+    let tags = mounts
+        .iter()
+        .all(|(caller, tag)| handled_above(caller, *tag, lookup, depth));
+    if !tags {
+        return false;
+    }
+    // Mounted as a value too, or only: `Dynamic`'s `component` is asked as a tag
+    // is; anywhere else (a route table, another component's prop, R49) nothing
+    // here reads the mount.
+    let values = crate::owners::function_binding_name(file, component)
+        .into_iter()
+        .flat_map(|name| file.ast.reference_identifiers_to(name.span))
+        .filter(|reference| !mounts.iter().any(|(_, tag)| *tag == reference.span))
+        .filter(|reference| !exported_by_name(file, reference.span))
+        .collect::<Vec<_>>();
+    let value_handled = |holder: &FileFacts, reference: Span| {
+        !dynamic_component(holder, reference, lookup)
+            || handled_above(holder, reference, lookup, depth)
+    };
+    if !values
+        .iter()
+        .all(|reference| value_handled(file, reference.span))
+    {
+        return false;
+    }
+    // The same in another analyzed file. A component with no value use
+    // anywhere, however exported, has no mount here to ask about.
+    let elsewhere = lookup
+        .symbol_of_function(file, component)
+        .map(|symbol| lookup.symbol_references(symbol.as_str()))
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|location| location.path.as_ref() != file.path.as_str())
+        .filter_map(|location| {
+            let holder = lookup.file_by_path(location.path.as_ref())?;
+            let start = u32::try_from(location.start_byte).ok()?;
+            let end = u32::try_from(location.end_byte).ok()?;
+            let at = Span::new(start, end);
+            let tag = holder
+                .ast
+                .jsx_elements
+                .iter()
+                .any(|element| element.name.span == at || element.closing_name == Some(at));
+            let import = holder
+                .ast
+                .imports
+                .iter()
+                .any(|import| import.span.contains(at))
+                || exported_by_name(holder, at);
+            (!tag && !import).then_some((holder, at))
+        })
+        .collect::<Vec<_>>();
+    if !elsewhere
+        .iter()
+        .all(|(holder, at)| value_handled(holder, *at))
+    {
+        return false;
+    }
+    !mounts.is_empty() || !values.is_empty() || !elsewhere.is_empty()
+}
+
+/// `at` only names the binding in an `export { … }` or `export default name`:
+/// no value goes anywhere. An exported declaration's body is not this.
+fn exported_by_name(file: &FileFacts, at: Span) -> bool {
+    file.ast.exports.iter().any(|export| {
+        export.span.contains(at)
+            && file.source_text(export.span).is_some_and(|text| {
+                text.starts_with("export {")
+                    || file.source_text(at).is_some_and(|name| {
+                        text.trim_end_matches(';').trim_end() == format!("export default {name}")
+                    })
+            })
+    })
+}
+
+/// `reference` is exactly the `component` of a `Dynamic`, the one prop that is
+/// a mount; any other value use (a route table, another component's prop) is
+/// not read here.
+fn dynamic_component(
+    file: &FileFacts,
+    reference: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> bool {
+    file.ast.jsx_elements.iter().any(|element| {
+        lookup
+            .intrinsic_tag_prop(file, element.name.span)
+            .is_some_and(|prop| {
+                element.attributes.iter().any(|attribute| {
+                    file.source_text(attribute.name) == Some(prop)
+                        && attribute
+                            .expression
+                            .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == reference)
+                })
+            })
+    })
 }
 
 /// A read in a component's prop or child runs only if the component reads it.

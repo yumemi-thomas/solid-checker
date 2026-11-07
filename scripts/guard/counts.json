@@ -18,7 +18,7 @@
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 164,
+  "SC1002 handed-read-after-await": 163,
   "SC1002 search-depth-limit": 1,
   "SC1003 destructure-root-unproven": 28,
   "SC1003 props-callers-unenumerated": 14,

@@ -647,12 +647,11 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "handed-read-after-await",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 7414,
-      "end": 7430,
+      "start": 7327,
+      "end": 7332,
       "fixes": 0
     },
     {

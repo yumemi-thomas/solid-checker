@@ -2077,25 +2077,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
             );
         }
-        for read in helper_file
-            .ast
-            .calls_within(synchronous_prefix(helper_file, helper))
-        {
-            if !written_directly_in(&helper_file.ast, helper, read.span)
-                || !crate::interproc::site_on_every_completion(
-                    ctx.semantic_lookup,
-                    helper_file,
-                    helper.span,
-                    read.span,
-                )
-            {
-                continue;
-            }
-            self.report_call_read(draft, walk, helper_file, read);
-            // A helper the helper calls on every completion runs on the same
-            // stack, so its straight-line reads are reached the same way.
-            self.report_helper_reads(draft, walk, helper_file, read, depth + 1);
-        }
+        // A read in the helper's prefix, behind a branch or a loop too, runs on
+        // this stack, past the suspension, if it runs at all: "wrong if it
+        // runs", as a read written in the member's own continuation is.
+        let Some(helper_file) = self.files.get(helper_file.path.as_str()).copied() else {
+            return;
+        };
+        self.report_prefix(draft, walk, helper_file, helper, depth + 1);
     }
 
     /// Async functions execute their prefix immediately too. Their tail is
@@ -2512,6 +2500,16 @@ impl<'f, 'a> Reach<'f, 'a> {
             self.push_search_limit(draft, walk, file, call);
             return;
         }
+        // A computed key (`p["then"](h)`, `p[k](h)`): whatever the type says,
+        // no arm below reads its handlers. They are obligations, never dropped.
+        if file
+            .ast
+            .computed_members
+            .contains(&file.ast.peel_ts_sugar_span(call.callee))
+        {
+            self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
+            return;
+        }
         let ctx = self.ctx;
         // `untrack(() => load())` returns what its callback returns: the
         // promise is the same one, but the helper's own reads before its first
@@ -2655,12 +2653,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
         match name {
             "Promise.then" | "Promise.catch" | "Promise.finally" => {
-                let Some(receiver) = file
-                    .ast
-                    .member_at(callee)
-                    .filter(|_| !file.ast.computed_members.contains(&callee))
-                    .map(|member| member.object)
-                else {
+                let Some(receiver) = file.ast.member_at(callee).map(|member| member.object) else {
                     return;
                 };
                 // Only a native promise runs the handler from a microtask on
@@ -2844,15 +2837,37 @@ impl<'f, 'a> Reach<'f, 'a> {
         depth: usize,
     ) {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        if file.ast.computed_members.contains(&callee) {
-            return;
-        }
         let Some(member) = file.ast.member_at(callee) else {
             return;
         };
-        let handlers = match file.source_text(member.property) {
+        // A literal key names the member (`p["then"](h)`); any other computed
+        // key may name a chain call, and nothing here says which.
+        let computed = file.ast.computed_members.contains(&callee);
+        let name = if computed {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|literal| literal.span == callee)
+                .map(|literal| literal.key.as_ref())
+        } else {
+            file.source_text(member.property)
+        };
+        let handlers = match name {
             Some("then") => 2,
             Some("catch" | "finally") => 1,
+            None if computed => {
+                for argument in &call.arguments {
+                    if argument.spread || !plain_value(file, argument.span) {
+                        self.push_unfollowed(draft, walk, file, call, argument.span);
+                    }
+                }
+                // The receiver's chain is its own, whatever this link is.
+                let receiver = file.ast.peel_ts_sugar_span(member.object);
+                if let Some(inner) = file.ast.call_at(receiver) {
+                    self.expand(draft, walk, queue, file, inner, depth + 1);
+                }
+                return;
+            }
             _ => return,
         };
         for argument in call.arguments.iter().take(handlers) {

@@ -4,22 +4,22 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
-      "start": 611,
-      "end": 617,
+      "start": 229,
+      "end": 235,
       "fixes": 0
     },
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "handed-read-after-await",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
-      "start": 784,
-      "end": 797,
+      "start": 611,
+      "end": 617,
       "fixes": 0
     },
     {
