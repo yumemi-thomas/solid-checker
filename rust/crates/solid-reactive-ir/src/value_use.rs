@@ -944,9 +944,13 @@ impl<'l, 'a> Census<'l, 'a> {
         // slot (`setTimeout`, `.then`). Any other may run on the caller's.
         let deferred_unproven = role == crate::ExecutionRole::DeferredCallback
             && !self.fresh_stack_callback(file, span);
+        // A compute's read past an await runs with no observer, whatever the
+        // role says of the compute: no role clears it there.
+        let suspended = crate::execution_role::past_suspension(file, span, self.lookup).is_some();
         let reads = !self.async_walk
             && role != crate::ExecutionRole::Unknown
             && !deferred_unproven
+            && !suspended
             && !role.reports_untracked_read();
         let writes = role != crate::ExecutionRole::Unknown && !role.reports_disallowed_write();
         let clear = match (site, self.carried) {
@@ -1385,9 +1389,21 @@ impl<'l, 'a> Census<'l, 'a> {
                     file.ast.peel_ts_sugar_span(call.callee),
                 )
             });
-        let Some((callee_file, function)) = callee else {
-            self.uses
-                .push((object.location(file.path.as_str()), blocker));
+        // W5 (R19a): `function_called_at` does not follow a call's result
+        // (`const box = make(() => 0); box()`), so its answer is taken only
+        // when it is the callee name's own function in this file: its
+        // declaration, or a binding initialized with that literal.
+        let own = callee.is_some_and(|(callee_file, function)| {
+            std::ptr::eq(callee_file, file) && own_function(file, object, function.span)
+        });
+        let Some((callee_file, function)) = callee.filter(|_| own) else {
+            // `const box = make(() => 0); box()`: what the functions `make`
+            // returns return, when `make` is a project function by its own
+            // name; anything else is the use.
+            if !self.made_returns(file, object, mode, depth) {
+                self.uses
+                    .push((object.location(file.path.as_str()), blocker));
+            }
             return;
         };
         let mut returned = callee_file
@@ -1410,6 +1426,61 @@ impl<'l, 'a> Census<'l, 'a> {
         for value in returned {
             self.escaped_object(callee_file, value, None, mode, depth + 1);
         }
+    }
+
+    /// W5 (R19a): the callee of the call at `call` is a `const` bound to a
+    /// call of a project function by its own name; each function literal it
+    /// returns stands for what it returns. False when that is not proved.
+    fn made_returns(&mut self, file: &'a FileFacts, call: Span, mode: Mode, depth: usize) -> bool {
+        let ast = &file.ast;
+        let Some(callee) = ast
+            .call_at(call)
+            .map(|call| ast.peel_ts_sugar_span(call.callee))
+        else {
+            return false;
+        };
+        let Some(declaration) = ast.reference_declaration(callee) else {
+            return false;
+        };
+        let Some(maker) = ast
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+            })
+            .and_then(|binding| binding.initializer)
+            .map(|value| ast.peel_ts_sugar_span(value))
+            .filter(|value| ast.call_at(*value).is_some())
+        else {
+            return false;
+        };
+        let made = ast.call_at(maker).and_then(|inner| {
+            self.lookup
+                .function_called_at(file.path.as_str(), ast.peel_ts_sugar_span(inner.callee))
+        });
+        let Some((maker_file, maker_function)) = made.filter(|(maker_file, function)| {
+            std::ptr::eq(*maker_file, file) && own_function(file, maker, function.span)
+        }) else {
+            return false;
+        };
+        let returned = returned_values(maker_file, maker_function);
+        let functions = returned
+            .iter()
+            .filter_map(|value| {
+                maker_file
+                    .ast
+                    .function_at(maker_file.ast.peel_ts_sugar_span(*value))
+            })
+            .collect::<Vec<_>>();
+        if functions.is_empty() || functions.len() != returned.len() {
+            return false;
+        }
+        for function in functions {
+            for value in returned_values(maker_file, function) {
+                self.escaped_object(maker_file, value, None, mode, depth + 1);
+            }
+        }
+        true
     }
 
     /// W3: whether the function holding `span` is a literal a standard
@@ -1611,6 +1682,7 @@ impl<'l, 'a> Census<'l, 'a> {
         );
         let reads = !self.async_walk
             && role != crate::ExecutionRole::Unknown
+            && crate::execution_role::past_suspension(file, callee, self.lookup).is_none()
             && !role.reports_untracked_read();
         let writes = role != crate::ExecutionRole::Unknown && !role.reports_disallowed_write();
         match self.carried {
@@ -2430,6 +2502,54 @@ fn member_key<'f>(file: &'f FileFacts, member: &solid_facts::ast::MemberFact) ->
         None if ast.computed_members.contains(&member.span) => None,
         None => file.source_text(member.property),
     }
+}
+
+/// What a function returns: each `return`'s argument in its own body, and an
+/// arrow's expression body.
+fn returned_values(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> Vec<Span> {
+    let mut values = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            crate::owners::containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|holder| holder.span == function.span)
+        })
+        .filter_map(|returned| returned.argument)
+        .collect::<Vec<_>>();
+    if function.expression_body {
+        values.push(function.body);
+    }
+    values
+}
+
+/// W5: whether the call at `call` calls `function` by its own name: the
+/// callee is a reference whose declaration names that function, or a binding
+/// whose initializer is that function literal.
+fn own_function(file: &FileFacts, call: Span, function: Span) -> bool {
+    let ast = &file.ast;
+    let Some(callee) = ast
+        .call_at(call)
+        .map(|call| ast.peel_ts_sugar_span(call.callee))
+    else {
+        return false;
+    };
+    let Some(declaration) = ast.reference_declaration(callee) else {
+        return false;
+    };
+    ast.functions.iter().any(|fact| {
+        fact.span == function
+            && fact
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+    }) || ast.bindings.iter().any(|binding| {
+        binding.names.iter().any(|name| name.span == declaration)
+            && binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(function)
+    })
 }
 
 /// Whether `object` is the object of a member write's target.
