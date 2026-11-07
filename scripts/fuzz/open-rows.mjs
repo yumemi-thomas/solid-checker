@@ -3,10 +3,12 @@
 // The only writer of that file; review its diff. Each row: its outcome, `certified`, and its cause (a family's `item` for a family someone
 // already named). The seed comes from the run. New rows need --allow-new; any changed count needs the ratchet in open-defects.json edited
 // in the same diff (exact both ways, open-defects.test.mjs), certified and false-positive rows counted on their own.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
+import { STOP_VARIANTS, stopPlan, stopProblems } from "./stop-holder.mjs";
 import { ALIAS_OWNER, CASTS_STAGE2, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
 
 /** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
@@ -48,7 +50,6 @@ export function causeOf(row, problem, entry) {
  * by id under this cause, with the blocker. Nothing else enters: not a shape real code has, not any other group, and not a row with no
  * such finding, which keeps its own cause and is returned as rejected.
  */
-const STOP_VARIANTS = ["installed-set-reflect", "installed-set-alias", "store-proto-merge", "store-proto-literal", "store-proto-string", "store-proto-member", "proto-key-handed", "proto-member", "proto-literal", "proto-method-this"];
 export const inStopGroup = (row) => row.outcome === "false-clean" && (STOP_VARIANTS.includes(row.variant) || (row.code === "CAUGHT_REACTIVE_READ" && /^(?:evt|flw)-/.test(String(row.context ?? ""))));
 
 /** Rules whose uncertifiable is about the read itself: a CAUGHT row stops only on one starting exactly at the read Chrome reported. */
@@ -117,6 +118,26 @@ export function ledgerChange(before, after) {
   return { added: [...now].filter((id) => !was.has(id)), removed: [...was].filter((id) => !now.has(id)), moved };
 }
 
+/** The holder-free check of `rows`' stop rows, on the smoke at `dir`'s programs. `--checker` and `--typefacts` name the build; a run with neither stops. */
+async function stopHolderCheck(dir, rows, args) {
+  const value = (name) => { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; };
+  const [checker, typefacts] = [value("--checker"), value("--typefacts")];
+  if (!checker || !typefacts) throw new Error("--update needs --checker and --typefacts: the stop rows' holder-free check runs on the build the smoke judged");
+  const variants = new Map();
+  for (const grid of Object.keys(rows.grids)) for (const line of readFileSync(join(dir, grid, "programs.jsonl"), "utf8").split("\n").filter(Boolean)) { const row = JSON.parse(line); variants.set(`${grid}/${row.id}`, row.variant); }
+  const stop = Object.entries(rows.grids).flatMap(([grid, list]) => Object.entries(list).filter(([, row]) => row.cause === STOP_NAMED_U).map(([id]) => ({ id, grid, variant: variants.get(`${grid}/${id}`) })));
+  const plan = stopPlan(stop, ({ grid, id }) => {
+    const folder = join(dir, grid, "cases", id);
+    return { text: readFileSync(join(folder, "App.tsx"), "utf8"), others: readdirSync(folder).filter((name) => /\.[cm]?[jt]sx?\$/.test(name) && name !== "App.tsx").length };
+  });
+  const root = mkdtempSync(join(tmpdir(), "stop-holder-"));
+  const cases = plan.checked.map(({ id, text }) => { const folder = join(root, "src", id); mkdirSync(folder, { recursive: true }); writeFileSync(join(folder, "App.tsx"), text.replace("export function C1()", "export function App()")); return { id, dir: folder }; });
+  const { runChecker } = await import("./patterns.mjs");
+  const findings = await runChecker(cases, join(root, "work"), { checker, typefacts });
+  rmSync(root, { recursive: true, force: true });
+  return { checked: plan.checked.length, unchecked: plan.unchecked.length, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length, problems: stopProblems(plan, findings) };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.includes("--final")) {
@@ -141,6 +162,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const blockers = { read: {}, variant: {} };
   for (const rows of Object.values(out.grids)) for (const row of Object.values(rows)) if (row.blocker) { const name = row.blocker.split("@")[0]; const group = row.atRead ? blockers.read : blockers.variant; group[name] = (group[name] ?? 0) + 1; }
   console.log(`stop rule blockers: ${JSON.stringify(blockers)}`);
+  // The stop rows must keep a finding with the generator's holder removed (stop-holder.mjs). Needs the build the run judged.
+  const stopRun = await stopHolderCheck(dir, out, args);
+  console.log(`stop holder check: ${stopRun.checked} checked, ${stopRun.unchecked} unchecked (a file beside App.tsx), ${stopRun.noHolder} with no holder`);
+  for (const problem of stopRun.problems) console.log(`stop holder ${problem}`);
+  if (stopRun.problems.length) throw new Error(`${stopRun.problems.length} stop rows fail the holder-free check: a U that was the holder's is a false clean, back to its owner`);
   if (added.length && !args.includes("--allow-new")) throw new Error(`${added.length} new rows: a new failing row is a defect to read, not to list. Pass --allow-new to list them`);
   writeFileSync(OPEN_ROWS, printLedger(out));
   console.log(JSON.stringify(ledgerCounts(out), null, 1));

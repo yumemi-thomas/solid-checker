@@ -153,7 +153,7 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
 const TSCONFIG = JSON.stringify({ compilerOptions: { jsx: "preserve", jsxImportSource: "@solidjs/web", module: "ESNext", moduleResolution: "Bundler", strict: true, target: "ES2022", lib: ["ES2022", "DOM", "DOM.Iterable"], skipLibCheck: true, noEmit: true }, include: ["*.ts", "*.tsx"] });
 
 /** The checker's findings of each case. */
-async function runChecker(cases, root, { checker, typefacts }) {
+export async function runChecker(cases, root, { checker, typefacts }) {
   const results = new Map();
   let next = 0;
   await Promise.all(Array.from({ length: 6 }, async () => {
