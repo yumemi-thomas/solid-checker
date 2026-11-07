@@ -5840,5 +5840,18 @@
    "mx-resolve-in-reactive-scope-handed-flush-each-x-direct-none"
   ],
   "rediscovered": "matrix --recall by id, Chrome confirming (472 ids over both codes: direct bindings every layer, namespace/alias/wrapper layer none): 75c33dbbc 226 false-clean, this build 0 (50 agree, 176 recall-gap; 134 recall-gap to agree), 0 false-positive. Legal twins handed-flush-handler, -empty, -tag (354 ids): 0 false-positive on both"
+ },
+ {
+  "finding": "SC1001 V on a read in an IIFE inside `flush(fn)` in a named helper a tracked JSX expression runs (`[1].forEach(k)`): the role fell through to `inside-component`; Chrome is silent",
+  "found": "R3c, ADR 0856's probes (cases/w3)",
+  "fixed": "ADR 0859; now uncertifiable where the helper's run is not placed, no row in a memo",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-flush-read-each-iife-signal-direct-none",
+   "lg-strict-read-untracked-flush-read-each-signal-direct-iife",
+   "lg-strict-read-untracked-flush-read-each-signal-direct-helper"
+  ],
+  "rediscovered": "legal --recall by id, Chrome confirming (136 ids): 183cff9c0 build 54 false positives (stopped), this commit 0 (68 clean, 68 uncertifiable)"
  }
 ]

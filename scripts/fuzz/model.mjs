@@ -111,7 +111,7 @@ export const CHAIN_FORMS = ["chain-5", "chain-13", "forward-2", "forward-13"];
 export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
 /** ADR 0820: the site in a generator's body, the iterator stepped from an async function. `gen-prefix` and `gen-drain` are legal: the site runs on the first stack. */
 export const GENERATOR_FORMS = ["gen-await", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", "gen-prefix", "gen-drain"];
-export const CTL_FORMS = [...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GENERATOR_FORMS];
+export const CTL_FORMS = [...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", "aw-else", "aw-else-flip", "run-kept", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GENERATOR_FORMS];
 export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await", ...GENERATOR_FORMS]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 

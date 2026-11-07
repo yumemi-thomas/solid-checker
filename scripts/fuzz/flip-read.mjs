@@ -90,20 +90,51 @@ const ITER_PATCHES = {
 // twins: a handler runs the same entry with no observer, an empty receiver runs nothing, and `<K />` renders the function as a component.
 const HANDED_FLUSH = ["handed-flush-each", "handed-flush-call", "named-flush-call", "flush-iife"];
 const HANDED_FLUSH_LEGAL = ["handed-flush-handler", "handed-flush-empty", "handed-flush-tag"];
+// ADR 0857's entry walk ends at its bound (review R13): the site is N named functions from tracked JSX. Twice-called helpers end the in-place
+// climb at once; the sole-call chain outruns the climb's own 16 layers. Past either bound the row is open, never the site's lexical role.
+const ENTRY_CHAINS = { "entry-chain-5": [5, 2], "entry-chain-13": [13, 2], "sole-chain-17": [17, 1] };
+// ADR 0859: `flush(fn)` keeps the observer, for a read in a layer `fn` runs too. In a named helper, the helper's caller decides: tracked JSX is
+// silent, the component body warns. An IIFE on the way is no reason to take the read for the body's.
+const FLUSH_READ_BODY = ["flush-read-body", "flush-read-body-iife"];
+const FLUSH_READ_LEGAL = ["flush-read-each", "flush-read-each-iife", "flush-read-call", "flush-read-call-iife"];
+// Review R15: a helper that runs the literal in place and keeps it: the in-place run is tracked, the kept one runs in the body.
+const FLUSH_READ_STORED = "flush-read-stored";
+// Review R16: an `async` function's prefix runs on its caller's stack; past its await it runs on no observer.
+const ASYNC_ENTRY = "async-entry";
+
+// ADRs 0870-0873: where the after-await walk had no row. The branch runs (the condition holds at run time; no fact says so), so the read follows
+// the await on the path that runs.
+const P_AWAIT = "await Promise.resolve()";
+const ON = "Math.random() >= 0";
+const OFF = "Math.random() < 0";
+const COND_AWAITS = {
+  "aw-if": `if (${ON}) ${P_AWAIT};`,
+  "aw-and": `${ON} && (${P_AWAIT});`,
+  "aw-or": `${OFF} || (${P_AWAIT});`,
+  "aw-nullish": `let awN: number | undefined; awN ??= (${P_AWAIT}, 1); void awN;`,
+  "aw-ternary": `${ON} ? ${P_AWAIT} : 0;`,
+  "aw-switch": `switch (${ON} ? 1 : 2) { case 1: ${P_AWAIT}; }`,
+  "aw-dstr": `const { awA = (${P_AWAIT}, 1) } = {} as { awA?: number }; void awA;`,
+  "aw-label": `awL: { if (${OFF}) break awL; ${P_AWAIT}; }`,
+  "aw-optional": `const awO = ((_: unknown) => 1) as ((v: unknown) => number) | undefined; awO?.(${P_AWAIT});`,
+};
+// The await's arm cannot precede the site (the other arm of an `if`), or leaves before it runs: the site runs with no await before it.
+const COND_AWAITS_LEGAL = ["aw-else", "aw-else-flip", "aw-early"];
+const HELPER_AWAITS = ["aw-shared-after", "aw-shared-before", "aw-helper-late", "aw-wrapper", "aw-wrapper-2"];
 
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn", ...HANDED_FLUSH],
-  RESOLVE_IN_REACTIVE_SCOPE: HANDED_FLUSH,
-  UNTIL_IN_REACTIVE_SCOPE: HANDED_FLUSH,
+  RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH, ...Object.keys(ENTRY_CHAINS), ASYNC_ENTRY],
+  UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH, ...Object.keys(ENTRY_CHAINS), ASYNC_ENTRY],
   CAUGHT_REACTIVE_READ: HANDED_FLUSH,
   PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop"],
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
-  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING, ...Object.keys(ITER_SAME)],
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
   REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
 };
@@ -112,18 +143,18 @@ export const FLIP_READ_CONTEXTS = {
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain"],
+  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
-  RESOLVE_IN_REACTIVE_SCOPE: HANDED_FLUSH_LEGAL,
-  UNTIL_IN_REACTIVE_SCOPE: HANDED_FLUSH_LEGAL,
+  RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
+  UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
 };
 
 // ADR 0665: a source no type proves sync or async. Each is pending at the read; the build before took it for a settled signal.
@@ -473,7 +504,62 @@ const holderForms = (k) => ({
   "dyn-jsx-later": { read: "jsx", later: (on) => `<Show when={${on}[0]()}><Dynamic component={${k}} /></Show>` },
 });
 
+/** A second copy of the site's statements, each local declared under a new name. */
+function freshCopy(stmts, kit) {
+  const names = new Set();
+  JSON.stringify(stmts, (key, value) => { if (value?.k === "decl") names.add(value.name); return value; });
+  let text = JSON.stringify(stmts);
+  for (const name of names) text = text.replace(new RegExp(`"${name}"`, "g"), JSON.stringify(kit.name(name.replace(/\d+$/, ""))));
+  return JSON.parse(text);
+}
+
 export function flipReadContext(context, stmts, kit) {
+  if (context === ASYNC_ENTRY || context === "async-entry-late") {
+    const h = kit.name("f");
+    const held = decl(h, fn(context === ASYNC_ENTRY ? stmts : [expr(domExpr("await 0;")), ...stmts], { async: true }));
+    return { body: [held], view: [child(kit.name("v"), iife(fn([expr(domExpr(`void ${h}();`)), ret(num(1))])))] };
+  }
+  if (context === FLUSH_READ_STORED) {
+    const keep = decl("hkSaved", domExpr("[] as (() => void)[]"));
+    const twice = decl("hkTwice", domExpr("(g: () => void) => { g(); hkSaved.push(g); }"));
+    return { body: [keep, twice, decl(kit.name("m"), prim("memo", fn([expr(flush(fn([ctl("run-kept", stmts)]))), ret(num(1))]))), expr(domExpr("hkSaved[0]?.();"))], view: [] };
+  }
+  if (COND_AWAITS[context] || HELPER_AWAITS.includes(context) || COND_AWAITS_LEGAL.includes(context) || context === "aw-wrapper-untracked") {
+    const watch = (m) => expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
+    const memo = (body) => { const m = kit.name("m"); return [decl(m, prim("memo", fn([...body, ret(num(1))], { async: true }))), watch(m)]; };
+    const hop = expr(domExpr(`${P_AWAIT};`));
+    if (COND_AWAITS[context]) return { body: memo([expr(domExpr(COND_AWAITS[context])), ...stmts]), view: [] };
+    if (context === "aw-early") return { body: memo([expr(domExpr(`if (${OFF}) { ${P_AWAIT}; return 1; }`)), ...stmts]), view: [] };
+    if (COND_AWAITS_LEGAL.includes(context)) return { body: memo([ctl(context, stmts)]), view: [] };
+    const h = kit.name("f");
+    const awaitH = expr(domExpr(`await ${h}();`));
+    const asyncFn = (body) => decl(h, fn([...body, ret(num(1))], { async: true }));
+    if (context === "aw-shared-after") return { body: [asyncFn([hop, ...stmts]), ...memo([...freshCopy(stmts, kit), awaitH]), ...memo([awaitH])], view: [] };
+    if (context === "aw-shared-before") return { body: [asyncFn([hop, ...stmts]), ...memo([awaitH]), ...memo([...freshCopy(stmts, kit), awaitH])], view: [] };
+    if (context === "aw-helper-late") return { body: [asyncFn([...freshCopy(stmts, kit), hop, ...stmts]), ...memo([hop, awaitH])], view: [] };
+    const c = kit.name("f");
+    const compute = decl(c, fn([hop, ...stmts, ret(num(1))], { async: true }));
+    const type = "(f: () => Promise<number>)";
+    if (context === "aw-wrapper-untracked") return { body: [compute, decl(h, domExpr(`${type} => { void f(); }`)), expr(domExpr(`${h}(${c});`))], view: [] };
+    const [wrap, m] = [kit.name("w"), kit.name("m")];
+    const inner = decl(h, domExpr(`${type} => createMemo(f)`, undefined, ["createMemo"]));
+    const read = expr(domExpr(`createEffect(() => ${m}(), () => {});`, undefined, ["createEffect"]));
+    if (context === "aw-wrapper") return { body: [compute, inner, decl(m, domExpr(`${h}(${c})`)), read], view: [] };
+    return { body: [compute, inner, decl(wrap, domExpr(`${type} => ${h}(f)`)), decl(m, domExpr(`${wrap}(${c})`)), read], view: [] };
+  }
+  if (ENTRY_CHAINS[context] || context === "entry-chain-handler") {
+    const [n, calls] = ENTRY_CHAINS[context] ?? [5, 2];
+    const names = Array.from({ length: n }, () => kit.name("f"));
+    const held = names.map((name, i) => decl(name, fn(i === 0 ? stmts : Array.from({ length: calls }, () => expr(call(ref(names[i - 1])))))));
+    const entry = expr(call(ref(names[n - 1])));
+    return { body: held, view: [context === "entry-chain-handler" ? button(kit.name("b"), [entry]) : child(kit.name("v"), iife(fn([entry, ret(num(1))])))] };
+  }
+  if (FLUSH_READ_BODY.includes(context) || FLUSH_READ_LEGAL.includes(context)) {
+    const k = kit.name("f");
+    const held = decl(k, fn([expr(flush(fn(context.endsWith("-iife") ? [expr(iife(fn(stmts)))] : stmts))), ret(num(1))]));
+    if (FLUSH_READ_BODY.includes(context)) return { body: [held, expr(call(ref(k)))], view: [] };
+    return { body: [held], view: [child(kit.name("v"), iife(fn([expr(context.startsWith("flush-read-each") ? domExpr(`[1].forEach(${k})`) : call(ref(k))), ret(num(1))])))] };
+  }
   if (HANDED_FLUSH.includes(context) || HANDED_FLUSH_LEGAL.includes(context)) {
     if (context === "flush-iife") return { body: [], view: [child(kit.name("v"), iife(fn([expr(flush(fn(stmts))), ret(num(1))])))] };
     const k = kit.name("K");
