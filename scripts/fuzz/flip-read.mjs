@@ -57,6 +57,8 @@ const ITER_PAIR = `function (this: unknown[]) { return itO.call(this.length === 
 const ITER_NEXT = `function (this: object) { const r = itN.call(this); const k = itSeen.get(this) ?? 0; itSeen.set(this, k + 1); if (!r.done && k === 1 && typeof r.value === "function" && r.value.name !== "noop" && ${ITER_IN}) return { value: function noop() {}, done: false }; return r; }`;
 // The same patch as code from a string (plain JavaScript, no annotations).
 const ITER_CODE = `const itO = Array.prototype[Symbol.iterator]; Array.prototype[Symbol.iterator] = function () { return itO.call(this.length === 2 && typeof this[1] === "function" && this[1].name !== "noop" && /\\bC\\d+\\b/.test(new Error().stack || "") ? [this[0], function noop() {}] : this); };`;
+// The patch through a parameter `g` that holds the global object.
+const ITER_G = `const itO = g.Array.prototype[Symbol.iterator]; const itKs: PropertyKey[] = [Symbol.iterator]; g.Array.prototype[itKs[0]] = ${ITER_PAIR};`;
 const ITER_IP = "const itIP = Object.getPrototypeOf([][Symbol.iterator]()); const itN = itIP.next; const itSeen = new WeakMap<object, number>();";
 const ITER_PATCHES = {
   "iter-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; (Array.prototype as any)[itKs[0]] = ${ITER_PAIR};`,
@@ -107,6 +109,32 @@ const ITER_PATCHES = {
   // Review D4: a window name read through `any`, and an object listener (no function literal to read).
   "iter-any-default-view": `const itAP = (document as any).defaultView.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
   "iter-object-listener": `window.addEventListener("itx", { handleEvent(e: any) { e.currentTarget.Function(${JSON.stringify(ITER_CODE)})(); } }); window.dispatchEvent(new Event("itx"));`,
+  // Review R19a: the callee's name is not the called value. A call's result, a written binding, a conditional whose arms reduce to one
+  // signature, a subclass override, a written method; each patches through its parameter where the declaration the types name does not.
+  "iter-through-call": `const itMake = (_x: unknown) => (g: any) => { ${ITER_G} }; const itRun = itMake(() => {}); itRun(globalThis);`,
+  "iter-through-call-call": `const itMake = (_x: unknown) => (g: any) => { ${ITER_G} }; const itRun = itMake(() => {}); itRun.call(null, globalThis);`,
+  "iter-let-written": `let itRun = (_g: any) => {}; itRun = (g: any) => { ${ITER_G} }; itRun(globalThis);`,
+  "iter-cond-callee": `const itNoop = (_g: any) => {}; const itPatch = (g: any) => { ${ITER_G} }; const itRun = [1].length === 1 ? itPatch : itNoop; itRun(globalThis);`,
+  "iter-subclass-method": `class ItA { m(_g: any) {} } class ItB extends ItA { m(g: any) { ${ITER_G} } } const itA: ItA = new ItB(); itA.m(globalThis);`,
+  "iter-member-written": `const itObj = { m(_g: any) {} }; itObj.m = (g: any) => { ${ITER_G} }; itObj.m(globalThis);`,
+  "iter-listener-through-call": `const itMk = (_x: unknown) => function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }; const itH = itMk(() => {}); window.addEventListener("itx", itH); window.dispatchEvent(new Event("itx"));`,
+  // Review R19b: a member the program writes is no longer the standard one its declaration names.
+  "iter-this-seen-written": `(window as any).scrollTo = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }; window.scrollTo(0, 0);`,
+  "iter-keys-written": `const itK = Object.keys; (Object as any).keys = (o: any) => { if (o === window) o.Function(${JSON.stringify(ITER_CODE)})(); return itK(o); }; Object.keys(window);`,
+  "iter-keys-alias-written": `const itK = Object.keys; const itKeys = Object.keys; (Object as any).keys = (o: any) => { if (o === window) o.Function(${JSON.stringify(ITER_CODE)})(); return itK(o); }; Object.keys(window); itKeys(window);`,
+  "iter-keys-defined": `const itK = Object.keys; Object.defineProperty(Object, "keys", { value: (o: any) => { if (o === window) o.Function(${JSON.stringify(ITER_CODE)})(); return itK(o); }, configurable: true, writable: true }); Object.keys(window);`,
+  // Review R19c: a destructured `any` window has an entity and no library type.
+  "iter-destructured-any": `const { defaultView: itW } = document as any; const itAP = itW.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // Review R19d: a platform caller by a bare alias.
+  "iter-listener-alias": `const itOn = addEventListener; itOn("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); dispatchEvent(new Event("itx"));`,
+  // Review R19e: `composedPath()` of a bubbling event holds the window on any target.
+  "iter-composed-path": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath().at(-1); itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  "iter-composed-index": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath()[3]; itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  "iter-composed-forof": `document.body.addEventListener("itx", (e) => { for (const itT of e.composedPath() as any[]) { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); } }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.
+  "iter-hasown-key": `(window as any).toString = function (this: any) { delete this.toString; this.Function(${JSON.stringify(ITER_CODE)})(); return "x"; }; Object.hasOwn({}, window as any);`,
+  "iter-compared-call": `const itBox: unknown[] = []; if (itBox[0] === (globalThis as any).Function(${JSON.stringify(ITER_CODE)})()) itBox.push(1);`,
+  "iter-composed-some": `document.body.addEventListener("itx", (e) => { e.composedPath().some((itT: any) => { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); return false; }); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
 };
 
 export const FLIP_READ_CONTEXTS = {

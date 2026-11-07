@@ -1,5 +1,5 @@
 const view = document.defaultView;
-view?.getComputedStyle(document.body);
+if (view) view.getComputedStyle(document.body);
 const { top } = document.body.getBoundingClientRect();
 console.log(top);
 type Node = { parent?: Node };

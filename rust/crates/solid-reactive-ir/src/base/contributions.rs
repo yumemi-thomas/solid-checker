@@ -770,6 +770,8 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
             AssignmentWrite::UnownedPrototype => {}
         }
     }
+    // `scrollTo = f`: the global's own binding.
+    patches.extend(written_global_identifiers(file).map(|name| standard_patch("", name)));
     // `globalThis[key] = f`: a key no fact reads.
     for assignment in &ast.assignments {
         let target = ast.peel_ts_sugar_span(assignment.target);

@@ -1585,6 +1585,46 @@ fn a_value_handed_to_unseen_code_withdraws_the_tuple_slots() {
     ] {
         assert_eq!(withdrawn(source), (true, true), "{source}");
     }
+    // Reviews R19b, D8: a written member is no longer the listed one, and a
+    // key argument of a listed builtin is coerced through program code.
+    assert_eq!(
+        withdrawn("const o = {}; Object.keys(o); Object.hasOwn(o, 'k');"),
+        (false, false)
+    );
+    for source in [
+        "Object.keys = patch; Object.keys(window);",
+        "Object.hasOwn({}, window);",
+        "Object.keys(...args, window);",
+    ] {
+        assert_eq!(withdrawn(source), (true, true), "{source}");
+    }
+    // Review R19d: a platform caller as a value. Review R19e: a path's
+    // element. Compared, tested or read for its own answers, neither.
+    for source in [
+        "const st = setTimeout; st(tick);",
+        "[tick].forEach(setTimeout);",
+        "setTimeout.call(null, tick);",
+        "const st = window.setTimeout; st(tick);",
+        "const on = addEventListener; on('x', tick);",
+        "const t = e.composedPath().at(-1); t.go();",
+        "const t = e.composedPath()[3]; go(t);",
+        "for (const t of e.composedPath()) go(t);",
+        "const p = e.composedPath(); go(p);",
+        "e.composedPath().some((t) => t.go());",
+        "e.composedPath().some(go);",
+        "if (x === window.Function(code)()) go();",
+    ] {
+        assert!(withdrawn(source).0 || withdrawn(source).1, "{source}");
+    }
+    for source in [
+        "typeof setTimeout === 'function';",
+        "type T = ReturnType<typeof setTimeout>;",
+        "const p = e.composedPath(); p.includes(el); p.length;",
+        "e.composedPath().indexOf(el);",
+        "e.composedPath().some((t) => t === el);",
+    ] {
+        assert_eq!(withdrawn(source), (false, false), "{source}");
+    }
     // What is seen (a closed method, a listener or a timer's callback that
     // reaches nothing) needs Type Facts, which this harness has none of: the
     // iteration-written-slots fixtures pin it.

@@ -492,7 +492,9 @@ fn only_a_value_of_an_array_intrinsic_reaches_iteration() {
         ("globalThis[k].call(null, s);", Here),
         ("class L extends Array {}", None),
         ("x.__proto__ = y;", None),
-        ("Object.keys(Array.prototype);", None),
+        // A listed builtin is the project's question since review R19b: the
+        // program may have written the member (handed_to_unseen_code).
+        ("Object.keys(Array.prototype);", AtCall),
         // Review a9fc #1: the global object through an alias, a pattern, or a
         // descriptor; what a global object read for a test does not hand on.
         ("const g: any = globalThis; f(g.Array.prototype);", AtCall),
@@ -516,7 +518,7 @@ fn only_a_value_of_an_array_intrinsic_reaches_iteration() {
         ),
         (
             "const isDict = (value) => value != null && (value = Object.getPrototypeOf(value), value === Array.prototype || value === Object.prototype);",
-            None,
+            AtCall,
         ),
         (
             "const p = Object.getPrototypeOf(x); if (p === q || !p) f();",
@@ -594,7 +596,7 @@ fn only_a_value_of_an_array_intrinsic_reaches_iteration() {
         ("function f() { return g.bind(this); }", Here),
         ("function f() { g(this); }", AtCall),
         ("export function f() { g.apply(this, arguments); }", None),
-        ("function f() { Object.keys(this); }", None),
+        ("function f() { Object.keys(this); }", AtCall),
         // A never-reassigned alias of sloppy `this` is `this`.
         ("function f() { var self = this; return self[k]; }", Here),
         ("function f() { var self = this; return self.Array; }", Here),
