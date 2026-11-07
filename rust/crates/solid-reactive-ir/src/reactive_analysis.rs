@@ -578,7 +578,10 @@ pub(crate) fn collect_project<'facts>(
         .into_iter()
         .filter(|obligation| {
             let at = &obligation.location;
-            !used.contains(&(at.path.clone(), at.start_byte, at.end_byte)) && !covered(obligation)
+            // A read row under the site need not be one the projection
+            // reports (a store setter's callback): only a use before the
+            // escape speaks for it; a duplicate beside a reported row is U.
+            !used.contains(&(at.path.clone(), at.start_byte, at.end_byte))
         })
         .collect::<Vec<_>>();
     for obligation in handed {

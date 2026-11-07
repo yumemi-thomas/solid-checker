@@ -378,7 +378,7 @@ export const VALUE_USES = {
   // W3 (review of 7c0eff2d9): a write into a call's result (`ecb().v = ecc`), and an escaped read in a store setter's callback (run on
   // the caller's stack, though its role is a deferred callback).
   "use-call-target-apart": { ...USE_READ, imports: ["createStore"], legal: ["memo", "effect-compute"], importLines: ["const [ect] = createStore({ a: 1 });", "const ech: any = {};", "const ecb = () => ech;", "ecb().s = ect;"], text: (o) => `void ${o}; void ech.s.a;` },
-  "use-setter-apart": { ...USE_READ, contexts: ["effect-apply"], importLines: ['import { setSw2 } from "./sw2";', "const [esp] = createSignal(1);", 'const espm = new Map([["k", esp]]);'], files: SETTER_STORE.files, text: (o) => `void ${o}; setSw2((d) => { d.n = espm.get("k")!(); });` },
+  "use-setter-apart": { ...USE_READ, contexts: ["body"], importLines: ['import { setSw2 } from "./sw2";', "const [esp] = createSignal(1);", "const esph = ((): (() => number) | null => null)() ?? esp;"], files: SETTER_STORE.files, text: (o) => `void ${o}; setSw2((d) => { d.n = esph(); });` },
   "use-export-let": { ...USE_READ, importLines: ['const [elc] = createSignal(1);', 'export let elRead = elc;', 'import { readEl } from "./el";'], files: { "el.ts": 'import { elRead } from "./App";\nexport const readEl = () => elRead();\n' }, text: (o) => `void ${o}; void readEl();` },
 };
 const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
