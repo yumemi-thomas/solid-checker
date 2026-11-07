@@ -334,8 +334,55 @@ pub(super) fn leaf_owner_operations_for_file(
                     },
                 )
             };
+            // A call in IIFE layers the callback runs in place is judged at its
+            // own line, as a direct call is: that is where rc.21 raises the
+            // code (the strict judge, Chrome). The IIFE call itself takes no
+            // helper path, so the operation is not claimed at it too.
+            let through_iife = |span: Span| {
+                let ast = &callback_file.ast;
+                let mut at = span;
+                for _ in 0..16 {
+                    let Some(function) = crate::owners::owning_function(ast, at) else {
+                        return false;
+                    };
+                    // A parameter list is the helper path's (argument facts,
+                    // defaults): only a layer with none is the leaf's own text.
+                    if function.span == leaf_callback.span
+                        || function.r#async
+                        || function.generator
+                        || !function.parameters.is_empty()
+                        || function.rest_parameter
+                        || !function.body.contains(at)
+                    {
+                        return false;
+                    }
+                    let Some(iife) = ast.calls_with_peeled_callee(function.span).next() else {
+                        return false;
+                    };
+                    if direct_callback_runs(callback_file, leaf_callback.span, iife.span) {
+                        return true;
+                    }
+                    at = iife.span;
+                }
+                false
+            };
+            let iife_call = callback_file
+                .ast
+                .function_at(callback_file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|literal| {
+                    !literal.r#async
+                        && !literal.generator
+                        && literal.parameters.is_empty()
+                        && !literal.rest_parameter
+                })
+                && (direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                    || through_iife(call.span));
+            if iife_call {
+                continue;
+            }
             if !own_list
                 && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                && !through_iife(call.span)
                 && !(handed() && in_place())
             {
                 continue;

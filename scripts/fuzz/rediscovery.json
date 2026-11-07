@@ -5764,6 +5764,18 @@
   "rediscovered": "flw-guard-* direct ids over the five owner codes (105, Chrome confirmed): build rmg7 (b2e910572) 70 false cleans; r2: 0 (76 uncertifiable, 29 agree); legal twins 80 clean on both"
  },
  {
+  "finding": "SC3001 placed a forbidden call inside IIFEs a leaf callback runs (onSettled, a tracked compute) at the IIFE's line; rc.21 raises the code from the call's own line, so the strict judge read the V as off-site (Part 16, 13 rows)",
+  "found": "Part 16's strict judge (0a656082c, claude/flip-stacked)",
+  "fixed": "R5's SC3001 IIFE placement",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-tracked-signal-fn-wrapper-iife",
+   "mx-primitive-in-forbidden-scope-settled-effect-reexport-iife"
+  ],
+  "rediscovered": "the 13 rows' programs replayed (Chrome confirmed the code each time): build r7 V on the IIFE line in 13 of 13; r8 V on the forbidden call's line in 13 of 13 (each row's region). Part 16's judge confirms on merge"
+ },
+ {
   "finding": "an owned edge hid another entry: `f(); el.onclick = f` (stored, a member, a map, a library registry, returned) certified the site, and Chrome raised NO_OWNER_* on the click (ADR 0868)",
   "found": "the owner/scope scout (F2)",
   "fixed": "ADR 0868",
