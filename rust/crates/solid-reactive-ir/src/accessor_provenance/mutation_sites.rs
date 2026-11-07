@@ -869,6 +869,7 @@ const EVENT_READS: &[&str] = &[
     "clientY",
     "code",
     "ctrlKey",
+    "data",
     "defaultPrevented",
     "deltaMode",
     "deltaX",
@@ -1261,20 +1262,18 @@ fn received_by_seen_code(
         // A method run with the value as `this`: seen only for a closed list
         // of the window's methods that call nothing with it, and a listener
         // that can reach neither its `this` nor its event (review D3).
-        // The value is the window, so with no declaration (a dependency's
-        // untyped parameter) its method is the window's by key.
+        // The value is the window, so whatever the types say (a dependency's
+        // untyped parameter, `@types/node`'s `clearTimeout`, an invalid call)
+        // its method is the window's by key, while nothing wrote it.
         let name = standard
             .map(|declaration| declaration.qualified_name.as_ref())
             .or_else(|| {
                 let member = file
                     .ast
                     .member_at(file.ast.peel_ts_sugar_span(call.callee))?;
-                (kind == Obtained::Global
-                    && lookup
-                        .resolved_callee_call(file, call.callee)
-                        .is_none_or(|resolved| resolved.declaration.is_none()))
-                .then(|| member_key(file, member))
-                .flatten()
+                (kind == Obtained::Global)
+                    .then(|| member_key(file, member))
+                    .flatten()
             });
         return name.is_some_and(|name| {
             standard_member_intact(lookup, name)
@@ -1461,6 +1460,19 @@ fn callback_seen(
         if let Some(seen) = closed_parameter_seen(lookup, file, declaration, depth, test) {
             return seen;
         }
+        // A `const` holds what its initializing call returned.
+        let held = file.ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == ast::BindingShape::Identifier
+                && matches!(binding.names.as_slice(), [name] if name.span == declaration)
+        });
+        if let Some(inner) = held
+            .and_then(|binding| binding.initializer)
+            .and_then(|initializer| file.ast.call_at(file.ast.peel_ts_sugar_span(initializer)))
+            .filter(|inner| !inner.construct)
+        {
+            return call_result_seen(lookup, file, inner, frame, depth, test);
+        }
     }
     function_value_at(lookup, file, span)
         .is_some_and(|(callee_file, function)| test(callee_file, function))
@@ -1533,6 +1545,9 @@ fn closed_parameter_seen(
     })?;
     let name = match function.kind {
         ast::FunctionKind::Declaration => function.name.as_ref()?.span,
+        // A function expression's own name is an entry no binding shows
+        // (review R52).
+        _ if function.name.is_some() => return Some(false),
         _ => {
             file.ast
                 .bindings
@@ -1541,7 +1556,15 @@ fn closed_parameter_seen(
                     binding.immutable
                         && binding.shape == ast::BindingShape::Identifier
                         && binding.initializer.is_some_and(|initializer| {
-                            file.ast.peel_ts_sugar_span(initializer) == function.span
+                            let initializer = file.ast.peel_ts_sugar_span(initializer);
+                            // `options.run ?? ((f) => ...)`: this function is
+                            // reachable through the binding alone.
+                            initializer == function.span
+                                || file.ast.logical_expressions.iter().any(|logical| {
+                                    logical.span == initializer
+                                        && file.ast.peel_ts_sugar_span(logical.right)
+                                            == function.span
+                                })
                         })
                 })?
                 .names
@@ -1623,8 +1646,12 @@ fn call_result_seen(
             parent: frame,
         },
     };
-    callee_file.ast.own_returns(function).all(|returned| {
-        returned.argument.is_none_or(|argument| {
+    function
+        .expression_return
+        .iter()
+        .chain(callee_file.ast.own_returns(function))
+        .filter_map(|returned| returned.argument)
+        .all(|argument| {
             callback_seen(
                 lookup,
                 callee_file,
@@ -1634,7 +1661,6 @@ fn call_result_seen(
                 test,
             )
         })
-    })
 }
 
 /// The argument the entering call gives the parameter declared at
@@ -1796,10 +1822,8 @@ fn dispatched_event_stays_inline(
     let constructed = |span: Span| {
         file.ast.call_at(span).is_some_and(|construct| {
             construct.construct
-                && matches!(
-                    global_name(file, file.ast.peel_ts_sugar_span(construct.callee)),
-                    Some("Event" | "CustomEvent")
-                )
+                && global_name(file, file.ast.peel_ts_sugar_span(construct.callee))
+                    .is_some_and(|name| name.ends_with("Event"))
                 && lookup
                     .standard_library_declaration(file, construct, typefacts::CallKind::Construct)
                     .is_some()
