@@ -1638,3 +1638,30 @@ fn a_value_handed_to_unseen_code_withdraws_the_tuple_slots() {
         assert!(withdrawn(source).0, "{source}");
     }
 }
+
+/// The census runs inside the member-stability memo probe, which may read no
+/// memo: a probe that does begins the build from inside its own
+/// invalidation, and a daemon's incremental build waits on itself forever
+/// (the rf3 grid's stall). A listed member's intactness reads the
+/// assigned-member names from the base index, as that memo's probe does.
+#[test]
+fn the_unseen_code_census_reads_no_memo_as_a_probe() {
+    for source in [
+        "window.addEventListener('itx', (e: any) => { e.currentTarget.Function('x')(); });",
+        "window.addEventListener('itx', function (this: any) { this.Function('x')(); });",
+        "window.scrollTo = patch; window.scrollTo(0, 0);",
+        "Object.keys(window);",
+        "Object.keys = patch; Object.keys(window);",
+    ] {
+        let (probed, direct) = with_lookup(source, &[], |lookup| {
+            let probed = super::memo_probes::as_probe(|| {
+                crate::interproc::accessor_provenance::handed_to_unseen_code(lookup)
+            });
+            (
+                probed,
+                crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
+            )
+        });
+        assert_eq!(probed, direct, "{source}");
+    }
+}

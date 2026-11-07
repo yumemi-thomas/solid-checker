@@ -90,7 +90,9 @@ const ITER_PATCHES = {
   "iter-global-unseen": `(globalThis as any).itSetU = (g: any, k: PropertyKey) => { const itO = g.Array.prototype[Symbol.iterator]; g.Array.prototype[k] = ${ITER_PAIR}; }; (globalThis as any).itSetU(window, Symbol.iterator);`,
   // Reviews R2 and R7: a standard function that calls what it is given (`map(Function)`), `call` running a project function that
   // writes through its parameter, the global object kept in an object or returned, an intrinsic kept in a `Map`.
-  "iter-map-function": `[${JSON.stringify(ITER_CODE)}].map(Function as unknown as (code: string) => () => void).forEach((f) => f());`,
+  // `map` calls what it is given with (element, index, array); `Function` would read the code as a parameter list, so the element is
+  // the argument list and `Function.apply` bound to `Function` runs it: `map` still calls the function it is given.
+  "iter-map-function": `[[${JSON.stringify(ITER_CODE)}]].map(Function.apply.bind(Function, null) as unknown as (args: string[]) => () => void).forEach((f) => f());`,
   "iter-call-patch": `const itPatch = (g: any) => { const itO = g.Array.prototype[Symbol.iterator]; const itKs: PropertyKey[] = [Symbol.iterator]; g.Array.prototype[itKs[0]] = ${ITER_PAIR}; }; itPatch.call(null, globalThis);`,
   "iter-global-stored": `const itHolder = { g: globalThis as any }; const itAP = itHolder.g.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
   "iter-global-returned": `const itRoot = (): any => globalThis; const itAP = itRoot().Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,

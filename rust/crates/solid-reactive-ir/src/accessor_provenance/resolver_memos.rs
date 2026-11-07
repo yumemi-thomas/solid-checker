@@ -1307,10 +1307,7 @@ fn build_on(
     );
     state.questions = current;
     store.publish::<TupleIteration>([((), Some(lookup.member_stability().tuple_iteration))]);
-    store.publish::<TupleSlotIteration>([(
-        (),
-        Some(lookup.member_stability().tuple_slot_iteration),
-    )]);
+    store.publish::<TupleSlotIteration>([((), Some(lookup.tuple_slot_iteration_may_be_mutated()))]);
     timer.lap("inputs");
     // Stage 2: binding locations (a parameter key overwrites) and
     // declarations, last wins in file order.

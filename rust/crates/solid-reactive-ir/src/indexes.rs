@@ -3,8 +3,9 @@
 //! This module hides AST and TypeScript table layout from rule discovery. The
 //! builder asks semantic questions here instead of repeatedly scanning facts.
 
+use crate::once_guard::Once as OnceLock;
 use crate::{HashMap, HashSet};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
@@ -930,7 +931,7 @@ pub(super) struct SemanticLookup<'a> {
     /// L0: the analyzed files by interned id ([`crate::base`]).
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
-    reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    reference_rows: std::sync::OnceLock<crate::base::file_table::ReferenceRows>,
     /// Each path's import resolutions, digested into its Entities section.
     resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
@@ -1294,7 +1295,7 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
             resolution_digests: OnceLock::new(),
-            reference_rows: OnceLock::new(),
+            reference_rows: std::sync::OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
@@ -2538,6 +2539,19 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// L1: member uses by name.
+    /// Whether some assignment writes a member named `name`: the names
+    /// [`crate::object_members::AssignedMembersAnswer`] holds, read from the
+    /// base index as its probe reads them, so a memo probe may ask it (one
+    /// that reads that memo begins the build from inside itself).
+    pub(crate) fn member_name_assigned_in_base(&self, name: &str) -> bool {
+        self.note_probe_read(crate::base::memo::probes::Probe::AssignedNames, || {
+            crate::base::memo::probes::PolledKey::Unit
+        });
+        self.base_members()
+            .values(&crate::base::MemberName::Named(Arc::from(name)))
+            .any(|(_, used)| used.role == crate::base::MemberRole::Assigned)
+    }
+
     pub(crate) fn base_members(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::MemberName, crate::base::MemberUse> {

@@ -5583,5 +5583,76 @@
    "lg-reactive-write-in-owned-scope-iter-global-unseen-signal-direct-none"
   ],
   "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE iter-global-unseen, layers none (190 programs): 1c831d131 78 false-positive (Chrome-confirmed), this build 0. Fixtures iteration-written-slots handed-seen-listener (V), handed-unseen (U), handed-proto-writer (U)"
+ },
+ {
+  "finding": "review R19a: the census took the declaration a call's callee resolves to as the function called (a value a call made, a written `let`, an overridden or written method): SC2001 V where Chrome is quiet",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19a (exact callee value, declared_callee_at_parameter with its exact flag); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-through-call-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-through-call-call-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-let-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-subclass-method-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-member-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-cond-callee-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-listener-through-call-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-through-call, iter-through-call-call, iter-let-written, iter-subclass-method, iter-member-written: 5fe4d0b8b (built with a local timer-settler probe edit no context here reaches) 78 false-positive each (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal each). iter-cond-callee, iter-listener-through-call: already uncertifiable on 5fe4d0b8b (128 each), so they rediscover nothing there; kept as the shapes R19 named"
+ },
+ {
+  "finding": "review R19b: a listed standard member the program writes (`Object.keys = …`, `defineProperty(Object, 'keys', …)`) still counted as seen code: SC2001 V where Chrome is quiet",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19b (standard_member_intact); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-keys-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-keys-defined-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-this-seen-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-keys-alias-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-hasown-key-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-keys-written, iter-keys-defined: 5fe4d0b8b (built with a local timer-settler probe edit no context here reaches) 78 false-positive each (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal each). iter-this-seen-written, iter-keys-alias-written, iter-hasown-key: already uncertifiable on 5fe4d0b8b (128 each), so they rediscover nothing there; kept as the shapes R19 named"
+ },
+ {
+  "finding": "review R19e: an event's composed path, or a value compared after a `Function` call ran, handed the window on unseen: SC2001 V where Chrome is quiet",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19e (composed path members and compared calls are no seen use); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-composed-path-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-composed-index-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-composed-forof-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-composed-some-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-compared-call-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-composed-path, iter-composed-index, iter-composed-forof, iter-composed-some, iter-compared-call: 5fe4d0b8b (built with a local timer-settler probe edit no context here reaches) 78 false-positive each (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal each)"
+ },
+ {
+  "finding": "reviews R19c, R19d: a destructured `any` window and an aliased listener adder or timer",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19c, R19d; now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-destructured-any-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-listener-alias-signal-direct-none"
+  ],
+  "outside": "iter-destructured-any, iter-listener-alias: uncertifiable on 5fe4d0b8b already (128 each), so the grid cannot show the old build wrong; fixtures handed-any-destructured, handed-listener-alias, handed-timer-alias, handed-timer-argument, handed-member-timer-value pin them"
+ },
+ {
+  "finding": "ADR 0803 step 2: the unseen-code census ran inside the member-stability memo probe and reached memos from there (the assigned-member census through standard_member_intact and through an exact member callee): a daemon's incremental build waited on its own lazy cell forever",
+  "found": "R1f, lg-recall grids on rf3 and rf4: the executor gave no answer to prepare within 600 s",
+  "fixed": "ADR 0803 step 2: the census no longer feeds the member-stability index (tuple_slot_iteration asked of the lookup), standard_member_intact reads the base index; once_guard panics on a lazy cell re-entered on its own thread",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-listener-event-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-subclass-method-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE: rf3 stopped at 1,500 of 6,460 (and 1,800 of 3,572 on the listener contexts alone), rf4 at about 3,678 of 6,460 (2,770 harness rows), each an executor timeout with daemons sampled in the re-entrant wait; this build answers all 6,460 (0 harness). Unit test the_unseen_code_census_reads_no_memo_as_a_probe fails on the first path"
  }
 ]

@@ -1021,12 +1021,12 @@ fn received_by_seen_code(
                 .map(|member| member_key(file, member));
             return member
                 .is_none_or(|name| name.is_some_and(|name| standard_member_intact(lookup, name)))
-                && function_at(lookup, file, call, 0).is_some_and(|(callee_file, function)| {
+                && (function_at(lookup, file, call, 0).is_some_and(|(callee_file, function)| {
                     function.kind == ast::FunctionKind::Arrow
                         || callee_file
                             .source_text(function.span)
                             .is_some_and(|text| !crate::execution_role::mentions_receiver(text))
-                });
+                }) || timer_runs_promise_settler(lookup, file, call));
         }
         Slot::ReadOnlyBuiltin => {
             return read_only_builtin(file, call)
@@ -1104,6 +1104,66 @@ fn received_by_seen_code(
     parameter_hands_nothing(lookup, callee_file, function, argument, kind, depth)
 }
 
+/// The sleep idiom (`new Promise((done) => setTimeout(done, ms))`, review D11):
+/// whether the callback of the timer `call` is a settling function of a
+/// `new Promise` the checker can name. The engine's `resolve` and `reject`
+/// ignore `this` and run nothing with it. Exactly the callback and a delay (a
+/// further argument is handed to them); the reference is the parameter itself,
+/// never written; a non-arrow executor reads no `arguments`, which aliases its
+/// parameters in sloppy code; and `Promise` is the global, unwritten, standard.
+fn timer_runs_promise_settler(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+) -> bool {
+    let [callback, ..] = call.arguments.as_slice() else {
+        return false;
+    };
+    if call.arguments.len() > 2 || call.arguments.iter().any(|argument| argument.spread) {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(callback.span);
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    let written = file.ast.write_targets.iter().any(|target| {
+        file.ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(*target))
+            == Some(declaration)
+    });
+    let Some(executor) = file.ast.functions.iter().find(|function| {
+        function.parameters.iter().take(2).any(|parameter| {
+            parameter.shape == ast::BindingShape::Identifier
+                && matches!(parameter.names.as_slice(), [name] if name.span == declaration)
+        })
+    }) else {
+        return false;
+    };
+    let reads_arguments = file.ast.identifiers.iter().any(|identifier| {
+        executor.span.contains(identifier.span)
+            && identifier.role == ast::IdentifierRole::Reference
+            && file.source_text(identifier.span) == Some("arguments")
+    });
+    let promise = file.ast.calls.iter().find(|construct| {
+        construct.construct
+            && construct
+                .arguments
+                .first()
+                .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument.span) == executor.span)
+    });
+    !written
+        && (executor.kind == ast::FunctionKind::Arrow || !reads_arguments)
+        && promise.is_some_and(|promise| {
+            global_name(file, file.ast.peel_ts_sugar_span(promise.callee)) == Some("Promise")
+                && lookup
+                    .standard_library_declaration(file, promise, typefacts::CallKind::Construct)
+                    .is_some_and(|declaration| {
+                        declaration.qualified_name.as_ref() == "PromiseConstructor.construct"
+                    })
+                && standard_member_intact(lookup, "Promise")
+        })
+}
+
 /// Whether nothing replaced the standard member `qualified_name`: no write of
 /// a member of its name on any receiver (`window.scrollTo = f`), and none of
 /// the writes [`crate::base::contributions::patch_veto`] names: a standard
@@ -1113,7 +1173,9 @@ fn standard_member_intact(lookup: &SemanticLookup<'_>, qualified_name: &str) -> 
     let member = qualified_name
         .rsplit_once('.')
         .map_or(qualified_name, |(_, member)| member);
-    !crate::indexes::CalleeWorld::member_name_assigned(lookup, member)
+    // The base index, not the assigned-member memo: this census runs inside
+    // the member-stability memo probe, which may read no memo.
+    !lookup.member_name_assigned_in_base(member)
         && !(lookup.hazard_present(crate::base::Hazard::AnyStandardPatch)
             && crate::base::contributions::patch_veto(qualified_name)
                 .into_iter()
