@@ -755,6 +755,7 @@
    "mx-dynamic-static-promise-patch-global-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-dynamic-static-promise-patch-window-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-dynamic-static-promise-then-named-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
+   "mx-dynamic-static-promise-then-withheld-chain-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-dynamic-static-promise-then-withheld-named-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-dynamic-static-promise-then-withheld-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-loading-on-accessor-aw-helper-late-accessor-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await"]},
@@ -824,6 +825,7 @@
    "mx-no-owner-context-gen-yield-each-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-no-owner-context-gen-yield-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-no-owner-context-then-named-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
+   "mx-no-owner-context-then-withheld-chain-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-no-owner-context-then-withheld-named-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-no-owner-context-then-withheld-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-no-owner-effect-apply-placed-twin-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner"]},
@@ -2754,7 +2756,9 @@
    "mx-untracked-read-after-await-aw-then-member-x-wrapper-none-m-show-signal": {"outcome":"false-clean","cause":"R-neighbour-U"},
    "mx-untracked-read-after-await-then-named-x-tuple-forward-13": {"outcome":"false-clean","cause":"census"},
    "mx-untracked-read-after-await-then-named-x-tuple-forward-2": {"outcome":"false-clean","cause":"census"},
-   "mx-untracked-read-after-await-then-named-x-wrapper-forward-13": {"outcome":"false-clean","cause":"census"}
+   "mx-untracked-read-after-await-then-named-x-wrapper-forward-13": {"outcome":"false-clean","cause":"census"},
+   "mx-untracked-read-after-await-then-withheld-chain-x-hook-forward-2": {"outcome":"false-clean","cause":"R-neighbour-U"},
+   "mx-untracked-read-after-await-then-withheld-chain-x-hook-member-forward-13": {"outcome":"false-clean","cause":"R-neighbour-U"}
   }
  }
 }
