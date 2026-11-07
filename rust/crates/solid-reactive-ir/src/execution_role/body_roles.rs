@@ -833,20 +833,23 @@ pub(crate) fn generator_flight_stepped(
             None => return false,
         }
     };
-    let Some(generator) = containing_ast_function(ast, span).filter(|function| function.generator) else {
+    let Some(generator) = containing_ast_function(ast, span).filter(|function| function.generator)
+    else {
         return false;
     };
-    crate::local_access::function_reference_hand_offs(file, generator, lookup).is_some_and(|references| {
-        references.iter().any(|(at, hand_off)| {
-            *hand_off == crate::local_access::HandOff::Call
-                && ast.calls.iter().any(|call| {
-                    ast.peel_ts_sugar_span(call.callee) == *at
-                        && ast.iterated_operands.contains(&call.span)
-                        && containing_ast_function(ast, call.span)
-                            .is_some_and(|holder| holder.r#async && !holder.generator)
-                })
-        })
-    })
+    crate::local_access::function_reference_hand_offs(file, generator, lookup).is_some_and(
+        |references| {
+            references.iter().any(|(at, hand_off)| {
+                *hand_off == crate::local_access::HandOff::Call
+                    && ast.calls.iter().any(|call| {
+                        ast.peel_ts_sugar_span(call.callee) == *at
+                            && ast.iterated_operands.contains(&call.span)
+                            && containing_ast_function(ast, call.span)
+                                .is_some_and(|holder| holder.r#async && !holder.generator)
+                    })
+            })
+        },
+    )
 }
 
 /// ADR 0851: whether code at `span`, in a generator's own body, runs on the

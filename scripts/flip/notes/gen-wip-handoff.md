@@ -1,5 +1,11 @@
 # gen-wip handoff (2026-11-07; NOT green)
 
+## Latest (Claude, after the Codex credit stop) — ffc77cfd0 + this commit
+- Codex tree saved as 0ce3cd34a. Fixed its wrong blocker: `async-flight-error-unobserved` now only for a generator iterated in an async flight (`generator_flight_stepped`); owner-handed-inline GeneratorHanded back to function-run-unplaced.
+- Debug build ok; coverage: only helper-prop-read (blocker callee-callback-timing -> function-run-unplaced, still U, accepted) and the new generator-step-owner snapshot; both updated in this commit, every row read.
+- OPEN precision loss: generator-step-owner App.tsx:54 (drained sync generator) and :65 (first segment) were SC2001 V on 97c1bb966, now U function-run-unplaced (fail-closed, but the README says negatives keep the compute's context). Trace with tools/arms-text.mjs before claiming green; likely the callee_roles `generator-steps` arm or write walk `generator-steps-unknown` for InPlace calls.
+- Still not run on this tree: ownership-gate, VM census (gen cells, gstep, W1/W2 ctx, lg twins), corpus sweep, verify-delta, make verify, ADR 0851-0853 final text. The smoke-manifest stop stands (proposed patch in scratch; also the pending gen-yield-alias id).
+
 ## STOP before smoke manifest change (2026-11-07 continuation)
 
 The brief requires a stop before changing a smoke manifest. No manifest, judge,
