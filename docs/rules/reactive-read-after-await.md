@@ -158,7 +158,9 @@ Each of these keeps it from applying:
 - a generator callback, which runs nothing when it is called. A generator the
   computation steps runs on its flight: past an `await`, under a `for await`
   written in the computation, the read is proved; past a `yield`, or stepped any
-  other way, it is an uncertifiable obligation (`generator-stepped`, ADR 0820);
+  other way, it is an uncertifiable obligation (`generator-stepped`, ADR 0820),
+  and so is a read in a function the body hands on past the `yield` (a slot, an
+  assigned member, a forwarded callback, ADR 0850);
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
 - a read inside or after `for await` (or after `await using`) is an

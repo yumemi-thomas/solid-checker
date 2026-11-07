@@ -16,8 +16,8 @@ const built = {
   plan: { clicks: [] },
 };
 const site = { line: 10 };
-const finding = (rule, line, kind = "violation") => ({ rule, kind, line, endLine: line, id: "SC", file: "App.tsx" });
-const event = (code, ...lines) => ({ code, message: "m", positions: lines.map((line) => ({ file: "App.tsx", line })) });
+const finding = (rule, line, kind = "violation") => ({ rule, kind, line, column: 1, endLine: line, id: "SC", file: "App.tsx" });
+const event = (code, ...lines) => ({ code, message: "m", positions: lines.map((line) => ({ file: "App.tsx", line, column: 1 })) });
 const run = (diagnostics, hits = { h1: 1, h2: 1, h3: 1 }, extra = {}) => ({ diagnostics, errors: [], witnesses: [], hits, ...extra });
 const verdictsOf = (findings, runtime) => offSiteVerdicts({ findings, built, runtime, plan: built.plan }).map((row) => row.verdict + (row.why ? `(${row.why})` : ""));
 

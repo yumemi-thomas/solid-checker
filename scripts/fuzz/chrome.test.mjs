@@ -3,23 +3,29 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EntryCache } from "./cache.mjs";
-import { CLEAN_ID, cacheableChrome, chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus, isCloseTimeout, runChrome } from "./chrome.mjs";
-import { HALT_TEXT, haltable } from "./hits.mjs";
+import { CLEAN_ID, cacheableChrome, chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus, findingsOnClean, isCloseTimeout, runChrome, runtimeOnClean } from "./chrome.mjs";
+import { HALT_TEXT, INSTRUMENT_PRELUDE, cleanPositions, haltable } from "./hits.mjs";
 import { classify } from "./classify.mjs";
 
 // A row as scripts/runtime-oracle.mjs writes it (the fields the fuzzer reads).
 const row = (over = {}) => ({
   id: "fuzz-1", verdict: "static-only", failure: null, pageErrors: [],
-  diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", file: "App.tsx", line: 12, column: 5, message: "write", verdict: "covered-violation", stack: ["App.tsx:8", "App.tsx:20"] }],
-  findings: [{ file: "App.tsx", rule: "no-write-in-pure-computation", id: "SC2001", kind: "violation", line: 8, endLine: 8 }],
+  diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", file: "App.tsx", line: 12, column: 5, message: "write", verdict: "covered-violation", stack: ["App.tsx:8:3", "App.tsx:20:1"] }],
+  findings: [{ file: "App.tsx", rule: "no-write-in-pure-computation", id: "SC2001", kind: "violation", line: 8, column: 3, endLine: 8 }],
   ...over,
 });
+// The program text, so a deeper frame (line 8 under the write at 12) places a finding: no line of it mounts anything.
+const evidence = { source: Array.from({ length: 30 }, () => "x();").join("\n") };
 const sites = [{ id: "s1", line: 8, kind: "write", witness: { selector: '[data-probe="w1"]', text: "17" } }, { id: "s2", line: 30, kind: "write", witness: null }];
 
 describe("Chrome records", () => {
   it("turns an oracle diagnostic into positions: its site, then each application frame", () => {
     expect(chromeDiagnostics(row())[0].positions).toEqual([
-      { file: "App.tsx", line: 12 }, { file: "App.tsx", line: 8 }, { file: "App.tsx", line: 20 },
+      { file: "App.tsx", line: 12, column: 5 }, { file: "App.tsx", line: 8, column: 3 }, { file: "App.tsx", line: 20, column: 1 },
+    ]);
+    // A row recorded before columns (review 4c): positions without one, which the judges leave unplaced.
+    expect(chromeDiagnostics(row({ diagnostics: [{ code: "X", file: "App.tsx", line: 12, stack: ["App.tsx:8"] }] }))[0].positions).toEqual([
+      { file: "App.tsx", line: 12 }, { file: "App.tsx", line: 8 },
     ]);
   });
 
@@ -46,7 +52,7 @@ describe("Chrome records", () => {
   });
 
   it("and Chrome's own diagnostic at the finding settles it as agree", () => {
-    const result = classify({ sites, checker: chromeChecker(row()), runtime: chromeRuntime(row(), [{ selector: '[data-probe="w1"]', text: "17" }], sites), plan: { clicks: [] } });
+    const result = classify({ sites, checker: chromeChecker(row()), runtime: chromeRuntime(row(), [{ selector: '[data-probe="w1"]', text: "17" }], sites), plan: { clicks: [] }, evidence });
     expect(result.verdict).toBe("agree");
   });
 });
@@ -79,7 +85,7 @@ describe("a diagnostic Chrome could not place", () => {
 
   it("does not hide a diagnostic Chrome did place at the finding (that still agrees)", () => {
     const r = row({ unattributed: ["HUGE_FAN_OUT"] });
-    expect(classify({ sites, checker: chromeChecker(r), runtime: chromeRuntime(r, shown, sites), plan: { clicks: [] } }).verdict).toBe("agree");
+    expect(classify({ sites, checker: chromeChecker(r), runtime: chromeRuntime(r, shown, sites), plan: { clicks: [] }, evidence }).verdict).toBe("agree");
   });
 });
 
@@ -347,5 +353,17 @@ writeFileSync(arg("--out"), JSON.stringify({ results: ids.map((id) => ({ id, ver
     expect([records.get("a").cached, records.get("b").cached]).toEqual([false, false]);
     expect(records.get("a").runtime.diagnostics.map((d) => d.code)).toEqual(["NO_OWNER_CLEANUP"]);
     expect(options.cache.stats().spotMismatches).toEqual(["a"]);
+  });
+});
+
+describe("a twin's record, put on the clean text (ADR 0815)", () => {
+  const run = `function f() {\n  __h(2); useIt();\n}\n${INSTRUMENT_PRELUDE}`;
+  const clean = cleanPositions(run, "function f() {\n  useIt();\n}\n");
+
+  it("moves frame and finding columns, drops a frame in the prelude, keeps other files and frames with no column", () => {
+    const runtime = { diagnostics: [{ code: "X", positions: [{ file: "App.tsx", line: 2, column: 11 }, { file: "App.tsx", line: 7, column: 3 }, { file: "Other.tsx", line: 2, column: 11 }, { file: "App.tsx", line: 2 }] }], errors: [] };
+    expect(runtimeOnClean(runtime, clean).diagnostics[0].positions).toEqual([{ file: "App.tsx", line: 2, column: 3 }, { file: "Other.tsx", line: 2, column: 11 }, { file: "App.tsx", line: 2 }]);
+    const checker = { ok: true, findings: [{ file: "App.tsx", rule: "r", line: 2, column: 11, endLine: 2 }, { file: "Other.tsx", rule: "r", line: 2, column: 11, endLine: 2 }] };
+    expect(findingsOnClean(checker, clean).findings.map((finding) => finding.column)).toEqual([3, 11]);
   });
 });

@@ -30,9 +30,12 @@ describe("a program's answers", () => {
     // An advisory code is not judged: its silence is no miss.
     expect(TWIN_CODES).not.toContain("ASYNC_OUTSIDE_LOADING_BOUNDARY");
     expect(answers.ASYNC_OUTSIDE_LOADING_BOUNDARY).toBeUndefined();
-    // A withholding rule's finding declines every code, as the grids count it.
-    const withheld = answersOf([{ rule: "reactive-dispatch-unresolved", kind: "uncertifiable", line: 8 }, { rule: "missing-owner", kind: "violation", line: 5 }]);
+    // A withholding rule's finding on the site's lines declines every code; elsewhere it declines none (review 4c).
+    const withheldFindings = [{ rule: "reactive-dispatch-unresolved", kind: "uncertifiable", line: 8 }, { rule: "missing-owner", kind: "violation", line: 5 }];
+    const withheld = answersOf(withheldFindings, [8]);
     expect([withheld.PRIMITIVE_IN_FORBIDDEN_SCOPE, withheld.NO_OWNER_BOUNDARY]).toEqual(["uncertifiable", "violation"]);
+    const elsewhere = answersOf(withheldFindings, [3]);
+    expect([elsewhere.PRIMITIVE_IN_FORBIDDEN_SCOPE, elsewhere.NO_OWNER_BOUNDARY]).toEqual(["none", "violation"]);
   });
 });
 

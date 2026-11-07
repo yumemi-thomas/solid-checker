@@ -7,11 +7,11 @@ const sites = [
   { id: "s2", line: 20, kind: "read", witness: { selector: '[data-probe="k1"]', text: "1007" } },
 ];
 const plan = { clicks: ["b1"] };
-const violation = (rule, line, endLine = line, id = "SC2001") => ({ rule, id, kind: "violation", line, endLine });
-const uncertifiable = (rule, line, endLine = line) => ({ rule, id: "SC2001", kind: "uncertifiable", line, endLine });
+const violation = (rule, line, endLine = line, id = "SC2001") => ({ rule, id, kind: "violation", line, column: 1, endLine });
+const uncertifiable = (rule, line, endLine = line) => ({ rule, id: "SC2001", kind: "uncertifiable", line, column: 1, endLine });
 const runtime = (over = {}) => ({ failure: null, diagnostics: [], errors: [], witnesses: [{ siteId: "s1", reached: true }, { siteId: "s2", reached: true }], ...over });
 const checker = (findings) => ({ ok: true, findings });
-const diag = (code, ...lines) => ({ code, message: code, positions: lines.map((line) => ({ file: "App.tsx", line })) });
+const diag = (code, ...lines) => ({ code, message: code, positions: lines.map((line) => ({ file: "App.tsx", line, column: 1 })) });
 
 describe("classify: the checker claims a violation", () => {
   it("is a candidate false positive when the runtime ran the site and said nothing", () => {
@@ -22,8 +22,11 @@ describe("classify: the checker claims a violation", () => {
   });
 
   it("agrees when a diagnostic whose code claims the rule has the finding's line on its stack", () => {
-    const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 12, 8)] }), plan });
+    // Review 4c, R8: at the exact position of a deeper frame, on a line that mounts nothing; with no program text no deeper frame counts.
+    const text = Array.from({ length: 20 }, () => "x();").join("\n");
+    const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 12, 8)] }), plan, evidence: { source: text } });
     expect(result.verdict).toBe("agree");
+    expect(classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 12, 8)] }), plan }).verdict).toBe("candidate-misplaced");
   });
 
   it("is inconclusive when the runtime is silent but the site's witness is absent (it never ran)", () => {
@@ -115,14 +118,21 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
   // `const cb1 = () => { ...line 8... }; onSettled(cb1);` registered on line 30: the callback runs later, so line 30 is not on the stack.
   describe("a finding on the line where the callback was registered", () => {
     const registrations = (line) => (line >= 7 && line <= 9 ? [30] : []);
-    const withRegistration = (findings, code = "CLEANUP_IN_FORBIDDEN_SCOPE", lines = [8, 9]) => classify({ sites: [], checker: checker(findings), runtime: runtime({ diagnostics: [diag(code, ...lines)] }), plan, evidence: { registrationLines: registrations } });
-    it("covers the diagnostic: a withholding finding is a recall gap, a violation an agree", () => {
-      const declined = withRegistration([uncertifiable("reactive-dispatch-unresolved", 30)]);
+    // Review 4c, R8: the registering argument's exact position (`cb1` at 30:11 in `onSettled(cb1)`), read from the program text.
+    const positions = (line) => (line >= 7 && line <= 9 ? [{ line: 30, column: 11 }] : []);
+    const withRegistration = (findings, code = "CLEANUP_IN_FORBIDDEN_SCOPE", lines = [8, 9]) => classify({ sites: [], checker: checker(findings), runtime: runtime({ diagnostics: [diag(code, ...lines)] }), plan, evidence: { registrationLines: registrations, registrationPositions: positions } });
+    const at11 = (finding) => ({ ...finding, column: 11 });
+    it("covers the diagnostic at the registering argument's position: a claiming uncertifiable is a recall gap, a violation an agree, a withholding nothing (R25)", () => {
+      const declined = withRegistration([at11(uncertifiable("leaf-owner-forbidden-call", 30))]);
       expect(declined.verdict).toBe("recall-gap");
-      expect(declined.items.find((item) => item.kind === "recall-gap")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE", line: 8, rule: "reactive-dispatch-unresolved" } });
-      const proven = withRegistration([violation("leaf-owner-forbidden-call", 30, 30, "SC3001")]);
+      expect(declined.items.find((item) => item.kind === "recall-gap")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE", line: 8, rule: "leaf-owner-forbidden-call" } });
+      expect(withRegistration([at11(uncertifiable("reactive-dispatch-unresolved", 30))]).items.map((item) => item.kind)).toContain("candidate-false-clean");
+      const proven = withRegistration([at11(violation("leaf-owner-forbidden-call", 30, 30, "SC3001"))]);
       expect(proven.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
       expect(proven.items.find((item) => item.kind === "agree")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE" } });
+      // At another column of that line (the call's start): not the argument.
+      expect(withRegistration([uncertifiable("reactive-dispatch-unresolved", 30)]).verdict).toBe("candidate-false-clean");
+      expect(withRegistration([violation("leaf-owner-forbidden-call", 30, 30, "SC3001")]).verdict).toBe("candidate-misplaced");
     });
     it("is still a false clean without the registration link, or when the finding's rule does not claim the code", () => {
       expect(classify({ sites: [], checker: checker([uncertifiable("reactive-dispatch-unresolved", 30)]), runtime: runtime({ diagnostics: [diag("CLEANUP_IN_FORBIDDEN_SCOPE", 8, 9)] }), plan }).verdict).toBe("candidate-false-clean");
@@ -182,18 +192,19 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     expect(classify({ sites, checker: checker([uncertifiable("missing-owner", 30)]), runtime: fired, plan }).items.find((item) => item.kind === "candidate-false-clean").certified).toBe(false);
   });
 
-  it("a diagnostic with no line is a false clean only when no claiming finding exists anywhere", () => {
+  it("a diagnostic with no line is unjudged: no finding has its position (R8, `unplaced`)", () => {
     const unplaced = runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED")] });
+    // Review 4c, R8: a code with a place and no position cannot be judged: `unplaced`, never a pass or a false clean.
     const none = classify({ sites, checker: checker([]), runtime: unplaced, plan });
-    expect(none.items.find((item) => item.kind === "candidate-false-clean")?.diagnostic).toMatchObject({ code: "STRICT_READ_UNTRACKED", line: null, unplaced: true });
+    expect(none.items.find((item) => item.kind === "unplaced")?.diagnostic).toMatchObject({ code: "STRICT_READ_UNTRACKED", line: null, unplaced: true });
     const elsewhere = classify({ sites, checker: checker([violation("strict-read-untracked", 20, 20, "SC1001")]), runtime: unplaced, plan });
-    expect(elsewhere.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
+    expect(elsewhere.items.map((item) => item.kind)).toContain("unplaced");
     // A halt is a consequence, never a false clean; with nothing else to compare the run is inconclusive, not agreement.
     expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("inconclusive");
   });
 
   it("ranks the tiers: false clean, wrong rule, known open, recall gap, unexecuted, inconclusive, agree", () => {
-    expect(VERDICTS).toEqual(["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"]);
+    expect(VERDICTS).toEqual(["candidate-false-positive", "candidate-false-clean", "candidate-misplaced", "candidate-wrong-rule", "known-open", "unplaced", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"]);
     const both = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8), violation("no-write-in-pure-computation", 20, 20)]),
       runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)], witnesses: [{ siteId: "s1", reached: true }, { siteId: "s2", reached: false }] }), plan });
     expect(both.items.map((item) => item.kind).sort()).toEqual(["inconclusive", "recall-gap"]);
@@ -236,8 +247,9 @@ describe("helpers", () => {
     expect(disturbances(unplaced, plan).join("|")).toMatch(/could not be placed on a line \(REACTIVE_WRITE_IN_OWNED_SCOPE\)/);
     // Halting is reported once, as halting.
     expect(disturbances(runtime({ diagnostics: [diag("REACTIVITY_HALTED")] }), plan)).toEqual(["reactivity halted"]);
+    // The unplaced diagnostic itself is unjudged (R8: no position): `unplaced`, beside the finding's own inconclusive.
     const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: unplaced, plan });
-    expect(result.verdict).toBe("inconclusive");
+    expect(result.items.map((item) => item.kind).sort()).toEqual(["inconclusive", "unplaced"]);
   });
 
   it("a placed diagnostic is not unattributed", () => {
