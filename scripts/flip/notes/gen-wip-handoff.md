@@ -1,5 +1,10 @@
 # gen-wip handoff (2026-11-07; NOT green)
 
+## g4 = 50bb44efc measured (sc VM release, uncached Chrome on every row; gen-wip/g4-*.jsonl, v0850-all-ctx.jsonl)
+- All 22 generator contexts (gstep-*, gen-yield-each/sync-each, gen-await..gen-drain; 954 programs): 97c1bb966 43 FP, 14 FC (12 Chrome-confirmed), 1 wrong-rule -> g4 0 FP, 0 FC, 0 wrong-rule. Chrome-differs left: only the pre-existing throw-in-flight family in untouched contexts (gen-await, gen-iife, gen-wrap, gen-delegate, gen-next, gen-prefix, gen-drain).
+- gen cells (88): 0 FP/FC; the 4 throw-in-flight rows are now U (recall-gap/not-fired). lg twins (1,316): unchanged.
+- Gates on g4: coverage (only intended snapshot moves, read) 0 after update, ownership-gate 0. Not yet: corpus sweep, verify-delta, make verify, ADR text; smoke-manifest stop still blocks rediscovery entries.
+
 ## Latest (Claude, after the Codex credit stop) — ffc77cfd0 + this commit
 - Codex tree saved as 0ce3cd34a. Fixed its wrong blocker: `async-flight-error-unobserved` now only for a generator iterated in an async flight (`generator_flight_stepped`); owner-handed-inline GeneratorHanded back to function-run-unplaced.
 - Debug build ok; coverage: only helper-prop-read (blocker callee-callback-timing -> function-run-unplaced, still U, accepted) and the new generator-step-owner snapshot; both updated in this commit, every row read.
