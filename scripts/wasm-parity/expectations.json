@@ -690,7 +690,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 7,
-        "proofObligations": 9,
+        "proofObligations": 10,
         "cachedSummaries": 0,
         "unresolvedObligations": 3
       },
