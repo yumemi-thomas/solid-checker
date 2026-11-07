@@ -237,7 +237,7 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "then-withheld", "then-withheld-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
@@ -846,6 +846,17 @@ export function flipReadContext(context, stmts, kit) {
     if (effect) return { body: [expr(prim("effect", fn(body, { async: true }), { apply: fn([]) }))], view: [] };
     const m = kit.name("m");
     return { body: [decl(m, prim("memo", fn(body, { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
+  // Review R39: a chain of withheld `then`s on a flight the memo returns: the second handler reads. Chrome warns there.
+  if (context === "then-withheld-chain") {
+    const [t, q, f, m] = [kit.name("t"), kit.name("q"), kit.name("f"), kit.name("m")];
+    const star = expr(domExpr(`const ${t}: unknown[] = []; ${t}[Number("0")] = () => 0;`));
+    const flight = domExpr(`${q}(new Promise<number>((done) => setTimeout(() => done(1), 1))).then(() => 1).then(${f})`);
+    return {
+      hoisted: [star],
+      body: [decl(q, domExpr("(x: Promise<number>) => x")), decl(f, fn([...stmts, ret(num(1))])), decl(m, prim("memo", fn([ret(flight)]))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))],
+      view: [],
+    };
   }
   // ADR 0874, review R30-R32: `names` is the program's own object, typed as a list: its `forEach` runs nothing on this stack.
   if (context === "wh-helper-late" || context === "wh-action-late" || context === "wh-root-cleanup") {

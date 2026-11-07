@@ -6758,5 +6758,18 @@
   "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 3 false-positive; m19 0, uncertifiable"
  },
  {"finding": "an impostor away from the receiver (a parameter, a return, a structural type): the write stood silent, certified on the cast forms, Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE", "found": "open-defects patterns types/d03-param-structural, types/p3-cast-param, types/p3-cast-return", "fixed": "ADRs 0840, 0874; uncertifiable", "grid": "patterns", "code": "REACTIVE_WRITE_IN_OWNED_SCOPE", "ids": ["types/d03-param-structural", "types/p3-cast-param", "types/p3-cast-return"], "rediscovered": "patterns lane, Chrome confirming: false clean on fbddde125, fine on the merge of C2's b2c3dee81 (cycle c1), every new row uncertifiable, none proved", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' cast-*, recv-* and wh-* contexts generate the family"},
- {"finding": "a primitive's own setter taken as exact where a Function held in a parameter patches it: SC2001 V, Chrome silent", "found": "open-defects patterns types/s02-setter-slot-function-escaped", "fixed": "ADRs 0840, 0874; uncertifiable", "grid": "patterns", "code": "REACTIVE_WRITE_IN_OWNED_SCOPE", "ids": ["types/s02-setter-slot-function-escaped"], "rediscovered": "patterns lane, Chrome confirming: false positive on fbddde125, fine on the merge of C2's b2c3dee81 (cycle c1), the V is now uncertifiable", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' cast-*, recv-* and wh-* contexts generate the family"}
+ {"finding": "a primitive's own setter taken as exact where a Function held in a parameter patches it: SC2001 V, Chrome silent", "found": "open-defects patterns types/s02-setter-slot-function-escaped", "fixed": "ADRs 0840, 0874; uncertifiable", "grid": "patterns", "code": "REACTIVE_WRITE_IN_OWNED_SCOPE", "ids": ["types/s02-setter-slot-function-escaped"], "rediscovered": "patterns lane, Chrome confirming: false positive on fbddde125, fine on the merge of C2's b2c3dee81 (cycle c1), the V is now uncertifiable", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' cast-*, recv-* and wh-* contexts generate the family"},
+ {
+  "finding": "a chain of withheld `then`s (`q(p).then(() => 1).then(f)` on a receiver with no native claim, a `*` site in the program): `expand_standard` took the `!native_promise` branch and stopped, and `claim` reads no withheld call, so neither handler was walked; Chrome warns at the read in `f`",
+  "found": "review R39 of the merge cfabb02dc (read in code); the fuzz shape confirms it",
+  "fixed": "ADR 0874",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-then-withheld-chain-x-direct-none",
+   "mx-untracked-read-after-await-then-withheld-chain-store-link-direct-none",
+   "mx-untracked-read-after-await-then-withheld-chain-x-direct-none-m-show-signal"
+  ],
+  "rediscovered": "flip-read.mjs then-withheld-chain, matrix.mjs --grid --recall --ids, Chrome confirming: merged build rc1 (cfabb02dc) 7 false-clean; m22 0, 7 recall-gap"
+ }
 ]

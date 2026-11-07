@@ -2630,7 +2630,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         };
         let next = walk.unproven || withheld;
         let previous = std::mem::replace(&mut walk.unproven, next);
-        self.expand_standard(draft, walk, queue, file, call, depth, resolved);
+        self.expand_standard(draft, walk, queue, file, call, depth, resolved, withheld);
         walk.unproven = previous;
     }
 
@@ -2646,6 +2646,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         call: &'f CallFact,
         depth: usize,
         resolved: &typefacts::ResolvedCall,
+        withheld: bool,
     ) {
         let Some(name) = standard_call_name(resolved) else {
             self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
@@ -2674,6 +2675,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                     // may be native too: its handlers are obligations.
                     let undecided = !native_promise_claim(self.ctx, file, receiver, 0)
                         && native_promise_undecided(self.ctx, file, receiver, 0);
+                    // Review R39: a withheld call has no claim to read: its
+                    // handlers and its chain stay obligations.
+                    if withheld && !undecided && !native_promise_claim(self.ctx, file, receiver, 0)
+                    {
+                        self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
+                        return;
+                    }
                     let mark = draft.static_defects.len();
                     if undecided || native_promise_claim(self.ctx, file, receiver, 0) {
                         for argument in call
@@ -2812,6 +2820,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                 if is_global_promise_static(file, callee) =>
             {
                 self.expand_aggregate(draft, walk, queue, file, call, depth);
+            }
+            // Review R39: `PromiseLike.then` and the rest: a withheld call has
+            // handlers the walk must not lose.
+            _ if withheld => {
+                self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
             }
             _ => {}
         }
