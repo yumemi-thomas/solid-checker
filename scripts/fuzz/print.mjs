@@ -393,6 +393,9 @@ function render(program, instrument) {
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
       // ADR 0820: the site in a generator's body, the iterator stepped here.
+      case "run-kept": return `hkTwice(() => ${block(c.body, depth)});`;
+      case "aw-else": return `if (Math.random() >= 0) ${block(c.body, depth)} else { await Promise.resolve(); }`;
+      case "aw-else-flip": return `if (Math.random() < 0) { await Promise.resolve(); } else ${block(c.body, depth)}`;
       case "gen-await": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-yield": return `async function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-iife": return `for await (const _y of (async function* () ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])})()) void _y;`;

@@ -1161,58 +1161,78 @@ pub(super) fn inline_callback_execution_role(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> Option<ExecutionRole> {
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(call, index)| {
-            if !direct_callback_contains(file, call.arguments[index].span, span) {
-                return None;
-            }
-            let primitive = lookup.primitive_at_call(file, call.span)?;
-            if callback_execution_at_call(file, call, primitive, index, lookup)?
-                != Execution::Inline
-                || callback_runs_outside_tracking(
-                    lookup.dialect,
-                    primitive,
-                    index,
-                    call.arguments.len(),
-                )
-            {
-                return None;
-            }
-            let key = (file.path.to_string(), call.span);
-            if !classifying.insert(key.clone()) {
-                return None;
-            }
-            let role = semantic_execution_role_within(
+    // ADR 0859: a site in layers that run in place inside the callback (an
+    // IIFE) runs on the stack of the outermost layer's call, so that call is
+    // what the callback holds; past an await on the way it is no such run.
+    // A named function's reads are placed by its calls, so the climb stays
+    // inside it.
+    let named = file
+        .ast
+        .functions_body_containing(span)
+        .filter(|function| crate::owners::function_binding_name(file, function).is_some())
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span);
+    let climb = super::write_roles::climb_in_place_layers_within(file, span, lookup, named)
+        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none());
+    let among_others = climb.as_ref().is_some_and(|climb| climb.among_others);
+    let at = climb.map_or(span, |climb| climb.at);
+    file.ast.arguments_containing(at).find_map(|(call, index)| {
+        if !direct_callback_contains(file, call.arguments[index].span, at) {
+            return None;
+        }
+        let primitive = lookup.primitive_at_call(file, call.span)?;
+        if callback_execution_at_call(file, call, primitive, index, lookup)? != Execution::Inline
+            || callback_runs_outside_tracking(
+                lookup.dialect,
+                primitive,
+                index,
+                call.arguments.len(),
+            )
+        {
+            return None;
+        }
+        let key = (file.path.to_string(), call.span);
+        if !classifying.insert(key.clone()) {
+            return None;
+        }
+        let role = semantic_execution_role_within(
+            file,
+            call.span,
+            allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        );
+        classifying.remove(&key);
+        // The callback runs where the call runs. The lexical rendering
+        // role of the call is proven only when the call itself runs during
+        // the body; a call written in a nested helper that runs later
+        // (`const isCurrent = id => id === latest(() => draft())`) is not.
+        if role == ExecutionRole::UntrackedRendering
+            && !nested_literal_runs_during_body(
                 file,
                 call.span,
-                allowed,
                 lookup.entities(),
                 lookup.symbol_names(),
                 lookup,
-                classifying,
-            );
-            classifying.remove(&key);
-            // The callback runs where the call runs. The lexical rendering
-            // role of the call is proven only when the call itself runs during
-            // the body; a call written in a nested helper that runs later
-            // (`const isCurrent = id => id === latest(() => draft())`) is not.
-            if role == ExecutionRole::UntrackedRendering
-                && !nested_literal_runs_during_body(
-                    file,
-                    call.span,
-                    lookup.entities(),
-                    lookup.symbol_names(),
-                    lookup,
-                )
-            {
-                return Some(role_arm!(
-                    "callback_standing.inline_callback_execution_role.unknown",
-                    ExecutionRole::Unknown
-                ));
-            }
-            Some(role)
-        })
+            )
+        {
+            return Some(role_arm!(
+                "callback_standing.inline_callback_execution_role.unknown",
+                ExecutionRole::Unknown
+            ));
+        }
+        // A helper that also keeps the literal runs it elsewhere too: the
+        // in-place run proves a violation, never that every run is legal.
+        if among_others && !role.reports_untracked_read() {
+            return Some(role_arm!(
+                "callback_standing.inline_callback_execution_role.among-others",
+                ExecutionRole::Unknown
+            ));
+        }
+        Some(role)
+    })
 }
 
 /// Compose an inline callback of a higher-order factory with the proven use of
