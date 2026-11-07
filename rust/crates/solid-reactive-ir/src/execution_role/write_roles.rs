@@ -2479,6 +2479,21 @@ pub(super) fn write_role_walk<'f>(
     if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
     }
+    // ADR 0851: a generator's entries are its steps, which the role at the
+    // site already took (`callee_roles.generator-steps`); a call of it runs
+    // none of its body, so the walk over its callers below does not apply.
+    if crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        .is_some_and(|generator| {
+            crate::owners::generator_creations(file, generator, lookup).is_some()
+        })
+    {
+        return if direct == ExecutionRole::Unknown {
+            role_arm!("write_roles.generator-steps-unknown", unknown)
+        } else {
+            role_arm!("write_roles.generator-steps", direct)
+        };
+    }
     // A site in a parameter list (a default value, a pattern, a function written
     // inside either) runs when its function is called without the argument:
     // for a closure bound to a name, whatever its calls omit; for an anonymous

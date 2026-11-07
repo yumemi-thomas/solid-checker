@@ -1,4 +1,13 @@
-# gen-wip handoff (2026-11-07, stopped on account limit; NOT green, never built past d4, no gates on d3/d4)
+# gen-wip handoff (2026-11-07; NOT green)
+
+## Blocking review findings on a84e8af61 (fix before any green commit; fuzz shape first, old fails, new passes, W2 in Chrome)
+- W2 (plausible FP): `generator_step_resumption` asks only sites directly in the generator: `yield 1; [1].forEach(() => set(1));` under `for await` in a compute climbs to the compute's role: SC2001 V where Chrome is silent; owner rules go quiet the same way. Fix: climb in-place layers first (as `climbed_after_await` does).
+- W1 (plausible silent clean): `generator-never-stepped` (Unreported) also answers for `export function* g()` / `export const it = g()` with no project reference. Exported or handed-out generator/iterator must be Unknown.
+
+## Progress after a84e8af61
+- d4 measured (sc VM, gen-wip/d4-*.jsonl): gen cells == d1; lg twins unchanged; other gen ctx unchanged; gstep: 31 FP -> 20 FP (all role-based), gstep-from back to agree.
+- d5 (this commit, built, local only): write_role_walk stops at a generator covered by `generator_creations` (`write_roles.generator-steps[-unknown]`): gstep-handler SC2001/SC2002/SC3002 V -> U; gen cells unchanged (census-local-d5.txt). CHECK: gstep-spread writes became U (was V at v0850?) -- measure; spread should keep the body's role.
+
 
 Base: claude/flip-gen-await 97c1bb966 (ADR 0850, pushed, green except pre-existing flaky backend_process/exec.test). This WIP is on top.
 
