@@ -669,11 +669,12 @@ for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   // A variant with `text` writes its own site over the source.
   const [call, bindingsFor] = [spec.call, spec.bindingsFor];
   spec.call = (node, sigs, ...rest) => (variants[node.variant]?.text ? member(sigs[0].name, variants[node.variant].text, variants[node.variant].imports, variants[node.variant]) : call(node, sigs, ...rest));
-  spec.bindingsFor = (variant) => (variants[variant]?.text ? ["direct", "alias", "wrapper"] : bindingsFor?.(variant) ?? spec.bindings);
+  spec.bindingsFor = (variant) => (variants[variant]?.text ? variants[variant].bindings ?? ["direct", "alias", "wrapper"] : bindingsFor?.(variant) ?? spec.bindings);
   const legal = Object.entries(variants).filter(([, { legal }]) => legal);
   spec.recallLegalVariants = [...(spec.recallLegalVariants ?? []), ...legal.map(([variant]) => variant)];
   spec.legalVariantContexts = { ...spec.legalVariantContexts, ...Object.fromEntries(legal.map(([variant, { legal }]) => [variant, legal])) };
   spec.recallVariants = [...(spec.recallVariants ?? []), ...Object.keys(variants)];
+  for (const [variant, { only, contexts, legal = [] }] of Object.entries(variants)) if (only) for (const context of [...contexts, ...legal]) (spec.contextOnly ??= {})[context] = [...(spec.contextOnly?.[context] ?? []), variant];
   spec.variantContexts = { ...spec.variantContexts, ...Object.fromEntries(Object.entries(variants).map(([variant, { contexts, legal = [] }]) => [variant, [...contexts, ...legal]])) };
 }
 

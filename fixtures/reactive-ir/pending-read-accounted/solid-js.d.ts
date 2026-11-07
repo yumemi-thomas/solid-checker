@@ -60,6 +60,7 @@ declare module "solid-js" {
   export function createMemo<T>(compute: (prev: T | undefined) => T): Accessor<T>;
   export function untrack<T>(fn: () => T): T;
   export function isPending(fn: () => any): boolean;
+  export function latest<T>(fn: () => T): T;
   export function onSettled(callback: () => void | (() => void)): void;
   export function Loading(props: {
     fallback?: JSX.Element;

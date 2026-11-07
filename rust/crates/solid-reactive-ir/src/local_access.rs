@@ -5360,6 +5360,10 @@ impl LocalAccessContext<'_, '_> {
         // proves nothing for its read. The read then has its own unplaced
         // rows, whatever the other paths placed.
         let mut cut = false;
+        // ADR 0838: whether a decided climb ended somewhere that proves it
+        // enumerated nothing: no `WalkDecided` for this read.
+        let mut open = self.lookup.program_has_eval();
+        let rows_before = result.async_reads.len();
         while let Some((site, depth, every, first, decided)) = sites.pop() {
             let Some(function) = containing_ast_function(&file.ast, site) else {
                 cut |= !decided;
@@ -5367,6 +5371,7 @@ impl LocalAccessContext<'_, '_> {
             };
             if depth >= CALL_ATTRIBUTED_DEPTH {
                 cut |= !decided;
+                open = true;
                 continue;
             }
             if !visited.insert(function.span)
@@ -5375,6 +5380,7 @@ impl LocalAccessContext<'_, '_> {
                 || !site_runs_during_local_call(file, function, site)
             {
                 cut |= !decided;
+                open = true;
                 continue;
             }
             let every = every
@@ -5413,6 +5419,7 @@ impl LocalAccessContext<'_, '_> {
                 })
             {
                 cut |= !decided;
+                open = true;
                 continue;
             }
             // The positions that run the function: each direct call of its
@@ -5442,14 +5449,7 @@ impl LocalAccessContext<'_, '_> {
             // Review R17: a reference that is no call this walk follows and no
             // carrier (a literal's member, a push, a handler property, a prop,
             // an export) runs the function where nothing here places it.
-            let name = file.source_text(binding.span).unwrap_or_default();
-            let exported = file.ast.exports.iter().any(|export| {
-                export.span.contains(binding.span)
-                    || export
-                        .specifiers
-                        .iter()
-                        .any(|specifier| file.source_text(specifier.local.span) == Some(name))
-            });
+            let exported = crate::execution_role::flow_binding_exported(file, binding.span);
             let unfollowed = file.ast.identifiers.iter().any(|identifier| {
                 identifier.role == solid_facts::ast::IdentifierRole::Reference
                     && file.ast.reference_declaration(identifier.span) == Some(binding.span)
@@ -5464,7 +5464,11 @@ impl LocalAccessContext<'_, '_> {
             });
             if exported || unfollowed {
                 cut |= !decided;
+                open = true;
             }
+            // ADR 0531: the read's row, not this walk, places its function's
+            // inline carriers.
+            open |= depth == 0 && !all_carriers.is_empty();
             let carriers = if depth > 0 {
                 all_carriers
             } else {
@@ -5738,6 +5742,11 @@ impl LocalAccessContext<'_, '_> {
                     invocation_context_unproven: under_untrack == ExecutionRole::Unknown,
                 }));
             }
+        }
+        if !cut && !open && result.async_reads.len() == rows_before {
+            result
+                .walk_decided_reads
+                .push(location(file.path.shared(), read.span));
         }
         if cut {
             let mut held = LocalAccessResult::default();
@@ -8225,6 +8234,9 @@ pub(crate) fn append_local_access_result(
     target
         .bounded_async_reads
         .extend(source.bounded_async_reads.iter().cloned());
+    target
+        .walk_decided_reads
+        .extend(source.walk_decided_reads.iter().cloned());
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations
@@ -8267,6 +8279,7 @@ pub(crate) fn append_local_access_result_owned(
     target
         .bounded_async_reads
         .extend(source.bounded_async_reads);
+    target.walk_decided_reads.extend(source.walk_decided_reads);
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations

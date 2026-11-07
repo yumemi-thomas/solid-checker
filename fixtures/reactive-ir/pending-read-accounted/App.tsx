@@ -1,4 +1,4 @@
-import { createEffect, createMemo, isPending, Loading, onSettled } from "solid-js";
+import { createEffect, createMemo, isPending, latest, Loading, onSettled } from "solid-js";
 
 // ADR 0838: every pending read is accounted for. Each positive is a read an
 // async walk ended at with no row of its rule; each now has an uncertifiable
@@ -70,6 +70,65 @@ export function TwoCallers() {
   return (
     <Loading fallback={0}>
       <p>{(wrapUse(), "x")}</p>
+    </Loading>
+  );
+}
+
+// Review R18: a probe's first load throws to the render effect's boundary
+// (Chrome rc.21: ASYNC_OUTSIDE_LOADING_BOUNDARY), direct or through a helper.
+export function BareProbe() {
+  const pending = createMemo(async () => 1);
+  return <p>{latest(() => pending())}</p>;
+}
+
+export function HelperBareProbe() {
+  const pending = createMemo(async () => 1);
+  const wrapUse = () => pending();
+  return <p>{isPending(() => wrapUse()) ? 1 : 2}</p>;
+}
+
+// Review R17: an exported helper has callers no walk here sees.
+export const exportedPending = createMemo(async () => 1);
+export const exportedRead = () => {
+  exportedPending();
+};
+export function ExportedHelper() {
+  return (
+    <Loading fallback={0}>
+      <p>{(exportedRead(), "x")}</p>
+    </Loading>
+  );
+}
+
+// Review D9: a reference the walk does not follow keeps the helper open.
+export function ShorthandReference() {
+  const pending = createMemo(async () => 1);
+  const wrapUse = () => pending();
+  const box = { wrapUse };
+  return <button onClick={() => [wrapUse(), box.wrapUse()]}>x</button>;
+}
+
+// Negatives, each path decided by the walk (ADR 0838, `WalkDecided`): every
+// position that runs the helper is a handler, a timer or a covered probe.
+export function HandlerHelper() {
+  const pending = createMemo(async () => 1);
+  const wrapUse = () => pending();
+  return <button onClick={() => wrapUse()}>x</button>;
+}
+
+export function TimerHelper() {
+  const pending = createMemo(async () => 1);
+  const wrapUse = () => pending();
+  setTimeout(() => wrapUse(), 1);
+  return <p>x</p>;
+}
+
+export function CoveredProbeHelper() {
+  const pending = createMemo(async () => 1);
+  const wrapUse = () => pending();
+  return (
+    <Loading fallback={0}>
+      <p>{isPending(() => wrapUse()) ? 1 : 2}</p>
     </Loading>
   );
 }

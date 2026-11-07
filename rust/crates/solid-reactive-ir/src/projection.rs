@@ -1004,7 +1004,11 @@ pub fn suppress_findings_owned_by_enabled_rules(
 ) {
     let pending_reads = findings
         .iter()
-        .filter(|finding| finding.id == "SC5001")
+        // ADR 0838: an accounting row adds a claim; it owns no strict read.
+        .filter(|finding| {
+            finding.id == "SC5001"
+                && finding.analysis_context != crate::blockers::ASYNC_READ_UNACCOUNTED
+        })
         .map(|finding| {
             (
                 (

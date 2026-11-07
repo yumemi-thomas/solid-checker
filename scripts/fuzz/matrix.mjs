@@ -357,7 +357,8 @@ export function pairsOption(value) {
   return sets;
 }
 const NO_WINDOW_MOUNT = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
-const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
+// `contextOnly`: a context only these variants take (its source is written by the variant, so no other value can be crossed with it).
+const variantFits = (code, context) => (variant) => (context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context)) && (SPEC[code].contextOnly?.[context]?.includes(variant) ?? true);
 /** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
 export const recallLeanOf = (options) => Boolean(options.recall) && !options.recallFull;
 /** The misuse grid's recall shapes of a cell (`--recall`); `lean: false` is `--recall-full`. */
@@ -369,7 +370,7 @@ export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(
  * reaches the shapes twenty random draws miss. In a fixed order: variants, then bindings, then layers.
  */
 export const gridShapes = (code, context, mounts = ["root"], sources = ["local"]) => gridVariantsOf(code)
-  .filter((variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context))
+  .filter(variantFits(code, context))
   .flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /**

@@ -188,6 +188,7 @@ pub(crate) fn collect_project<'facts>(
         action_invocations,
         mut async_reads,
         bounded_async_reads,
+        walk_decided_reads,
         strict_read_obligations,
         write_action_obligations,
         dispatch_obligations,
@@ -969,6 +970,7 @@ pub(crate) fn collect_project<'facts>(
                 .get(symbol)
                 .is_some_and(|options| options.declared_loading)
         },
+        &walk_decided_reads.into_iter().collect(),
         draft,
     );
     interprocedural.factory_instances

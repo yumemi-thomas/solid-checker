@@ -55,6 +55,10 @@ pub(crate) enum PendingSafe {
     /// `isPending(() => a())` / `latest(...)`: no untracked-read throw; the
     /// first load still throws to the boundary around it (review R18).
     PendingProbe,
+    /// The read's call-attributed walk enumerated every position that runs
+    /// it and each is decided (ADR 0838): a fresh stack, a discarded region, a
+    /// served read, a covered probe. SC5008 stays with the read's own `try`.
+    WalkDecided,
     /// A declared `loadingValue` served in the pass that created the source
     /// (ADR 0632): no pending value reaches the read.
     DeclaredServed,
@@ -98,6 +102,7 @@ impl PendingSafe {
             Self::NotRenderEffect | Self::UnderLoading | Self::DeclaredFirstPaint => {
                 &[PendingRule::Boundary]
             }
+            Self::WalkDecided => &[PendingRule::Unsuspendable, PendingRule::Boundary],
             Self::NoComputationPass => &[PendingRule::Caught],
         }
     }
@@ -232,6 +237,7 @@ pub(crate) fn account_pending_reads(
     ctx: &AnalysisContext<'_>,
     pending: &dyn Fn(&str) -> bool,
     declared: &dyn Fn(&str) -> bool,
+    walk_decided: &HashSet<Location>,
     draft: &mut ProgramDraft,
 ) {
     let lookup = ctx.semantic_lookup;
@@ -392,6 +398,10 @@ pub(crate) fn account_pending_reads(
         let file = lookup.file_by_path(site.location.path.as_ref());
         let span = span_of(&site.location);
         let mut reasons = site_reasons(ctx, declared, file, span, &site);
+        // A row at the read, or a walk that cut it, keeps the row logic.
+        if rows.is_empty() && !cut && walk_decided.contains(&site.location) {
+            reasons.push(PendingSafe::WalkDecided);
+        }
         let caught_claim = match (file, span) {
             (Some(file), Some(span)) => caught_claim(ctx, file, span, &mut reasons),
             _ => false,
@@ -475,6 +485,11 @@ fn site_reasons(
         .map_or(span, |call| call.callee);
     if crate::execution_role::pending_accessor_probe(file, callee, lookup) {
         reasons.push(PendingSafe::PendingProbe);
+    }
+    // A reviewed scheduler's callback (ADR 0435): the role table's fact, read at
+    // the site for a read no producer has a row for (a transported call).
+    if crate::execution_role::fresh_stack_callback_call(file, callee, lookup).is_some() {
+        reasons.push(PendingSafe::FreshStack);
     }
     if crate::owners::read_loading_cover(lookup, file, span, ctx.symbol_names)
         == crate::owners::LoadingCover::Covered
@@ -643,6 +658,7 @@ mod tests {
         let table = [
             (PendingSafe::Discarded, &[Unsuspendable, Boundary, Caught][..]),
             (PendingSafe::PendingProbe, &[Unsuspendable]),
+            (PendingSafe::WalkDecided, &[Unsuspendable, Boundary]),
             (PendingSafe::DeclaredServed, &[Unsuspendable, Boundary, Caught]),
             (PendingSafe::FreshStack, &[Unsuspendable, Boundary, Caught]),
             (PendingSafe::SuspendsInComputation, &[Unsuspendable]),
