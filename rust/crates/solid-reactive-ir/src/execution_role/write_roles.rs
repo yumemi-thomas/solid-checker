@@ -2506,7 +2506,46 @@ pub(super) fn write_role_walk<'f>(
         // adjustments the read role at the site does not: one role where
         // every step agrees, none where they differ or a step is unplaced.
         let key = (file.path.to_string(), generator.span);
-        if !crate::owners::generator_exported(file, generator) && visiting.insert(key.clone()) {
+        // A step runs the site on its own stack only up to the generator's
+        // first suspension of its own (a `yield`, or an `await` of an async
+        // one), unless a sync generator is drained in place by every
+        // creation (a `for…of`, spread, pattern or `Array.from`), whose loop
+        // takes each later step on the same stack.
+        let own = |point: Span| {
+            generator.body.contains(point)
+                && crate::owners::containing_ast_function(&file.ast, point)
+                    .is_some_and(|owner| owner.span == generator.span)
+        };
+        let suspensions = file.ast.yields.iter().map(|fact| fact.span).chain(
+            generator
+                .r#async
+                .then(|| {
+                    file.ast
+                        .awaits
+                        .iter()
+                        .chain(&file.ast.implicit_suspensions)
+                        .copied()
+                })
+                .into_iter()
+                .flatten(),
+        );
+        let first_segment = !suspensions.filter(|point| own(*point)).any(|point| {
+            point.start < span.start
+                || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                    repeated.contains(span)
+                        && looped.contains(point)
+                        && generator.body.contains(looped)
+                })
+        });
+        let drained = !generator.r#async
+            && calls.iter().all(|call| {
+                file.ast.iterated_operands.contains(&call.span)
+                    || crate::owners::array_from_source(file, call.span, lookup)
+            });
+        if (first_segment || drained)
+            && !crate::owners::generator_exported(file, generator)
+            && visiting.insert(key.clone())
+        {
             let mut sites = Vec::new();
             let mut unplaced = false;
             for call in calls {

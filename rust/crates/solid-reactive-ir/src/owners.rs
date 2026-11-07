@@ -289,7 +289,7 @@ fn step_member_callee(file: &solid_facts::FileFacts, object: Span) -> Option<Spa
 
 /// Whether `span` is the first argument of a call the compiler resolves to the
 /// standard library's `Array.from`, which iterates it to the end in the call.
-fn array_from_source(
+pub(crate) fn array_from_source(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
