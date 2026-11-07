@@ -26,8 +26,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -153,8 +153,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -2219,6 +2219,38 @@
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
    "status": "uncertifiable",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `window.addEventListener(type, eventListener)` at src/keyboard.tsx:11 takes a listener from a parameter the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "listener-reach"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "condition"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   },
    "labelWeight": 224,
    "sites": 206,
    "verification": {
@@ -2352,8 +2384,8 @@
    "verifiedWeight": 63,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -2952,8 +2984,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -4938,8 +4970,8 @@
    "verifiedWeight": 58,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -5051,8 +5083,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -5128,8 +5160,8 @@
    "verifiedWeight": 3,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -5965,8 +5997,8 @@
    "verifiedWeight": 65,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -6203,8 +6235,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -6866,8 +6898,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -6961,8 +6993,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7047,8 +7079,8 @@
    "verifiedWeight": 4,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7115,8 +7147,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7228,8 +7260,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7296,8 +7328,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7364,8 +7396,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7459,8 +7491,8 @@
    "verifiedWeight": 6,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7554,8 +7586,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7655,8 +7687,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7714,8 +7746,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -7782,8 +7814,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -9490,8 +9522,8 @@
    "verifiedWeight": 40,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10027,8 +10059,8 @@
    "verifiedWeight": 1,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10104,8 +10136,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10173,8 +10205,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10241,8 +10273,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10378,8 +10410,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10481,8 +10513,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10558,8 +10590,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10617,8 +10649,8 @@
    "verifiedWeight": 1,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10685,8 +10717,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10771,8 +10803,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10842,8 +10874,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10930,8 +10962,8 @@
    "verifiedWeight": 2,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -11000,8 +11032,8 @@
    "verifiedWeight": 1,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -11112,8 +11144,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -11208,8 +11240,8 @@
    "verifiedWeight": 4,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -11308,8 +11340,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -11957,8 +11989,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12059,8 +12091,8 @@
    "verifiedWeight": 32,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12172,8 +12204,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12285,8 +12317,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12398,8 +12430,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12499,8 +12531,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12623,8 +12655,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12719,8 +12751,8 @@
    "verifiedWeight": 4,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -12833,8 +12865,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -13383,8 +13415,8 @@
    "verifiedWeight": 19,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -13523,8 +13555,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -13639,8 +13671,8 @@
    "verifiedWeight": 0,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -14935,8 +14967,8 @@
    "verifiedWeight": 26,
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15358,8 +15390,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15416,8 +15448,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15454,8 +15486,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15507,8 +15539,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15565,8 +15597,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15603,8 +15635,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -15636,8 +15668,8 @@
    "status": "certified",
    "held": {
     "adr": "0803",
-    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
      {
       "kind": "uncertifiable",

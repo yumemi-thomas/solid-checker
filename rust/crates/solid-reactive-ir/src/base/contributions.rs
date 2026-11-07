@@ -879,7 +879,15 @@ pub(crate) fn patch_veto(qualified_name: &str) -> [Hazard; 5] {
             "",
             container.strip_suffix("Constructor").unwrap_or(container),
         ),
-        if owner.is_empty() || owner.ends_with("Constructor") {
+        // The window's own members live on the global: `window[k] = f` may be
+        // any of them (review D21).
+        if owner.is_empty()
+            || owner.ends_with("Constructor")
+            || matches!(
+                container,
+                "Window" | "WindowOrWorkerGlobalScope" | "AnimationFrameProvider"
+            )
+        {
             standard_patch("", ANY_MEMBER)
         } else {
             standard_patch(container, ANY_MEMBER)

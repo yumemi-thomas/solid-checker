@@ -497,11 +497,21 @@ fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
         .map(|target| file.ast.peel_ts_sugar_span(*target))
         .collect::<HashSet<_>>();
     let handed = |span: Span, kind: Obtained| handed_on(file, span, kind, HANDED_BUDGET, at_calls);
+    let in_type_query = |span: Span| {
+        file.ast
+            .type_queries
+            .iter()
+            .any(|query| query.contains(span))
+    };
     file.ast.members.iter().any(|member| {
         // A member of the global object goes as the global object does
         // ([`handed_on`]): an intrinsic by name, an event handler written, a
         // method called with it as `this`.
         let object = file.ast.peel_ts_sugar_span(member.object);
+        // `typeof globalThis.setTimeout` in a type is erased: no value.
+        if in_type_query(member.span) {
+            return false;
+        }
         if global_name(file, object).is_some_and(|name| WINDOW_NAMES.contains(&name)) {
             return handed(object, Obtained::Global);
         }
@@ -563,6 +573,7 @@ fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
         global_name(file, identifier.span).is_some_and(|name| WINDOW_NAMES.contains(&name))
             && identifier.role == ast::IdentifierRole::Reference
             && !file.ast.type_names.contains(&identifier.span)
+            && !in_type_query(identifier.span)
             && !objects.contains(&identifier.span)
             && handed(identifier.span, Obtained::Global)
     }) || file.ast.bindings.iter().any(|binding| {
@@ -599,11 +610,7 @@ fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
         // setTimeout`, `[f].forEach(setTimeout)`, `setTimeout.bind(null)`).
         global_name(file, identifier.span).is_some_and(|name| PLATFORM_CALLERS.contains(&name))
             && !file.ast.type_names.contains(&identifier.span)
-            && !file
-                .ast
-                .type_queries
-                .iter()
-                .any(|query| query.contains(identifier.span))
+            && !in_type_query(identifier.span)
             && !callees.contains_key(&identifier.span)
             && handed(identifier.span, Obtained::Function)
     }) || file.ast.calls.iter().any(|call| {
@@ -1046,6 +1053,7 @@ fn received_by_seen_code(
         return standard.is_some_and(|declaration| {
             let name = declaration.qualified_name.as_ref();
             standard_member_intact(lookup, name)
+                && (!name.ends_with("dispatchEvent") || dispatched_event_stays_inline(file, call))
                 && (THIS_SEEN.iter().any(|(seen, _)| *seen == name)
                     || (LISTENER_ADDERS.contains(&name)
                         && function_at(lookup, file, call, 1).is_some_and(
@@ -1110,7 +1118,8 @@ fn received_by_seen_code(
 /// ignore `this` and run nothing with it. Exactly the callback and a delay (a
 /// further argument is handed to them); the reference is the parameter itself,
 /// never written; a non-arrow executor reads no `arguments`, which aliases its
-/// parameters in sloppy code; and `Promise` is the global, unwritten, standard.
+/// parameters in sloppy code, and has no name it could call itself by with any
+/// value (review R35); and `Promise` is the global, unwritten, standard.
 fn timer_runs_promise_settler(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -1152,7 +1161,8 @@ fn timer_runs_promise_settler(
                 .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument.span) == executor.span)
     });
     !written
-        && (executor.kind == ast::FunctionKind::Arrow || !reads_arguments)
+        && (executor.kind == ast::FunctionKind::Arrow
+            || (!reads_arguments && executor.name.is_none()))
         && promise.is_some_and(|promise| {
             global_name(file, file.ast.peel_ts_sugar_span(promise.callee)) == Some("Promise")
                 && lookup
@@ -1161,6 +1171,44 @@ fn timer_runs_promise_settler(
                         declaration.qualified_name.as_ref() == "PromiseConstructor.construct"
                     })
                 && standard_member_intact(lookup, "Promise")
+        })
+}
+
+/// Review D21: the event `dispatchEvent` is given keeps `target`, the window,
+/// once dispatched. Seen only when nothing else can read it: `new Event(...)`
+/// in place, or a binding the call is the only use of.
+fn dispatched_event_stays_inline(file: &FileFacts, call: &ast::CallFact) -> bool {
+    let [event] = call.arguments.as_slice() else {
+        return false;
+    };
+    if event.spread {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(event.span);
+    let constructed = |span: Span| file.ast.call_at(span).is_some_and(|call| call.construct);
+    if constructed(span) {
+        return true;
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    let single = file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+        .all(|identifier| identifier.span == span);
+    single
+        && file.ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && binding.shape == ast::BindingShape::Identifier
+                && matches!(binding.names.as_slice(), [name] if name.span == declaration)
+                && binding.initializer.is_some_and(|initializer| {
+                    constructed(file.ast.peel_ts_sugar_span(initializer))
+                })
         })
 }
 
@@ -1242,6 +1290,38 @@ const THIS_SEEN: &[(&str, &str)] = &[
     (
         "postMessage",
         "queues a message event, whose listeners are each decided where added",
+    ),
+    ("Window.clearTimeout", "cancels a timer"),
+    ("WindowOrWorkerGlobalScope.clearTimeout", "cancels a timer"),
+    ("clearTimeout", "cancels a timer"),
+    ("Window.clearInterval", "cancels a timer"),
+    ("WindowOrWorkerGlobalScope.clearInterval", "cancels a timer"),
+    ("clearInterval", "cancels a timer"),
+    ("Window.cancelAnimationFrame", "cancels a frame callback"),
+    (
+        "AnimationFrameProvider.cancelAnimationFrame",
+        "cancels a frame callback",
+    ),
+    ("cancelAnimationFrame", "cancels a frame callback"),
+    ("Window.cancelIdleCallback", "cancels an idle callback"),
+    ("cancelIdleCallback", "cancels an idle callback"),
+    ("Window.alert", "shows a dialog"),
+    ("alert", "shows a dialog"),
+    ("Window.confirm", "shows a dialog"),
+    ("confirm", "shows a dialog"),
+    ("Window.prompt", "shows a dialog"),
+    ("prompt", "shows a dialog"),
+    (
+        "EventTarget.dispatchEvent",
+        "runs listeners, each decided where it is added",
+    ),
+    (
+        "Window.dispatchEvent",
+        "runs listeners, each decided where it is added",
+    ),
+    (
+        "dispatchEvent",
+        "runs listeners, each decided where it is added",
     ),
     ("Window.removeEventListener", "removes a listener"),
     ("EventTarget.removeEventListener", "removes a listener"),

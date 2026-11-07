@@ -5,6 +5,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
+      "start": 1155,
+      "end": 1159,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
@@ -57,14 +68,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
       "start": 1370,
-      "end": 1419,
+      "end": 1377,
       "fixes": 0
     },
     {
@@ -76,6 +87,61 @@
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
       "start": 1378,
       "end": 1384,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1378,
+      "end": 1382,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1422,
+      "end": 1426,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
+      "start": 564,
+      "end": 568,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
+      "start": 600,
+      "end": 607,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
+      "start": 636,
+      "end": 643,
       "fixes": 0
     },
     {
@@ -101,6 +167,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/unplaced-action.tsx",
+      "start": 455,
+      "end": 463,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -109,6 +186,17 @@
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/unplaced-action.tsx",
       "start": 515,
       "end": 527,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/unplaced-action.tsx",
+      "start": 530,
+      "end": 535,
       "fixes": 0
     }
   ]

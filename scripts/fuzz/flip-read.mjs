@@ -133,6 +133,9 @@ const ITER_PATCHES = {
   "iter-composed-path": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath().at(-1); itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-index": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath()[3]; itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-forof": `document.body.addEventListener("itx", (e) => { for (const itT of e.composedPath() as any[]) { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); } }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  // Review D21: an event keeps `target` after `dispatchEvent`; a computed write on the global object replaces a window method.
+  "iter-event-target": `const itEv = new Event("itx"); window.dispatchEvent(itEv); (itEv.target as any).Function(${JSON.stringify(ITER_CODE)})();`,
+  "iter-window-computed": `const itK = ["con", "firm"].join(""); const itC = window.confirm; (window as any)[itK] = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); (window as any)[itK] = itC; return true; }; window.confirm("y");`,
   // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.
   "iter-hasown-key": `(window as any).toString = function (this: any) { delete this.toString; this.Function(${JSON.stringify(ITER_CODE)})(); return "x"; }; Object.hasOwn({}, window as any);`,
   "iter-compared-call": `const itBox: unknown[] = []; if (itBox[0] === (globalThis as any).Function(${JSON.stringify(ITER_CODE)})()) itBox.push(1);`,

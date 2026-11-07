@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "function-prototype-callee-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/variants/apply-unknown/App.tsx",
+      "start": 174,
+      "end": 184,
+      "fixes": 0
+    }
+  ]
+}

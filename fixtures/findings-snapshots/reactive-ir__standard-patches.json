@@ -1,47 +1,70 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
       "start": 147,
-      "end": 154,
+      "end": 151,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
       "start": 196,
-      "end": 203,
+      "end": 200,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
       "start": 241,
-      "end": 248,
+      "end": 245,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/standard-patches/App.tsx",
+      "start": 328,
+      "end": 332,
       "fixes": 0
     },
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
       "start": 357,
       "end": 360,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/standard-patches/App.tsx",
+      "start": 357,
+      "end": 358,
       "fixes": 0
     }
   ]

@@ -2,14 +2,14 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-listener-reach/App.tsx",
       "start": 110,
-      "end": 131,
+      "end": 118,
       "fixes": 0
     },
     {
@@ -21,6 +21,17 @@
       "path": "fixtures/reactive-ir/rc21-listener-reach/App.tsx",
       "start": 119,
       "end": 126,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-listener-reach/App.tsx",
+      "start": 119,
+      "end": 124,
       "fixes": 0
     },
     {

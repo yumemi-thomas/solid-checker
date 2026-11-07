@@ -5654,5 +5654,23 @@
    "lg-reactive-write-in-owned-scope-iter-subclass-method-signal-direct-none"
   ],
   "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE: rf3 stopped at 1,500 of 6,460 (and 1,800 of 3,572 on the listener contexts alone), rf4 at about 3,678 of 6,460 (2,770 harness rows), each an executor timeout with daemons sampled in the re-entrant wait; this build answers all 6,460 (0 harness). Unit test the_unseen_code_census_reads_no_memo_as_a_probe fails on the first path"
+ },
+ {
+  "finding": "review D21: an event keeps `target` after `dispatchEvent`; a computed write on the global object replaces a window method the closed list names",
+  "found": "reviewer, design pre-review of the list",
+  "fixed": "ADR 0803 step 2 (dispatched_event_stays_inline, patch_veto's open-key entry for a window member); now uncertifiable",
+  "outside": "iter-event-target, iter-window-computed: the list grew in this commit, so no earlier build had the hole, and uncertifiable on 5fe4d0b8b for another reason (128 each, `.Function` obtained). lg-recall on rf8: 0 false positives. Fixtures handed-dispatched-event, handed-window-method-computed, handed-dispatch-held (negative)"
+ },
+ {
+  "finding": "reviews D11, R35: a timer's callback that is a `new Promise` executor's parameter is seen only when it is the engine's settling function: a replaced `Promise`, an extra timer argument, `arguments`, a shadowing parameter, a named executor calling itself",
+  "found": "harness artifact in the grid's entry, then the reviewer's attacks on the proof",
+  "fixed": "ADR 0803 step 2 (timer_runs_promise_settler); proved for the sleep idiom, uncertifiable for each attack",
+  "outside": "a timer fires after render, so no generated program patches iteration through it before the body's pattern (ES module, render first). Fixtures handed-timer-settler (negative), handed-promise-replaced, handed-settler-extra-argument, handed-settler-arguments, handed-settler-shadowed, handed-settler-named"
+ },
+ {
+  "finding": "measurement artifact: the grid's entry `new Promise((done) => setTimeout(done, ms))` counted as a timer's unread callback, so every grid program from D3 on withdrew its tuple slots and iter-* rows read uncertifiable whatever their census did",
+  "found": "R1f, all 128 uncertifiable on every iter-* context of a build with no such census",
+  "fixed": "ADR 0803 step 2 (timer_runs_promise_settler), at the source: the idiom is proved, the judge and the entry are unchanged",
+  "outside": "a harness property, no program shape. Control on rf8: cleanup-mount, handler-mount, arm-helper, 380 programs: 213 clean, 167 uncertifiable, 0 false positive"
  }
 ]
