@@ -26,6 +26,14 @@ export function readOpenDefects(path = OPEN_DEFECTS, rows = OPEN_ROWS) {
 export const STOP_NAMED_U = "R-stop-named-U";
 export const namedKey = (finding) => `${finding.id}/${finding.blocker}@${finding.line}:${finding.column}`;
 
+/**
+ * The cause of the `flw-owned-*` rows (the scout's F2, an owned edge hides an escape): open defects, certified false cleans among them, with
+ * their fix in R5's queue. Listed because the gap is measured and hiding it is no option. It must reach 0 before #173 moves: the final
+ * gate (open-rows.mjs --final, `make flip-final`) fails while this cause holds a row.
+ */
+export const F2_OPEN = "R-F2-open";
+export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => row.cause === F2_OPEN).map(([id]) => `${grid}/${id}`));
+
 /** Whether a row answers an entry: same id prefix, code, contexts, source and variant prefix. */
 const answers = (entry, row) => String(row.id).startsWith(entry.idPrefix) && entry.code === row.code
   && (!entry.contexts || entry.contexts.includes(row.context)) && (!entry.source || entry.source === row.source) && (!entry.variantPrefix || String(row.variant ?? "").startsWith(entry.variantPrefix));
@@ -74,10 +82,10 @@ export const offLedger = (list, grid, moves) => moves.filter((move) => !list.row
 
 /** The ledger's counts: per cause, and its certified and false-positive rows, which a cause's count could hide. */
 export function ledgerCounts(rows) {
-  const counts = { causes: {}, certified: 0, falsePositive: 0 };
+  const counts = { causes: {}, certified: 0, certifiedF2: 0, falsePositive: 0 };
   for (const grid of Object.values(rows?.grids ?? {})) for (const row of Object.values(grid)) {
     counts.causes[row.cause] = (counts.causes[row.cause] ?? 0) + 1;
-    if (row.certified) counts.certified += 1;
+    if (row.certified) counts[row.cause === F2_OPEN ? "certifiedF2" : "certified"] += 1;
     if (row.outcome === "false-positive") counts.falsePositive += 1;
   }
   return counts;
@@ -88,7 +96,7 @@ export function ratchetDifferences(list) {
   const counts = ledgerCounts(list.rows);
   const ratchet = list.ratchet ?? {};
   const out = [];
-  for (const key of ["certified", "falsePositive"]) if (counts[key] !== ratchet[key]) out.push({ key, rows: counts[key], ratchet: ratchet[key] ?? null });
+  for (const key of ["certified", "certifiedF2", "falsePositive"]) if (counts[key] !== ratchet[key]) out.push({ key, rows: counts[key], ratchet: ratchet[key] ?? null });
   for (const cause of new Set([...Object.keys(counts.causes), ...Object.keys(ratchet.causes ?? {})])) if (counts.causes[cause] !== ratchet.causes?.[cause]) out.push({ key: cause, rows: counts.causes[cause] ?? 0, ratchet: ratchet.causes?.[cause] ?? null });
   return out;
 }
