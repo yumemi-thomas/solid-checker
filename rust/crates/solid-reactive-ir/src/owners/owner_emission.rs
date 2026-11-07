@@ -118,14 +118,20 @@ pub(super) fn emit_file(
     };
     // ADR 0868: the function making a run at `at` holds context zero (no
     // edge reaches it) and is not proven never to run.
-    let caller_unplaced = |at: Span| {
-        file.ast
-            .innermost_function_owning(at)
-            .is_some_and(|caller| {
-                graph
-                    .node_context(pid, caller.span)
-                    .is_some_and(|(_, context)| context == 0)
-                    && reach.function_runs(file, caller)
+    let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
+        lookup.note_file_read(caller_file);
+        graph
+            .path_id(caller_file.path.as_str())
+            .is_some_and(|caller_pid| {
+                caller_file
+                    .ast
+                    .innermost_function_owning(at)
+                    .is_some_and(|caller| {
+                        graph
+                            .node_context(caller_pid, caller.span)
+                            .is_some_and(|(_, context)| context == 0)
+                            && reach.function_runs(caller_file, caller)
+                    })
             })
     };
     for candidate in &entry.fragment.requirements {
@@ -830,7 +836,7 @@ fn named_layer_entry_open(
     span: Span,
     region: Option<Span>,
     lookup: &SemanticLookup<'_>,
-    caller_unplaced: impl Fn(Span) -> bool,
+    caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
 ) -> bool {
     let mut walked = HashSet::default();
     layer_entry_open(
@@ -877,7 +883,7 @@ fn layer_entry_open(
     span: Span,
     region: Option<Span>,
     lookup: &SemanticLookup<'_>,
-    caller_unplaced: &dyn Fn(Span) -> bool,
+    caller_unplaced: &dyn Fn(&solid_facts::FileFacts, Span) -> bool,
     walked: &mut HashSet<(String, Span)>,
     depth: usize,
 ) -> bool {
@@ -960,7 +966,7 @@ fn layer_entry_open(
         };
         if local
             .iter()
-            .any(|reference| caller_unplaced(run_at(reference)))
+            .any(|reference| caller_unplaced(file, run_at(reference)))
         {
             return true;
         }
@@ -991,7 +997,16 @@ fn layer_entry_open(
             lookup.function_call_site_references(file.path.as_str(), function.span)
         {
             if caller.path != file.path
-                && layer_entry_open(caller, callee, None, lookup, &|_| false, walked, depth - 1)
+                && (caller_unplaced(caller, callee)
+                    || layer_entry_open(
+                        caller,
+                        callee,
+                        None,
+                        lookup,
+                        caller_unplaced,
+                        walked,
+                        depth - 1,
+                    ))
             {
                 return true;
             }
