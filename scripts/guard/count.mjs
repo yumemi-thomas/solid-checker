@@ -6,7 +6,9 @@
 //   open } }: counted per fixture against the base's own snapshots, so a fall in one fixture is not netted by a rise in another (a base
 //   with no snapshots falls back to the totals, rows without `fixture`); the ADR exists in docs/decisions.md, `proof` is `file::symbol`
 //   with the symbol declared in that file, the `proved` fixture's snapshot held the key at the base and holds fewer now, and the `open`
-//   one holds it now. A rename needs a `renames` row { from, to, adr } with equal counts.
+//   one holds it now. A row with `kind: "relabel"` { fixture, key, from, to, adr, kind, relabeledTo } instead records rows that kept their
+//   finding under another blocker: it names no proof or fixtures, and `relabeledTo` must gain, in that fixture, what `key` lost. It is no
+//   clean. A rename needs a `renames` row { from, to, adr } with equal counts.
 // - `drops` and `renames` are append-only against the base.
 // A clean needs a proof: removing an obligation to gain cleans is what this makes visible. Exit 1 on any failure.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -96,6 +98,14 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
       continue;
     }
     if (!adrExists(row.adr)) failures.push(`${why}: ${row.adr ?? "no ADR"} is not in docs/decisions.md`);
+    if (row.kind !== undefined && row.kind !== "relabel") failures.push(`${why}: kind ${row.kind} is not a kind of drop`);
+    if (row.kind === "relabel") {
+      // The rows stay uncertifiable under another blocker: no proof to name, and naming one would record a relabel as a clean.
+      if (row.proof !== undefined || row.fixtures !== undefined) failures.push(`${why}: a relabel names no proof or fixtures`);
+      const gained = keyCount(snapshotOf(fixture), row.relabeledTo) - keyCount(baseSnapshotOf(fixture), row.relabeledTo);
+      if (!fixture || !row.relabeledTo || gained < was - now) failures.push(`${why}: relabeledTo ${row.relabeledTo ?? "(none)"} gained ${gained} in the fixture, not the ${was - now} that left`);
+      continue;
+    }
     const [file, symbol, ...rest] = String(row.proof ?? "").split("::");
     const text = file ? read(file) : null;
     if (!text || rest.length || !declares(text, symbol)) failures.push(`${why}: proof ${row.proof ?? "(none)"} is no file::symbol whose file declares the symbol`);

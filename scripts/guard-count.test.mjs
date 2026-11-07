@@ -54,6 +54,19 @@ test("a fall is counted per fixture: a rise in another fixture does not net it",
   assert.equal(run({ inRepo: { [K]: 3 }, drops: [{ ...fixed, fixture: undefined }] }, { inRepo: { [K]: 3 } }, { [K]: 3 }, { current, baseSnapshots }).length, 1);
 });
 
+test("a relabel records no proof, and its target gains what the key lost, in that fixture", () => {
+  const J = "SC1001 read-backing-unproven";
+  const relabel = { fixture: "reactive-ir/open", key: K, from: 1, to: 0, adr: "ADR 0812", kind: "relabel", relabeledTo: J };
+  const moved = { "reactive-ir/open": { findings: [row("SC1001", "read-backing-unproven")] }, "reactive-ir/proved": baseSnaps["reactive-ir/proved"] };
+  const check = (drops, current = moved) => run({ inRepo: { [K]: 1, [J]: 1 }, drops }, { inRepo: { [K]: 2 } }, { [K]: 1, [J]: 1 }, { current, baseSnapshots: Object.entries(baseSnaps) });
+  assert.deepEqual(check([relabel]), []);
+  assert.match(check([{ ...relabel, proof: "rust/x.rs::proves_y" }])[0], /names no proof/);
+  assert.match(check([{ ...relabel, fixtures: drop.fixtures }])[0], /names no proof/);
+  assert.match(check([{ ...relabel, relabeledTo: "SC1001 other" }])[0], /gained 0/);
+  assert.match(check([relabel], { "reactive-ir/open": { findings: [] }, "reactive-ir/proved": baseSnaps["reactive-ir/proved"] })[0], /gained 0/);
+  assert.match(check([{ ...relabel, kind: "other" }])[0], /not a kind/);
+});
+
 test("a key that goes is a fall", () => {
   assert.match(run({ inRepo: {} }, { inRepo: { [K]: 3 } }, {})[0], /3 -> 0, no drops row/);
 });
