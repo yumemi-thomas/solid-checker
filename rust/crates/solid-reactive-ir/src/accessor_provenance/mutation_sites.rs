@@ -1047,13 +1047,17 @@ fn received_by_seen_code(
     // it is given (review D1).
     let standard = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call);
     let Slot::Argument(argument) = slot else {
+        if kind == Obtained::Global && absent_window_member(lookup, file, call) {
+            return true;
+        }
         // A method run with the value as `this`: seen only for a closed list
         // of the window's methods that call nothing with it, and a listener
         // that can reach neither its `this` nor its event (review D3).
         return standard.is_some_and(|declaration| {
             let name = declaration.qualified_name.as_ref();
             standard_member_intact(lookup, name)
-                && (!name.ends_with("dispatchEvent") || dispatched_event_stays_inline(file, call))
+                && (!name.ends_with("dispatchEvent")
+                    || dispatched_event_stays_inline(lookup, file, call))
                 && (THIS_SEEN.iter().any(|(seen, _)| *seen == name)
                     || (LISTENER_ADDERS.contains(&name)
                         && function_at(lookup, file, call, 1).is_some_and(
@@ -1174,10 +1178,75 @@ fn timer_runs_promise_settler(
         })
 }
 
+/// The only `__` members a browser defines: `Object.prototype`'s (Chromium 148,
+/// walked over the window's prototype chain).
+const NATIVE_DUNDER: [&str; 5] = [
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+    "__proto__",
+];
+
+/// `(window as any).__log?.(x)`: a member of the global object no declaration
+/// resolves, under a `__` literal key no platform defines and nothing analyzed
+/// can install: no write of the name on any receiver, a window prototype's, or
+/// `Object.prototype`'s, no reflective definition of it, no declaration of the
+/// name in a classic script. It is absent, so the window reaches no code. A
+/// member installed from outside the analyzed program is outside ADR 0803's
+/// premise (review D24).
+fn absent_window_member(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+) -> bool {
+    let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)) else {
+        return false;
+    };
+    let Some(key) = member_key(file, member) else {
+        return false;
+    };
+    key.starts_with("__")
+        && !NATIVE_DUNDER.contains(&key)
+        && lookup
+            .resolved_callee_call(file, call.callee)
+            .is_none_or(|resolved| resolved.declaration.is_none())
+        && standard_member_intact(lookup, key)
+        && ["Object", "Window", "EventTarget"]
+            .iter()
+            .all(|owner| standard_member_intact(lookup, &format!("{owner}.{key}")))
+        && !lookup.property_may_be_defined_reflectively_as(key)
+        && !classic_script_declares(lookup, key)
+}
+
+/// Whether an analyzed file that is no module declares `name`, which a classic
+/// script's top level makes a member of the global object. Any depth counts:
+/// this only withholds a proof.
+fn classic_script_declares(lookup: &SemanticLookup<'_>, name: &str) -> bool {
+    lookup.slot_entries(lookup.base_hazards()).any(|(file, _)| {
+        !crate::execution_role::file_is_module(file)
+            && (file.ast.functions.iter().any(|function| {
+                function
+                    .name
+                    .as_ref()
+                    .is_some_and(|fname| file.source_text(fname.span) == Some(name))
+            }) || file.ast.bindings.iter().any(|binding| {
+                binding
+                    .names
+                    .iter()
+                    .any(|bound| file.source_text(bound.span) == Some(name))
+            }))
+    })
+}
+
 /// Review D21: the event `dispatchEvent` is given keeps `target`, the window,
 /// once dispatched. Seen only when nothing else can read it: `new Event(...)`
 /// in place, or a binding the call is the only use of.
-fn dispatched_event_stays_inline(file: &FileFacts, call: &ast::CallFact) -> bool {
+fn dispatched_event_stays_inline(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+) -> bool {
     let [event] = call.arguments.as_slice() else {
         return false;
     };
@@ -1185,7 +1254,20 @@ fn dispatched_event_stays_inline(file: &FileFacts, call: &ast::CallFact) -> bool
         return false;
     }
     let span = file.ast.peel_ts_sugar_span(event.span);
-    let constructed = |span: Span| file.ast.call_at(span).is_some_and(|call| call.construct);
+    // The global `Event` or `CustomEvent` itself: a subclass's constructor can
+    // keep the event, a shadowing class is another class (review of 37ce9020a).
+    let constructed = |span: Span| {
+        file.ast.call_at(span).is_some_and(|construct| {
+            construct.construct
+                && matches!(
+                    global_name(file, file.ast.peel_ts_sugar_span(construct.callee)),
+                    Some("Event" | "CustomEvent")
+                )
+                && lookup
+                    .standard_library_declaration(file, construct, typefacts::CallKind::Construct)
+                    .is_some()
+        })
+    };
     if constructed(span) {
         return true;
     }

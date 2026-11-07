@@ -134,6 +134,11 @@ const ITER_PATCHES = {
   "iter-composed-index": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath()[3]; itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-forof": `document.body.addEventListener("itx", (e) => { for (const itT of e.composedPath() as any[]) { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); } }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   // Review D21: an event keeps `target` after `dispatchEvent`; a computed write on the global object replaces a window method.
+  "iter-window-any-written": `(window as any).__itHook = function (this: any) { const g = this; ${ITER_G} }; (window as any).__itHook();`,
+  // Review D24: the window inherits a member an array-free prototype write installs under a key no literal names.
+  "iter-object-proto-member": `const itKn: PropertyKey[] = ["__itp"]; (Object.prototype as any)[itKn[0]] = function (this: any) { const g = this; delete (Object.prototype as any)[itKn[0]]; ${ITER_G} }; (window as any).__itp?.();`,
+  // Review of 37ce9020a: a subclass's constructor keeps the event, whose `target` stays the window after dispatch.
+  "iter-event-subclass": `let itKept: any; class ItE extends Event { constructor() { super("itx"); itKept = this; } } window.dispatchEvent(new ItE()); { const g = itKept.target; ${ITER_G} }`,
   "iter-event-target": `const itEv = new Event("itx"); window.dispatchEvent(itEv); (itEv.target as any).Function(${JSON.stringify(ITER_CODE)})();`,
   "iter-window-computed": `const itK = ["con", "firm"].join(""); const itC = window.confirm; (window as any)[itK] = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); (window as any)[itK] = itC; return true; }; window.confirm("y");`,
   // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.
