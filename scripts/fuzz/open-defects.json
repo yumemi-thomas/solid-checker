@@ -1037,7 +1037,7 @@
  "ratchet": {
   "certified": 124,
   "certifiedF2": 0,
-  "falsePositive": 57,
+  "falsePositive": 65,
   "stackedClaim": 162,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -1050,15 +1050,15 @@
    "STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter": 6,
    "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": 10
   },
-  "unjudgedClaim": 1,
+  "unjudgedClaim": 3,
   "causes": {
    "R-not-legal": 663,
    "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`": 13,
    "false-positive": 4,
    "createRoot inside onCleanup inside createRoot": 2,
-   "R-casts-stage2": 284,
+   "R-casts-stage2": 292,
    "R-unplaced": 157,
-   "R-unjudged-unplaced": 1,
+   "R-unjudged-unplaced": 3,
    "R-stacked": 162,
    "R-other": 38,
    "R-neighbour-U": 108,

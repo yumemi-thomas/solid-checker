@@ -81,7 +81,7 @@
   "SC4001 owner-varies-by-caller": 78,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 1,
-  "SC4002 computation-error-unobserved": 8,
+  "SC4002 computation-error-unobserved": 5,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
   "SC4002 owner-unproven": 5,
@@ -559,6 +559,18 @@
    "fixtures": {
     "proved": "uncertifiable-repro/sc1001",
     "open": "reactive-ir/handed-net-guards"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4002 computation-error-unobserved",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 0893",
+   "proof": "rust/crates/solid-reactive-ir/src/stored_throw.rs::throw_end",
+   "fixtures": {
+    "proved": "reactive-ir/owner-callback-prop",
+    "open": "reactive-ir/stored-throw-observation"
    }
   }
  ],
