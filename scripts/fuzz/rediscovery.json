@@ -6834,5 +6834,17 @@
   "found": "lost-row chase on tier A: probus-hk railLayout.ts, @solid-primitives/utils dist/index.js",
   "fixed": "ADR 0874",
   "outside": "the fix proves more, no grid program holds such a target beside a site it decides; fixtures/reactive-ir/host-call-member-write holds the assignment_writes rule"
- }
+ },
+{
+ "finding": "ADR 0877: const-held symbol mistaken for an open global key",
+ "found": "C2 corpus writer probe and symbol-key-const fixture",
+ "fixed": "ADR 0877",
+ "grid": "lg-recall",
+ "code": "STRICT_READ_UNTRACKED",
+ "ids": [
+  "lg-strict-read-untracked-proto-const-symbol-signal-direct-none",
+  "lg-strict-read-untracked-proto-const-symbol-signal-direct-closure"
+ ],
+ "rediscovered": "m35: four uncertifiable legal twins; m36: four clean, Chrome silent on all four. symbol-key-const fails on m35 with standard-member-impostor at sort and passes on m36; patch-const-symbol misuse twins remain held on both builds."
+}
 ]

@@ -1121,6 +1121,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-withheld-rows/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-mutation/node_modules/
 !fixtures/reactive-ir/impostor-withheld-mutation/node_modules/**
+!fixtures/reactive-ir/symbol-key-const/node_modules/
+!fixtures/reactive-ir/symbol-key-const/node_modules/**
+!fixtures/reactive-ir/symbol-key-const-open/node_modules/
+!fixtures/reactive-ir/symbol-key-const-open/node_modules/**
 !fixtures/reactive-ir/standard-patches/node_modules/
 !fixtures/reactive-ir/standard-patches/node_modules/**
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/

@@ -87,6 +87,8 @@ const PATCHES = {
   "patch-key-from": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `Array.from([${h}]).forEach((g) => { g(); })`],
   "patch-key-spread": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `[...[${h}]].map((g) => g())`],
   "patch-key-get": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `new Map([[1, ${h}]]).get(1)!()`],
+  // ADR 0877: a `const` holding a symbol, the global `Symbol` replaced first: the key may be a name.
+  "patch-const-symbol": [`(globalThis as any).Symbol = { for: () => "then" }; const sk = (Symbol as any).for("k"); (Promise.prototype as any)[sk] = ${SYNC_PROTO};`, "Promise.resolve().then"],
   "patch-let-assigned-key": [`${PATCH_KEYS} let gp: any = {}; gp = Object.getPrototypeOf(Promise.resolve()); gp[pm] = ${SYNC_PROTO};`, "Promise.resolve().then"],
   "patch-key-ctor": [`${PATCH_KEYS} let gA = false; const gR = (globalThis as any)[pk]; (globalThis as any)[pk] = class extends gR { static resolve(v?: unknown) { return gA ? ((gA = false), { then(f: () => void) { f(); } }) : gR.resolve(v); } };`, "(gA = true, Promise.resolve()).then"],
 };
@@ -112,6 +114,8 @@ const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
 const PROTO_LEGAL = {
   "proto-own-class": (h) => [`class Foo { then() {} } Foo.prototype.then = () => {};`, `setTimeout(${h}, 0)`],
   "proto-compared": (h) => [`const isPlain = (v: object) => { const gp = Object.getPrototypeOf(v); return gp === null || gp === Object.prototype; }; isPlain({});`, `Promise.resolve().then(${h})`],
+  // ADR 0877: a `const` holding a symbol names no member of the prototype it writes.
+  "proto-const-symbol": (h) => [`const sk = Symbol.for("k"); (globalThis as any)[sk] = () => {}; const ss = { [Symbol.for("site")]: () => {} };`, `Promise.resolve().then(${h})`],
   "proto-read-walk": (h) => [`let walked: object | null = []; while (walked) walked = Object.getPrototypeOf(walked);`, `Promise.resolve().then(${h})`],
 };
 // ADR 0874: a receiver the census took for the standard library's, with the program's own member on it. Each runs the callback at once

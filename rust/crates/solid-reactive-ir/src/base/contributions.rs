@@ -1054,7 +1054,19 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
 /// `Symbol` makes on the spot. A program that replaces `Symbol` reopens each
 /// such site ([`SYMBOL_SITE`]): this file cannot see that.
 fn symbol_key(file: &FileFacts, key: Span) -> bool {
-    symbol_made_at(file, file.ast.peel_ts_sugar_span(key))
+    symbol_made_at(file, file.ast.peel_ts_sugar_span(key)) || const_symbol_key(file, key)
+}
+
+/// ADR 0877: the key at `key` names a `const` of this file holding what
+/// [`symbol_made_at`] accepts at its initializer. `Symbol` replaced is
+/// `symbol_open`'s, as for the same call written in place.
+fn const_symbol_key(file: &FileFacts, key: Span) -> bool {
+    let ast = &file.ast;
+    ast.reference_declaration(ast.peel_ts_sugar_span(key))
+        .and_then(|declaration| ast.identifier_binding(declaration))
+        .filter(|binding| binding.immutable)
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| symbol_made_at(file, ast.peel_ts_sugar_span(initializer)))
 }
 
 /// The well-known symbols no census member reads. Not `replace`, through which
@@ -1664,6 +1676,8 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
         let argument_key = |index: usize| match argument(index) {
             Some(key) => match &key.literal_value {
                 ArgumentLiteralFact::String(name) => CensusKey::Named(name.to_string()),
+                // ADR 0877: a definer keeps `*`.
+                _ if const_symbol_key(file, key.span) => CensusKey::Unknown,
                 _ => census_key(file, key.span, true),
             },
             None => CensusKey::Unknown,
