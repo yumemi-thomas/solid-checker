@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 547,
+      "end": 551,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -9,6 +20,17 @@
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 560,
       "end": 569,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 794,
+      "end": 798,
       "fixes": 0
     },
     {
@@ -22,14 +44,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 1101,
-      "end": 1108,
+      "end": 1105,
       "fixes": 0
     },
     {
@@ -44,34 +66,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 1469,
-      "end": 1476,
+      "end": 1473,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 1715,
-      "end": 1722,
+      "end": 1719,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 2019,
-      "end": 2026,
+      "end": 2023,
       "fixes": 0
     },
     {
@@ -141,6 +165,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2502,
+      "end": 2506,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -148,6 +183,17 @@
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 2511,
       "end": 2520,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2549,
+      "end": 2553,
       "fixes": 0
     },
     {
@@ -161,6 +207,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2752,
+      "end": 2756,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -171,14 +228,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 3039,
-      "end": 3046,
+      "end": 3043,
       "fixes": 0
     },
     {
@@ -237,14 +294,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
       "start": 292,
-      "end": 298,
+      "end": 295,
       "fixes": 0
     },
     {
@@ -259,14 +316,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
       "start": 366,
-      "end": 372,
+      "end": 369,
       "fixes": 0
     },
     {
@@ -281,14 +338,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
       "start": 492,
-      "end": 498,
+      "end": 495,
       "fixes": 0
     },
     {
@@ -303,14 +360,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
       "start": 724,
-      "end": 730,
+      "end": 727,
       "fixes": 0
     },
     {
@@ -322,6 +379,17 @@
       "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
       "start": 736,
       "end": 745,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 905,
+      "end": 908,
       "fixes": 0
     },
     {

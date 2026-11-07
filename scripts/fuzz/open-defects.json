@@ -996,13 +996,20 @@
   "lg-recall/lg-strict-read-untracked-recv-replace-late-memo-hook-member-none-m-show-later": "C2",
   "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-label": "C2",
   "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-none": "C2",
-  "mx-census/mx-action-called-in-owned-scope-recv-replace-late-x-direct-none": "C2"
+  "mx-census/mx-action-called-in-owned-scope-recv-replace-late-x-direct-none": "C2",
+  "mx-census/mx-loading-on-accessor-flw-flow-show-value-accessor-direct-none": "R5",
+  "mx-census/mx-loading-on-accessor-flw-flow-show-value-arrow-direct-none": "R5",
+  "mx-census/mx-loading-on-accessor-flw-flow-show-value-memo-direct-none": "R5",
+  "mx-census/mx-strict-read-untracked-flw-flow-show-value-memo-direct-none": "R5",
+  "mx-census/mx-strict-read-untracked-flw-flow-show-value-signal-direct-none": "R5",
+  "mx-census/mx-untracked-read-after-await-flw-flow-show-value-x-direct-none": "R5",
+  "mx-recall/mx-settled-cleanup-unowned-flw-flow-for-async-x-ns-exported-none": "R5"
  },
  "ratchet": {
   "certified": 124,
   "certifiedF2": 0,
-  "falsePositive": 65,
-  "stackedClaim": 162,
+  "falsePositive": 72,
+  "stackedClaim": 185,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
    "MISSING_EFFECT_FN|leaf-owner-forbidden-call": 6,
@@ -1012,31 +1019,31 @@
    "PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner": 6,
    "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": 50,
    "STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter": 6,
-   "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": 10
+   "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": 33
   },
   "unjudgedClaim": 3,
   "causes": {
-   "R-not-legal": 663,
+   "R-not-legal": 1885,
    "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`": 13,
-   "false-positive": 4,
+   "false-positive": 11,
    "createRoot inside onCleanup inside createRoot": 2,
    "R-casts-stage2": 307,
-   "R-unplaced": 157,
+   "R-unplaced": 165,
    "R-unjudged-unplaced": 3,
-   "R-stacked": 162,
+   "R-stacked": 185,
+   "R-neighbour-U": 140,
    "R-other": 38,
-   "R-neighbour-U": 108,
-   "R-misplaced": 43,
-   "R-carrier": 191,
+   "R-misplaced": 33,
+   "R-carrier": 193,
    "census": 96,
    "g2d named hand-off": 34,
-   "R-alias-call": 238,
+   "R-alias-call": 253,
    "R-F1-open": 7,
    "R-alias-owner": 81,
    "R-stop-named-U": 481,
    "R-call-arg": 76,
-   "R-placeless": 46,
-   "R-near": 9
+   "R-placeless": 53,
+   "R-near": 12
   }
  }
 }

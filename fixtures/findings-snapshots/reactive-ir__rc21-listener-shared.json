@@ -30,17 +30,6 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-listener-shared/App.tsx",
-      "start": 214,
-      "end": 235,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-listener-shared/App.tsx",
       "start": 229,
       "end": 234,
       "fixes": 0

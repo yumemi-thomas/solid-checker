@@ -27,6 +27,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 223,
+      "end": 228,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "prop-pending-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
@@ -45,6 +56,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 428,
+      "end": 433,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -55,6 +77,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 503,
+      "end": 508,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -62,6 +95,17 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 538,
       "end": 553,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 545,
+      "end": 550,
       "fixes": 0
     },
     {
@@ -97,6 +141,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 694,
+      "end": 699,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "violation",
@@ -104,6 +159,17 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 865,
       "end": 872,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 865,
+      "end": 870,
       "fixes": 0
     },
     {
@@ -129,6 +195,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 918,
+      "end": 923,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -136,6 +213,17 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 978,
       "end": 985,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 978,
+      "end": 983,
       "fixes": 0
     },
     {
@@ -156,6 +244,17 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 1027,
       "end": 1034,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1027,
+      "end": 1032,
       "fixes": 0
     },
     {
@@ -202,6 +301,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1334,
+      "end": 1339,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -210,6 +320,50 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 1621,
       "end": 1625,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1667,
+      "end": 1672,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1716,
+      "end": 1721,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1727,
+      "end": 1732,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1906,
+      "end": 1911,
       "fixes": 0
     },
     {
@@ -224,6 +378,50 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2033,
+      "end": 2038,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2111,
+      "end": 2116,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2152,
+      "end": 2157,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2244,
+      "end": 2249,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -232,6 +430,28 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 2787,
       "end": 2798,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2791,
+      "end": 2796,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2875,
+      "end": 2880,
       "fixes": 0
     },
     {
@@ -246,6 +466,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 2923,
+      "end": 2928,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -257,6 +488,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 3007,
+      "end": 3012,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 3060,
+      "end": 3065,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -265,6 +518,28 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 3085,
       "end": 3096,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 3089,
+      "end": 3094,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 3129,
+      "end": 3134,
       "fixes": 0
     },
     {
@@ -287,6 +562,17 @@
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 3209,
       "end": 3216,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 3209,
+      "end": 3214,
       "fixes": 0
     },
     {

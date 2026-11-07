@@ -213,6 +213,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
+      "start": 3847,
+      "end": 3858,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",
@@ -221,6 +232,17 @@
       "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
       "start": 3949,
       "end": 3956,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
+      "start": 4099,
+      "end": 4110,
       "fixes": 0
     },
     {
@@ -309,6 +331,28 @@
       "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
       "start": 5505,
       "end": 5515,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
+      "start": 5632,
+      "end": 5643,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
+      "start": 5764,
+      "end": 5775,
       "fixes": 0
     },
     {

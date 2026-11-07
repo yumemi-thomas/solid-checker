@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "reactive-dispatch-unresolved",
@@ -79,14 +79,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 933,
-      "end": 939,
+      "end": 936,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 952,
+      "end": 953,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 974,
+      "end": 977,
       "fixes": 0
     },
     {
@@ -101,14 +123,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 1112,
-      "end": 1118,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1131,
+      "end": 1132,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1153,
+      "end": 1156,
       "fixes": 0
     },
     {
@@ -123,14 +167,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 1286,
-      "end": 1292,
+      "end": 1289,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1305,
+      "end": 1306,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1327,
+      "end": 1330,
       "fixes": 0
     },
     {
@@ -145,24 +211,69 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 1462,
-      "end": 1468,
+      "end": 1465,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1481,
+      "end": 1482,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1503,
+      "end": 1506,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 1634,
-      "end": 1640,
+      "end": 1637,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1653,
+      "end": 1654,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 1675,
+      "end": 1678,
       "fixes": 0
     },
     {
@@ -177,14 +288,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 2087,
-      "end": 2093,
+      "end": 2090,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 2106,
+      "end": 2107,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 2128,
+      "end": 2131,
       "fixes": 0
     },
     {
@@ -199,14 +332,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
       "start": 573,
-      "end": 579,
+      "end": 576,
       "fixes": 0
     },
     {
@@ -221,14 +354,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
       "start": 631,
-      "end": 637,
+      "end": 634,
       "fixes": 0
     },
     {
@@ -243,14 +376,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
       "start": 696,
-      "end": 702,
+      "end": 699,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
+      "start": 719,
+      "end": 720,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
+      "start": 743,
+      "end": 746,
       "fixes": 0
     },
     {
@@ -276,44 +431,91 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 643,
-      "end": 649,
+      "end": 646,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 662,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 684,
+      "end": 687,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 824,
-      "end": 830,
+      "end": 827,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 873,
-      "end": 879,
+      "end": 876,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 925,
-      "end": 931,
+      "end": 928,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 959,
+      "end": 960,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 983,
+      "end": 986,
       "fixes": 0
     },
     {
@@ -344,6 +546,17 @@
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 1141,
+      "end": 1142,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 1141,
       "end": 1142,
