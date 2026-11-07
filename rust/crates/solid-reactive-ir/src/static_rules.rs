@@ -19,6 +19,7 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 mod after_await;
+mod handed_compute;
 mod native_promise;
 mod pre_await;
 

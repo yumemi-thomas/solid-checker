@@ -189,8 +189,8 @@ describe("Chrome's confirmation", () => {
   });
   it("counts a diagnostic Chrome could not place as Solid speaking, for a false clean", () => {
     expect(status(item(6), [], record({ runtime: { unattributed: ["NO_OWNER_CLEANUP"] } }))).toBe("confirmed-unplaced");
-    // ... unless a finding that could claim it exists somewhere in the file.
-    expect(status(item(6), [], record({ runtime: { unattributed: ["NO_OWNER_CLEANUP"] }, checker: { findings: [{ rule: "missing-owner", kind: "uncertifiable", line: 2, endLine: 2 }] } }))).toBe("refuted-by-chrome");
+    // ... a finding of a claiming rule elsewhere in the file does not cover it (review 4c, R8): it has no position.
+    expect(status(item(6), [], record({ runtime: { unattributed: ["NO_OWNER_CLEANUP"] }, checker: { findings: [{ rule: "missing-owner", kind: "uncertifiable", line: 2, endLine: 2 }] } }))).toBe("confirmed-unplaced");
     expect(status(item(null), [{ kind: "candidate-false-clean", diagnostic: { code: "NO_OWNER_CLEANUP", line: null } }])).toBe("confirmed-unplaced");
     expect(isConfirmed("confirmed-unplaced") && isConfirmed("confirmed") && !isConfirmed("line-differs")).toBe(true);
   });

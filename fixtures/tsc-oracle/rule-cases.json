@@ -550,7 +550,15 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "SC4003's keystone. A boundary element at module scope is perfectly well typed -- it is just an element. The claim is an ownership one: created with no reactive owner above it, the boundary can never be disposed, and the subtree it manages leaks for the lifetime of the app.",
+      "why": "SC4003's keystone. A boundary created by a call at module scope is perfectly well typed. The claim is an ownership one: created with no reactive owner above it, rc.21 warns NO_OWNER_BOUNDARY and the boundary can never be disposed.",
+      "code": "import { Loading } from \"solid-js\";\nexport const Orphan = Loading({ fallback: 0, children: 1 });\n"
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "ADR 0869: the JSX form is no owner site. rc.21's dev `createComponent` runs the component under its own transparent root, so Chrome is quiet at module scope and the checker says nothing.",
       "code": "import { Loading } from \"solid-js\";\nexport const Orphan = <Loading>{null}</Loading>;\n"
     },
     {
@@ -583,7 +591,7 @@
       "expect": "silent",
       "checker": "reports",
       "why": "`resolve` returns a Promise and is called correctly; the claim is that the runtime's observer guard throws when it runs directly in a tracked scope.",
-      "code": "import { createMemo, resolve } from \"solid-js\";\nexport const value = createMemo(() => resolve(() => 1));\n"
+      "code": "import { createMemo, resolve } from \"solid-js\";\nexport function Value() {\n  const value = createMemo(() => resolve(() => 1));\n  return <div>{String(value())}</div>;\n}\n"
     },
     {
       "rule": "sync-computation-received-async",

@@ -1246,6 +1246,10 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
             }
+            if operation.computation_error_unobserved {
+                crate::blockers::COMPUTATION_ERROR_UNOBSERVED
+                    .clone_into(&mut finding.analysis_context);
+            }
             if operation.identity_unproven {
                 finding.fixes.clear();
                 finding.analysis_context =
@@ -1304,6 +1308,22 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // on a re-ask nothing here proves.
             if read.declared_loading && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
+            }
+            // ADR 0855: while a module evaluates no strict-read window is open,
+            // so the read emits nothing and throws a plain NotReadyError, which
+            // a `catch` on the evaluating stack swallows. A component body, an
+            // apply or a labelled `untrack` emits before it throws: there the
+            // finding stands.
+            if read.caught
+                && finding.id == "SC5001"
+                && read.execution == crate::ExecutionRole::ModuleInitialization
+                && read.leaf_owner.is_none()
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "this read runs while the module evaluates, where a pending read emits no diagnostic and throws a plain NotReadyError, and a `catch` in this module may be on its stack and swallow it; if none is: {}",
+                    finding.message
+                );
             }
             // The same escalation for the execution window: a host that may
             // run the read's callback inside the component body's strict-read

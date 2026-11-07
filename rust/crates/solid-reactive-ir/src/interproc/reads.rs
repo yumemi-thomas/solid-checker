@@ -380,7 +380,7 @@ fn in_place_layer_owners(
         }
         let node = &nodes[index];
         let Some((climb, through_generator)) =
-            crate::execution_role::in_place_run_site_within(file, site, lookup, Some(node.span))
+            crate::execution_role::in_place_run_site_placing(file, site, lookup, Some(node.span))
         else {
             continue;
         };
@@ -403,7 +403,10 @@ fn in_place_layer_owners(
         owners.push(InPlaceLayerOwner {
             owner: index,
             local: !site_on_every_completion(lookup, file, node.span, call),
-            undecided: climb.suspended.is_some() || climb.in_list || through_generator,
+            undecided: climb.suspended.is_some()
+                || climb.in_list
+                || through_generator
+                || climb.withheld,
         });
     }
     owners

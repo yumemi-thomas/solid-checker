@@ -51,8 +51,30 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 811,
+      "end": 823,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
       "start": 819,
       "end": 823,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 858,
+      "end": 877,
       "fixes": 0
     }
   ]

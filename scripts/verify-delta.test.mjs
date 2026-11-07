@@ -46,15 +46,15 @@ test("every check a row or the universal set names actually exists", () => {
 test("each table row claims its own owner's paths", () => {
   const expected = [
     ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "backend-process", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
     ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "wasm-compile"]],
     ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"]],
     [
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
       ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz"],
     ],
-    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "guard-count"]],
-    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "guard-count"]],
+    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "guard-count", "backend-process"]],
+    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "guard-count", "backend-process"]],
     [
       "apps/solid-typefacts/src/session.rs",
       ["typefacts", "backend-staleness", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz", "wasm-parity"],
@@ -101,6 +101,7 @@ test("a mapped change set runs preflight checks before building and testing", ()
     "guard-count",
     "build-debug",
     "ir-lib",
+    "backend-process",
     "write-walk-strategies",
     "coverage",
     "repro-causes",
@@ -385,7 +386,7 @@ test("a real non-ASCII path git has to escape is read, not thrown on", () => {
     }
     // ...and every one of them lands on the fixtures row rather than escalating.
     for (const name of names) {
-      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "guard-count"], name);
+      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "guard-count", "backend-process"], name);
     }
   });
 });

@@ -21,7 +21,7 @@ import { findingsDiff, outcomeDiff } from "./hits.mjs";
 import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
 import { callAtLine } from "./falseclean.mjs";
-import { registrationLines } from "./registration.mjs";
+import { registrationLines, registrationPositions } from "./registration.mjs";
 import { createTypecheckBatcher, typecheck, typecheckBatch } from "./typecheck.mjs";
 import { judgeUnexecuted, lexicallyDeadHits } from "./unexecuted.mjs";
 
@@ -326,7 +326,8 @@ export async function finishEntries({ results, live }, config, deps = {}) {
     }
     value.classification = classify({
       sites: value.built.sites, glue: instrument ? value.built.glue : [], checker: value.checker, runtime: value.runtime, plan: value.built.plan,
-      evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral, lexicallyDead: lexicallyDeadHits(value.program, value.built.ledger), registrationLines: registrationLines(value.program, value.built.lineTable) },
+      evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral, lexicallyDead: lexicallyDeadHits(value.program, value.built.ledger), registrationLines: registrationLines(value.program, value.built.lineTable), source: value.built.files?.["App.tsx"] ?? value.built.text,
+        registrationPositions: registrationPositions(value.program, value.built.lineTable, value.built.files?.["App.tsx"] ?? value.built.text) },
     });
   }
   return results;
@@ -428,7 +429,8 @@ export function classifyChrome(value, record, config = {}) {
   return classify({
     sites: value.built.sites, glue: value.built.glue ?? [], checker: record.checker, runtime: record.runtime, plan: value.built.plan,
     evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral: Boolean(value.built.neutral) && !record.checker.perturbed?.length && value.control?.matched === true,
-      lexicallyDead: lexicallyDeadHits(value.program, value.built.ledger), registrationLines: registrationLines(value.program, value.built.lineTable) },
+      lexicallyDead: lexicallyDeadHits(value.program, value.built.ledger), registrationLines: registrationLines(value.program, value.built.lineTable), source: value.built.files?.["App.tsx"] ?? value.built.text,
+        registrationPositions: registrationPositions(value.program, value.built.lineTable, value.built.files?.["App.tsx"] ?? value.built.text) },
   });
 }
 

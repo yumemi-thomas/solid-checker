@@ -26,6 +26,12 @@ raw value where a project uses `markRaw` or a shallow store (ADR 0634).
 holds an object or array there (ADR 0629). A labelled `untrack(fn, "name")` opens a
 window wherever it runs (ADR 0628).
 
+A read through an escaped reactive value carries an SC9012 at the read site
+(ADR 0860), with the blocker from its escape: a carrier, logical expression,
+unresolved member, primitive callback return or forwarded value. A proven
+tracked role discharges that read. A package-installed global function gets
+`dependency-global-read` at its call (ADR 0862). These rows prove no violation.
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top
@@ -216,7 +222,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   touching the listener, so a read inside it subscribes a memo or effect compute
   that calls it, and in a component body it is reported exactly as a bare read
   there (probed on every published rc.0-rc.9 client build). `untrack` is the
-  wrapper that clears the listener.
+  wrapper that clears the listener. A layer that runs in place inside `fn` (an IIFE)
+  answers as `fn` does, and in a helper not proven to run in the body the read is
+  uncertifiable (ADR 0859).
 - **Props follow their callers.** `devComponent` wraps the body in
   `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
   *getter* reads reactive state in that window. A prop that every visible call

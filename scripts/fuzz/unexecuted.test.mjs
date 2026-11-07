@@ -32,7 +32,7 @@ const strictClosed = {
   components: [{ k: "component", name: "C1", signals: [signal], view: [{ k: "probe", sig: "w1" }], body: [{ k: "decl", name: "f1", e: fn([{ k: "return", e: write }]) }] }],
 };
 const caseOf = (program) => ({ program, built: buildCase(program, { id: `t-${program.seed}` }) });
-const violationAt = (built, rule = "no-write-in-pure-computation") => { const [site] = built.sites; return { rule, id: "SC2001", kind: "violation", line: site.line, endLine: site.line }; };
+const violationAt = (built, rule = "no-write-in-pure-computation") => { const [site] = built.sites; return { rule, id: "SC2001", kind: "violation", line: site.line, column: 1, endLine: site.line }; };
 /** Hits: every entry and glue counter ran once; the payload sites never ran. */
 const hitsOf = (built) => Object.fromEntries(built.ledger.filter((row) => row.kind !== "site").map((row) => [row.hit, 1]));
 const runtime = (built, hits, over = {}) => ({ failure: null, diagnostics: [], errors: [], witnesses: built.sites.map((site) => ({ siteId: site.id, reached: null })), hits, quiescent: true, ...over });
@@ -128,7 +128,7 @@ describe("classify: candidate-false-positive: unexecuted", () => {
     const ran = judge(c, runtime(c.built, { ...hitsOf(c.built), [site.hit]: 1 }, { witnesses: [{ siteId: site.id, reached: true }] }));
     expect(ran.verdict).toBe("candidate-false-positive");
     expect(judge(c, runtime(c.built, hitsOf(c.built), { errors: [{ kind: "window-error", message: "boom", positions: [] }] })).items[0]).toMatchObject({ kind: "inconclusive", why: "disturbed" });
-    const diagnostic = { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", message: "x", positions: [{ file: "App.tsx", line: site.line }] };
+    const diagnostic = { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", message: "x", positions: [{ file: "App.tsx", line: site.line, column: 1 }] };
     expect(judge(c, runtime(c.built, hitsOf(c.built), { diagnostics: [diagnostic] })).verdict).toBe("agree");
   });
 
@@ -136,8 +136,8 @@ describe("classify: candidate-false-positive: unexecuted", () => {
     const c = caseOf(andFalse);
     const [site] = c.built.sites;
     const result = classify({
-      sites: c.built.sites, glue: c.built.glue, plan: c.built.plan, runtime: runtime(c.built, hitsOf(c.built), { diagnostics: [{ code: "NO_OWNER_CLEANUP", message: "x", positions: [{ file: "App.tsx", line: 1 }] }] }),
-      checker: { ok: true, findings: [violationAt(c.built), { rule: "missing-owner", id: "SC4001", kind: "uncertifiable", line: 1, endLine: 1 }] },
+      sites: c.built.sites, glue: c.built.glue, plan: c.built.plan, runtime: runtime(c.built, hitsOf(c.built), { diagnostics: [{ code: "NO_OWNER_CLEANUP", message: "x", positions: [{ file: "App.tsx", line: 1, column: 1 }] }] }),
+      checker: { ok: true, findings: [violationAt(c.built), { rule: "missing-owner", id: "SC4001", kind: "uncertifiable", line: 1, column: 1, endLine: 1 }] },
       evidence: { ledger: c.built.ledger, lexicallyDead: lexicallyDeadHits(c.program, c.built.ledger) },
     });
     expect(result.items.map((item) => item.kind).sort()).toEqual(["candidate-unexecuted", "recall-gap"]);

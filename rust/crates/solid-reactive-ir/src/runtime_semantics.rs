@@ -362,6 +362,25 @@ pub(super) fn argument_behavior(
     })
 }
 
+/// ADR 0893: a scheduler whose callback's throw nothing in the program can
+/// take: a task or microtask with no value handed back, so the throw reaches
+/// the global handler. A promise's handler is not one: its throw rejects a
+/// promise a later `catch` or an `await` in a `try` may hold.
+pub(super) fn scheduler_throw_reaches_host(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && matches!(
+                declaration.qualified_name.as_ref(),
+                "queueMicrotask"
+                    | "setTimeout"
+                    | "setInterval"
+                    | "WindowOrWorkerGlobalScope.queueMicrotask"
+                    | "WindowOrWorkerGlobalScope.setTimeout"
+                    | "WindowOrWorkerGlobalScope.setInterval"
+            )
+    })
+}
+
 /// ADR 0810: standard calls that read an object's own keys, run no getter and
 /// answer no value of it. `Object.keys` Gets nothing: a store's `ownKeys` trap
 /// has no strict-read warning in Chrome.

@@ -4,8 +4,7 @@
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-resolve-leaf/App.tsx",
       "start": 165,

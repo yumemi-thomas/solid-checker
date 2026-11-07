@@ -227,7 +227,9 @@ impl Finding {
                 && !missing_jsx_census
                 && !provider_open
                 && !default_unproven
-                && !owned_run_throws);
+                && !owned_run_throws
+                && !requirement.flight_error_unobserved
+                && !requirement.computation_error_unobserved);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
         if missing_jsx_census {
@@ -334,6 +336,20 @@ impl Finding {
             message.push_str(
                 "; but this read also runs under an owner, where the context has no provider and Solid throws `ContextNotFoundError` first (missing-context-provider), and a run with no owner is not proven to be reached after that",
             );
+        }
+        if requirement.computation_error_unobserved {
+            message.push_str(
+                "; but the throw is stored on a computation or taken by a `try` or an error boundary, and no read that reports it is proven",
+            );
+        }
+        if requirement.flight_error_unobserved {
+            message.push_str(
+                "; but the throw rejects the async generator stepper's flight, and whether a later read or error boundary observes that rejection is not proven",
+            );
+            evidence.push(EvidenceStep {
+                message: "the resumed step has no owner, but error propagation from its rejected flight to an observed read or boundary is unproven".into(),
+                location: Some(requirement.location.clone()),
+            });
         }
         if runtime_uncertain {
             let (clause, guidance, evidence_message) = match requirement.operation {

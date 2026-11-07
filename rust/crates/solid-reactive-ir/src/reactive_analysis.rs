@@ -442,7 +442,16 @@ pub(crate) fn collect_project<'facts>(
                     .map(|action| &action.location),
             )
             .chain(handed.iter().map(|obligation| &obligation.location))
-            .chain(draft.static_defects.iter().map(|defect| &defect.location)),
+            .chain(draft.static_defects.iter().map(|defect| &defect.location))
+            // ADR 0874: a withheld call's rows are about its target; the
+            // value on its chain keeps a row of its own.
+            .filter(|location| {
+                !draft.withheld_callees.contains(&(
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                ))
+            }),
     )
     .with_member_writes(&decided_writes);
     let census_obligation =
@@ -460,6 +469,9 @@ pub(crate) fn collect_project<'facts>(
     // reference's row stays where it was.
     let mut use_rows = Vec::new();
     let mut used = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
+    // ADR 0860: the rows past an escape, after every other.
+    let mut escaped_rows = Vec::new();
+    let mut escaped_seen = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
@@ -482,6 +494,15 @@ pub(crate) fn collect_project<'facts>(
                     location.end_byte,
                 )) {
                     use_rows.push(census_obligation(&callee, location, blocker));
+                }
+            }
+            for (location, blocker) in census.take_escaped_uses() {
+                if escaped_seen.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    escaped_rows.push(census_obligation(&callee, location, blocker));
                 }
             }
             let Some(blocker) = open else {
@@ -514,6 +535,15 @@ pub(crate) fn collect_project<'facts>(
                     use_rows.push(census_obligation("this value", location, blocker));
                 }
             }
+            for (location, blocker) in census.take_escaped_uses() {
+                if escaped_seen.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    escaped_rows.push(census_obligation("this value", location, blocker));
+                }
+            }
             let Some(blocker) = open else {
                 continue;
             };
@@ -522,6 +552,20 @@ pub(crate) fn collect_project<'facts>(
                 call.span.location(file.path.as_str()),
                 blocker,
             ));
+        }
+    }
+    // ADR 0840: a standard call the impostor census withholds may run any
+    // function the program puts at that member, a setter or an accessor as
+    // well as a method: the call is the use, and its row names the census.
+    for file in ctx.semantic_lookup.files() {
+        for call in file.ast.calls.iter().filter(|call| !call.construct) {
+            if ctx.semantic_lookup.impostor_withheld(file, call.callee) {
+                handed.push(census_obligation(
+                    file.source_text(call.callee).unwrap_or("this call"),
+                    call.callee.location(file.path.as_str()),
+                    crate::blockers::STANDARD_MEMBER_IMPOSTOR,
+                ));
+            }
         }
     }
     handed.extend(use_rows);
@@ -556,9 +600,26 @@ pub(crate) fn collect_project<'facts>(
         .into_iter()
         .filter(|obligation| !covered(obligation))
         .collect::<Vec<_>>();
+    // A use before the escape speaks for its span only where its own row
+    // stands: one `covered` dropped leaves the escaped row there.
+    let kept = handed
+        .iter()
+        .map(|obligation| {
+            let at = &obligation.location;
+            (at.path.clone(), at.start_byte, at.end_byte)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let escaped_rows = escaped_rows
+        .into_iter()
+        .filter(|obligation| {
+            let at = &obligation.location;
+            !kept.contains(&(at.path.clone(), at.start_byte, at.end_byte))
+        })
+        .collect::<Vec<_>>();
     for obligation in handed {
         draft.push_defect(obligation);
     }
+    draft.deferred_defects.extend(escaped_rows);
     // ADR 0509: a reported read of a proven async source with no async row
     // (a transported read, a module source read in another file) may meet the
     // source pending; give it the row the projection opens it with
@@ -927,6 +988,7 @@ pub(crate) fn collect_project<'facts>(
         .collect::<Vec<_>>();
     draft.async_reads.extend(siblings);
     hold_withdrawn_slot_rows(ctx, &source.withdrawn_array_slots, draft);
+    hold_withheld_layer_rows(ctx, draft);
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
@@ -1017,6 +1079,98 @@ fn hold_withdrawn_static_rows(draft: &mut ProgramDraft) {
             }
         }
     }
+}
+
+/// ADR 0874: a row placed through a call the census withholds stands at its
+/// site, uncertain: an impostor may run that callback anywhere, or never.
+fn hold_withheld_layer_rows(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    let lookup = ctx.semantic_lookup;
+    let in_layer = |at: &crate::Location| {
+        let (Ok(start), Ok(end)) = (u32::try_from(at.start_byte), u32::try_from(at.end_byte))
+        else {
+            return false;
+        };
+        lookup.file_by_path(at.path.as_ref()).is_some_and(|file| {
+            crate::execution_role::runs_in_withheld_layer(
+                file,
+                solid_facts::core::Span::new(start, end),
+                lookup,
+            )
+        })
+    };
+    for read in &mut draft.reads {
+        if !read.uncertain && read.execution.reports_untracked_read() && in_layer(&read.location) {
+            read.uncertain = true;
+        }
+    }
+    for defect in &mut draft.static_defects {
+        if !defect.uncertain && in_layer(&defect.location) {
+            defect.uncertain = true;
+            if !crate::blockers::named(&defect.analysis_context) {
+                crate::blockers::STANDARD_MEMBER_IMPOSTOR.clone_into(&mut defect.analysis_context);
+            }
+        }
+    }
+    // A pending read a withheld call's callback makes in JSX: the tracked
+    // rule's row stands beside the unplaced one, open.
+    let tracked = draft
+        .async_reads
+        .iter()
+        .filter(|read| {
+            read.execution == crate::ExecutionRole::Unknown
+                && in_layer(&read.location)
+                && lookup
+                    .file_by_path(read.location.path.as_ref())
+                    .is_some_and(|file| {
+                        let (Ok(start), Ok(end)) = (
+                            u32::try_from(read.location.start_byte),
+                            u32::try_from(read.location.end_byte),
+                        ) else {
+                            return false;
+                        };
+                        file.ast
+                            .any_jsx_containing(solid_facts::core::Span::new(start, end))
+                    })
+        })
+        .map(|read| crate::AsyncRead {
+            execution: crate::ExecutionRole::TrackedJsx,
+            options_opaque: true,
+            ..read.clone()
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(tracked);
+    // Anywhere else, the row the standard carrier's run would place (a
+    // pending read in a memo's compute: SC5003's) stands too, opaque.
+    let placed = draft
+        .async_reads
+        .iter()
+        .filter(|read| read.execution == crate::ExecutionRole::Unknown)
+        .filter_map(|read| {
+            let file = lookup.file_by_path(read.location.path.as_ref())?;
+            let start = u32::try_from(read.location.start_byte).ok()?;
+            let end = u32::try_from(read.location.end_byte).ok()?;
+            let span = solid_facts::core::Span::new(start, end);
+            if file.ast.any_jsx_containing(span) {
+                return None;
+            }
+            let call = crate::execution_role::withheld_layer_call(file, span, lookup)?;
+            let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
+            let execution = crate::execution_role::semantic_execution_role(
+                file,
+                call,
+                &allowed,
+                ctx.entities,
+                ctx.symbol_names,
+                lookup,
+            );
+            (execution != crate::ExecutionRole::Unknown).then(|| crate::AsyncRead {
+                execution,
+                options_opaque: true,
+                ..read.clone()
+            })
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(placed);
 }
 
 /// ADR 0803: a withdrawn slot stays a source, so transport, the handed net and

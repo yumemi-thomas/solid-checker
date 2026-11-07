@@ -21,6 +21,23 @@ object of a written member (`s.a` in `s.a.v = 1`) is such a read (ADR 0612). Pro
 member reads follow the component's caller classification (see
 [strict-read-untracked](strict-read-untracked.md)): proven-static props are not
 reactive and stay silent; unprovable ones are reported as **uncertifiable**.
+A read that may follow an await a branch can skip (`if (f) await p;`, `&&`,
+`switch`, a destructuring default), directly or in a closure, IIFE or helper
+run there, is **uncertifiable**: position cannot tell an arm that leaves from
+one that falls through (ADR 0870). A helper is walked once per set of
+windows, so a helper shared by two computations reports for each (ADR 0871),
+and one called past the computation's first suspension adds no tracking
+window (ADR 0872). An async function handed to a tracked primitive through a
+project wrapper's parameter (`(f) => createMemo(f)`) is walked as that
+primitive's compute; a hand-off the walk cannot follow is **uncertifiable**,
+`function-run-unplaced`, except `f();` as a statement in a synchronous
+wrapper, which runs in place (ADR 0873). A call past a suspension whose
+callee names no symbol and resolves to no declaration (`fns[0]()`,
+`(c ? a : b)()`) is **uncertifiable** (ADR 0879). On the flight, a handler the
+walk cannot read (`then(api.fmt)`), an `async` or generator handler, an async
+function a handler calls, and the handlers of a `.then` with no exact
+standard declaration (an `any` receiver) are **uncertifiable** (ADRs
+0880-0882).
 A call after the await to a project function whose body reads an accessor
 only on some paths (`await load(); return byUser(posts)`) is
 **uncertifiable**: the read is past the await, but whether the callee reads on
@@ -158,7 +175,9 @@ Each of these keeps it from applying:
 - a generator callback, which runs nothing when it is called. A generator the
   computation steps runs on its flight: past an `await`, under a `for await`
   written in the computation, the read is proved; past a `yield`, or stepped any
-  other way, it is an uncertifiable obligation (`generator-stepped`, ADR 0820);
+  other way, it is an uncertifiable obligation (`generator-stepped`, ADR 0820),
+  and so is a read in a function the body hands on past the `yield` (a slot, an
+  assigned member, a forwarded callback, ADR 0850);
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
 - a read inside or after `for await` (or after `await using`) is an

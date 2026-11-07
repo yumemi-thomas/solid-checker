@@ -12,7 +12,9 @@ Flags the signal-family constructors — `createMemo`, `createSignal(fn)`,
 options include `sync: true` while the computation's callback is async or
 statically returns a Promise/AsyncIterable. Options the syntax cannot read
 (`createMemo(fn, opts)`, a spread, a non-literal `sync:` value) beside an async
-computation are **uncertifiable**: they may set `sync: true`.
+computation are **uncertifiable**: they may set `sync: true`. An async generator's
+iterator is an AsyncIterable however it is named, and so is a return type with a
+`Symbol.asyncIterator` member (ADR 0865); a sync generator's iterator is a plain value.
 A site that provably never runs is silent, such as a function only a
 `defer: true` apply with no compute source calls (ADR 0590).
 

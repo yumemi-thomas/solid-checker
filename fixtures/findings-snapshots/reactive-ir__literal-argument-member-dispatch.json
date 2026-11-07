@@ -151,6 +151,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/nested-source.ts",
+      "start": 696,
+      "end": 717,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/nested-source.ts",
       "start": 714,
       "end": 716,
       "fixes": 0
@@ -461,6 +472,28 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
       "start": 539,
       "end": 655,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "exported-parameter-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
+      "start": 1925,
+      "end": 2046,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
+      "start": 2005,
+      "end": 2019,
       "fixes": 0
     },
     {

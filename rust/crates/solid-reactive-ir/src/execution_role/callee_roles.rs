@@ -200,6 +200,59 @@ pub(super) fn semantic_role_before_awaits(
     // below follow. Each of them would place it -- most often in the
     // enclosing component body, the one place it is least likely to run --
     // so the role is left unknown and projection claims nothing about it.
+    // ADR 0851: calling a generator runs none of its body; each step runs the
+    // next segment on the stack of the code that makes it. A site in the body
+    // of a generator every reference of which creates an iterator takes the
+    // role at its steps: one role where they all agree, none where they differ
+    // or a step escapes (unplaced), and no run where nothing creates it.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && let Some(calls) = crate::owners::generator_creations(file, generator, lookup)
+    {
+        let key = (file.path.to_string(), generator.span);
+        if !classifying.insert(key.clone()) {
+            return role_arm!("callee_roles.generator-steps-cycle", ExecutionRole::Unknown);
+        }
+        let mut sites = Vec::new();
+        let mut unplaced = crate::owners::generator_exported(file, generator);
+        for call in calls {
+            match crate::owners::iterator_steps(file, call, lookup) {
+                crate::owners::IteratorSteps::InPlace => sites.push(call.span),
+                crate::owners::IteratorSteps::Held(steps) => sites.extend(steps),
+                crate::owners::IteratorSteps::Unplaced => unplaced = true,
+            }
+        }
+        let mut role = None;
+        let mut differ = unplaced;
+        for site in sites {
+            if differ {
+                break;
+            }
+            let at = semantic_execution_role_within(
+                file,
+                site,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+            differ |= role.is_some_and(|role| role != at);
+            role = Some(at);
+        }
+        classifying.remove(&key);
+        return match role {
+            _ if differ => role_arm!(
+                "callee_roles.generator-steps-unplaced",
+                ExecutionRole::Unknown
+            ),
+            Some(role) => role_arm!("callee_roles.generator-steps", role),
+            None => role_arm!(
+                "callee_roles.generator-never-stepped",
+                ExecutionRole::Unreported
+            ),
+        };
+    }
     if result_access_callback_contains(file, span, lookup) {
         return role_arm!(
             "callee_roles.result-access-callback",
@@ -407,6 +460,14 @@ pub(super) fn semantic_role_before_awaits(
     }
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
         return role_arm!("callee_roles.returned-factory-callback", role);
+    }
+    // ADR 0874: nothing places code an impostor may run, or never run. A JSX
+    // expression the compiler wraps keeps its own role (ADR 0470, below).
+    if (classifying.contains(&write_classification_marker())
+        || own_jsx_compiler_role(file, span).is_none())
+        && super::write_roles::runs_in_withheld_layer(file, span, lookup)
+    {
+        return role_arm!("callee_roles.withheld-layer", ExecutionRole::Unknown);
     }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
         return role_arm!("callee_roles.inline-callback", role);

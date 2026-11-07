@@ -241,6 +241,7 @@ function render(program, instrument) {
   function fnText(f, depth, { header } = {}) {
     const { head, body } = fnParts(f, depth, header);
     // A named function expression (the recall axes' callback forms): `function cbNamed() { ... }`.
+    if (f.form === "generator") return `function*${head} ${body}`;
     if (f.form === "named") return `${f.async ? "async " : ""}function ${f.label}${head} ${body}`;
     return `${f.async ? "async " : ""}${head} => ${body}`;
   }
@@ -393,6 +394,19 @@ function render(program, instrument) {
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
       // ADR 0820: the site in a generator's body, the iterator stepped here.
+      case "run-kept": return `hkTwice(() => ${block(c.body, depth)});`;
+      // A branch no run takes and the checker cannot evaluate (flw-mixed-dead): its body is a block, so its calls are counted (Part 16).
+      case "dead-random": return `if (Math.random() > 2) ${block(c.body, depth)}`;
+      case "aw-else": return `if (Math.random() >= 0) ${block(c.body, depth)} else { await Promise.resolve(); }`;
+      case "aw-else-flip": return `if (Math.random() < 0) { await Promise.resolve(); } else ${block(c.body, depth)}`;
+      // ADR 0866: an `if (getOwner())` the suspension is inside of. `guard-loop` runs the site twice, the second time past the `await`.
+      case "guard-await": used.add("getOwner"); return `if (getOwner()) ${block(c.body, depth, null, ["await Promise.resolve();"])}`;
+      case "guard-for-await": used.add("getOwner"); return `if (getOwner()) { for await (const _x of [1]) ${block(c.body, depth + 1)} }`;
+      case "guard-loop": used.add("getOwner"); return `if (getOwner()) { for (let i = 0; i < 2; i += 1) ${block(c.body, depth + 1, null, [], ["await Promise.resolve();"])} }`;
+      case "guard-early": used.add("getOwner"); return `if (getOwner()) ${block(c.body, depth, null, [], ["await Promise.resolve();"])}`;
+      case "guard-probe-loop": used.add("getOwner"); return `for (let i = 0; i < 2; i += 1) { if (getOwner()) ${block(c.body, depth + 1, null, [], ["await Promise.resolve();"])} }`;
+      // The iterator stepped past the `yield` on a timer's stack.
+      case "guard-yield": used.add("getOwner"); return `function* gen() { if (getOwner()) ${block(c.body, depth + 1, null, ["yield 1;"])} }\n${ind(depth)}const it = gen();\n${ind(depth)}it.next();\n${ind(depth)}setTimeout(() => it.next(), 0);`;
       case "gen-await": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-yield": return `async function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-iife": return `for await (const _y of (async function* () ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])})()) void _y;`;
@@ -401,6 +415,13 @@ function render(program, instrument) {
       case "gen-next": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}await gen().next();`;
       case "gen-sync-loop": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
       case "gen-prefix": return `async function* gen() ${block(c.body, depth, null, [], ["await Promise.resolve();", "yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gen-yield-alias": return `async function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}const again = gen;\n${ind(depth)}for await (const _y of gen()) void _y;\n${ind(depth)}void again;`;
+      case "gen-yield-each": return `async function* gen() {\n${ind(depth + 1)}yield 1;\n${ind(depth + 1)}[1].forEach(() => ${block(c.body, depth + 1)});\n${ind(depth)}}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gen-sync-each": return `function* gen() {\n${ind(depth + 1)}yield 1;\n${ind(depth + 1)}[1].forEach(() => ${block(c.body, depth + 1)});\n${ind(depth)}}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
+      case "gstep": {
+        const body = c.mode === "first" ? block(c.body, depth, null, [], ["yield 1;"]) : block(c.body, depth, null, ["yield 1;"]);
+        return c.holder ? `const ${c.holder} = { *${c.name}() ${body} };` : `${c.exported ? "export " : ""}function* ${c.name}() ${body}`;
+      }
       case "gen-drain": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) void _y;\n${ind(depth)}await Promise.resolve();`;
       default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); if (c.form.startsWith("chain-") || c.form.startsWith("forward-")) return chainText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }
@@ -476,11 +497,14 @@ function render(program, instrument) {
     const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       // `lazy` (misuse.mjs `memo-lazy-*`): computed on its first read, not at creation.
-      case "memo": used.add("createMemo"); return `createMemo(${f}${e.lazy ? ", { lazy: true }" : ""})`;
+      // `creator` (flip-read.mjs `st-c-*`): another primitive that stores its compute's error, printed as a memo is.
+      case "memo": used.add(e.creator?.name ?? "createMemo"); return `${e.creator?.name ?? "createMemo"}(${f}${e.creator?.tail ?? ""}${e.lazy ? ", { lazy: true }" : ""})`;
       case "effect":
         used.add("createEffect");
         // `errorArm` (model.mjs): the compute throws once the signal reads 2; `fn` is the bundle's error handler.
         if (e.errorArm !== undefined) return `createEffect(() => { if (${e.errorArm}() === 2) throw new Error("x"); return 1; }, { effect: () => {}, error: ${f} })`;
+        // `errorBundle` (flip-read.mjs `st-effect-err-arm`): the compute's throw goes to the bundle's `error` arm.
+        if (e.errorBundle) return `createEffect(${f}, { effect: () => {}, error: () => {} })`;
         // `defer` (misuse.mjs `effect-apply-defer*`): the apply skips the first run and runs only when the compute reruns.
         return `createEffect(${f}, ${applyText(e.apply, depth)}${e.defer ? ", { defer: true }" : ""})`;
       case "reaction":
@@ -615,9 +639,12 @@ function render(program, instrument) {
   const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
   if (usesContext) { used.add("createContext"); out.push("const Ctx = createContext(7);", ""); }
   const useList = [...uses.entries()];
+  // A use repeated in a copy of the site brings the same module line (`function wrapUse`), and the same context line: one serves both.
+  const moduleOnce = new Set();
+  const once = (line) => !moduleOnce.has(line) && moduleOnce.add(line);
   for (const [node, described] of useList) {
-    if (described.contextLine) { used.add("createContext"); out.push(described.contextLine, ""); }
-    for (const line of described.moduleLines) out.push(auxLine(node, line), "");
+    if (described.contextLine && once(described.contextLine)) { used.add("createContext"); out.push(described.contextLine, ""); }
+    for (const line of described.moduleLines) if (once(line)) out.push(auxLine(node, line), "");
   }
   const moduleSignals = program.moduleSignals ?? [];
   moduleSignals.forEach((sig) => out.push(signalLine(sig)));
@@ -646,7 +673,9 @@ function render(program, instrument) {
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) if (!hosted.has(sig.name) && !component.hoisted) out.push(`${INDENT}${signalLine(sig)}`);
       for (const line of sourcePrelude(component, signals, used)) out.push(`${INDENT}${line}`);
-      for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
+      // A use repeated in a copy of the site (`freshCopy`, the shared-helper contexts) brings the same prelude line: one declaration serves both.
+      const preluded = new Set();
+      for (const [node, described] of useList) for (const line of described.preludeLines) if (!preluded.has(line)) { preluded.add(line); out.push(`${INDENT}${auxLine(node, line)}`); }
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
       for (const item of component.view) out.push(...viewText(item, 3));
@@ -692,6 +721,7 @@ function render(program, instrument) {
   for (const helper of moduleHelpers.filter((h) => h.via)) packageImports.push(helperImportLine(helper));
   for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
   packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
+  packageImports.push(...new Set(program.components.flatMap((component) => component.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
   // rc.21 declares these only in `solid-js/internal`.
   const internal = ["createErrorBoundary", "createLoadingBoundary", "createOwner"];
@@ -763,6 +793,8 @@ export function moduleFiles(program) {
   for (const component of program.components) {
     const seen = sourcedSignals(component, signals);
     for (const { node } of walk(component)) if (node.k === "use") Object.assign(extra, describeUse(node, seen).files ?? {});
+    // A context's own module (flip-read.mjs: the code it places in a second file).
+    Object.assign(extra, component.files ?? {});
   }
   if (!moduleHelpers.length && !sourced.length) return extra;
   const head = used.size ? `import { ${[...used].sort().join(", ")} } from "solid-js";\n\n` : "";

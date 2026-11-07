@@ -351,6 +351,24 @@ pub(super) fn call_owner_edge(
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> OwnerEdgeKind {
+    // ADR 0888: a call in the rest of a block an await of its own function
+    // dominates runs on that function's continuation on every run, where no
+    // owner is current (ADR 0352): the callee gains no owned run from it. A
+    // possible owned run kept here was read as a proven one (ADR 0577's
+    // owned-run throw). A caller that never runs resumes nothing. Not where
+    // the function probes `getOwner()` at all: a guard around the call
+    // (`if (getOwner()) run(…)`) skips it with no owner (as ADR 0493's climb).
+    if crate::execution_role::follows_dominating_await(file, site)
+        && !crate::owners::owning_function(&file.ast, site).is_some_and(|outer| {
+            file.ast.calls.iter().any(|call| {
+                outer.span.contains(call.span)
+                    && lookup.primitive_at_call(file, call.span)
+                        == Some(solid_dialect::Primitive::GetOwner)
+            })
+        })
+    {
+        return OwnerEdgeKind::ResumesUnowned;
+    }
     if crate::execution_role::may_follow_own_await(file, site) {
         return OwnerEdgeKind::MayResumeUnowned;
     }
@@ -542,8 +560,10 @@ pub(super) fn callback_call_owner_edge(
 /// audited 2.0.0-rc.9, dev and prod, an exported helper written this way and
 /// called at module scope skips `onCleanup` (no `NO_OWNER_CLEANUP`), while the
 /// unguarded helper beside it warns. The guard and the operation must share
-/// one function body with no `await` between them -- an owner seen before an
-/// `await` is not current after it -- and nothing else is read as a guard:
+/// one function body with no suspension between them -- an owner seen before
+/// an `await`, a `for await` or a `yield` is not current after it, and a loop
+/// in the guarded region runs the operation again after one -- and nothing
+/// else is read as a guard:
 /// `owner && …` over a binding, `!getOwner() || …`, and early returns keep
 /// their requirement.
 pub(crate) fn guarded_by_owner_probe(
@@ -582,11 +602,26 @@ pub(crate) fn guarded_by_owner_probe(
             };
             current = crate::owners::owning_function(&file.ast, invocation.span).map(|f| f.span);
         }
+        // ADR 0866: a suspension in the guarded region leaves the stack the
+        // probe saw an owner on, written before the operation or in a loop
+        // that repeats the operation inside the region. A loop around the
+        // probe tests it again.
+        let yields = file.ast.yields.iter().map(|fact| &fact.span);
         !file
             .ast
             .awaits
             .iter()
-            .any(|awaited| region.contains(*awaited) && awaited.start < span.start)
+            .chain(&file.ast.implicit_suspensions)
+            .chain(yields)
+            .any(|&suspension| {
+                region.contains(suspension)
+                    && (suspension.start < span.start
+                        || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                            repeated.contains(span)
+                                && looped.contains(suspension)
+                                && region.contains(looped)
+                        }))
+            })
     };
     file.ast.logical_expressions.iter().any(|logical| {
         logical.operator == solid_facts::ast::LogicalOperatorKind::And
@@ -630,8 +665,10 @@ pub(crate) fn push_owner_requirement(
         return;
     }
     // The operation runs only once the same invocation has seen an owner, so
-    // there is no unowned execution to report and nothing left unproven.
-    if guarded_by_owner_probe(file, span, lookup) {
+    // there is no unowned execution to report and nothing left unproven. Not
+    // SC4002's claim: a provider-free read throws `ContextNotFoundError`
+    // exactly where an owner is current, so the probe proves its run.
+    if operation != "context-provider" && guarded_by_owner_probe(file, span, lookup) {
         return;
     }
     let location = location(file.path.as_str(), span);
@@ -668,6 +705,8 @@ pub(crate) fn push_owner_requirement(
             location,
             uncertain: status.uncertain || missing_jsx_census || constructed,
             runtime_uncertain: status.runtime_uncertain,
+            flight_error_unobserved: status.flight_error_unobserved,
+            computation_error_unobserved: false,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
             owner_varies_by_caller: status.owner_varies_by_caller,
@@ -1389,10 +1428,45 @@ pub(crate) fn inline_carrier_arguments(
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<usize> {
+    inline_carrier_arguments_by(
+        file,
+        call,
+        lookup,
+        lookup.resolved_callee_call(file, call.callee),
+    )
+}
+
+/// ADR 0874: [`inline_carrier_arguments`] for a call the impostor census
+/// withholds, read through its placing resolution: the arguments the standard
+/// carrier would run in place. An impostor may run them there, later, or
+/// never, so this proves no run and no owner; it only keeps the callback
+/// from losing every owner context.
+pub(crate) fn withheld_carrier_arguments(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<usize> {
+    if !lookup.impostor_withheld(file, call.callee) {
+        return Vec::new();
+    }
+    inline_carrier_arguments_by(
+        file,
+        call,
+        lookup,
+        lookup.placing_callee_call(file, call.callee),
+    )
+}
+
+fn inline_carrier_arguments_by(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+    resolved: Option<&typefacts::ResolvedCall>,
+) -> Vec<usize> {
     if lookup.primitive_at_call(file, call.span).is_some() {
         return Vec::new();
     }
-    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+    let Some(resolved) = resolved else {
         return Vec::new();
     };
     call.arguments

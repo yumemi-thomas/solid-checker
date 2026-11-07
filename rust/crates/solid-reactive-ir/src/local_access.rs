@@ -500,8 +500,8 @@ fn iteration_receiver_of_parameter(
             .iter()
             .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == callback.span)
     })?;
-    t.lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0874: this only opens obligations.
+    t.lookup.placing_standard_declaration(file, call)?;
     file.ast
         .member_at(file.ast.peel_ts_sugar_span(call.callee))
         .map(|member| member.object)
@@ -608,9 +608,8 @@ fn handed_call(
         return true;
     }
     // F-B: a standard call hands on what it was given (`m.get("f")`).
-    t.lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        .is_some()
+    // ADR 0874: this only opens obligations.
+    t.lookup.placing_standard_declaration(file, call).is_some()
         && (handed_argument()
             || file
                 .ast
@@ -2011,6 +2010,11 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
             );
             if execution == ExecutionRole::DiscardedRendering {
+                continue;
+            }
+            // ADR 0874: a call an impostor may run, or never: not silent.
+            if crate::execution_role::runs_in_withheld_layer(file, call.span, self.lookup) {
+                retained_in_layer = true;
                 continue;
             }
             let candidates = self.lookup.callee_symbols(file, call.callee);
@@ -5740,7 +5744,9 @@ impl LocalAccessContext<'_, '_> {
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
                     provenance_open: options.provenance_open,
-                    caught: caught_in_try(file, read.span) || caught_in_try(file, anchor),
+                    caught: caught_in_try(file, read.span)
+                        || caught_in_try(file, anchor)
+                        || module_evaluation_may_catch(file, execution),
                     component_prop: false,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
@@ -6766,7 +6772,9 @@ impl LocalAccessContext<'_, '_> {
                 provenance_open: async_options.provenance_open,
                 // ADR 0838 (R2h): a `try` around the read swallows its throw
                 // wherever the carrier that runs it stands.
-                caught: caught_in_try(file, timing_at) || caught_in_try(file, call.span),
+                caught: caught_in_try(file, timing_at)
+                    || caught_in_try(file, call.span)
+                    || module_evaluation_may_catch(file, async_execution),
                 component_prop: self.read_in_component_prop(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
                 server_rendering_unresolved: async_options.server_rendering_unresolved,
@@ -7394,7 +7402,8 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
                 provenance_open: member_options.provenance_open,
-                caught: caught_in_try(file, member),
+                caught: caught_in_try(file, member)
+                    || module_evaluation_may_catch(file, async_execution),
                 component_prop: self.read_in_component_prop(file, member),
                 ssr_client_hole: member_options.ssr_client_bare,
                 server_rendering_unresolved: member_options.server_rendering_unresolved,
@@ -8937,7 +8946,9 @@ fn placed_nowhere(
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    function_escapes_unfollowed(file, span, lookup)
+    // ADR 0874: a withheld call proves no run, and an impostor may make one.
+    crate::execution_role::runs_in_withheld_layer(file, span, lookup)
+        || function_escapes_unfollowed(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
         || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
 }
@@ -10153,6 +10164,16 @@ enum MergeGet {
     /// A plain literal source serves it.
     Plain,
     Unproven,
+}
+
+/// ADR 0855: no strict-read window is open while a module evaluates, so a
+/// pending read there throws a plain `NotReadyError` and emits nothing: a
+/// `catch` anywhere on the evaluating stack swallows it (rc.21, probed). A
+/// module-evaluation role is lexical or reached through this file's own calls
+/// and mounts (`named_mount_root_role`, the call-attributed walk), so only a
+/// handler in this file may be on that stack.
+fn module_evaluation_may_catch(file: &solid_facts::FileFacts, execution: ExecutionRole) -> bool {
+    execution == ExecutionRole::ModuleInitialization && !file.ast.try_catches.is_empty()
 }
 
 /// ADR 0637: a `catch` around the read swallows the throw that would report it,

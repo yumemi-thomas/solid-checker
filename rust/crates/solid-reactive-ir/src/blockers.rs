@@ -21,6 +21,13 @@ pub(crate) const SEARCH_DEPTH_LIMIT: &str = "search-depth-limit";
 /// decided.
 pub(crate) const SEARCH_BUDGET_EXHAUSTED: &str = "search-budget-exhausted";
 
+/// ADR 0852: a throw rejects an async stepper's flight, whose error propagation
+/// to a read or error boundary is not proved.
+pub(crate) const ASYNC_FLIGHT_ERROR_UNOBSERVED: &str = "async-flight-error-unobserved";
+/// ADR 0893: a plain throw ends stored on a computation, or in a `try` or a
+/// handling boundary, and no read that reports it is proven.
+pub(crate) const COMPUTATION_ERROR_UNOBSERVED: &str = "computation-error-unobserved";
+
 // Track W.
 pub(crate) const SOLID_VERSION_UNCLASSIFIED: &str = "solid-version-unclassified";
 pub(crate) const RESPONSE_HEAD_POSITION_UNPROVEN: &str = "response-head-position-unproven";
@@ -223,7 +230,11 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 }
 
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
-    if requirement.unplaced_callback {
+    if requirement.flight_error_unobserved {
+        ASYNC_FLIGHT_ERROR_UNOBSERVED
+    } else if requirement.computation_error_unobserved {
+        COMPUTATION_ERROR_UNOBSERVED
+    } else if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
     } else if requirement.owner_varies_by_caller {
         OWNER_VARIES_BY_CALLER
@@ -300,6 +311,11 @@ pub(crate) fn for_rule(code: &str) -> &'static str {
         _ => PROOF_STEP_UNNAMED,
     }
 }
+
+/// ADR 0840: a standard method of a census member on a receiver no fact
+/// proves real, while the program may put a function at that member of an
+/// object of its own.
+pub(crate) const STANDARD_MEMBER_IMPOSTOR: &str = "standard-member-impostor";
 
 #[cfg(test)]
 mod tests {

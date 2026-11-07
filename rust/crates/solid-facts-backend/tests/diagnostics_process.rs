@@ -144,12 +144,6 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], code, "{name}");
             assert_eq!(rows[0]["kind"], kind, "{name}");
-            if name == "WrappedImmediate" {
-                let begin = rows[0]["primaryLocation"]["startByte"].as_u64().unwrap() as usize;
-                let end = rows[0]["primaryLocation"]["endByte"].as_u64().unwrap() as usize;
-                assert!(source[begin..end].contains("as () => void"));
-                continue;
-            }
             let callee = match name {
                 "StableTransportFalse" | "StableTransportTrue" | "StableTransportSpread" => {
                     start + source[start..end].find("register(").unwrap()
@@ -157,6 +151,12 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
                 "StableMemberReceiver" => {
                     start + source[start..end].find("target.register(").unwrap()
                 }
+                // A parameterless synchronous IIFE: the row stands on the call
+                // inside it, the line rc.21 raises the code from (d529b7692).
+                "ForbiddenImmediate" | "WrappedImmediate" => {
+                    start + source[start..end].find("onCleanup(").unwrap()
+                }
+                "UnknownImmediate" => start + source[start..end].find("unknown(").unwrap(),
                 _ => {
                     let anchor = source[start..end]
                         .find("    (")
@@ -1317,7 +1317,20 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
     // Three reads, and ADR 0665's SC5003 of the memo over the handed compute.
     // ADR 0775: and SC9012 at `options()` of the two wrappers nothing resolves:
     // what they return may be pending (patterns net/wrapped-later-tracked).
-    assert_eq!(rows.len(), 6, "{rows:#?}");
+    // ADR 0860: the escaped return also leaves a row at each options() read
+    // whose execution role is not proven tracked.
+    assert_eq!(rows.len(), 8, "{rows:#?}");
+    for start in [369_u64, 627] {
+        assert!(
+            rows.iter().any(|row| {
+                row["primaryLocation"]["startByte"].as_u64() == Some(start)
+                    && row["id"] == "SC9012"
+                    && row["kind"] == "uncertifiable"
+                    && row["analysisContext"] == "value-forwarded"
+            }),
+            "{rows:#?}"
+        );
+    }
     for (wrapper, expected) in [
         ("wrapped", None),
         ("wrappedSnapshot", None),
@@ -1470,7 +1483,7 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
     for (fixture, expected, flags) in [
         (
             "returned-store-proxy",
-            vec![("uncertifiable", "SC9012"); 4],
+            vec![("uncertifiable", "SC9012"); 17],
             Vec::new(),
         ),
         (
@@ -1648,7 +1661,13 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("primitive-in-directive-application", 3),
             ],
         ),
-        ("owner-presence", &[("missing-owner", 14)]),
+        // ADR 0869: the three JSX `<Loading>`/`<Await>` boundaries (App.tsx
+        // lines 5, 6, 38) are no owner site. rc.21's dev `createComponent`
+        // runs every component under its own transparent root, and Chrome is
+        // quiet for each; the call form `Loading(props)` still warns.
+        // ADR 0868: `directRootHelper`'s two operations (lines 23-24) are
+        // uncertifiable: its census is not proven closed.
+        ("owner-presence", &[("missing-owner", 13)]),
         (
             "async-boundary",
             &[

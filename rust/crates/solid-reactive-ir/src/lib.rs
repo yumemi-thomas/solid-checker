@@ -97,6 +97,7 @@ mod server_rules;
 mod source_discovery;
 mod static_api;
 mod static_rules;
+mod stored_throw;
 pub mod summary_semantics;
 mod symbols;
 mod timings;
@@ -783,6 +784,9 @@ pub struct LeafOwnerOperation {
     /// not confirm the callee is that primitive (ADR 0711): a named blocker.
     #[serde(default, skip_serializing_if = "is_false")]
     pub identity_unproven: bool,
+    /// ADR 0893: the throw reaches no proven report.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub computation_error_unobserved: bool,
 }
 
 impl LeafOwnerOperation {
@@ -1306,6 +1310,14 @@ pub struct OwnerRequirement {
     pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
+    /// ADR 0852: the throw rejects an async generator stepper's flight; no
+    /// proof follows the rejection to an observed read or error boundary.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub flight_error_unobserved: bool,
+    /// ADR 0893: the throw ends stored on a computation, or in a `try` or a
+    /// handling boundary, and no read that reports it is proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub computation_error_unobserved: bool,
     /// Allocation itself depends on a runtime fact not available to the
     /// analyzer (for example server-entry selection or spread arity).
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1450,8 +1462,10 @@ pub struct AsyncRead {
     /// ADR 0665: `options_opaque`, because no fact says the source is async.
     #[serde(default)]
     pub provenance_open: bool,
-    /// The read sits in a `try`. rc.21 emits the untracked-read diagnostic before
-    /// it throws, so SC5001 stands (ADR 0640); a boundary warning needs the throw
+    /// The read sits in a `try`, or (ADR 0855) runs while a module with a
+    /// handler evaluates. In a strict-read window rc.21 emits the untracked-read
+    /// diagnostic before it throws, so SC5001 stands; while a module evaluates
+    /// it emits nothing, so SC5001 is open. A boundary warning needs the throw
     /// to reach it, which a `catch` may stop.
     #[serde(default)]
     pub caught: bool,

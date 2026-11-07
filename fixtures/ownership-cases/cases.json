@@ -3563,6 +3563,25 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        51,
+        58
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []

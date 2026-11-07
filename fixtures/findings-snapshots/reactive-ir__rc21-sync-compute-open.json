@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 260,
-      "end": 270,
+      "start": 626,
+      "end": 636,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 311,
-      "end": 321,
+      "start": 677,
+      "end": 687,
       "fixes": 0
     },
     {
@@ -28,8 +28,8 @@
       "blocker": "compute-return-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 373,
-      "end": 383,
+      "start": 739,
+      "end": 749,
       "fixes": 0
     },
     {
@@ -39,8 +39,8 @@
       "blocker": "compute-return-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 416,
-      "end": 426,
+      "start": 782,
+      "end": 792,
       "fixes": 0
     },
     {
@@ -50,8 +50,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 427,
-      "end": 440,
+      "start": 793,
+      "end": 806,
       "fixes": 0
     },
     {
@@ -61,8 +61,8 @@
       "blocker": "compute-return-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 461,
-      "end": 471,
+      "start": 827,
+      "end": 837,
       "fixes": 0
     },
     {
@@ -72,8 +72,59 @@
       "blocker": "compute-return-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
-      "start": 536,
-      "end": 546,
+      "start": 902,
+      "end": 912,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
+      "start": 1058,
+      "end": 1068,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
+      "start": 1104,
+      "end": 1114,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
+      "start": 1149,
+      "end": 1159,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "compute-return-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
+      "start": 1218,
+      "end": 1228,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-compute-open/App.tsx",
+      "start": 1302,
+      "end": 1312,
       "fixes": 0
     }
   ]

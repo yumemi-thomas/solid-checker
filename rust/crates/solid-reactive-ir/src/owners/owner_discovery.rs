@@ -243,19 +243,67 @@ pub(crate) fn discover_owner_file(
                     .ast
                     .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
                     .is_some_and(|declaration| crate::indexes::binding_written(file, declaration)));
-        if let Some(target) = target {
-            let (source, kind) = if unproven_callee
-                || (kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span))
-            {
-                may_run()
-            } else {
-                (source.clone(), kind)
-            };
-            edges.push(SymbolicOwnerEdge {
-                source,
+        // ADR 0851: calling a generator runs none of its body: the edge is a
+        // step's, from where the step runs. A literal called in place is the
+        // ADR 0516 arm's below; an action's stepped generator is its own.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let steps = (!call.construct
+            && file.ast.function_at(callee).is_none()
+            && matches!(
                 target,
-                kind,
-            });
+                Some(OwnerTarget::Symbol(_) | OwnerTarget::Function(..))
+            )
+            && lookup
+                .function_called_at(file.path.as_str(), callee)
+                .or_else(|| lookup.object_member_function(file, call.callee))
+                .is_some_and(|(_, function)| function.generator))
+        .then(|| crate::owners::iterator_steps(file, call, lookup));
+        if let Some(target) = target {
+            match steps {
+                Some(crate::owners::IteratorSteps::Held(sites)) => {
+                    for site in sites {
+                        let in_list = list_site(site);
+                        let source = owner_at(site).filter(|_| !in_list).map(|span| OwnerSource {
+                            path: file.path.to_string(),
+                            span,
+                        });
+                        let kind = if in_list {
+                            OwnerEdgeKind::MayBeUnowned
+                        } else {
+                            call_owner_edge(file, site, lookup)
+                        };
+                        let kind = if kind == OwnerEdgeKind::Preserve && !runs_every_time(site) {
+                            OwnerEdgeKind::MayRun
+                        } else {
+                            kind
+                        };
+                        edges.push(SymbolicOwnerEdge {
+                            source,
+                            target: target.clone(),
+                            kind,
+                        });
+                    }
+                }
+                Some(crate::owners::IteratorSteps::Unplaced) => edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
+                }),
+                Some(crate::owners::IteratorSteps::InPlace) | None => {
+                    let (source, kind) = if unproven_callee
+                        || (kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span))
+                    {
+                        may_run()
+                    } else {
+                        (source.clone(), kind)
+                    };
+                    edges.push(SymbolicOwnerEdge {
+                        source,
+                        target,
+                        kind,
+                    });
+                }
+            }
         }
         // ADR 0347: an invoked function literal runs in the call, under the
         // owner of the code around it (`invocation_runs_under_owner`).
@@ -318,6 +366,24 @@ pub(crate) fn discover_owner_file(
                     source,
                     target,
                     kind,
+                });
+            }
+            // ADR 0874: a withheld carrier's callback may run here, later with
+            // no owner, or never. As for a carrier that may run zero times
+            // (ADR 0563), the possible unowned bit alone: nothing proves a run,
+            // so what the callback does stays an obligation, never a violation.
+            for index in withheld_carrier_arguments(file, call, lookup) {
+                let argument = call.arguments[index].span;
+                if crate::owners::argument_may_be_generator(file, argument, lookup) {
+                    continue;
+                }
+                let Some(target) = callback_target(argument, false) else {
+                    continue;
+                };
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
                 });
             }
         }
@@ -565,7 +631,7 @@ pub(crate) fn discover_owner_file(
             // ADR 0462: `Loading(props)`/`Errored(props)` called as a function
             // creates its boundary in the call, with the caller's owner. Its
             // own operation name, so the call is placed after an `await` as
-            // an effect is, and a JSX boundary keeps its placement.
+            // an effect is (ADR 0869: a JSX boundary is no site).
             (Some(OwnerRequirementRole::Boundary), _) => Some((
                 "boundary-call",
                 OWNER_CONTEXT_UNOWNED,
@@ -590,7 +656,6 @@ pub(crate) fn discover_owner_file(
                 operation_span: call.callee,
                 owner,
                 report_mask: OWNER_CONTEXT_UNOWNED,
-                allow_uncertain: true,
                 runtime_uncertain: true,
                 settled_target: None,
                 settled_gate: None,
@@ -627,7 +692,6 @@ pub(crate) fn discover_owner_file(
                     operation_span: call.callee,
                     owner,
                     report_mask: OWNER_CONTEXT_UNOWNED,
-                    allow_uncertain: true,
                     // A `let` on the walk may hold another function by the
                     // time it is called: an obligation, never a proof.
                     runtime_uncertain: !answer.exact,
@@ -658,7 +722,6 @@ pub(crate) fn discover_owner_file(
                 operation_span,
                 owner,
                 report_mask,
-                allow_uncertain: true,
                 runtime_uncertain,
                 settled_target,
                 settled_gate,
@@ -824,35 +887,9 @@ pub(crate) fn discover_owner_file(
             }),
         }
     }
-    for element in &file.ast.jsx_elements {
-        let boundary = crate::jsx_primitive_name_cached(
-            lookup,
-            file,
-            element,
-            entities,
-            symbol_names,
-            dialect,
-        );
-        if boundary
-            .as_deref()
-            .is_some_and(|tag| dialect.is_async_boundary(tag))
-        {
-            requirements.push(OwnerRequirementCandidate {
-                operation: "boundary",
-                operation_span: Span::new(element.span.start, element.name.span.end),
-                owner: owner_at(element.span),
-                report_mask: OWNER_CONTEXT_UNOWNED,
-                allow_uncertain: false,
-                runtime_uncertain: false,
-                settled_target: None,
-                settled_gate: None,
-                providing_region_chain: region_chain(element.span),
-                providing_region: region_of(element.span),
-                context_argument: None,
-                in_parameter_list: list_site(element.span),
-            });
-        }
-    }
+    // ADR 0869: a JSX `<Loading>` or `<Errored>` is no owner site. rc.21's dev
+    // `createComponent` runs every component under its own transparent root,
+    // so NO_OWNER_BOUNDARY comes only from the call form (`boundary-call`).
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
         proof: crate::base::reads::ReadProof::default(),

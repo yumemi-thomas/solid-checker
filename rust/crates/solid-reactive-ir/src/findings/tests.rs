@@ -240,6 +240,8 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         presets: &[],
     };
     let requirement = || OwnerRequirement {
+        flight_error_unobserved: false,
+        computation_error_unobserved: false,
         operation: crate::OwnerRequirementOperation::Cleanup,
         location: location(20),
         uncertain: false,

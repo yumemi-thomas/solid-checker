@@ -27,6 +27,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 765,
+      "end": 771,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
@@ -120,6 +131,17 @@
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
       "start": 1017,
       "end": 1023,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/relay.ts",
+      "start": 145,
+      "end": 151,
       "fixes": 0
     },
     {

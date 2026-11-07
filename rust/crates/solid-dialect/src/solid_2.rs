@@ -2259,6 +2259,59 @@ impl Dialect for Solid2 {
         argument == 1 && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
     }
 
+    /// ADR 0857, probed on rc.21 (Chrome, dev build): `resolve` and `until` in
+    /// `flush(fn)`'s callback throw "Cannot call … inside a reactive scope" in
+    /// a tracked JSX expression and in a memo compute, and are silent from a
+    /// handler and in `untrack`: `flush` runs `fn` before it drains, leaving
+    /// the observer as the call had it. `dispatchAsInteraction`'s `fn` sees the
+    /// caller's observer (probed, `callback_executions`). `render`'s code runs
+    /// under the root it creates and was silent in tracked JSX.
+    /// ADR 0893 (rc.21 probes, 14 of 14): `resolve`, `until`, a static
+    /// `dynamic` source and `useContext` throw with no diagnostic. In
+    /// `dev-shared.js` every coded throw has an `emitDiagnostic` first, so it
+    /// reports at the call whether or not anything reads the error.
+    fn plain_throw(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::Resolve
+                | Primitive::Until
+                | Primitive::DynamicStatic
+                | Primitive::DynamicUnknownForm
+                | Primitive::UseContext
+        )
+    }
+
+    /// An effect's compute logs its throw; a render effect's goes to a
+    /// boundary or halts.
+    fn compute_throw_reports(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && matches!(
+                primitive,
+                Primitive::CreateEffect
+                    | Primitive::CreateRenderEffect
+                    | Primitive::CreateTrackedEffect
+            )
+    }
+
+    /// rc.21 `notifyEffectStatus`: only a user effect queues its error arm,
+    /// whose default logs; the others `escalate` to a boundary or halt.
+    fn compute_throw_logged(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateEffect
+    }
+
+    /// rc.21 `isPending`: `catch (e) { if (e instanceof NotReadyError && …)
+    /// throw e; … return probeFound; }`.
+    fn callback_swallows_throw(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::IsPending && argument == 0
+    }
+
+    fn inline_callback_keeps_observer(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::Flush, 0) | (Primitive::DispatchAsInteraction, 1)
+        )
+    }
+
     /// ADR 0443. `runWithOwner(owner, fn)` sets `tracking = false` around
     /// `fn()` and leaves `strictRead` as the call had it (`dist/dev-shared.js:5776-5785`
     /// at rc.17, `runWithOwner` and `getObserver`), so `fn` runs in the

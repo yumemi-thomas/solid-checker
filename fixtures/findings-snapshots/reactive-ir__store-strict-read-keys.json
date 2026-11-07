@@ -342,6 +342,17 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 3503,
+      "end": 3519,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 3719,
       "end": 3720,
       "fixes": 0

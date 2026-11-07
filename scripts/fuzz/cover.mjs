@@ -6,13 +6,14 @@
 //
 // The misuse and the legal grids are one population: `side` is an axis, so a value's pairs are covered on each side it has. A `required` program (the
 // census's are their own grid; the ledger's, and the behaviour manifests') comes first and its features are not covered twice.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GRIDS } from "./focus-grids.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { legalCells, legalId, legalShapes, pairLegalCells, recallLegalShapes } from "./legal.mjs";
 import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
+import { OPEN_ROWS } from "./open-defects.mjs";
 import { fnv } from "./rng.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
@@ -108,8 +109,14 @@ export function cover(rows, { perCode = false, seed = FIXED_SEED, required = [] 
   return { ids: chosen, features: features.size };
 }
 
-/** What every sample holds: the programs the ledger pins. The behaviour manifests are not required: they would take the sample from 12,000 to 18,400. */
-export const requiredIds = () => [...new Set(readRediscovery().filter((entry) => !entry.outside).flatMap((entry) => entry.ids))];
+/**
+ * What every sample holds: the programs rediscovery.json pins, and every row of the open-defects ledger (open-defects-rows.json), so a listed
+ * row is judged at every seed and "a listed row stopped failing" stays a fact: a cover that moved off it would drop it as if fixed (74 rows at
+ * smoke-p7, Part 16). The behaviour manifests are not required: they would take the sample from 12,000 to 18,400.
+ */
+export const requiredIds = ({ rows = ledgerIds() } = {}) => [...new Set([...readRediscovery().filter((entry) => !entry.outside).flatMap((entry) => entry.ids), ...rows])];
+/** The ledger's ids, every grid's. */
+export const ledgerIds = (path = OPEN_ROWS) => (existsSync(path) ? Object.values(JSON.parse(readFileSync(path, "utf8")).grids ?? {}).flatMap((rows) => Object.keys(rows)) : []);
 
 /** One sample: the ids of each grid. `required`: the ids that come first, the others are chosen around them. */
 export function sample({ perCode = false, seed = FIXED_SEED, required = [], grids = SAMPLED_GRIDS, codes } = {}) {
