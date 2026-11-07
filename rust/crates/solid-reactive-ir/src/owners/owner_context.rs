@@ -647,8 +647,10 @@ pub(crate) fn push_owner_requirement(
         return;
     }
     // The operation runs only once the same invocation has seen an owner, so
-    // there is no unowned execution to report and nothing left unproven.
-    if guarded_by_owner_probe(file, span, lookup) {
+    // there is no unowned execution to report and nothing left unproven. Not
+    // SC4002's claim: a provider-free read throws `ContextNotFoundError`
+    // exactly where an owner is current, so the probe proves its run.
+    if operation != "context-provider" && guarded_by_owner_probe(file, span, lookup) {
         return;
     }
     let location = location(file.path.as_str(), span);

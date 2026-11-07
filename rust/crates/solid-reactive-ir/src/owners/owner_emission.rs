@@ -435,7 +435,12 @@ pub(super) fn emit_file(
             && region_answers;
         // A providing region owns its reads, so a provider-free read there is
         // a provider finding, not an owner question (ADR 0352).
-        let provider = provider_free_read && (root_owned || owned_on_every_path(context));
+        // ADR 0866 amendment: a read under `if (getOwner())` in the same
+        // invocation runs only with an owner, past any suspension or pass.
+        let probe_owned = provider_free_read
+            && crate::owners::guarded_by_owner_probe(file, candidate.operation_span, lookup);
+        let provider =
+            provider_free_read && (root_owned || owned_on_every_path(context) || probe_owned);
         // ADR 0577: a provider-free read whose function runs under an owner
         // on some path and with none on another throws `ContextNotFoundError`
         // on every owned run. That is SC4002's claim; SC4001's unowned run is
