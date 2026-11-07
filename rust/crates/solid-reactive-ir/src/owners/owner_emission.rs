@@ -848,13 +848,22 @@ fn named_layer_entry_open(
         else {
             return true;
         };
-        // A whole argument of a primitive's call is a position the owner
+        // A whole argument the dialect gives an owner is a position the owner
         // graph places (`createRoot(helper)`): its edge is in the context.
+        // `action(gen)` keeps its argument and `createContext(f)` holds a
+        // value: no edge follows either (R29).
         let primitive_position = |at: Span| {
             file.ast.arguments_containing(at).any(|(call, index)| {
                 !call.arguments[index].spread
                     && file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
-                    && lookup.primitive_at_call(file, call.span).is_some()
+                    && lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_owner_at(primitive, index, call.arguments.len())
+                                .is_some()
+                        })
             })
         };
         if local

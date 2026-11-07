@@ -67,7 +67,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 57,
   "SC4001 owner-allocation-unproven": 14,
-  "SC4001 owner-callers-unenumerated": 140,
+  "SC4001 owner-callers-unenumerated": 141,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 7,
   "SC4001 owner-unproven": 13,

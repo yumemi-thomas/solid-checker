@@ -5804,5 +5804,16 @@
    "lg-no-owner-boundary-handler-jsx-loading-direct-none"
   ],
   "rediscovered": "jsx-loading and jsx-errored direct ids (28): build rmg7 (b2e910572) 5 Chrome-confirmed false positives; r2: 0, 28 clean"
+ },
+ {
+  "finding": "ADR 0868's layer walk read every primitive's whole argument as placed: `f(); const act = action(f as any);` left the site silent while the click raises NO_OWNER_CLEANUP (reviewer's R29)",
+  "found": "the rolling review of a1e37776f",
+  "fixed": "ADR 0868, R29 amendment",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-owned-action-x-direct-none"
+  ],
+  "rediscovered": "flw-owned-action direct ids (35, Chrome confirmed): build r8 (a1e37776f plus the SC3001 fix) 35 false cleans; r9: 0, 35 uncertifiable"
  }
 ]

@@ -241,6 +241,7 @@ function render(program, instrument) {
   function fnText(f, depth, { header } = {}) {
     const { head, body } = fnParts(f, depth, header);
     // A named function expression (the recall axes' callback forms): `function cbNamed() { ... }`.
+    if (f.form === "generator") return `function*${head} ${body}`;
     if (f.form === "named") return `${f.async ? "async " : ""}function ${f.label}${head} ${body}`;
     return `${f.async ? "async " : ""}${head} => ${body}`;
   }

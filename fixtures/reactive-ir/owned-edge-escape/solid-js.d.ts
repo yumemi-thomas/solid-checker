@@ -4,5 +4,6 @@ declare namespace JSX {
 }
 
 declare module "solid-js" {
+  export function action(fn: any): () => void;
   export function onCleanup(callback: () => void): void;
 }

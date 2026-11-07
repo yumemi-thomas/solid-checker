@@ -195,6 +195,20 @@ const ESCAPES = {
     const g = kit.name("g");
     return { before: [decl(g, domExpr(`eval("${f}") as () => void`))], fires: `${g}()` };
   }),
+  // R29: a primitive's whole argument is placed by the graph only where the primitive runs it under a known owner. `action` keeps a generator
+  // and steps it on the click; `createContext` holds a value (Chrome, rc.21: the site's NO_OWNER_* code on the click).
+  "flw-owned-action": ownedAnd((f, kit) => {
+    const act = kit.name("act");
+    return { before: [decl(act, domExpr(`action(${f} as any)`, undefined, ["action"]))], fires: `${act}()` };
+  }),
+  "flw-owned-action-gen": (stmts, kit) => {
+    const [f, act] = [kit.name("f"), kit.name("act")];
+    return { body: [decl(f, fn(stmts, { form: "generator" })), expr(domExpr(`${f}().next()`)), decl(act, domExpr(`action(${f})`, undefined, ["action"]))], view: [button(kit.name("b"), [expr(domExpr(`${act}()`))])] };
+  },
+  "flw-owned-context": ownedAnd((f, kit) => {
+    const [C, g] = [kit.name("C"), kit.name("g")];
+    return { before: [decl(C, domExpr(`createContext(${f})`, undefined, ["createContext"])), decl(g, domExpr(`useContext(${C})`, undefined, ["useContext"]))], fires: `${g}()` };
+  }),
   "flw-owned-returned": (stmts, kit) => {
     const [f, u, g] = [kit.name("f"), kit.name("u"), kit.name("g")];
     return { body: [decl(u, fn([decl(f, fn(stmts)), expr(call(ref(f))), ret(ref(f))])), decl(g, call(ref(u)))], view: [button(kit.name("b"), [expr(call(ref(g)))])] };

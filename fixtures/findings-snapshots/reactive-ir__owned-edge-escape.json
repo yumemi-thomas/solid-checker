@@ -8,8 +8,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 241,
-      "end": 250,
+      "start": 249,
+      "end": 258,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 393,
-      "end": 402,
+      "start": 401,
+      "end": 410,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "computed-call-target-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 466,
-      "end": 474,
+      "start": 474,
+      "end": 482,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 563,
-      "end": 572,
+      "start": 571,
+      "end": 580,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 874,
-      "end": 883,
+      "start": 882,
+      "end": 891,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 982,
-      "end": 991,
+      "start": 990,
+      "end": 999,
       "fixes": 0
     },
     {
@@ -74,8 +74,8 @@
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 1003,
-      "end": 1008,
+      "start": 1011,
+      "end": 1016,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 1145,
-      "end": 1154,
+      "start": 1153,
+      "end": 1162,
       "fixes": 0
     },
     {
@@ -96,8 +96,19 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
-      "start": 1412,
-      "end": 1421,
+      "start": 1420,
+      "end": 1429,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owned-edge-escape/App.tsx",
+      "start": 1929,
+      "end": 1938,
       "fixes": 0
     },
     {
