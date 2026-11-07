@@ -50,7 +50,7 @@
   "SC2003 store-write-unproven": 91,
   "SC2003 unproven-container-root": 107,
   "SC2004 component-identity-unproven": 1,
-  "SC2004 function-run-unplaced": 11,
+  "SC2004 function-run-unplaced": 10,
   "SC2005 function-run-unplaced": 3,
   "SC2006 function-run-unplaced": 45,
   "SC2007 static-source-unproven": 7,
