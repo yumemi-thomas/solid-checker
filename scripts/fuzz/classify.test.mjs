@@ -122,10 +122,11 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     const positions = (line) => (line >= 7 && line <= 9 ? [{ line: 30, column: 11 }] : []);
     const withRegistration = (findings, code = "CLEANUP_IN_FORBIDDEN_SCOPE", lines = [8, 9]) => classify({ sites: [], checker: checker(findings), runtime: runtime({ diagnostics: [diag(code, ...lines)] }), plan, evidence: { registrationLines: registrations, registrationPositions: positions } });
     const at11 = (finding) => ({ ...finding, column: 11 });
-    it("covers the diagnostic at the registering argument's position: a withholding finding is a recall gap, a violation an agree", () => {
-      const declined = withRegistration([at11(uncertifiable("reactive-dispatch-unresolved", 30))]);
+    it("covers the diagnostic at the registering argument's position: a claiming uncertifiable is a recall gap, a violation an agree, a withholding nothing (R25)", () => {
+      const declined = withRegistration([at11(uncertifiable("leaf-owner-forbidden-call", 30))]);
       expect(declined.verdict).toBe("recall-gap");
-      expect(declined.items.find((item) => item.kind === "recall-gap")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE", line: 8, rule: "reactive-dispatch-unresolved" } });
+      expect(declined.items.find((item) => item.kind === "recall-gap")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE", line: 8, rule: "leaf-owner-forbidden-call" } });
+      expect(withRegistration([at11(uncertifiable("reactive-dispatch-unresolved", 30))]).items.map((item) => item.kind)).toContain("candidate-false-clean");
       const proven = withRegistration([at11(violation("leaf-owner-forbidden-call", 30, 30, "SC3001"))]);
       expect(proven.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
       expect(proven.items.find((item) => item.kind === "agree")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE" } });

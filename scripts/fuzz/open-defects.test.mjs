@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { gridStanding, heldGridEntry, readOpenDefects } from "./open-defects.mjs";
+import { gridStanding, heldGridEntry, ledgerCovers, namedKey, ratchetDifferences, readOpenDefects } from "./open-defects.mjs";
+import { inStopGroup, ledgerChange, runSeed, stopFinding } from "./open-rows.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { PATTERNS, comparePatterns, expectedSilent, judgePattern, patternCases } from "./patterns.mjs";
 
@@ -33,14 +34,6 @@ describe("the known open list", () => {
     expect(held.map(({ row }) => row.id)).toEqual(["a/x"]);
     expect(fixed.map((row) => row.id)).toEqual(["a/y"]);
     expect(unlisted.map((row) => row.id)).toEqual(["a/z"]);
-  });
-  it("holds a grid row only for its own outcome, and calls a passing one fixed", () => {
-    const entries = { grids: [{ idPrefix: "lg-", code: "X", variantPrefix: "noop-", outcome: "false-positive", item: "V-D1" }] };
-    const row = { id: "lg-x", code: "X", variant: "noop-a", outcome: "false-positive" };
-    expect(heldGridEntry(entries, { ...row, variant: "other" })).toBe(null);
-    expect(gridStanding(entries, row, "false-positive").kind).toBe("held");
-    expect(gridStanding(entries, { ...row, outcome: "uncertifiable" }, null).kind).toBe("fixed");
-    expect(gridStanding(entries, row, "harness")).toBe(null);
   });
   it("has the programs on disk", () => {
     expect(patternCases().length).toBeGreaterThan(600);
@@ -84,5 +77,86 @@ describe("the pattern judge", () => {
     expect(judgePattern(sru({ file: "h.ts", line: 2, column: 3 }, { file: "App.tsx", line: 9, column: 5, mount: true }), [withheld(9)]).outcome).toBe("false-clean");
     expect(judgePattern({ codes: ["ASYNC_OUTSIDE_LOADING_BOUNDARY"] }, [withheld(9)]).outcome).toBe("false-clean");
     expect(judgePattern({ codes: ["ASYNC_OUTSIDE_LOADING_BOUNDARY"] }, [at("async-outside-loading-boundary", 9, 1)]).outcome).toBe("fine");
+  });
+});
+
+describe("the row ledger (ADR 0815, R23)", () => {
+  const row = { id: "mx-a-1", code: "C", context: "c", outcome: "false-clean", detail: {} };
+  const list = { grids: [{ idPrefix: "mx-a-", code: "C", outcome: "false-clean", item: "fam" }, { idPrefix: "mx-a-", code: "C", outcome: "misplaced", item: "other" }], rows: { seed: 7, grids: { g: { "mx-a-1": { outcome: "false-clean", cause: "R" } } } } };
+  it("holds a listed row, and only with its own outcome", () => {
+    expect(gridStanding(list, row, "false-clean", { grid: "g" }).kind).toBe("held");
+    expect(gridStanding(list, row, "misplaced", { grid: "g" }).kind).toBe("moved");
+  });
+  it("fails a row turned certified", () => {
+    expect(gridStanding(list, { ...row, detail: { certified: true } }, "false-clean", { grid: "g" }).kind).toBe("certified");
+  });
+  it("fails a failing row off the ledger where the ledger covers the run, and only prints it elsewhere", () => {
+    const other = { ...row, id: "mx-a-2" };
+    expect(gridStanding(list, other, "false-clean", { grid: "g", strict: true })).toBe(null);
+    expect(gridStanding(list, other, "false-clean", { grid: "g" }).kind).toBe("unlisted");
+    expect(ledgerCovers(list, 7)).toBe(true);
+    expect(ledgerCovers(list, 8)).toBe(false);
+    expect(ledgerCovers({ rows: { complete: true } }, 8)).toBe(true);
+  });
+  it("a listed row that stopped failing fails the run; a passing row off the ledger is nothing", () => {
+    expect(gridStanding(list, { ...row, outcome: "agree" }, null, { grid: "g" }).kind).toBe("fixed");
+    expect(gridStanding(list, { ...row, id: "mx-a-2", outcome: "agree" }, null, { grid: "g" })).toBe(null);
+  });
+  it("a stop row stays held only while its listed uncertifiable stands, on every run (R27)", () => {
+    const named = { id: "SC9012", blocker: "value-in-carrier", line: 5, column: 7 };
+    const stop = { rows: { grids: { g: { "mx-a-1": { outcome: "false-clean", cause: "R-stop-named-U", blocker: namedKey(named) } } } } };
+    expect(gridStanding(stop, { ...row, detail: { namedU: [named] } }, "false-clean", { grid: "g" }).kind).toBe("held");
+    expect(gridStanding(stop, { ...row, detail: {} }, "false-clean", { grid: "g" }).kind).toBe("moved");
+    expect(gridStanding(stop, { ...row, detail: { namedU: [{ ...named, column: 9 }] } }, "false-clean", { grid: "g" }).kind).toBe("moved");
+  });
+  it("a CAUGHT row stops only on a read rule's row at Chrome's exact position, and keeps needing it", () => {
+    const caught = { code: "CAUGHT_REACTIVE_READ", detail: { namedU: [{ rule: "missing-owner", id: "SC4001", blocker: "x", line: 5, column: 7, atRead: true }, { rule: "strict-read-untracked", id: "SC1001", blocker: "y", line: 5, column: 3 }] } };
+    expect(stopFinding(caught)).toBe(null);
+    const at = { rule: "strict-read-untracked", id: "SC1001", blocker: "y", line: 5, column: 3, atRead: true };
+    expect(stopFinding({ ...caught, detail: { namedU: [at] } })).toBe(at);
+    const stop = { rows: { grids: { g: { "mx-a-1": { outcome: "false-clean", cause: "R-stop-named-U", blocker: namedKey(at), atRead: true } } } } };
+    expect(gridStanding(stop, { ...row, detail: { namedU: [at] } }, "false-clean", { grid: "g" }).kind).toBe("held");
+    expect(gridStanding(stop, { ...row, detail: { namedU: [{ ...at, atRead: undefined }] } }, "false-clean", { grid: "g" }).kind).toBe("moved");
+  });
+  it("takes only the measured variants into the stop group", () => {
+    const false_clean = { outcome: "false-clean", code: "X", context: "body" };
+    expect(inStopGroup({ ...false_clean, variant: "store-proto-literal" })).toBe(true);
+    for (const variant of ["installed-get", "installed-set", "proto-create", "proto-receiver", "store-proto-setprototypeof"]) expect(inStopGroup({ ...false_clean, variant }), variant).toBe(false);
+    expect(inStopGroup({ outcome: "false-clean", code: "CAUGHT_REACTIVE_READ", context: "evt-memo-fire-focus" })).toBe(true);
+    expect(inStopGroup({ outcome: "false-clean", code: "CAUGHT_REACTIVE_READ", context: "handed-flush" })).toBe(false);
+  });
+  it("finds a family by outcome: a later entry of the same key is reachable", () => {
+    expect(heldGridEntry(list, row, "misplaced").item).toBe("other");
+    expect(heldGridEntry(list, row, "false-clean").item).toBe("fam");
+  });
+  it("the list keeps no two entries of one key and outcome, no `partial`, and no cause above its ratchet", () => {
+    const open = readOpenDefects();
+    const keys = open.grids.map((entry) => JSON.stringify([entry.idPrefix, entry.code, entry.variantPrefix, entry.contexts, entry.source, entry.outcome]));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(open.grids.filter((entry) => "partial" in entry)).toEqual([]);
+    expect(ratchetDifferences(open)).toEqual([]);
+  });
+  it("the ledger is there and not empty, and every ratchet cause has rows", () => {
+    const open = readOpenDefects();
+    expect(Object.keys(open.rows.grids).length).toBeGreaterThan(0);
+    expect(Object.keys(open.ratchet.causes).length).toBeGreaterThan(0);
+    for (const count of Object.values(open.ratchet.causes)) expect(count).toBeGreaterThan(0);
+  });
+  it("a lost ledger throws", () => {
+    expect(() => readOpenDefects(undefined, "/nonexistent/rows.json")).toThrow(/missing/);
+  });
+  it("the ratchet is exact both ways, certified and false-positive rows on their own", () => {
+    const rows = { grids: { g: { a: { outcome: "false-clean", certified: true, cause: "R" }, b: { outcome: "false-positive", cause: "R" } } } };
+    expect(ratchetDifferences({ rows, ratchet: { certified: 1, falsePositive: 1, causes: { R: 2 } } })).toEqual([]);
+    expect(ratchetDifferences({ rows, ratchet: { certified: 1, falsePositive: 1, causes: { R: 3 } } })).toEqual([{ key: "R", rows: 2, ratchet: 3 }]);
+    expect(ratchetDifferences({ rows, ratchet: { certified: 0, falsePositive: 1, causes: { R: 2 } } })).toEqual([{ key: "certified", rows: 1, ratchet: 0 }]);
+  });
+});
+
+describe("open-rows.mjs (R25)", () => {
+  it("refuses a run with no report, and says what an update adds and removes", () => {
+    expect(() => runSeed("/nonexistent")).toThrow(/did not finish/);
+    expect(ledgerChange({ grids: { g: { a: {}, b: {} } } }, { grids: { g: { b: {}, c: {} } } })).toEqual({ added: ["g/c"], removed: ["g/a"], moved: [] });
+    expect(ledgerChange({ grids: { g: { a: { cause: "R" } } } }, { grids: { g: { a: { cause: "S" } } } }).moved).toEqual([{ id: "g/a", from: "R", to: "S" }]);
   });
 });

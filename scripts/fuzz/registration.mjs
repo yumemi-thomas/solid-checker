@@ -44,7 +44,7 @@ export function registrationLines(program, lineTable) {
 /**
  * Review 4c: the exact positions (`{ line, column }`, 1-based) of the registering arguments of a function a stack line is inside of: the
  * callback's name where a registering call takes it (`cb1` in `onSettled(cb1)`), read from the program text on the registering call's
- * line as a name right after `(` or `,`. A withholding or claiming finding starting there covers the diagnostic, as one at a stack frame.
+ * line as a name right after `(` or `,`. A claiming or declining finding starting there covers the diagnostic, as one at a stack frame; a withholding does not (R25).
  * @returns {(line: number) => { line: number, column: number }[]}
  */
 export function registrationPositions(program, lineTable, source) {

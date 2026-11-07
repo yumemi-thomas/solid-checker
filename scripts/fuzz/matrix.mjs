@@ -26,7 +26,8 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { callStarts, frameStarts } from "./call-starts.mjs";
+import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
+import { registrationPositions } from "./registration.mjs";
 import { partlySilentRules, besideCode, codeOfThrown, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { hitCount } from "./hits.mjs";
@@ -180,7 +181,11 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const mount = source.length > 1 ? (frame) => callStarts(text).mount(frame.line, frame.column) : () => true;
   const startsOf = source.length > 1 ? frameStarts(text) : null;
   const stacks = events.map((event) => withStarts(appStack(event.positions), startsOf));
-  const recordedAt = (finding) => stacks.some((stack) => withheldAtStack(finding, stack, mount, code));
+  // A callback's registering argument counts as in classify.mjs (`cb1` in `onSettled(cb1)`; ADR 0815): the two judges agree. For a
+  // claiming or declining row only: a withholding there would cover every code raised in that callback at any depth (R5, R25).
+  const registeredAt = built?.program && built.lineTable ? registrationPositions(built.program, built.lineTable, text) : () => [];
+  const registered = events.flatMap((event) => (attributed(event)[0] ? registeredAt(attributed(event)[0].line) : []));
+  const recordedAt = (finding) => stacks.some((stack) => withheldAtStack(finding, stack, mount, code)) || (!withholdingRules.includes(finding.rule) && registered.some((position) => finding.line === position.line && finding.column === position.column));
   const claims = (finding) => coversCodeAt(code, finding, recordedAt(finding));
   // Measured, not counted: a withholding whose start line is a frame's line but no recorded position (a column, a mount line).
   const nearOnly = (finding) => !claims(finding) && withholdingRules.includes(finding.rule) && stacks.some((stack) => stack.some((frame) => frame.line === finding.line));
@@ -236,7 +241,14 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
   const near = relevant.find(nearOnly);
-  return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified, ...(near ? { withheldNear: `${near.rule}@${near.line}:${near.column}` } : {}) } };
+  // The named uncertifiables on the site's own line, starting in the statement Chrome placed the code in (a placeless code has no such
+  // place: the line), `atRead` when one starts exactly at the position Chrome reported: what open-rows.mjs checks for a row the owner's
+  // stop rule covers (ADR 0815).
+  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column))?.[0];
+  const statement = top && top.line === site.line ? statementAt(text, top.line, top.column) : null;
+  const namedU = relevant.filter((finding) => finding.kind === "uncertifiable" && finding.blocker && finding.file === "App.tsx" && finding.line === site.line
+    && (!statement || statement.contains(finding.line, finding.column))).map((finding) => ({ rule: finding.rule, id: finding.id, line: finding.line, column: finding.column, blocker: finding.blocker, ...(stacks.some((stack) => withheldAtStack(finding, stack.slice(0, 1), mount, code)) ? { atRead: true } : {}) }));
+  return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified, ...(near ? { withheldNear: `${near.rule}@${near.line}:${near.column}` } : {}), ...(namedU.length ? { namedU } : {}) } };
 }
 
 /** The misuse site of a built case: its only `use` site. */

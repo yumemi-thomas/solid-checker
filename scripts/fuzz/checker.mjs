@@ -230,7 +230,7 @@ export function parseFindings(analysis, dir) {
     .filter(({ path }) => path?.startsWith(prefix) && relative(root, path) === "App.tsx")
     .map(({ finding }) => finding)
     .map((finding) => ({
-      file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind,
+      file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind, ...(finding.analysisContext ? { blocker: String(finding.analysisContext).split(":")[0] } : {}),
       line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
       ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { claimsSilent: true } : {}),
     }));

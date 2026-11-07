@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
+import { withholdingRules, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { registrationLines } from "./registration.mjs";
@@ -304,7 +304,7 @@ export function diagnosticItems(events, findings, registrationLines = () => [], 
     }
     // The registering argument of the callback the top frame is in (`cb1` in `onSettled(cb1)`): an exact position from the program text.
     const registered = registrationPositions(attributed[0].line);
-    const atPosition = (finding) => withheldAtStack(finding, stack, mount, event.code) || registered.some((position) => finding.line === position.line && finding.column === position.column);
+    const atPosition = (finding) => withheldAtStack(finding, stack, mount, event.code) || (!withholdingRules.includes(finding.rule) && registered.some((position) => finding.line === position.line && finding.column === position.column));
     const covering = findings.filter((finding) => atPosition(finding) && claims(finding, true));
     if (covering.some((finding) => finding.kind === "violation")) {
       // A violation at a stack line is already an agree through the finding; one at a registering argument is not met by that pass.

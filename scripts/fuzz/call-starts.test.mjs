@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callStarts, frameStarts } from "./call-starts.mjs";
+import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
 
 // Review 4c: V8 puts a member call's frame at the property; a checker row starts at the call or its callee object.
 describe("callStarts", () => {
@@ -74,5 +74,39 @@ describe("callStarts", () => {
     const at = callStarts("const [{ v }] = xs;\n({ w } = st);");
     expect(at(1, 10)).toContainEqual({ line: 1, column: 7 });
     expect(at(2, 4)).toContainEqual({ line: 2, column: 2 });
+  });
+  it("takes a frame on an attribute's name to the one call inside it; of two, to neither (R24)", () => {
+    const at = callStarts("<C run={() => n()} other={m()} />;\n<C run={() => a() + b()} />;");
+    expect(at(1, 4)).toContainEqual({ line: 1, column: 15 });
+    expect(at(1, 4)).not.toContainEqual({ line: 1, column: 27 });
+    expect(at(2, 4)).toEqual([{ line: 2, column: 4 }]);
+  });
+  it("counts every thing that can read in an attribute: a store read beside one call maps to neither (R25)", () => {
+    const at = callStarts("<K run={() => st.v + holder.c()} />;\n<K run={() => p.run()} />;");
+    expect(at(1, 4)).toEqual([{ line: 1, column: 4 }]);
+    expect(at(2, 4)).toContainEqual({ line: 2, column: 15 });
+  });
+  it("takes a frame at `in` to its right operand, and a tagged call's template to its tag", () => {
+    const at = callStarts('v = "v" in s1;\nhf`x`;');
+    expect(at(1, 5)).toContainEqual({ line: 1, column: 12 });
+    expect(at(2, 3)).toContainEqual({ line: 2, column: 1 });
+  });
+  it("keeps the arguments of a Solid function that reads what it is handed", () => {
+    const frame = frameStarts('import { deep, untrack } from "solid-js";\ndeep(st);\nuntrack(c);');
+    expect(frame({ line: 2, column: 1 }, 0)).toContainEqual(expect.objectContaining({ line: 2, column: 6, handed: true }));
+    expect(frame({ line: 3, column: 1 }, 0)).toEqual(expect.not.arrayContaining([expect.objectContaining({ handed: true })]));
+  });
+  it("gives an element's frame the whole pattern, never another element", () => {
+    const at = callStarts("const { a, b } = st;\nconst [{ c }, d] = xs;\n({ e, f } = st);");
+    expect(at(1, 12)).toEqual([{ line: 1, column: 12 }, { line: 1, column: 7 }]);
+    expect(at(2, 10)).toEqual([{ line: 2, column: 10 }, { line: 2, column: 7 }]);
+    expect(at(3, 7)).toEqual([{ line: 3, column: 7 }, { line: 3, column: 2 }]);
+  });
+  it("finds the statement of a position on a line of several", () => {
+    const at = statementAt("const a = f(st); const b = g(c); log(a);", 1, 26);
+    expect(at.contains(1, 28)).toBe(true);
+    expect(at.contains(1, 13)).toBe(false);
+    const iife = statementAt("(() => { const t = f(st); t.a = 7; })();\nx();", 1, 30);
+    expect(iife.contains(1, 22)).toBe(true);
   });
 });

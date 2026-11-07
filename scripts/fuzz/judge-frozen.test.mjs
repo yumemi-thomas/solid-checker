@@ -26,7 +26,7 @@ describe("judge-frozen", () => {
     expect(judgeLegal({ ...row.input, evaluated }).outcome).toBe(row.expected.outcome);
   });
   test("site rows are present", () => {
-    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["false-clean", "harness", "not-fired", "recall-gap", "unexecuted"]);
+    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["false-clean", "false-clean", "harness", "not-fired", "recall-gap", "recall-gap", "unexecuted"]);
   });
   test.each(frozen.rows.map((row) => [row.id, row]))("%s keeps its frozen verdict", (_id, row) => {
     const verdict = judgePattern({ codes: row.codes, stacks: row.stacks, positions: row.stacks !== undefined }, row.findings);

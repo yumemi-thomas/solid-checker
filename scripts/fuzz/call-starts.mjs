@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const ts = createRequire(join(resolve(here, "../../packages/cli"), "package.json"))("typescript");
 const cache = new Map();
+/** Solid's own functions that read the value they are handed: unlike a primitive that raises its own codes, their arguments stay handed (R23). */
+const VALUE_READERS = new Set(["deep", "snapshot", "merge", "omit"]);
 
 /**
  * `(frame, depth) => starts`: a frame's starts at its depth in the stack (0 is the top authored frame). A top frame in a call's callee has
@@ -21,6 +23,27 @@ const cache = new Map();
  * only there (codes.mjs `handedCodes`, `withheldAtStack`). Never for a Solid primitive or setter callee, which raises its own codes;
  * never deeper, where an argument is not the read (R5, R20).
  */
+/**
+ * The statement holding a position, as `contains(line, column)`, or null: the outermost one starting on its line, so the statements of an
+ * IIFE on that line are one site. A one-line program holds several statements on a line; a finding in a sibling statement is about
+ * something else.
+ */
+export function statementAt(source, line, column, fileName = "App.tsx") {
+  const text = String(source ?? "");
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const offsetOf = (l, c) => (file.getLineStarts()[l - 1] ?? Infinity) + c - 1;
+  const at = offsetOf(line, column);
+  let best = null;
+  const visit = (node) => {
+    if (ts.isStatement(node) && !ts.isBlock(node) && node.getStart(file) <= at && at < node.getEnd() && (!best || node.getEnd() - node.getStart(file) < best.getEnd() - best.getStart(file))) best = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  const lineOf = (node) => file.getLineAndCharacterOfPosition(node.getStart(file)).line;
+  for (let up = best?.parent; up; up = up.parent) if (ts.isStatement(up) && !ts.isBlock(up) && lineOf(up) === lineOf(best)) best = up;
+  return best && { contains: (l, c) => best.getStart(file) <= offsetOf(l, c) && offsetOf(l, c) < best.getEnd() };
+}
+
 /**
  * The lines that say whether the function holding `line` runs: its own, and every reference to its name (`const hf = ...; [].forEach(hf)`).
  */
@@ -84,7 +107,7 @@ export function callStarts(source, fileName = "App.tsx") {
     const names = /^(?:solid-js|@solidjs\/)/.test(statement.moduleSpecifier.text) ? solid : dependency;
     const clause = statement.importClause;
     if (clause?.name) names.add(clause.name.text);
-    if (clause?.namedBindings) (ts.isNamespaceImport(clause.namedBindings) ? [clause.namedBindings] : clause.namedBindings.elements).forEach((element) => names.add(element.name.text));
+    if (clause?.namedBindings) (ts.isNamespaceImport(clause.namedBindings) ? [clause.namedBindings] : clause.namedBindings.elements).forEach((element) => { if (!VALUE_READERS.has(element.propertyName?.text ?? element.name.text)) names.add(element.name.text); });
   }
   const nameOf = (expression) => (ts.isIdentifier(unwrap(expression)) ? unwrap(expression).text : null);
   const collect = (node) => {
@@ -115,6 +138,8 @@ export function callStarts(source, fileName = "App.tsx") {
         if (/^[A-Z_$]/.test(tag) || tag.includes(".")) mounts.push([node.getStart(file), callee.getEnd()]);
       }
     }
+    // A tagged call's frame is on its template, the row on the tag.
+    if (ts.isTaggedTemplateExpression(node)) calls.push([node.template.getStart(file), node.template.getEnd(), node.getStart(file), rootOf(node.tag).getStart(file)]);
     if (ts.isPropertyAccessExpression(node)) { access(node, node.name.getStart(file), node.name.getEnd()); onResult(node); }
     else if (ts.isElementAccessExpression(node)) {
       access(node, node.expression.getEnd(), node.getEnd());
@@ -123,6 +148,19 @@ export function callStarts(source, fileName = "App.tsx") {
       if (ts.isPropertyAccessExpression(node.argumentExpression)) access(node, node.argumentExpression.name.getStart(file), node.argumentExpression.name.getEnd());
     } else if (ts.isDeleteExpression(node)) access(node.expression, node.getStart(file), node.expression.getStart(file));
     else if (ts.isForOfStatement(node)) access(node.expression, node.initializer.getStart(file), node.initializer.getEnd());
+    // The compiler keeps no mapping inside an attribute's closure: V8's frame in `run={() => n()}` comes back on `run`, the row on the call.
+    // Only with exactly one thing inside that can read: of two, the frame does not say which (R24, R25). A callee's own member is its call.
+    else if (ts.isJsxAttribute(node) && node.initializer) {
+      const inside = [];
+      const reads = (child) => (ts.isCallExpression(child) || ts.isNewExpression(child) || ts.isTaggedTemplateExpression(child) || ts.isSpreadElement(child) || ts.isSpreadAssignment(child)
+        || (ts.isBinaryExpression(child) && child.operatorToken.kind === ts.SyntaxKind.InKeyword)
+        || ((ts.isPropertyAccessExpression(child) || ts.isElementAccessExpression(child)) && !((ts.isCallExpression(child.parent) || ts.isNewExpression(child.parent)) && child.parent.expression === child)));
+      const inner = (child) => { if (reads(child)) inside.push(child); ts.forEachChild(child, inner); };
+      inner(node.initializer);
+      if (inside.length === 1) calls.push([node.name.getStart(file), node.name.getEnd(), inside[0].getStart(file), rootOf(inside[0].expression ?? inside[0]).getStart(file)]);
+    }
+    // `in` reads its right operand: V8's frame is at the binary's start, the row on the operand.
+    else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword) calls.push([node.getStart(file), node.right.getStart(file), node.right.getStart(file), rootOf(node.right).getStart(file)]);
     // A spread steps its operand: V8's frame is on the operand, the row on the `...`.
     else if (ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) calls.push([node.expression.getStart(file), node.expression.getEnd(), node.getStart(file), rootOf(node.expression).getStart(file)]);
     // A template coerces its substitutions natively: V8's frame is the template's, the row on the substitution.

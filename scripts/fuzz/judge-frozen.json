@@ -10200,6 +10200,18 @@
    "note": "Its twin: a standard function writes its first argument, so the row there is a gap.",
    "input": { "code": "STORE_WRITE_OUTSIDE_SETTER", "site": { "id": "s1", "line": 2, "hit": 3 }, "typecheck": { "ok": true }, "checker": { "ok": true, "findings": [ { "rule": "reactive-dispatch-unresolved", "kind": "uncertifiable", "id": "SC9012", "file": "App.tsx", "line": 2, "column": 15, "endLine": 2 } ] }, "runtime": { "diagnostics": [ { "code": "STORE_WRITE_OUTSIDE_SETTER", "message": "m", "positions": [ { "file": "App.tsx", "line": 2, "column": 1 } ] } ], "errors": [], "witnesses": [] }, "built": { "files": { "App.tsx": "const a = 1;\nObject.assign(st, b);\nx();" } } },
    "expected": { "outcome": "recall-gap" }
+  },
+  {
+   "id": "ADR0815/element-row-other-element",
+   "note": "Chrome frames each element of a pattern (probe3: `{ a, b } = st` at a and at b). A row at `a` says nothing about the read at `b`.",
+   "input": { "code": "STRICT_READ_UNTRACKED", "site": { "id": "s1", "line": 1, "hit": 3 }, "typecheck": { "ok": true }, "checker": { "ok": true, "findings": [ { "rule": "reactive-dispatch-unresolved", "kind": "uncertifiable", "id": "SC9012", "file": "App.tsx", "line": 1, "column": 9, "endLine": 1 } ] }, "runtime": { "diagnostics": [ { "code": "STRICT_READ_UNTRACKED", "message": "m", "positions": [ { "file": "App.tsx", "line": 1, "column": 12 } ] } ], "errors": [], "witnesses": [] }, "built": { "files": { "App.tsx": "const { a, b } = st;\nx();" } } },
+   "expected": { "outcome": "false-clean" }
+  },
+  {
+   "id": "ADR0815/pattern-row-covers-element",
+   "note": "Its twin: the checker reports a pattern once, at its start, so that row covers each element.",
+   "input": { "code": "STRICT_READ_UNTRACKED", "site": { "id": "s1", "line": 1, "hit": 3 }, "typecheck": { "ok": true }, "checker": { "ok": true, "findings": [ { "rule": "reactive-dispatch-unresolved", "kind": "uncertifiable", "id": "SC9012", "file": "App.tsx", "line": 1, "column": 7, "endLine": 1 } ] }, "runtime": { "diagnostics": [ { "code": "STRICT_READ_UNTRACKED", "message": "m", "positions": [ { "file": "App.tsx", "line": 1, "column": 12 } ] } ], "errors": [], "witnesses": [] }, "built": { "files": { "App.tsx": "const { a, b } = st;\nx();" } } },
+   "expected": { "outcome": "recall-gap" }
   }
  ],
  "legalRows": [
