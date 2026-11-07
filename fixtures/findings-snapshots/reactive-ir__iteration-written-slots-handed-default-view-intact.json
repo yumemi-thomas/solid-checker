@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-default-view-intact/body-write.tsx",
+      "start": 109,
+      "end": 115,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-default-view-intact/wire.ts",
+      "start": 89,
+      "end": 96,
+      "fixes": 0
+    }
+  ]
+}

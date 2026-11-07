@@ -264,6 +264,9 @@ ir-edit-fuzz: build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
 	  --fixtures --family mount --steps 8 --seed $(IR_FUZZ_SEED)
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
+	  --fixtures --family census --steps 4 --seed $(IR_FUZZ_SEED)
 
 ir-edit-fuzz-corpus: build-checker-release
 	test -n "$(IR_FUZZ_PROJECT)" || { echo "set IR_FUZZ_PROJECT=<tsconfig.json>"; exit 2; }
@@ -297,6 +300,7 @@ coverage-update: build-checker-debug
 # expected results with the cause the classifier reads, and the set stays in
 # its budget. The corpus side (scripts/uncertifiable-causes.mjs --report) needs
 # a sweep and runs by hand; CONTRIBUTING.md, "Adding a repo to the reproduction set".
+# A `held` case is temporary: a broader blocker covers its files until the open-work item it names lands (capped, HELD_CAP).
 repro-causes: build-checker-debug
 	$(BUN) scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
 	  --cases fixtures/uncertifiable-repro/cases.json \

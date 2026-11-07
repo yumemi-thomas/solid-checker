@@ -256,8 +256,11 @@ impl<'a, 'facts: 'a> World<'a> for Resolver<'a, 'facts> {
         self.member_stability.tuple_iteration
     }
 
+    // ADR 0801's census, asked of the lookup and not kept in the member
+    // stability: that index answers a memo probe, which may read no memo,
+    // and the census resolves exact callees through the assigned-member memo.
     fn tuple_slot_iteration(&self) -> bool {
-        self.member_stability.tuple_slot_iteration
+        self.lookup.tuple_slot_iteration_may_be_mutated()
     }
 
     fn receiver_channels_opaque(&self) -> bool {

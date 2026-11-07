@@ -6660,7 +6660,7 @@
    ],
    "rediscovered": "SYNC_NODE_RECEIVED_ASYNC jsx sync-memo-read (6, Chrome confirmed): build pa11 (5870569bb) 4 wrong-rule (SC5003 violation Chrome does not report); ADR 0889 (pa12) 6 agree, SC5003 uncertifiable. Fixture reactive-ir/sync-memo-read (twin SyncFalseRead keeps its violation)"
   },
-  {
+ {
    "finding": "a flow element whose result is dropped (`const f = () => <Show when={a()}>...`, `f()`) proved ASYNC_OUTSIDE_LOADING_BOUNDARY while Chrome rc.21 is silent: no render reads the component's result",
    "found": "R2h, ADR 0892's fuzz shapes",
    "fixed": "ADR 0892",
@@ -6672,7 +6672,7 @@
    ],
    "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY jsx flow-show (18, Chrome confirmed): build pa13 (e18f1899f's tree) 16 false positive, 2 agree; pa16 16 not-fired, 2 recall-gap (those 2 were V and rendered, now uncertifiable), 0 false positive"
   },
-  {
+ {
    "finding": "a read in the `when` of a `Match` outside a `Switch` (`(<Match when={a()}>...</Match> as any).when`) runs in the body, since `Match` returns its props; the tracked role accounted for SC5001 and Chrome rc.21 reports PENDING_ASYNC_UNTRACKED_READ",
    "found": "R2h, review D20's shape",
    "fixed": "ADR 0892",
@@ -6794,7 +6794,7 @@
  {"finding":"A plain throw (resolve, until, a static dynamic source, useContext) claimed as a violation in a compute that stores its error, where nothing reports it: unread, in a try here or in a caller, under isPending, an effect's error arm, Errored with a parameter fallback (here or above a mount), a getter that never runs; and a helper whose only tracked entry is unread","found":"Part 16 ledger dry run (mx-census flush-read-stored, 3 ids); D18 and R3e probes cases/mu, cases/mv","fixed":"ADR 0893","grid":"lg-recall","code":"DYNAMIC_STATIC_PROMISE","ids":["lg-dynamic-static-promise-st-read-try-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, with Part 16's codeOfLogged applied for the run: the h2 build (8f0005a43 with ADR 0888) 289 of 380 st-* legal ids false-positive (Chrome same), rc 3; the ADR 0893 build 0 false-positive, 375 uncertifiable, 4 clean, 1 unexecuted"},
  {"finding":"A plain throw (resolve, until, a static dynamic source, useContext) claimed as a violation in a compute that stores its error, where nothing reports it: unread, in a try here or in a caller, under isPending, an effect's error arm, Errored with a parameter fallback (here or above a mount), a getter that never runs; and a helper whose only tracked entry is unread","found":"Part 16 ledger dry run (mx-census flush-read-stored, 3 ids); D18 and R3e probes cases/mu, cases/mv","fixed":"ADR 0893","grid":"lg-recall","code":"CONTEXT_NOT_FOUND","ids":["lg-context-not-found-st-read-caller-try-x-direct-none","lg-context-not-found-st-child-memo-handled-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, with Part 16's codeOfLogged applied for the run: the h2 build (8f0005a43 with ADR 0888) 289 of 380 st-* legal ids false-positive (Chrome same), rc 3; the ADR 0893 build 0 false-positive, 375 uncertifiable, 4 clean, 1 unexecuted"},
  {"finding":"A plain throw (resolve, until, a static dynamic source, useContext) claimed as a violation in a compute that stores its error, where nothing reports it: unread, in a try here or in a caller, under isPending, an effect's error arm, Errored with a parameter fallback (here or above a mount), a getter that never runs; and a helper whose only tracked entry is unread","found":"Part 16 ledger dry run (mx-census flush-read-stored, 3 ids); D18 and R3e probes cases/mu, cases/mv","fixed":"ADR 0893","grid":"lg-recall","code":"NO_OWNER_CONTEXT","ids":["lg-no-owner-context-st-async-unread-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, with Part 16's codeOfLogged applied for the run: the h2 build (8f0005a43 with ADR 0888) 289 of 380 st-* legal ids false-positive (Chrome same), rc 3; the ADR 0893 build 0 false-positive, 375 uncertifiable, 4 clean, 1 unexecuted"},
-  {
+ {
    "finding": "a setter handed whole to a list carrier that provably runs it (`[1].forEach(setC)`) had only a census row at the argument: Chrome rc.21 reports REACTIVE_WRITE_IN_OWNED_SCOPE at the run (patterns queue/T-foreach-setter, types/h08-setter-as-cb)",
    "found": "ADR 0815's held rows, Part 16's ledger",
    "fixed": "ADR 0894",
@@ -6806,7 +6806,7 @@
    ],
    "rediscovered": "REACTIVE_WRITE_IN_OWNED_SCOPE use-write-foreach (24 of the set, Chrome confirmed): build pa17 24 false clean; pa19 24 agree"
   },
-  {
+ {
    "finding": "an accessor handed to `untrack` with a label (`untrack(c, \"x\")`) had only a census row at the argument: Chrome rc.21 reports STRICT_READ_UNTRACKED at the run (patterns queue/T-untrack-label, types/e804-accessor-label)",
    "found": "ADR 0815's held rows, Part 16's ledger",
    "fixed": "ADR 0894",
@@ -6873,7 +6873,6 @@
   ],
   "rediscovered": "both contexts, direct binding (6 judged, Chrome confirmed): r22 (33ad17deb) 6 false cleans; r24 0, 6 uncertifiable"
  },
- {"finding":"CAUGHT_REACTIVE_READ with no SC5008 row where the read sits in a helper the try calls: a memo's stored error caught through one or two helpers, the direct read had its row","found":"R3e probe cases/mv/caller-try, while reading ADR 0893; coordinator's item","fixed":"SC5008 site loop (local_access.rs discover_caught_reads); now uncertifiable, not proved","grid":"mx-recall","code":"CAUGHT_REACTIVE_READ","ids":["mx-caught-reactive-read-effect-compute-caught-throw-helper-direct-none","mx-caught-reactive-read-memo-caught-throw-helper-direct-none","mx-caught-reactive-read-effect-compute-caught-throw-helper-2-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, 108 caught-throw-* ids: 3d7e53b87's k5 build 72 false-clean (8 Chrome-confirmed), 36 recall-gap; the fix 0 false-clean, 108 recall-gap (U, caught-read-unproven, 4 Chrome-confirmed)"},
  {"finding":"A throw in a function kept in a slot inside a JSX handler's body, called in a try there: the host-run check took any reference inside a handler for the handler itself (R44)","found":"review of WIP 6881dccbe","fixed":"ADR 0893 (host_runs)","grid":"lg-recall","code":"DYNAMIC_STATIC_PROMISE","ids":["lg-dynamic-static-promise-st-handler-slot-try-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id: WIP 6881dccbe (m4) false-positive, Chrome same, rc 3; the fix uncertifiable"},
  {"finding":"A throw in a function kept in a slot inside a JSX handler's body, called in a try there: the host-run check took any reference inside a handler for the handler itself (R44)","found":"review of WIP 6881dccbe","fixed":"ADR 0893 (host_runs)","grid":"lg-recall","code":"CONTEXT_NOT_FOUND","ids":["lg-context-not-found-st-handler-slot-try-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id: WIP 6881dccbe (m4) false-positive, Chrome same, rc 3; the fix uncertifiable"},
  {"finding":"A throw in a function a component runs as a `ref`, under an Errored with a parameter fallback: a ref runs during the render and the boundary takes it, and the host-run check reported it with no position asked (R47)","found":"review of WIP 2833415d5","fixed":"ADR 0893 (host_runs)","grid":"lg-recall","code":"DYNAMIC_STATIC_PROMISE","ids":["lg-dynamic-static-promise-st-hold-ref-handled-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id: WIP 2833415d5 (m6) false-positive, Chrome same, rc 3; the fix uncertifiable"},
@@ -6882,5 +6881,123 @@
  {"finding":"A boundary past the mount walk's bound, or a component mounted only as a value (Dynamic, a route table, another component's prop): handled_above answered not handled, so V where Chrome is silent (D26, R49)","found":"review D26 and R49","fixed":"ADR 0893 (handled_above)","grid":"lg-recall","code":"RESOLVE_IN_REACTIVE_SCOPE","ids":["lg-resolve-in-reactive-scope-st-boundary-far-x-direct-none","lg-resolve-in-reactive-scope-st-dynamic-handled-x-direct-none","lg-resolve-in-reactive-scope-st-route-table-x-direct-none","lg-resolve-in-reactive-scope-st-prop-component-handled-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id: the build before false-positive (m9 12 ids, n3 4 ids), rc 3; the fix uncertifiable"},
  {"finding":"A boundary past the mount walk's bound, or a component mounted only as a value (Dynamic, a route table, another component's prop): handled_above answered not handled, so V where Chrome is silent (D26, R49)","found":"review D26 and R49","fixed":"ADR 0893 (handled_above)","grid":"lg-recall","code":"UNTIL_IN_REACTIVE_SCOPE","ids":["lg-until-in-reactive-scope-st-boundary-far-x-direct-none","lg-until-in-reactive-scope-st-dynamic-handled-x-direct-none","lg-until-in-reactive-scope-st-route-table-x-direct-none","lg-until-in-reactive-scope-st-prop-component-handled-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id: the build before false-positive (m9 12 ids, n3 4 ids), rc 3; the fix uncertifiable"},
  {"finding":"A chain through a computed key: `(p as any)[\"then\"](h)`, `(p.then(h) as any)[k](g)`: expand's arms read no computed callee, so the handlers' reads were certified, sync and awaited alike, a silent clean where nothing else holds the handler","found":"review residual on 8f0005a43; review on 1332bede2","fixed":"after_await.rs expand: a computed callee goes to unresolved_chain_handlers, which walks the receiver; now uncertifiable or proved at the read","grid":"mx-recall","code":"UNTRACKED_READ_AFTER_AWAIT","ids":["mx-untracked-read-after-await-aw-then-computed-x-direct-none","mx-untracked-read-after-await-aw-then-computed-await-x-direct-none","mx-untracked-read-after-await-aw-then-computed-open-x-direct-none","mx-untracked-read-after-await-aw-then-computed-await-open-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, 160 programs with no unused `{ fmt: f }` slot (that slot gave the handler a U of its own and hid the certified read; ids aw-then-computed, -open, -await, -await-open): m8 152 false-clean certified, 8 recall-gap; the fix 0 false-clean, 29 agree, 131 recall-gap"},
- {"finding":"An exported component mounted only as a value from another analyzed file, under a boundary that takes the throw there: SC4002 V where Chrome is silent; handled_above read only the component's own file","found":"coordinator's challenge on the exported cost","fixed":"ADR 0893 (handled_above)","outside":"the generator prints a site in one file only, so a site in another file's exported component is no grid shape: fixture reactive-ir/stored-throw-value-mount holds it (Handled, Routed U; Reported, Unused V); Chrome probe cases/xf: V on n9 where Chrome is silent, U on p3","code":"CONTEXT_NOT_FOUND"}
+ {"finding":"An exported component mounted only as a value from another analyzed file, under a boundary that takes the throw there: SC4002 V where Chrome is silent; handled_above read only the component's own file","found":"coordinator's challenge on the exported cost","fixed":"ADR 0893 (handled_above)","outside":"the generator prints a site in one file only, so a site in another file's exported component is no grid shape: fixture reactive-ir/stored-throw-value-mount holds it (Handled, Routed U; Reported, Unused V); Chrome probe cases/xf: V on n9 where Chrome is silent, U on p3","code":"CONTEXT_NOT_FOUND"},
+ {
+  "finding": "review a9fc #1 step 2: the global object handed to code the checker does not see (a function stored on the global object, called with `window`) that patches iteration through its parameter left a primitive's own setter exact: SC2001 V where Chrome is quiet",
+  "found": "R1e, flip-read.mjs iter-global-unseen",
+  "fixed": "ADR 0803 step 2 (handed_to_unseen_code); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-global-unseen-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE iter-global-unseen, layers none (190 programs): 1c831d131 78 false-positive (Chrome-confirmed), this build 0. Fixtures iteration-written-slots handed-seen-listener (V), handed-unseen (U), handed-proto-writer (U)"
+ },
+ {
+  "finding": "review R19a: the census took the declaration a call's callee resolves to as the function called (a value a call made, a written `let`, an overridden or written method): SC2001 V where Chrome is quiet",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19a (exact callee value, declared_callee_at_parameter with its exact flag); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-through-call-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-through-call-call-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-let-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-subclass-method-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-member-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-cond-callee-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-listener-through-call-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-through-call, iter-through-call-call, iter-let-written, iter-subclass-method, iter-member-written: 5fe4d0b8b (built with a local timer-settler probe edit no context here reaches) 78 false-positive each (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal each). iter-cond-callee, iter-listener-through-call: already uncertifiable on 5fe4d0b8b (128 each), so they rediscover nothing there; kept as the shapes R19 named"
+ },
+ {
+  "finding": "review R19b: a listed standard member the program writes (`Object.keys = …`, `defineProperty(Object, 'keys', …)`) still counted as seen code: SC2001 V where Chrome is quiet",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19b (standard_member_intact); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-keys-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-keys-defined-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-this-seen-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-keys-alias-written-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-hasown-key-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-keys-written, iter-keys-defined: 5fe4d0b8b (built with a local timer-settler probe edit no context here reaches) 78 false-positive each (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal each). iter-this-seen-written, iter-keys-alias-written, iter-hasown-key: already uncertifiable on 5fe4d0b8b (128 each), so they rediscover nothing there; kept as the shapes R19 named"
+ },
+ {
+  "finding": "review R19e: an event's composed path, or a value compared after a `Function` call ran, handed the window on unseen: SC2001 V where Chrome is quiet",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19e (composed path members and compared calls are no seen use); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-composed-path-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-composed-index-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-composed-forof-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-composed-some-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-compared-call-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-composed-path, iter-composed-index, iter-composed-forof, iter-composed-some, iter-compared-call: 5fe4d0b8b (built with a local timer-settler probe edit no context here reaches) 78 false-positive each (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal each)"
+ },
+ {
+  "finding": "reviews R19c, R19d: a destructured `any` window and an aliased listener adder or timer",
+  "found": "review R19 of R1e's ADR 0803 step 2 (findings-rolling.md)",
+  "fixed": "ADR 0803 step 2, R19c, R19d; now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-destructured-any-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-listener-alias-signal-direct-none"
+  ],
+  "outside": "iter-destructured-any, iter-listener-alias: uncertifiable on 5fe4d0b8b already (128 each), so the grid cannot show the old build wrong; fixtures handed-any-destructured, handed-listener-alias, handed-timer-alias, handed-timer-argument, handed-member-timer-value pin them"
+ },
+ {
+  "finding": "ADR 0803 step 2: the unseen-code census ran inside the member-stability memo probe and reached memos from there (the assigned-member census through standard_member_intact and through an exact member callee): a daemon's incremental build waited on its own lazy cell forever",
+  "found": "R1f, lg-recall grids on rf3 and rf4: the executor gave no answer to prepare within 600 s",
+  "fixed": "ADR 0803 step 2: the census no longer feeds the member-stability index (tuple_slot_iteration asked of the lookup), standard_member_intact reads the base index; once_guard panics on a lazy cell re-entered on its own thread",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-listener-event-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-subclass-method-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE: rf3 stopped at 1,500 of 6,460 (and 1,800 of 3,572 on the listener contexts alone), rf4 at about 3,678 of 6,460 (2,770 harness rows), each an executor timeout with daemons sampled in the re-entrant wait; this build answers all 6,460 (0 harness). Unit test the_unseen_code_census_reads_no_memo_as_a_probe fails on the first path"
+ },
+ {
+  "finding": "review D21: an event keeps `target` after `dispatchEvent`; a computed write on the global object replaces a window method the closed list names",
+  "found": "reviewer, design pre-review of the list",
+  "fixed": "ADR 0803 step 2 (dispatched_event_stays_inline, patch_veto's open-key entry for a window member); now uncertifiable",
+  "outside": "iter-event-target, iter-window-computed: the list grew in this commit, so no earlier build had the hole, and uncertifiable on 5fe4d0b8b for another reason (128 each, `.Function` obtained). lg-recall on rf8: 0 false positives. Fixtures handed-dispatched-event, handed-window-method-computed, handed-dispatch-held (negative)"
+ },
+ {
+  "finding": "reviews D11, R35: a timer's callback that is a `new Promise` executor's parameter is seen only when it is the engine's settling function: a replaced `Promise`, an extra timer argument, `arguments`, a shadowing parameter, a named executor calling itself",
+  "found": "harness artifact in the grid's entry, then the reviewer's attacks on the proof",
+  "fixed": "ADR 0803 step 2 (timer_runs_promise_settler); proved for the sleep idiom, uncertifiable for each attack",
+  "outside": "a timer fires after render, so no generated program patches iteration through it before the body's pattern (ES module, render first). Fixtures handed-timer-settler (negative), handed-promise-replaced, handed-settler-extra-argument, handed-settler-arguments, handed-settler-shadowed, handed-settler-named"
+ },
+ {
+  "finding": "measurement artifact: the grid's entry `new Promise((done) => setTimeout(done, ms))` counted as a timer's unread callback, so every grid program from D3 on withdrew its tuple slots and iter-* rows read uncertifiable whatever their census did",
+  "found": "R1f, all 128 uncertifiable on every iter-* context of a build with no such census",
+  "fixed": "ADR 0803 step 2 (timer_runs_promise_settler), at the source: the idiom is proved, the judge and the entry are unchanged",
+  "outside": "a harness property, no program shape. Control on rf8: cleanup-mount, handler-mount, arm-helper, 380 programs: 213 clean, 167 uncertifiable, 0 false positive"
+ },
+ {
+  "finding": "review D24: `(window as any).__k?.()` read as absent while a computed write on `Object.prototype` or a window prototype installed it; review of 37ce9020a: a subclass of `Event` keeps the event, whose `target` is the window after dispatch: SC2001 V where Chrome is quiet",
+  "found": "reviewer, on T1b and on 37ce9020a",
+  "fixed": "ADR 0803 step 2 (absent_window_member asks Object, Window and EventTarget owners; dispatched_event_stays_inline asks the global Event or CustomEvent by declaration); now uncertifiable",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-object-proto-member-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-event-subclass-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-object-proto-member, iter-event-subclass: an adf2e96c9 predecessor build rf9 (T1b before D24) 78 false-positive each (Chrome-confirmed), rf10 0. Fixtures handed-object-proto-computed, handed-window-proto-computed, handed-eventtarget-proto-computed, handed-event-subclass, handed-event-shadowed"
+ },
+ {
+  "finding": "review D24: other ways a `__` member exists with no member write: a definer through a parameter, a classic script's top-level declaration; and `valueOf`, `__defineGetter__`, any-cast `requestAnimationFrame` outside the `__` shape",
+  "found": "reviewer, on T1b",
+  "fixed": "ADR 0803 step 2 (absent_window_member, ClassicScriptDunder); now uncertifiable",
+  "outside": "iter-window-any-written is uncertifiable on rf9 already (128), since the member write withdraws; a classic script cannot be generated (each program is an ES module), and the definer and valueOf shapes are fixture cases: handed-definer-parameter, handed-classic-script-member, handed-window-valueof, handed-window-define-getter, handed-window-any-raf, handed-window-any-timer, handed-window-any-written. make ir-edit-fuzz family census adds a definer and a classic declaration to handed-window-absent-member: 0 mismatches"
+ }
 ]

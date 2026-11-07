@@ -1,5 +1,92 @@
 # Track R progress
 
+## Handoff: R1e, ADR 0803 step 2 (2026-11-07, WIP `claude/flip-r1e-wip`)
+
+**First: review R19 blocks the commit.** Full text: `/Users/thomas/dev/sc-scratch.noindex/review/findings-rolling.md`, R19. For each fix: a fuzz shape and a fixture first (the old build fails, the new one passes), then one measurement. Any narrowing of an exemption: send a short design to the reviewer (thread "Flip reviewer (perso): designs and commits") and to the coordinator before building it.
+- a. `received_by_seen_code` trusts `function_called_at`, which answers a binding's initializer. Make code seen only when all of these hold: `through_call` is false (`const run = make(() => {})`), `function_value_is_current` holds (`let run = noop; run = patch`, `function f(){} f = patch`), `resolved.targets.is_none()` (`c ? noop : patch`), and for a member call the method is exact (`class_method_symbol`/`class_instance_is_exact`, a subclass override; an object literal never written, `o.m = patch`). Otherwise unseen. Test each case.
+- b. THIS_SEEN, SEEN_STANDARD and `read_only_builtin` ignore a member the program writes (`window.scrollTo = ...`, `(Object as any).keys = ...`). A list hit also needs `!lookup.member_name_assigned(member)` and no StandardPatch on the root, in all three lists.
+- c. A destructured `any` window (`const { defaultView: w } = document as any`): the post-D4 code already demands `runtime_value_domain` at every candidate span, destructured slot locals included, and counts `unknown()`. Confirm with a fixture.
+- d. A bare alias of `setTimeout`/`setInterval`/`addEventListener` (`const st = setTimeout`, `[f].forEach(setTimeout)`): a reference outside callee position counts as handed.
+- e. (low) `e.composedPath()` holds the window: count it unless the result is only used by `includes`/`indexOf`/`some`/`length`, or list it in open-work.
+- R19 says "sloppy `this`: no code". The reviewer read t3-b3846b2a while the chain held the pre-D4 source. The D4 code is in this commit (and in `/Users/thomas/dev/sc-scratch.noindex/flip-r1/post-d4/`). Tell the reviewer.
+
+**State.**
+- Last green commit: `1c831d131` (`claude/flip-r1` = `claude/flip-r1e-item3`).
+- This WIP is **not green**:
+  - snapshots are not updated for step 2;
+  - coverage, verify-delta, ownership-gate, ir-read-lint and ir-edit-fuzz were not run on this tree;
+  - there are no rediscovery entries for the new contexts (only `iter-global-unseen` has one);
+  - the counts.json drops are not final;
+  - the `held` expectations in fixtures/uncertifiable-repro/cases.json may move.
+- Focused tests pass: census `only_a_value_of_an_array_intrinsic_reaches_iteration` and `a_value_handed_to_unseen_code_withdraws_the_tuple_slots`. Clippy and fmt are clean on solid-facts, solid-facts-backend and solid-reactive-ir.
+- The unit harness (`with_lookup`) has no Type Facts. The seen side (standard declarations, resolved functions) is pinned by fixtures only.
+
+**What step 2 holds (mutation_sites.rs, contributions.rs, indexes, project_memos 50):**
+- Calls that receive the global object, `Function` or an intrinsic are recorded per file (`IntrinsicHandedAtCall`; slot 0..61 an argument, 62 a timer callback, 63 the receiver). They are decided over the project (`handed_to_unseen_code`).
+- Seen code:
+  - `SEEN_STANDARD` (index 0 only, except `Object.is`);
+  - `call`/`bind` shifted to their target;
+  - a project or dependency function whose parameter hands nothing on, followed 3 levels;
+  - no dialect exemption (D1).
+- Stored or returned counts (R2, R7). Global at a callee counts.
+- Review D3:
+  - the receiver of a method call on an obtained value (THIS) is seen only via `THIS_SEEN` or `LISTENER_ADDERS` with `listener_reaches_nothing`. That test: every parameter a name nothing reads; a non-arrow mentions no `this`/`super`/`arguments`; no `eval`/`Function` inside. A function declaration is judged like an expression (exemption a). An object listener counts.
+  - `on*` writes on the window, by member or bare, count unless `null`/`undefined` (exemption c) or a literal that passes the test.
+  - Timer callbacks count unless an arrow or never mentioning `this` (exemption b).
+  - Bare `addEventListener` records THIS.
+  - `Object.assign(window, ...)` is not exempt.
+- R12:
+  - `WINDOW_NAMES` (+top, parent, frames, opener) for globals and members of the window. Destructured keys keep `GLOBAL_OBJECTS`.
+  - `FileFacts::window_valued_candidates` (solid-facts/project.rs) are demanded in demand_plan.rs (library types, plus `runtime_value_domain` for D4). They become per-file `WindowValuedCandidate` hazards.
+  - `window_handed_to_unseen_code` counts Window/globalThis, `unknown()`, or a missing entity.
+- `patch_veto`: CallableFunction/NewableFunction → Function.
+- D4 (coordinator ruling):
+  - in any file, `this.<Array|Function|eval|Reflect|Object|global>`;
+  - `this.<globalThis|window|self|top|parent|frames>` through the typed candidates (narrowing accepted);
+  - in sloppy files only (no ES module, no "use strict" prologue in the file or any enclosing function, not in a class): `this[k]`, and a never-reassigned `var/let/const self = this` that follows the same rules;
+  - handing `this`/`self` on through call/apply/bind, or as an argument to unseen code, sits behind the temporary `SLOPPY_THIS_HANDED_ON` switch. The coordinator decides whether that part ships or becomes an open item, from its measured cost; then remove the switch.
+  - `return this` and a stored `this` are open items: list them in docs/open-work.md.
+
+**Measurement in flight.** `chain-s8.sh` runs in t3-b3846b2a; outputs are in `/Users/thomas/dev/sc-scratch.noindex/flip-r1/`.
+- Builds: s7 (D3/R12), s8a (D4 without hand-on), s8b (with hand-on).
+- Sweeps: `sweep-s7|s8a|s8b.json`, each against the previous build; s7 against `sweep-s4.json` (s4: 290 V).
+- Fuzz: `g/s7-d3`, `g/s8b-d4`, `g/n5-d4`, `g/s5-d4`, `g/s7-d4o`.
+- Coverage in compare mode: `cov-s7|s8a|s8b.log`.
+- The t3-b3846b2a tree switches between pre- and post-D4 sources during the chain and ends on post-D4 with the switch on. That equals this commit except for this note. These numbers predate the R19 fixes: measure again once after them.
+- Report: the listener-rule cost (s7 vs s4), the hand-on cost (s8b vs s8a), and the probus-hk V loss (`createSignal(window)` now counts). Read every moved V.
+- Old build s5 on the new fixtures:
+  - `sloppy-this-{dependency,computed,handed,alias,strict}`: all SC2001 V (strict is the negative and must stay V);
+  - `handed-any-default-view`: V plus a U;
+  - `handed-object-listener`: V.
+- Unknown: whether a CommonJS dependency (`dep-sloppy`, synthetic, with `dependencySources`) is analyzed at all. The new build on `sloppy-this-dependency` tells. If it is not analyzed, the fixture needs another shape.
+
+**Still owed for the step 2 commit:**
+- The `held` cases' `why` must name the sc2001 hazard call site (`attachPropListeners(window, props)` in `node_modules/@solid-primitives/event-listener/dist/components.js`, re-confirm) and sc4001's (`src/pkg-event-listener-target.tsx:12`, `makeEventListener(window, ...)`).
+- Rediscovery entries for every new context (n5/s5 fail, new passes). Timer and sloppy code cannot be expressed by the generator (an ES module, render before a timer): say so and point at the fixtures.
+- counts.json drops on the final numbers.
+- docs/open-work.md: `return this`/stored `this`, R19e if listed, a JS `any` window remainder if the D4 fallback is taken.
+- The commit message lists every moved held case (id, old expect, new expect), names the probus-hk V loss, and records the reviewer interactions (R7, D1, D3, R12, D4, R19).
+- Then fast-forward `claude/flip-r1` (never push), report the hash, write the handoff, and stop (coordinator).
+
+**Next: after_await B5-B8.**
+- Rebase on `origin/claude/flip-gen-await` `97c1bb966` first.
+- R3 owns B1-B4 in the same file; tell R3 if `run()` must be touched.
+- A fuzz context first for each.
+- Plan and shapes: `/Users/thomas/dev/sc-scratch.noindex/research/scout-bind-afterawait.md`.
+- Then value_reaches (three-way, `claude/flip-r1-exact-walk`), may_run_in_leaf_owner_within, the remaining shapes.
+- The `.bind` proof (B) is deferred past #173 (open-work "Untyped `.bind` in dependency JS").
+
+**Traps.**
+- Never `git checkout --theirs` or a hooks-disabled commit; probe merges in a scratch worktree.
+- A failed run counted by `grep -c` reads 0: check the output is JSON.
+- ir-read-lint matches by name (`withdrawn.iter()`).
+- Every build or heavy check goes through `sc-heavy` (one at a time, CARGO_BUILD_JOBS=10, the sccache env, sweeps `--jobs 3`, load under 30, wait while `/Users/thomas/dev/sc-scratch.noindex/integrator-waiting` exists).
+- Other worktrees' `sc-heavy` processes are not yours.
+- The census's `.any` chain stops at the first true, so `at_calls` is incomplete then (harmless: the hazard is present anyway).
+- `iter-map-function` needs its cast or tsc rejects it.
+- `handed-seen-listener` was redesigned (a listener that reaches nothing). Its old shape is `handed-listener-param` (U).
+
+
 Branch `claude/flip-reads`. One line per rule; fresh agents continue from here.
 
 Helpers (this machine, scratch): `/tmp/sc-scratch.noindex/flip-reads`: `ff.sh <name> <bindir> <codes> --grids ...` (focused run), `sw.sh <tag> <prev>` (sweep build `r<tag>`, compare), `redisc.py` (append a rediscovery entry), `base/` (build at the branch cut), `sweep-base.json` (16,036 U, 383 V).

@@ -804,6 +804,53 @@ impl FileFacts {
         None
     }
 
+    /// ADR 0803 (review R12): where a value may be a window the program did not
+    /// name as a global: a static member, or a destructured key, named as one
+    /// of the DOM's window-valued properties (`document.defaultView`,
+    /// `event.view`, `frame.contentWindow`, `message.source`, `w.top`), and a
+    /// call of a member `open` (`window.open()`). Whether the value is one is
+    /// the type's question (Type Facts' library types); the demand plan asks
+    /// it at exactly these spans, in this order, which the census's entries
+    /// index.
+    #[must_use]
+    pub fn window_valued_candidates(&self) -> Vec<Span> {
+        const KEYS: [&str; 11] = [
+            "defaultView",
+            "view",
+            "contentWindow",
+            "source",
+            "top",
+            "parent",
+            "frames",
+            "self",
+            "window",
+            "opener",
+            "globalThis",
+        ];
+        let ast = &self.ast;
+        let members = ast.members.iter().filter_map(|member| {
+            (!ast.computed_members.contains(&member.span)
+                && self
+                    .source_text(member.property)
+                    .is_some_and(|key| KEYS.contains(&key)))
+            .then_some(member.span)
+        });
+        let opened = ast.calls.iter().filter_map(|call| {
+            let member = ast.member_at(ast.peel_ts_sugar_span(call.callee))?;
+            (!ast.computed_members.contains(&member.span)
+                && self.source_text(member.property) == Some("open"))
+            .then_some(call.span)
+        });
+        let slots = ast.bindings.iter().flat_map(|binding| {
+            binding
+                .object_slots
+                .iter()
+                .filter(|slot| KEYS.contains(&slot.property.as_str()))
+                .map(|slot| slot.local.span)
+        });
+        members.chain(opened).chain(slots).collect()
+    }
+
     /// What the value at `span` is when it is an object the standard library's
     /// calls read (ADR 0781), through assertions and bindings that hold it.
     #[must_use]

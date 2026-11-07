@@ -143,6 +143,8 @@ const ITER_PAIR = `function (this: unknown[]) { return itO.call(this.length === 
 const ITER_NEXT = `function (this: object) { const r = itN.call(this); const k = itSeen.get(this) ?? 0; itSeen.set(this, k + 1); if (!r.done && k === 1 && typeof r.value === "function" && r.value.name !== "noop" && ${ITER_IN}) return { value: function noop() {}, done: false }; return r; }`;
 // The same patch as code from a string (plain JavaScript, no annotations).
 const ITER_CODE = `const itO = Array.prototype[Symbol.iterator]; Array.prototype[Symbol.iterator] = function () { return itO.call(this.length === 2 && typeof this[1] === "function" && this[1].name !== "noop" && /\\bC\\d+\\b/.test(new Error().stack || "") ? [this[0], function noop() {}] : this); };`;
+// The patch through a parameter `g` that holds the global object.
+const ITER_G = `const itO = g.Array.prototype[Symbol.iterator]; const itKs: PropertyKey[] = [Symbol.iterator]; g.Array.prototype[itKs[0]] = ${ITER_PAIR};`;
 const ITER_IP = "const itIP = Object.getPrototypeOf([][Symbol.iterator]()); const itN = itIP.next; const itSeen = new WeakMap<object, number>();";
 const ITER_PATCHES = {
   "iter-key": `const itKs: PropertyKey[] = [Symbol.iterator]; const itO = Array.prototype[Symbol.iterator]; (Array.prototype as any)[itKs[0]] = ${ITER_PAIR};`,
@@ -169,6 +171,66 @@ const ITER_PATCHES = {
   "iter-ctor-key": `const itAP: any = [].constructor.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
   "iter-global-alias": `const itG: any = globalThis; const itAP = itG.Array.prototype; const itKs: PropertyKey[] = [itG.Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
   "iter-gpo-destructure": `const { getPrototypeOf: itGp } = Object; const itAP: any = itGp([]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // Review a9fc #1 step 2: the global object handed to a callee with no declaration (a function stored on the global object), which
+  // patches iteration through its parameter.
+  "iter-global-unseen": `(globalThis as any).itSetU = (g: any, k: PropertyKey) => { const itO = g.Array.prototype[Symbol.iterator]; g.Array.prototype[k] = ${ITER_PAIR}; }; (globalThis as any).itSetU(window, Symbol.iterator);`,
+  // Reviews R2 and R7: a standard function that calls what it is given (`map(Function)`), `call` running a project function that
+  // writes through its parameter, the global object kept in an object or returned, an intrinsic kept in a `Map`.
+  // `map` calls what it is given with (element, index, array); `Function` would read the code as a parameter list, so the element is
+  // the argument list and `Function.apply` bound to `Function` runs it: `map` still calls the function it is given.
+  "iter-map-function": `[[${JSON.stringify(ITER_CODE)}]].map(Function.apply.bind(Function, null) as unknown as (args: string[]) => () => void).forEach((f) => f());`,
+  "iter-call-patch": `const itPatch = (g: any) => { const itO = g.Array.prototype[Symbol.iterator]; const itKs: PropertyKey[] = [Symbol.iterator]; g.Array.prototype[itKs[0]] = ${ITER_PAIR}; }; itPatch.call(null, globalThis);`,
+  "iter-global-stored": `const itHolder = { g: globalThis as any }; const itAP = itHolder.g.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-global-returned": `const itRoot = (): any => globalThis; const itAP = itRoot().Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // Review D1: the dialect's runtime hands back what it keeps.
+  "iter-signal-held": `const [itProto] = createSignal<any>(Array.prototype); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itProto()[itKs[0]]; itProto()[itKs[0]] = ${ITER_PAIR};`,
+  "iter-map-stored": `const itHeld = new Map<number, any>([[1, Array.prototype]]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itHeld.get(1)[itKs[0]]; itHeld.get(1)[itKs[0]] = ${ITER_PAIR};`,
+  // Review D3: a listener or an event handler runs with the window as `this` and an event whose `currentTarget` is the window;
+  // dispatched at once, so the patch lands before the body's pattern.
+  "iter-listener-this": `window.addEventListener("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); window.dispatchEvent(new Event("itx"));`,
+  "iter-listener-event": `window.addEventListener("itx", (e: any) => { e.currentTarget.Function(${JSON.stringify(ITER_CODE)})(); }); window.dispatchEvent(new Event("itx"));`,
+  "iter-bare-listener": `addEventListener("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); dispatchEvent(new Event("itx"));`,
+  "iter-on-handler": `window.onresize = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }; window.dispatchEvent(new Event("resize"));`,
+  // Review R12: a window by type, or by one of the window's names for itself.
+  "iter-default-view": `(document.defaultView as any).Function(${JSON.stringify(ITER_CODE)})();`,
+  "iter-window-top": `(window.top as any).Function(${JSON.stringify(ITER_CODE)})();`,
+  // Review D4: a window name read through `any`, and an object listener (no function literal to read).
+  "iter-any-default-view": `const itAP = (document as any).defaultView.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-object-listener": `window.addEventListener("itx", { handleEvent(e: any) { e.currentTarget.Function(${JSON.stringify(ITER_CODE)})(); } }); window.dispatchEvent(new Event("itx"));`,
+  // Review R19a: the callee's name is not the called value. A call's result, a written binding, a conditional whose arms reduce to one
+  // signature, a subclass override, a written method; each patches through its parameter where the declaration the types name does not.
+  "iter-through-call": `const itMake = (_x: unknown) => (g: any) => { ${ITER_G} }; const itRun = itMake(() => {}); itRun(globalThis);`,
+  "iter-through-call-call": `const itMake = (_x: unknown) => (g: any) => { ${ITER_G} }; const itRun = itMake(() => {}); itRun.call(null, globalThis);`,
+  "iter-let-written": `let itRun = (_g: any) => {}; itRun = (g: any) => { ${ITER_G} }; itRun(globalThis);`,
+  "iter-cond-callee": `const itNoop = (_g: any) => {}; const itPatch = (g: any) => { ${ITER_G} }; const itRun = [1].length === 1 ? itPatch : itNoop; itRun(globalThis);`,
+  "iter-subclass-method": `class ItA { m(_g: any) {} } class ItB extends ItA { m(g: any) { ${ITER_G} } } const itA: ItA = new ItB(); itA.m(globalThis);`,
+  "iter-member-written": `const itObj = { m(_g: any) {} }; itObj.m = (g: any) => { ${ITER_G} }; itObj.m(globalThis);`,
+  "iter-listener-through-call": `const itMk = (_x: unknown) => function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }; const itH = itMk(() => {}); window.addEventListener("itx", itH); window.dispatchEvent(new Event("itx"));`,
+  // Review R19b: a member the program writes is no longer the standard one its declaration names.
+  "iter-this-seen-written": `(window as any).scrollTo = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }; window.scrollTo(0, 0);`,
+  "iter-keys-written": `const itK = Object.keys; (Object as any).keys = (o: any) => { if (o === window) o.Function(${JSON.stringify(ITER_CODE)})(); return itK(o); }; Object.keys(window);`,
+  "iter-keys-alias-written": `const itK = Object.keys; const itKeys = Object.keys; (Object as any).keys = (o: any) => { if (o === window) o.Function(${JSON.stringify(ITER_CODE)})(); return itK(o); }; Object.keys(window); itKeys(window);`,
+  "iter-keys-defined": `const itK = Object.keys; Object.defineProperty(Object, "keys", { value: (o: any) => { if (o === window) o.Function(${JSON.stringify(ITER_CODE)})(); return itK(o); }, configurable: true, writable: true }); Object.keys(window);`,
+  // Review R19c: a destructured `any` window has an entity and no library type.
+  "iter-destructured-any": `const { defaultView: itW } = document as any; const itAP = itW.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // Review R19d: a platform caller by a bare alias.
+  "iter-listener-alias": `const itOn = addEventListener; itOn("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); dispatchEvent(new Event("itx"));`,
+  // Review R19e: `composedPath()` of a bubbling event holds the window on any target.
+  "iter-composed-path": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath().at(-1); itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  "iter-composed-index": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath()[3]; itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  "iter-composed-forof": `document.body.addEventListener("itx", (e) => { for (const itT of e.composedPath() as any[]) { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); } }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
+  // Review D21: an event keeps `target` after `dispatchEvent`; a computed write on the global object replaces a window method.
+  "iter-window-any-written": `(window as any).__itHook = function (this: any) { const g = this; ${ITER_G} }; (window as any).__itHook();`,
+  // Review D24: the window inherits a member an array-free prototype write installs under a key no literal names.
+  "iter-object-proto-member": `const itKn: PropertyKey[] = ["__itp"]; (Object.prototype as any)[itKn[0]] = function (this: any) { const g = this; delete (Object.prototype as any)[itKn[0]]; ${ITER_G} }; (window as any).__itp?.();`,
+  // Review of 37ce9020a: a subclass's constructor keeps the event, whose `target` stays the window after dispatch.
+  "iter-event-subclass": `let itKept: any; class ItE extends Event { constructor() { super("itx"); itKept = this; } } window.dispatchEvent(new ItE()); { const g = itKept.target; ${ITER_G} }`,
+  "iter-event-target": `const itEv = new Event("itx"); window.dispatchEvent(itEv); (itEv.target as any).Function(${JSON.stringify(ITER_CODE)})();`,
+  "iter-window-computed": `const itK = ["con", "firm"].join(""); const itC = window.confirm; (window as any)[itK] = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); (window as any)[itK] = itC; return true; }; window.confirm("y");`,
+  // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.
+  "iter-hasown-key": `(window as any).toString = function (this: any) { delete this.toString; this.Function(${JSON.stringify(ITER_CODE)})(); return "x"; }; Object.hasOwn({}, window as any);`,
+  "iter-compared-call": `const itBox: unknown[] = []; if (itBox[0] === (globalThis as any).Function(${JSON.stringify(ITER_CODE)})()) itBox.push(1);`,
+  "iter-composed-some": `document.body.addEventListener("itx", (e) => { e.composedPath().some((itT: any) => { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); return false; }); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
 };
 
 // ADR 0857: the census's `handed-flush` (misuse.mjs) through other entries. A function a tracked JSX expression runs (by a call, or by a
@@ -380,7 +442,9 @@ export const FLIP_READ_LEGAL = {
   FLUSH_IN_ACTION: ["wh-action-late"],
   // ADR 0893: a plain throw in a kept flush callback, stored by the memo and read by nothing: no report, so no violation.
   DYNAMIC_STATIC_PROMISE: [FLUSH_READ_STORED],
-  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS)],
+  // Scout A.6: `Function.prototype.call` patched to defer, then `h.call(null)`: the read leaves the body (Chrome quiet). The proof read
+  // `CallableFunction.call`, whose patch keys a `Function.prototype.call` write never raised.
+  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), "patch-call-late"],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(ITER_PATCHES)],
@@ -984,7 +1048,12 @@ export function flipReadContext(context, stmts, kit) {
     return { body: [holder, root, ...(context === "cleanup-mount-mixed" ? [expr(domExpr(mount))] : [])], view: [button(b, [expr(domExpr(`${d}()`))])] };
   }
   const iterPatch = ITER_PATCHES[context] ?? ITER_SAME[context];
-  if (iterPatch) return { top: [expr(domExpr(iterPatch))], body: stmts, view: [] };
+  if (iterPatch) return { top: [expr(domExpr(iterPatch, undefined, iterPatch.includes("createSignal") ? ["createSignal"] : undefined))], body: stmts, view: [] };
+  if (context === "patch-call-late") {
+    const h = kit.name("f");
+    const patch = "Function.prototype.call = function (this: () => void) { const run = this; queueMicrotask(() => Reflect.apply(run, undefined, [])); } as any;";
+    return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${h}.call(null)`))], view: [] };
+  }
   if (context === "cast-late-foreach") {
     const t = kit.name("t");
     const h = kit.name("f");

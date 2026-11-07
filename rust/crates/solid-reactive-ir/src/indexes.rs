@@ -3,8 +3,9 @@
 //! This module hides AST and TypeScript table layout from rule discovery. The
 //! builder asks semantic questions here instead of repeatedly scanning facts.
 
+use crate::once_guard::Once as OnceLock;
 use crate::{HashMap, HashSet};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
@@ -67,8 +68,9 @@ mod project_memos;
 mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
-    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer, PROJECT_TABLES_FROM,
-    ProjectTables, RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
+    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer,
+    IntrinsicHandedToUnseen, PROJECT_TABLES_FROM, ProjectTables, RouterParams, SourceTexts,
+    StringCodeVeto, TupleIterationVeto,
 };
 pub(crate) use test_runner::TestRunnerCallback;
 
@@ -929,7 +931,7 @@ pub(super) struct SemanticLookup<'a> {
     /// L0: the analyzed files by interned id ([`crate::base`]).
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
-    reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    reference_rows: std::sync::OnceLock<crate::base::file_table::ReferenceRows>,
     /// Each path's import resolutions, digested into its Entities section.
     resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
@@ -955,6 +957,7 @@ pub(super) struct SemanticLookup<'a> {
     section_fingerprints: [OnceLock<[u8; 32]>; crate::base::reads::Section::ALL.len()],
     tuple_iteration_veto: crate::base::reads::Recorded<bool>,
     string_code_veto: crate::base::reads::Recorded<bool>,
+    intrinsic_handed_to_unseen: crate::base::reads::Recorded<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
     parameter_completion_calls: crate::base::reads::Recorded<HashSet<(&'a str, Span, usize)>>,
@@ -1292,7 +1295,7 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
             resolution_digests: OnceLock::new(),
-            reference_rows: OnceLock::new(),
+            reference_rows: std::sync::OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
@@ -1306,6 +1309,7 @@ impl<'a> SemanticLookup<'a> {
             section_fingerprints: std::array::from_fn(|_| OnceLock::new()),
             tuple_iteration_veto: crate::base::reads::Recorded::new(),
             string_code_veto: crate::base::reads::Recorded::new(),
+            intrinsic_handed_to_unseen: crate::base::reads::Recorded::new(),
             parameter_completion_calls: crate::base::reads::Recorded::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: crate::base::reads::Recorded::new(),
@@ -2424,6 +2428,14 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| self.whole_program_answer::<StringCodeVeto>())
     }
 
+    /// ADR 0803 (review a9fc #1, step 2): some call hands an obtained value to
+    /// code the checker does not see.
+    pub(crate) fn intrinsic_handed_to_unseen_code(&self) -> bool {
+        *self
+            .intrinsic_handed_to_unseen
+            .get_or_init(|| self.whole_program_answer::<IntrinsicHandedToUnseen>())
+    }
+
     /// ADR 0292: whether `property` holding `function` is the `default` of a
     /// module object a dialect component loader renders, and that function's
     /// one reference ([`LazyWitnessesIn`]).
@@ -2527,6 +2539,19 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// L1: member uses by name.
+    /// Whether some assignment writes a member named `name`: the names
+    /// [`crate::object_members::AssignedMembersAnswer`] holds, read from the
+    /// base index as its probe reads them, so a memo probe may ask it (one
+    /// that reads that memo begins the build from inside itself).
+    pub(crate) fn member_name_assigned_in_base(&self, name: &str) -> bool {
+        self.note_probe_read(crate::base::memo::probes::Probe::AssignedNames, || {
+            crate::base::memo::probes::PolledKey::Unit
+        });
+        self.base_members()
+            .values(&crate::base::MemberName::Named(Arc::from(name)))
+            .any(|(_, used)| used.role == crate::base::MemberRole::Assigned)
+    }
+
     pub(crate) fn base_members(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::MemberName, crate::base::MemberUse> {

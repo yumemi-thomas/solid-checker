@@ -22,8 +22,9 @@
 //! Nothing is noted outside a recording, inside a memo computation (its own
 //! reads are the store's) or while a probe is asked.
 
+use crate::once_guard::Once as OnceLock;
 use std::cell::RefCell;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use super::*;
 use crate::base::FileId;

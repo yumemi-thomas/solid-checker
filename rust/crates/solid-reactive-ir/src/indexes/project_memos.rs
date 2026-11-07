@@ -85,6 +85,7 @@ project_tables! {
     47 write_flow_answers: WriteFlowAnswer,
     48 module_scope: ModuleScopeRuns,
     49 flush_veto: FlushVetoAnswer,
+    50 handed_calls: IntrinsicHandedToUnseen,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -345,6 +346,15 @@ whole_program! {
     |ctx| Ok(ctx.project(|lookup| {
         crate::interproc::accessor_provenance::visible_string_code(lookup)
     }))
+}
+
+whole_program! {
+    /// ADR 0803 (review a9fc #1, step 2): whether a call hands an obtained
+    /// value to code the checker does not see.
+    IntrinsicHandedToUnseen, 50, handed_calls, "intrinsic_handed_to_unseen", bool,
+    cycle: true,
+    direct: |lookup| crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
+    |ctx| Ok(ctx.project(crate::interproc::accessor_provenance::handed_to_unseen_code))
 }
 
 whole_program! {

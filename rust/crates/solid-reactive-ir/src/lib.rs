@@ -93,6 +93,7 @@ mod runtime_semantics;
 pub mod shadow;
 pub use runtime_configuration::RuntimeConfigurationPremise;
 mod object_members;
+mod once_guard;
 mod server_rules;
 mod source_discovery;
 mod static_api;

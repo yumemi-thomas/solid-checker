@@ -680,6 +680,10 @@ pub(crate) enum Hazard {
     /// empty for a global): the call the types name may run the project's
     /// function. A collision only withholds another proof.
     StandardPatch(u32),
+    /// A file that is no module declares this `__` name (ADR 0803 step 2, review
+    /// D24; the key is a hash of the name): a classic script's top level is the
+    /// global object. Any depth counts; a collision only withholds a proof.
+    ClassicScriptDunder(u32),
     /// Some [`Self::StandardPatch`] in the file (value 0), so a call that
     /// meets none hashes nothing.
     AnyStandardPatch,
@@ -690,7 +694,7 @@ pub(crate) enum Hazard {
     /// Some export at all (value 0).
     Export,
     /// The file obtains an array intrinsic or code from a string as a value
-    /// (ADR 0801, [`crate::interproc::accessor_provenance::array_intrinsic_obtained`];
+    /// (ADR 0801, [`crate::interproc::accessor_provenance::intrinsic_census`];
     /// value 0).
     ArrayIntrinsicObtained,
     /// Code may put a function at this member of an object no standard
@@ -703,6 +707,15 @@ pub(crate) enum Hazard {
     /// did not make here: a host global, which every spelling reaches, may be
     /// that object.
     StandardImpostorWrite(u32),
+    /// A call receives an obtained value (review a9fc #1 step 2; the value
+    /// encodes the call's ordinal, the value's kind and the argument,
+    /// [`crate::interproc::accessor_provenance::intrinsic_census`]): the
+    /// project decides whether its callee is seen code.
+    IntrinsicHandedAtCall,
+    /// A span where a value may be a window (review R12; the value indexes
+    /// [`solid_facts::FileFacts::window_valued_candidates`]): the project
+    /// asks its type.
+    WindowValuedCandidate,
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -723,6 +736,11 @@ fn member_hash(container: &str, member: &str) -> u32 {
 
 fn standard_override(container: &str, member: &str) -> Hazard {
     Hazard::StandardOverride(member_hash(container, member))
+}
+
+/// [`Hazard::ClassicScriptDunder`] of `name`.
+pub(crate) fn classic_script_dunder(name: &str) -> Hazard {
+    Hazard::ClassicScriptDunder(member_hash("", name))
 }
 
 fn standard_patch(owner: &str, member: &str) -> Hazard {
@@ -784,6 +802,8 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
             AssignmentWrite::UnownedPrototype => {}
         }
     }
+    // `scrollTo = f`: the global's own binding.
+    patches.extend(written_global_identifiers(file).map(|name| standard_patch("", name)));
     // `globalThis[key] = f`: a key no fact reads.
     for assignment in &ast.assignments {
         let target = ast.peel_ts_sugar_span(assignment.target);
@@ -924,10 +944,12 @@ pub(crate) fn patch_veto(qualified_name: &str) -> Vec<Hazard> {
         .rsplit_once('.')
         .unwrap_or(("", qualified_name));
     let container = owner.strip_prefix("Readonly").unwrap_or(owner);
-    let container = if container == "PromiseLike" {
-        "Promise"
-    } else {
-        container
+    // A declaration's interface is not the global it patches: `then` of
+    // `PromiseLike` is `Promise`'s, `call` of `CallableFunction` `Function`'s.
+    let container = match container {
+        "PromiseLike" => "Promise",
+        "CallableFunction" | "NewableFunction" => "Function",
+        container => container,
     };
     let mut hazards = vec![
         standard_patch(container, member),
@@ -937,7 +959,15 @@ pub(crate) fn patch_veto(qualified_name: &str) -> Vec<Hazard> {
             "",
             container.strip_suffix("Constructor").unwrap_or(container),
         ),
-        if owner.is_empty() || owner.ends_with("Constructor") {
+        // The window's own members live on the global: `window[k] = f` may be
+        // any of them (review D21).
+        if owner.is_empty()
+            || owner.ends_with("Constructor")
+            || matches!(
+                container,
+                "Window" | "WindowOrWorkerGlobalScope" | "AnimationFrameProvider"
+            )
+        {
             standard_patch("", ANY_MEMBER)
         } else {
             standard_patch(container, ANY_MEMBER)
@@ -2352,8 +2382,39 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     if !file.ast.exports.is_empty() {
         entries.push((Hazard::Export, 0));
     }
-    if crate::interproc::accessor_provenance::array_intrinsic_obtained(file) {
+    if !crate::execution_role::file_is_module(file) {
+        let declared = file
+            .ast
+            .functions
+            .iter()
+            .filter_map(|function| function.name.as_ref())
+            .chain(
+                file.ast
+                    .bindings
+                    .iter()
+                    .flat_map(|binding| binding.names.iter()),
+            );
+        for name in declared {
+            if let Some(text) = file
+                .source_text(name.span)
+                .filter(|text| text.starts_with("__"))
+            {
+                entries.push((classic_script_dunder(text), 0));
+            }
+        }
+    }
+    let (obtained, handed_calls) = crate::interproc::accessor_provenance::intrinsic_census(file);
+    if obtained {
         entries.push((Hazard::ArrayIntrinsicObtained, 0));
+    }
+    for call in handed_calls {
+        entries.push((Hazard::IntrinsicHandedAtCall, call));
+    }
+    for index in 0..file.window_valued_candidates().len() {
+        entries.push((
+            Hazard::WindowValuedCandidate,
+            u32::try_from(index).unwrap_or(u32::MAX),
+        ));
     }
     entries
 }

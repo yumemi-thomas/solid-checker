@@ -25,7 +25,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-forwarded",
+      "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
       "start": 807,

@@ -2194,7 +2194,7 @@ pub(crate) struct MemoReport {
 pub(crate) struct LookupMemos<'a> {
     store: StoreRef<'a>,
     table: FileTable,
-    begun: std::sync::OnceLock<BeginReport>,
+    begun: crate::once_guard::Once<BeginReport>,
 }
 
 impl<'a> LookupMemos<'a> {
@@ -2207,7 +2207,7 @@ impl<'a> LookupMemos<'a> {
         Self {
             store: StoreRef::Owned(store),
             table,
-            begun: std::sync::OnceLock::new(),
+            begun: crate::once_guard::Once::new(),
         }
     }
 
@@ -2216,7 +2216,7 @@ impl<'a> LookupMemos<'a> {
         Self {
             table: store.table(table),
             store: StoreRef::Shared(store),
-            begun: std::sync::OnceLock::new(),
+            begun: crate::once_guard::Once::new(),
         }
     }
 

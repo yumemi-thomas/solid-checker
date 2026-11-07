@@ -657,10 +657,10 @@ pub(crate) fn suppress<R>(f: impl FnOnce() -> R) -> R {
 /// R2, finding 7). So a fill made while probing goes to a cell only probes
 /// read, and the cache readers replay is filled outside every probe.
 pub(crate) struct Recorded<T> {
-    cell: OnceLock<(T, Arc<Reads>)>,
+    cell: crate::once_guard::Once<(T, Arc<Reads>)>,
     /// The value as a probe computed it, for probes asked before the cache
     /// is filled.
-    probed: OnceLock<T>,
+    probed: crate::once_guard::Once<T>,
 }
 
 impl<T> Default for Recorded<T> {
@@ -672,8 +672,8 @@ impl<T> Default for Recorded<T> {
 impl<T> Recorded<T> {
     pub(crate) const fn new() -> Self {
         Self {
-            cell: OnceLock::new(),
-            probed: OnceLock::new(),
+            cell: crate::once_guard::Once::new(),
+            probed: crate::once_guard::Once::new(),
         }
     }
 

@@ -357,6 +357,36 @@ pub(crate) fn project_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>
                 .any(|argument| argument.spread),
         ));
     }
+    declared_callee_in(world, file, call, index)
+}
+
+/// [`project_callee_at_parameter`] without the object-member index, for a
+/// question that index's own census depends on (ADR 0803 step 2:
+/// `handed_to_unseen_code` under member stability under the targets). A
+/// literal's method is exact here only by [`member_runs_declared_method`].
+pub(crate) fn declared_callee_at_parameter<'a>(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    declared_callee_in(lookup, file, call, index)
+}
+
+fn declared_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
     let declared = world
         .callee_symbol(file, call.callee)
         .and_then(|symbol| world.function_for_symbol(symbol));

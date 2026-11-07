@@ -39,6 +39,8 @@ test("every edit kind changes a representative file", () => {
   for (const [kind, edit] of Object.entries(EDIT_KINDS)) {
     // Needs a calling file on disk; tested below. A value mount has its own site.
     if (kind === "retype-return" || kind === "value-mount") continue;
+    // Each edits only the census fixture's wire.ts; tested below.
+    if (kind === "add-dunder-definer" || kind === "add-classic-declaration") continue;
     const next = edit({
       text: SAMPLE,
       path: "/p/Widget.tsx",
@@ -59,6 +61,17 @@ test("a value mount edit adds or removes the mount or its boundary, and only whe
   assert.ok(next.includes("<Errored"));
   assert.equal(EDIT_KINDS["value-mount"]({ ...ctx, text: next }), text);
   assert.equal(EDIT_KINDS["value-mount"]({ ...ctx, text: SAMPLE }), null);
+});
+
+test("the census family edits wire.ts only, and its classic edit drops the module marker", () => {
+  const text = "const a = 1;\nexport {};\n";
+  const edit = (kind, path) => EDIT_KINDS[kind]({ text, path, others: [], rand: seededRandom(3), serial: 4 });
+  for (const kind of ["add-dunder-definer", "add-classic-declaration"]) {
+    assert.equal(edit(kind, "/p/main.tsx"), null, kind);
+    assert.notEqual(edit(kind, "/p/wire.ts"), null, kind);
+  }
+  assert.ok(edit("add-dunder-definer", "/p/wire.ts").includes('"__log"'));
+  assert.ok(!edit("add-classic-declaration", "/p/wire.ts").includes("export"));
 });
 
 test("body keeps every byte offset; prefix shifts them; an import-free file has nothing to remove", () => {
