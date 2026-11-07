@@ -115,3 +115,11 @@ Ownership gate: passes (96 cases), with the case [86] edit. Each program was con
 - `push_defect` dedups by start byte, so order decides which row survives.
 - The d8 fixture route gives SC9005 (package source unavailable). Only the pattern lane exercises package globals.
 - Base binaries: `~/EDF/tmp/flipcarrier/base-wt` (b40d5d6a7, which has the memory fix e40429f5e).
+
+## Continuation (Codex, 2026-11-07)
+
+- `make verify` attempt `verify2.log` exited 2: builds-and-suites failed. Rust: 155 passed / 3 failed, all unchanged-repeat cache-hit assertions. Fuzz: 1098 passed / 4 failed: two executor startup deadlines, rewrite typecheck timeout, and one rediscovery code mismatch. No limits or assertions changed.
+- Split the rediscovery entry by runtime code (read ids under STRICT_READ_UNTRACKED, write ids under STORE_WRITE_OUTSIDE_SETTER). Added the escaped-read and escaped-write precision notes to their rule pages.
+- Re-ran `a_redirected_types_main_or_exports_field_is_resolved_again` alone under the heavy lock and 12 GB guard: exit 0 (1 passed). Router retries are queued behind another agent's heavy job.
+- Next: router retries; isolated executor/rewrite/rediscovery tests; verify-delta; verification handoff. Job 2 remains untouched.
+- The Next steps above predate the update and VM sections: sites, sweep, snapshots, ownership and VM t1 were already measured, as recorded there. Do not redo those without a changed semantic build.

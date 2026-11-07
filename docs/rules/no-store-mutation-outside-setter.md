@@ -9,6 +9,10 @@ A shallow store (`{ shallow: true }`) serves its values raw, so a write below it
 root lands on the raw object and warns nothing: silent, and a root write stays
 reported (ADR 0626).
 
+A write through an escaped store carries an SC9012 at the write site
+(ADR 0860), with the blocker from its escape, including a carrier or logical
+expression. The escape alone does not prove that the write targets a store.
+
 ## What it does
 
 **Props (2026-10-19).** A write through a 2.0 props object, or a `merge`/`omit`

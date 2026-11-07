@@ -5724,7 +5724,17 @@
    "mx-strict-read-untracked-body-use-global-apart-direct-none",
    "mx-strict-read-untracked-effect-apply-use-untrack-apart-direct-none",
    "mx-strict-read-untracked-root-use-self-apart-direct-none",
-   "mx-strict-read-untracked-body-use-store-map-apart-direct-none",
+   "mx-strict-read-untracked-body-use-store-map-apart-direct-none"
+  ],
+  "rediscovered": "the -apart ids in the sc VM (540 STRICT_READ_UNTRACKED, 72 STORE_WRITE_OUTSIDE_SETTER, Chrome confirmed): build b40d5d6a7 270 + 36 recall-gap with only a remote SC9012 (false cleans at the site); the escaped walk 0 remote (540 recall-gap at the site; 36 at the site, 36 agree). Legal twins (360): no false positive on either; 12 use-each-apart wrapper twins clean to uncertifiable. The 18 patterns: 0 of 18 with a row at the read, then 18 of 18. Package-global shapes (d8) are not generated: the grids carry no package; held by the pattern lane"
+ },
+ {
+  "finding": "a write through a store the census could not follow (a Map, ??) on a later line than its escape had no row at the write: the only SC9012 stood where the store escaped (STORE_WRITE_OUTSIDE_SETTER clean at its site)",
+  "found": "the integrator's site-aware judge (4c), 18 fuzz patterns",
+  "fixed": "ADR 0860, ADR 0862",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
    "mx-store-write-outside-setter-handler-sw-map-apart-direct-none",
    "mx-store-write-outside-setter-handler-sw-map-apart-direct-closure"
   ],
