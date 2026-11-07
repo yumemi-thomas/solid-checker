@@ -1726,6 +1726,16 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0857: whether the callback at `argument` is proven to run during the
+    /// call with the caller's observer still active, so a guard that throws on
+    /// an active observer (`resolve`, `until`) throws in it wherever it throws
+    /// at the call. Only probed slots answer; an inline slot that may set an
+    /// observer or clear it of its own (`render`'s root) does not.
+    fn inline_callback_keeps_observer(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the callback at `argument` clears tracking but keeps the strict
     /// -read window of the call that runs it (ADR 0443, `runWithOwner`). In a
     /// tracked computation such a call has no window, so the callback's read

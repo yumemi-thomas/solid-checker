@@ -1076,6 +1076,20 @@ fn resolve_tracked_scope(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
 ) -> Option<String> {
+    resolve_tracked_scope_within(file, call, allowed, context, ENTRY_DEPTH)
+}
+
+/// ADR 0857: how many calls [`resolve_tracked_scope_within`] follows out of
+/// the function that holds a `resolve`/`until` call.
+const ENTRY_DEPTH: usize = 4;
+
+fn resolve_tracked_scope_within(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    allowed: &[Span],
+    context: &StaticApiContext<'_>,
+    depth: usize,
+) -> Option<String> {
     // ADR 0612: the guard reads the observer, which no task past an await has.
     // Past one on some path nothing is proven ([`resolve_scope_unplaced`]).
     if crate::execution_role::past_suspension(file, call.span, context.lookup).is_some() {
@@ -1114,7 +1128,22 @@ fn resolve_tracked_scope(
                 )
             })
     {
-        let primitive = context.lookup.primitive_at_call(file, container.span)?;
+        let Some(primitive) = context.lookup.primitive_at_call(file, container.span) else {
+            // ADR 0857: a standard-library call that provably runs the
+            // literal inline runs it under the call's own observer.
+            return resolve_scope_of_entries(file, at, allowed, context, depth, true);
+        };
+        // ADR 0857: a callback proven to run during the call under the
+        // caller's observer (`flush(fn)`) runs where the call does.
+        if context
+            .lookup
+            .dialect
+            .inline_callback_keeps_observer(primitive, index)
+        {
+            return depth.checked_sub(1).and_then(|depth| {
+                resolve_tracked_scope_within(file, container, allowed, context, depth)
+            });
+        }
         let tracked = crate::owners::callback_execution_at_call(
             file,
             container,
@@ -1146,21 +1175,75 @@ fn resolve_tracked_scope(
     {
         return Some("the tracked compute callback named by its binding".to_owned());
     }
+    // ADR 0857: the climbed call runs where the layers land (`at`), so the
+    // tracked region and the role are asked there.
     let in_tracked_region = file
         .compiler
         .tracked_regions
         .iter()
-        .any(|region| region.span.contains(call.span));
-    (in_tracked_region
+        .any(|region| region.span.contains(at));
+    if in_tracked_region
         && crate::execution_role::semantic_execution_role(
             file,
-            call.span,
+            at,
             allowed,
             context.entities,
             context.symbol_names,
             context.lookup,
-        ) == crate::ExecutionRole::TrackedJsx)
-        .then(|| "tracked JSX".to_owned())
+        ) == crate::ExecutionRole::TrackedJsx
+    {
+        return Some("tracked JSX".to_owned());
+    }
+    resolve_scope_of_entries(file, at, allowed, context, depth, true)
+}
+
+/// ADR 0857: the tracked scope of a call that runs the function holding `at`
+/// (no function between them): a direct call of its binding, or a
+/// standard-library call proven to run it inline at least once
+/// (`[1].map(Row)`, `[1].forEach(() => …)`), each asked as the call itself
+/// is. One such entry under an observer is a run that throws, whatever the
+/// function's other entries are, a component's render among them.
+fn resolve_scope_of_entries(
+    file: &FileFacts,
+    at: Span,
+    allowed: &[Span],
+    context: &StaticApiContext<'_>,
+    depth: usize,
+    require_run: bool,
+) -> Option<String> {
+    use crate::local_access::HandOff;
+    let depth = depth.checked_sub(1)?;
+    let lookup = context.lookup;
+    let function = crate::owners::containing_body_function(&file.ast, at)?;
+    if function.generator || function.r#async || !lookup.function_value_is_current(file, function) {
+        return None;
+    }
+    let hand_offs = match crate::local_access::function_reference_hand_offs(file, function, lookup)
+    {
+        Some(named) => named,
+        None => vec![(
+            function.span,
+            crate::local_access::hand_off_at(file, function.span, lookup),
+        )],
+    };
+    hand_offs.into_iter().find_map(|(reference, hand_off)| {
+        let entry = match hand_off {
+            HandOff::Call => file.ast.calls.iter().find(|call| {
+                call.direct_callee
+                    && !call.construct
+                    && file.ast.peel_ts_sugar_span(call.callee) == reference
+            })?,
+            HandOff::Inline(carrier)
+                if !require_run
+                    || crate::carrier_runs::carrier_provably_runs(file, carrier, lookup) =>
+            {
+                file.ast.call_at(carrier)?
+            }
+            _ => return None,
+        };
+        resolve_tracked_scope_within(file, entry, allowed, context, depth)
+            .map(|scope| format!("{scope}, through the call that runs this function"))
+    })
 }
 
 /// Whether a `resolve`/`until` call that [`resolve_tracked_scope`] does not
@@ -1192,6 +1275,15 @@ fn resolve_scope_unplaced(
         Some(false) => return true,
         None => {}
     }
+    // ADR 0857: a call or a standard-library carrier that may run the function
+    // holding the call (an empty or unknown receiver too) under an observer:
+    // whether it runs is open.
+    let at = crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
+        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .map_or(call.span, |climb| climb.at);
+    if resolve_scope_of_entries(file, at, allowed, context, ENTRY_DEPTH, false).is_some() {
+        return true;
+    }
     // ADR 0517: a library callback on the way (`[1].forEach`) may run zero
     // times, so `resolve_tracked_scope` does not climb it; when the layers
     // beyond it reach a compute a tracked position names by its binding, the
@@ -1222,6 +1314,16 @@ fn resolve_scope_unplaced(
         let Some(primitive) = context.lookup.primitive_at_call(file, container.span) else {
             continue;
         };
+        // ADR 0857: a callback that runs during the call with the caller's
+        // listener (`flush(fn)`) is placed where the call is.
+        if crate::execution_role::callback_inherits_listener(
+            context.lookup.dialect,
+            primitive,
+            index,
+            container.arguments.len(),
+        ) {
+            return resolve_scope_unplaced(file, container, allowed, context);
+        }
         // ADR 0614: a `flush()` under a computation drains this callback with
         // that computation's observer active (ADR 0613).
         if context

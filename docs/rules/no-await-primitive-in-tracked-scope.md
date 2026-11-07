@@ -150,6 +150,11 @@ the value still will not update).
   **Past an await** of an async compute (its own, or one a layer's call follows)
   the guard's observer is gone: legal when the await dominates the call,
   **uncertifiable** when it only may (ADR 0612).
+  `flush(fn)` runs `fn` before it drains, with the caller's observer, so a call
+  in it answers where the `flush` runs; so does a function a direct call or a
+  standard-library call proven to run it (`[1].map(Row)`) runs, whatever else
+  enters it: a violation where that call is tracked (ADR 0857). An empty or
+  unknown receiver may run it zero times: **uncertifiable**.
   An action's first step answers to the action's calls, under whatever observer each runs (ADR 0614). So does a callback a `flush()` under a computation may drain, and an IIFE in a flow child's JSX: **uncertifiable**.
   Where nothing places the call at all, the finding is **uncertifiable**. So is a call in a closure a named memo compute hands on (`[1].forEach(hf)`, `run(hf)`; ADR 0585): never a proven deferral.
 - **`onSettled` / leaf owners.** `resolve()` passes the observer guard there,

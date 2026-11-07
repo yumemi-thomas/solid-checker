@@ -49,8 +49,9 @@
   "SC2003 store-operation-may-not-write": 19,
   "SC2003 store-write-unproven": 91,
   "SC2003 unproven-container-root": 107,
-  "SC2004 function-run-unplaced": 12,
-  "SC2005 function-run-unplaced": 4,
+  "SC2004 component-identity-unproven": 1,
+  "SC2004 function-run-unplaced": 11,
+  "SC2005 function-run-unplaced": 3,
   "SC2006 function-run-unplaced": 45,
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
@@ -313,6 +314,30 @@
     "proved": "reactive-ir/getter-parameter-read",
     "open": "reactive-ir/action-step-window"
    }
+  },
+  {
+   "key": "SC2004 function-run-unplaced",
+   "from": 12,
+   "to": 11,
+   "adr": "ADR 0857",
+   "proof": "rust/crates/solid-reactive-ir/src/static_api.rs::resolve_scope_of_entries",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-resolve-leaf",
+    "open": "reactive-ir/resolve-named-closure-unplaced"
+   },
+   "note": "Net of two proved, U to V (rc21-resolve-leaf helper(), resolve-named-closure-unplaced NamedForEach; Chrome rc.21 throws RESOLVE_IN_REACTIVE_SCOPE in both, probes flip-r3c cases/v1) and one added U (resolve-inline-entries Empty)"
+  },
+  {
+   "key": "SC2005 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 0857",
+   "proof": "rust/crates/solid-reactive-ir/src/static_api.rs::resolve_scope_of_entries",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-named-closure-unplaced",
+    "open": "reactive-ir/rc9-until-scope"
+   },
+   "note": "resolve-named-closure-unplaced AliasForEachUntil, U to V: [1].forEach(hf) provably runs hf in a compute a memo names through a const alias; Chrome rc.21 throws UNTIL_IN_REACTIVE_SCOPE (probe flip-r3c cases/v2)"
   }
  ],
  "renames": []
