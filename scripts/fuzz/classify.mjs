@@ -44,7 +44,29 @@ const rank = (verdict) => VERDICTS.indexOf(verdict);
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
 const lines = (positions) => (positions ?? []).map((position) => position.line);
 
-/** Diagnostics and coded thrown errors, one row per (code, innermost App position), repeats merged. */
+/**
+ * The identifier chain (`r1`, `s1.v`, `props.items`) through the 1-based (line, column) of a program's `lines`, or null: the source a report
+ * or a finding at that position reads or writes (a repeat's same-source test, offSiteVerdicts).
+ */
+export function sourceAt(lines, line, column) {
+  const row = Number.isInteger(line) && Number.isInteger(column) ? lines[line - 1] : undefined;
+  if (row === undefined || column < 1 || column > row.length) return null;
+  const part = /[\w$.]/;
+  let start = column - 1;
+  let end = column - 1;
+  if (!part.test(row[start])) return null;
+  while (start > 0 && part.test(row[start - 1])) start -= 1;
+  while (end + 1 < row.length && part.test(row[end + 1])) end += 1;
+  const chain = row.slice(start, end + 1).replace(/^\.+|\.+$/g, "");
+  // An operator keyword is not the source: `delete s1.v` starts at `delete`, Chrome's frame points into `s1.v`.
+  if (["delete", "void", "typeof", "await", "new"].includes(chain)) {
+    const next = row.slice(end + 1).search(/\S/);
+    return next < 0 ? null : sourceAt(lines, line, end + 2 + next);
+  }
+  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(chain) ? chain : null;
+}
+
+/** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
 export function runtimeEvents(runtime) {
   const rows = [];
   for (const diagnostic of runtime.diagnostics ?? []) {
@@ -58,7 +80,9 @@ export function runtimeEvents(runtime) {
   }
   const seen = new Set();
   return rows.filter((row) => {
-    const key = `${row.code}|${row.source}|${row.positions[0]?.line ?? "-"}`;
+    // The whole authored stack, not its innermost line: one read two calls run reports twice, with the calls as outer frames (Part 16:
+    // `f1(); f1();` merged to its first stack, and the checker's warning at the second call looked unconnected).
+    const key = `${row.code}|${row.source}|${row.positions.map((position) => `${position.file ?? ""}:${position.line}:${position.column ?? ""}`).join(">") || "-"}`;
     return !seen.has(key) && seen.add(key);
   });
 }
@@ -95,10 +119,16 @@ export function disturbances(runtime, plan) {
  *                   is in: registration.mjs);
  *   false-positive  the finding's lines ran (a site or glue counter above zero), the run was not disturbed, and the runtime reported no
  *                   code of the rule anywhere, placed or not: the same contradiction the legal grid's judge reads at its site;
- *   unconnected     a code of the rule is reported, but not on the finding's lines: the misuse's diagnostic may be the one the finding
- *                   means (a call the frames do not show). Counted, never a failure;
  *   unexecuted      the ledger shows the finding's lines never ran;
- *   unjudged        no runtime counterpart, no site or glue on its lines, no hit ledger, or a disturbed run.
+ *   unjudged        no runtime counterpart, no site or glue on its lines, or no hit ledger.
+ * A disturbed run (a throw, a halt) is judged the same way (coordinator, Part 16: 185 violations hid as `unjudged(disturbed)`), except:
+ *   stacked         the finding's lines ran and the runtime threw another code on them first (`first`), none of the rule's anywhere: a
+ *                   second claim behind Solid's first throw. A violation means "wrong if it runs", so it is no false positive by itself;
+ *                   matrix.mjs `judge` scores it `stacked-claim` only for a (first code, rule) pair a Chrome twin proves (stacked-pairs.json),
+ *                   a false positive otherwise;
+ *   stacked         (why `repeat`) the rule's code was reported, only off the finding's lines (once `unconnected`): that does not confirm
+ *                   this finding, but Solid reports some codes once, so it scores like a stacked claim, with the code reported as
+ *                   `first`. A report of the rule's code with no authored line may be this finding's: unjudged (`unplaced`), listed.
  * @returns {{ finding: string, verdict: string, why?: string }[]}
  */
 export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
@@ -129,24 +159,50 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     // anywhere in the file, it is the finding's (ADR 0641).
     const placeless = [...reported.map((event) => event.code), ...unattributedCodes(runtime).filter((code) => codes.includes(code))].some(isPlacelessCode);
     if (connected || placeless) return { finding: label, verdict: "substantiated" };
-    if (disturbed.length) return { finding: label, verdict: "unjudged", why: "disturbed" };
+    // A disturbed run: the verdict an undisturbed one would get, then what the disturbance changes (see above).
+    const atSpan = events.filter((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
+    const first = (atSpan.find((event) => event.source === "thrown") ?? atSpan[0])?.code ?? null;
+    // The rule's code reported only off these lines (`unconnected`) does not confirm this finding (coordinator, Part 16): a `repeat`, unless a
+    // report of it has no authored line, which may be this finding's (`unplaced`, unjudged).
+    const unplacedRuleCode = reported.some((event) => !appLines(event).length) || unattributedCodes(runtime).some((code) => codes.includes(code));
+    // Solid reports some codes once (a second untracked read after an await, a second store write): the code elsewhere may be this finding's
+    // too. A `repeat` (first = the code reported) scores like a stacked claim: proved only by a pair's twin (stacked.mjs), else false.
+    // Review of 1d6abdb80: a twin proves a code reports once per source, not that this finding reads the same one (`await x; a(); b();`
+    // warns per source). A repeat needs the first report to name the finding's accessor or store key: the identifier chain at Chrome's
+    // innermost authored frame equals the one at the finding's start (`r1`, `s1.v`). No text to read, or another source: a false positive.
+    const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
+    const sameSource = (event) => {
+      const at = event.positions.find((position) => position.file === "App.tsx" || position.file === undefined);
+      const one = sourceAt(text, at?.line, at?.column);
+      return Boolean(one) && one === sourceAt(text, finding.line, finding.column);
+    };
+    const elsewhere = reported.find((event) => appLines(event).length && sameSource(event))?.code ?? null;
+    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });
+    const halted = (verdict) => {
+      if (!disturbed.length) return verdict;
+      // A repeat stays one in a halted run (its pair needs the same twin); a stacked claim needs nothing of the rule reported anywhere.
+      if (verdict.verdict === "stacked" || verdict.why === "repeat-other-source") return { ...verdict, why: `disturbed-${verdict.why}` };
+      if (verdict.verdict === "false-positive") return first ? { finding: label, verdict: "stacked", first, why: "disturbed" } : { ...verdict, why: "disturbed" };
+      if (verdict.verdict === "unjudged") return { finding: label, verdict: "unjudged", why: `disturbed-${verdict.why}` };
+      return verdict;
+    };
     const covered = counted.filter((site) => inSpan(finding, site.line));
     // No counter on the line (a JSX tag or attribute): its host's entry says whether it ran (ADR 0641). The host is the innermost
     // function entry at or above the line; the ledger has no end lines, so a line after a closed closure takes the component's.
     if (!covered.length) {
       const host = hostEntry(built?.ledger, finding.line);
-      if (!host) return { finding: label, verdict: "unjudged", why: "no-site" };
+      if (!host) return halted({ finding: label, verdict: "unjudged", why: "no-site" });
       const entered = hitCount(hits, host.hit);
-      if (entered === null) return { finding: label, verdict: "unjudged", why: "no-hit-ledger" };
-      if (entered === 0) return { finding: label, verdict: "unexecuted", why: "host" };
-      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return { finding: label, verdict: "unconnected" };
-      return { finding: label, verdict: "false-positive", why: "host-ran" };
+      if (entered === null) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
+      if (entered === 0) return halted({ finding: label, verdict: "unexecuted", why: "host" });
+      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected());
+      return halted({ finding: label, verdict: "false-positive", why: "host-ran" });
     }
     const counts = covered.map((site) => hitCount(hits, site.hit));
-    if (counts.some((count) => count === null)) return { finding: label, verdict: "unjudged", why: "no-hit-ledger" };
-    if (counts.every((count) => count === 0)) return { finding: label, verdict: "unexecuted" };
-    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return { finding: label, verdict: "unconnected" };
-    return { finding: label, verdict: "false-positive" };
+    if (counts.some((count) => count === null)) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
+    if (counts.every((count) => count === 0)) return halted({ finding: label, verdict: "unexecuted" });
+    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected());
+    return halted({ finding: label, verdict: "false-positive" });
   });
 }
 

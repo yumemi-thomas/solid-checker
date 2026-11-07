@@ -1264,6 +1264,17 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": false
+  },
+  {
+   "id": "flip/sync-memo-jsx-read",
+   "item": "R-fp: async-outside-loading-boundary at a read of createMemo(async, { sync: true }) in JSX; Chrome reports SYNC_NODE_RECEIVED_ASYNC only (found by Part 16's stacked-pair twins; owner R2h)",
+   "outcome": "false-positive",
+   "codes": [
+    "SYNC_NODE_RECEIVED_ASYNC"
+   ],
+   "rules": [
+    "async-outside-loading-boundary"
+   ]
   }
  ],
  "notGenerated": [

@@ -2217,3 +2217,8 @@ B7: an `async` or generator handler on the flight was skipped. Its prefix runs i
 <a id="adr-0882"></a>
 ## ADR 0882 — `.then` with no exact standard declaration reads its handlers as obligations
 B8: a chain call whose callee resolves to no standard declaration (an `any` receiver, a thenable) returned with its handlers unread. A non-computed `then`/`catch`/`finally` now reads a readable handler as an obligation region (`HandlerMayNotRun`: it may run on the flight, inline, or never), any other handler as unresolved, and continues down the receiver's chain. Now uncertifiable: `aw-then-any` 16 (false clean on 0140ec6fb). `aw-then-cast` (`as unknown as Promise<number>`) was already exact: 16 agree before and after. Owners: `static_rules/after_await.rs`.
+
+<a id="adr-0887"></a>
+## ADR 0887 — A violation in a halted run is judged; a stacked one needs a Chrome twin
+
+The grid judge left every off-site violation in a run that threw `unjudged(disturbed)`: 185 on the pinned smoke, none counted. Now a disturbed run is judged like any other, with three changes. A violation whose lines ran while Solid threw another code there first is `stacked`: "wrong if it runs" holds, but the halt is no evidence, so it scores `stacked-claim` (listed by id with its pair, exact ratchet per pair, not a #173 blocker) only for a (first code, rule) pair `scripts/fuzz/stacked-pairs.json` proves with a pattern that removes the first throw and makes Chrome report a code of the rule; the patterns run checks every proof. An unproved pair, lines that ran with nothing of the rule anywhere, and the rule's code placed only off the lines are false positives. A line that never ran stays unexecuted; a rule code Chrome could not place stays unjudged.
