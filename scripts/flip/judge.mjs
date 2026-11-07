@@ -78,12 +78,20 @@ export function vanishedRows(base, rows, retired, decisions) {
     const changed = now ? keys.filter((key) => JSON.stringify(now[key]) !== JSON.stringify(was[key])) : null;
     if (changed && !changed.length) continue;
     const reason = reasons.get(id);
-    // A retired row for a row still there names the fields it excuses; any other changed field fails.
+    // A retired row for a row still there names the fields it excuses, and pins each one's value at the base (`from`) and now (`to`):
+    // an excuse covers that one change, never a later one. Any other changed field fails.
     if (changed && reason) {
       const named = Array.isArray(reason.fields) ? reason.fields : [];
       const unnamed = changed.filter((key) => !named.includes(key));
       if (unnamed.length) {
         out.push(`${id}: ${unnamed.join(", ")} changed, not named by its retired row's fields`);
+        continue;
+      }
+      // An absent field and `null` are one value: JSON holds no undefined.
+      const pinned = (pins, key, value) => Boolean(pins) && Object.hasOwn(pins, key) && JSON.stringify(pins[key] ?? null) === JSON.stringify(value ?? null);
+      const unpinned = changed.filter((key) => !pinned(reason.from, key, was[key]) || !pinned(reason.to, key, now[key]));
+      if (unpinned.length) {
+        out.push(`${id}: ${unpinned.join(", ")} changed, but its retired row does not pin that value at the base and now (from, to)`);
         continue;
       }
     }

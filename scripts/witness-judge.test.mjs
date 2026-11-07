@@ -95,5 +95,13 @@ test("every field of a row is compared, both ways, and a retired row of a row st
   assert.equal(vanishedRows({ x: row }, { x: { ...row, rule: "SC1003" } }, [], decisions).length, 1);
   assert.equal(vanishedRows({ x: row }, { x: closed }, [{ id: "x", adr: "ADR 0801", why: "w" }], decisions).length, 1);
   assert.equal(vanishedRows({ x: row }, { x: closed }, [{ id: "x", adr: "ADR 0801", why: "w", fields: ["closedBy"] }], decisions).length, 1);
-  assert.deepEqual(vanishedRows({ x: row }, { x: closed }, [{ id: "x", adr: "ADR 0801", why: "w", fields: ["closedBy", "closedAt"] }], decisions), []);
+  // The stricter gate (the W carrier brief, job 2): naming the fields is no longer enough, or the excuse would cover any later
+  // change to them too. It pins each field's value at the base (`from`) and now (`to`).
+  const named = { id: "x", adr: "ADR 0801", why: "w", fields: ["closedBy", "closedAt"] };
+  assert.equal(vanishedRows({ x: row }, { x: closed }, [named], decisions).length, 1);
+  const pinned = { ...named, from: { closedBy: null, closedAt: null }, to: { closedBy: closed.closedBy, closedAt: closed.closedAt } };
+  assert.deepEqual(vanishedRows({ x: row }, { x: closed }, [pinned], decisions), []);
+  // A later change to an excused field is no longer excused.
+  const moved = { ...closed, closedAt: { ...closed.closedAt, line: 4 } };
+  assert.equal(vanishedRows({ x: row }, { x: moved }, [pinned], decisions).length, 1);
 });
