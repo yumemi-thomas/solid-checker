@@ -477,6 +477,34 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0893: whether `primitive` fails with a plain `throw`, no diagnostic
+    /// emitted at the call: what says so is whatever reports the error.
+    fn plain_throw(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// ADR 0893: whether a throw in this tracked compute reaches a report by
+    /// itself. No other compute does: it stores the error for its reads.
+    fn compute_throw_reports(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// ADR 0893: whether a reporting compute's throw is logged where it runs,
+    /// past any boundary, rather than escalated to the nearest one.
+    fn compute_throw_logged(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// ADR 0893: whether this callback's caller takes every error the callback
+    /// throws.
+    fn callback_swallows_throw(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether this dialect's children-forbidden leaf callbacks
     /// ([`CallbackOwner::Leaf`]) are legal write/action regions.
     ///

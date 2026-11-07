@@ -24,6 +24,9 @@ pub(crate) const SEARCH_BUDGET_EXHAUSTED: &str = "search-budget-exhausted";
 /// ADR 0852: a throw rejects an async stepper's flight, whose error propagation
 /// to a read or error boundary is not proved.
 pub(crate) const ASYNC_FLIGHT_ERROR_UNOBSERVED: &str = "async-flight-error-unobserved";
+/// ADR 0893: a plain throw ends stored on a computation, or in a `try` or a
+/// handling boundary, and no read that reports it is proven.
+pub(crate) const COMPUTATION_ERROR_UNOBSERVED: &str = "computation-error-unobserved";
 
 // Track W.
 pub(crate) const SOLID_VERSION_UNCLASSIFIED: &str = "solid-version-unclassified";
@@ -222,6 +225,8 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
     if requirement.flight_error_unobserved {
         ASYNC_FLIGHT_ERROR_UNOBSERVED
+    } else if requirement.computation_error_unobserved {
+        COMPUTATION_ERROR_UNOBSERVED
     } else if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
     } else if requirement.owner_varies_by_caller {

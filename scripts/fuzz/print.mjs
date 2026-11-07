@@ -486,11 +486,14 @@ function render(program, instrument) {
     const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       // `lazy` (misuse.mjs `memo-lazy-*`): computed on its first read, not at creation.
-      case "memo": used.add("createMemo"); return `createMemo(${f}${e.lazy ? ", { lazy: true }" : ""})`;
+      // `creator` (flip-read.mjs `st-c-*`): another primitive that stores its compute's error, printed as a memo is.
+      case "memo": used.add(e.creator?.name ?? "createMemo"); return `${e.creator?.name ?? "createMemo"}(${f}${e.creator?.tail ?? ""}${e.lazy ? ", { lazy: true }" : ""})`;
       case "effect":
         used.add("createEffect");
         // `errorArm` (model.mjs): the compute throws once the signal reads 2; `fn` is the bundle's error handler.
         if (e.errorArm !== undefined) return `createEffect(() => { if (${e.errorArm}() === 2) throw new Error("x"); return 1; }, { effect: () => {}, error: ${f} })`;
+        // `errorBundle` (flip-read.mjs `st-effect-err-arm`): the compute's throw goes to the bundle's `error` arm.
+        if (e.errorBundle) return `createEffect(${f}, { effect: () => {}, error: () => {} })`;
         // `defer` (misuse.mjs `effect-apply-defer*`): the apply skips the first run and runs only when the compute reruns.
         return `createEffect(${f}, ${applyText(e.apply, depth)}${e.defer ? ", { defer: true }" : ""})`;
       case "reaction":

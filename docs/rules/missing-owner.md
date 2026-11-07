@@ -341,3 +341,5 @@ A package function whose same-operation creation calls cover every exit between 
   hand-on to `createRoot(fn)` runs under the root (`getOwner() ? fn() :
   createRoot(fn)` is clean); `!getOwner() ? fn() : …` runs it with no owner,
   a violation in a timer.
+
+A context read past an await in a compute that stores its error throws where only a read reports it; without a proven read it is `computation-error-unobserved`, not a violation (ADR 0893).

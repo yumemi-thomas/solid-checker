@@ -2266,6 +2266,45 @@ impl Dialect for Solid2 {
     /// the observer as the call had it. `dispatchAsInteraction`'s `fn` sees the
     /// caller's observer (probed, `callback_executions`). `render`'s code runs
     /// under the root it creates and was silent in tracked JSX.
+    /// ADR 0893 (rc.21 probes, 14 of 14): `resolve`, `until`, a static
+    /// `dynamic` source and `useContext` throw with no diagnostic. In
+    /// `dev-shared.js` every coded throw has an `emitDiagnostic` first, so it
+    /// reports at the call whether or not anything reads the error.
+    fn plain_throw(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::Resolve
+                | Primitive::Until
+                | Primitive::DynamicStatic
+                | Primitive::DynamicUnknownForm
+                | Primitive::UseContext
+        )
+    }
+
+    /// An effect's compute logs its throw; a render effect's goes to a
+    /// boundary or halts.
+    fn compute_throw_reports(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && matches!(
+                primitive,
+                Primitive::CreateEffect
+                    | Primitive::CreateRenderEffect
+                    | Primitive::CreateTrackedEffect
+            )
+    }
+
+    /// rc.21 `notifyEffectStatus`: only a user effect queues its error arm,
+    /// whose default logs; the others `escalate` to a boundary or halt.
+    fn compute_throw_logged(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateEffect
+    }
+
+    /// rc.21 `isPending`: `catch (e) { if (e instanceof NotReadyError && …)
+    /// throw e; … return probeFound; }`.
+    fn callback_swallows_throw(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::IsPending && argument == 0
+    }
+
     fn inline_callback_keeps_observer(&self, primitive: Primitive, argument: usize) -> bool {
         matches!(
             (primitive, argument),

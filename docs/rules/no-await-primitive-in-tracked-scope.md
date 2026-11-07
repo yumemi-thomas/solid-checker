@@ -188,3 +188,7 @@ the value still will not update).
   pending values are meant to be read
 
 A call in a layer of a function a memo or effect compute names by its binding runs under that compute's observer (ADR 0517).
+
+## A stored throw needs a read that reports it
+
+`resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893).

@@ -98,6 +98,7 @@ fn catalog_prose_program() -> Program {
         }],
         missing_owners: vec![OwnerRequirement {
             flight_error_unobserved: false,
+            computation_error_unobserved: false,
             operation: OwnerRequirementOperation::Cleanup,
             location: location(5),
             uncertain: false,

@@ -1239,6 +1239,10 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
             }
+            if operation.computation_error_unobserved {
+                crate::blockers::COMPUTATION_ERROR_UNOBSERVED
+                    .clone_into(&mut finding.analysis_context);
+            }
             if operation.identity_unproven {
                 finding.fixes.clear();
                 finding.analysis_context =

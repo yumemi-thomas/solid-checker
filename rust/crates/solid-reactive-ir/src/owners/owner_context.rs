@@ -687,6 +687,7 @@ pub(crate) fn push_owner_requirement(
             uncertain: status.uncertain || missing_jsx_census || constructed,
             runtime_uncertain: status.runtime_uncertain,
             flight_error_unobserved: status.flight_error_unobserved,
+            computation_error_unobserved: false,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
             owner_varies_by_caller: status.owner_varies_by_caller,

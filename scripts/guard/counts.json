@@ -51,6 +51,7 @@
   "SC2003 store-write-unproven": 91,
   "SC2003 unproven-container-root": 107,
   "SC2004 component-identity-unproven": 1,
+  "SC2004 computation-error-unobserved": 15,
   "SC2004 function-run-unplaced": 11,
   "SC2004 search-depth-limit": 1,
   "SC2005 function-run-unplaced": 3,
@@ -67,7 +68,8 @@
   "SC3001 refused-creation-unrun": 1,
   "SC4001 async-flight-error-unobserved": 4,
   "SC4001 component-identity-unproven": 2,
-  "SC4001 function-run-unplaced": 171,
+  "SC4001 computation-error-unobserved": 1,
+  "SC4001 function-run-unplaced": 172,
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 57,
@@ -76,9 +78,10 @@
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 7,
   "SC4001 owner-unproven": 13,
-  "SC4001 owner-varies-by-caller": 76,
+  "SC4001 owner-varies-by-caller": 77,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 1,
+  "SC4002 computation-error-unobserved": 8,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
   "SC4002 owner-unproven": 4,
@@ -103,14 +106,14 @@
   "SC5003 call-attributed-read": 54,
   "SC5003 carrier-run-unproven": 1,
   "SC5003 mount-form-window": 2,
-  "SC5003 mount-unresolved": 340,
+  "SC5003 mount-unresolved": 344,
   "SC5003 root-mount-pass-unproven": 37,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
   "SC5006 function-run-unplaced": 3,
   "SC5006 loading-hold-unproven": 4,
   "SC5007 loading-on-value-unproven": 8,
-  "SC5008 caught-read-unproven": 13,
+  "SC5008 caught-read-unproven": 14,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
   "SC6002 effect-owner-unproven": 21,
@@ -364,6 +367,18 @@
     "open": "reactive-ir/rc9-until-scope"
    },
    "note": "resolve-named-closure-unplaced AliasForEachUntil, U to V: [1].forEach(hf) provably runs hf in a compute a memo names through a const alias; Chrome rc.21 throws UNTIL_IN_REACTIVE_SCOPE (probe flip-r3c cases/v2)"
+  },
+  {
+   "key": "SC1001 callee-callback-timing",
+   "from": 403,
+   "to": 402,
+   "adr": "ADR 0851",
+   "proof": "rust/crates/solid-reactive-ir/src/owners.rs::generator_creations",
+   "fixtures": {
+    "proved": "reactive-ir/generator-step-owner",
+    "open": "reactive-ir/helper-prop-read"
+   },
+   "note": "Not a proof and not a rename: a relabel, still uncertifiable at the same span. helper-prop-read GeneratorHelper's `yield props.value` (start 7847): callee-callback-timing -> SC1001 function-run-unplaced under ADR 0851 (a generator's creating call runs none of its body; its steps are placed by generator_creations). The key's other 6 rows in helper-prop-read stay. Same row as origin/claude/flip-census, from this branch's count."
   }
  ],
  "renames": []

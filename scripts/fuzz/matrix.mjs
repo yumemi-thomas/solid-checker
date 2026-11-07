@@ -21,6 +21,7 @@
 //   node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--chrome-sample 3] [--shrink] [--baseline matrix.json] [--checker-label <commit>] [--all-cores]
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { STORED_ASYNC_CONTEXTS, STORED_CONTEXTS } from "./flip-read.mjs";
 import { guardGridExit, partialRows } from "./partial.mjs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
@@ -281,7 +282,12 @@ export const LEAN_DEMOTED = {
   mounts: ["show-fallback", "show-keyed", "for-signal", "for-unkeyed", "for-fallback", "switch", "repeat", "loading", "loading-on", "errored", "portal"],
   callbacks: ["function", "let"],
 };
-export function recallAxes(code, context, base, variants, { legal = false, lean = true } = {}) {
+export function recallAxes(code, context, base, variants, options = {}) {
+  const shapes = recallShapesOf(code, context, base, variants, options);
+  // ADR 0893: `st-unread` takes every layer around the site, on the direct binding: a layer the walk cannot follow is its question.
+  return context === "st-unread" ? shapes.filter((shape) => shape.binding === "direct") : shapes;
+}
+function recallShapesOf(code, context, base, variants, { legal = false, lean = true } = {}) {
   // A recall-only code has no base grid: its `legal` contexts are recall cells too.
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context) || (legal && SPEC[code].recallOnly && SPEC[code].legal?.includes(context));
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
@@ -293,6 +299,8 @@ export function recallAxes(code, context, base, variants, { legal = false, lean 
   // and the recall axes, crossed on the base contexts already, would multiply it about twentyfold. So do the lazy-memo, deferred-apply,
   // later-fire, named-handler and never-run contexts (misuse.mjs BASE_ONLY_CONTEXTS): their question is the host's run, not the
   // spelling around the site.
+  // ADR 0893: the question of a stored-error context is its reader or its compute.
+  if ((STORED_CONTEXTS.includes(context) || STORED_ASYNC_CONTEXTS.includes(context)) && context !== "st-unread") return shapes.filter((shape) => shape.binding === "direct" && shape.layer === "none");
   if (CBP_CONTEXTS.includes(context) || BASE_ONLY_CONTEXTS().includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall

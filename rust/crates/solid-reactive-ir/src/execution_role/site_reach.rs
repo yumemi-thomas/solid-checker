@@ -904,21 +904,7 @@ impl SiteReach<'_, '_> {
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
-        use solid_facts::ast::BindingShape;
-        let Some(binding) = file
-            .ast
-            .bindings
-            .iter()
-            .find(|binding| binding.call_initializer == Some(call.span) && binding.immutable)
-        else {
-            return false;
-        };
-        let accessor = match binding.shape {
-            BindingShape::Identifier => binding.names.first(),
-            BindingShape::Array => binding.array_slots.first().and_then(Option::as_ref),
-            _ => None,
-        };
-        let Some(accessor) = accessor else {
+        let Some(accessor) = computation_accessor(file, call) else {
             return false;
         };
         file.ast
@@ -931,11 +917,30 @@ impl SiteReach<'_, '_> {
     }
 }
 
+/// The `const` a computation's accessor is bound to: the identifier, or the
+/// first slot of an array pattern.
+pub(crate) fn computation_accessor<'f>(
+    file: &'f solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'f solid_facts::ast::NamedSpan> {
+    use solid_facts::ast::BindingShape;
+    let binding = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.call_initializer == Some(call.span) && binding.immutable)?;
+    match binding.shape {
+        BindingShape::Identifier => binding.names.first(),
+        BindingShape::Array => binding.array_slots.first().and_then(Option::as_ref),
+        _ => None,
+    }
+}
+
 /// ADR 0576: the call that creates a lazy computation whose callback is the
 /// value at `value`: its first argument (no spread) of a primitive whose
 /// [`solid_dialect::Dialect::lazy_option_argument`] is not proven absent or
 /// `false` (an unknown option may be lazy).
-fn lazy_creation<'f>(
+pub(crate) fn lazy_creation<'f>(
     file: &'f solid_facts::FileFacts,
     value: Span,
     lookup: &SemanticLookup<'_>,
