@@ -351,6 +351,24 @@ pub(super) fn call_owner_edge(
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> OwnerEdgeKind {
+    // ADR 0888: a call in the rest of a block an await of its own function
+    // dominates runs on that function's continuation on every run, where no
+    // owner is current (ADR 0352): the callee gains no owned run from it. A
+    // possible owned run kept here was read as a proven one (ADR 0577's
+    // owned-run throw). A caller that never runs resumes nothing. Not where
+    // the function probes `getOwner()` at all: a guard around the call
+    // (`if (getOwner()) run(…)`) skips it with no owner (as ADR 0493's climb).
+    if crate::execution_role::follows_dominating_await(file, site)
+        && !crate::owners::owning_function(&file.ast, site).is_some_and(|outer| {
+            file.ast.calls.iter().any(|call| {
+                outer.span.contains(call.span)
+                    && lookup.primitive_at_call(file, call.span)
+                        == Some(solid_dialect::Primitive::GetOwner)
+            })
+        })
+    {
+        return OwnerEdgeKind::ResumesUnowned;
+    }
     if crate::execution_role::may_follow_own_await(file, site) {
         return OwnerEdgeKind::MayResumeUnowned;
     }

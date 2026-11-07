@@ -2183,6 +2183,10 @@ B7: an `async` or generator handler on the flight was skipped. Its prefix runs i
 ## ADR 0882 — `.then` with no exact standard declaration reads its handlers as obligations
 B8: a chain call whose callee resolves to no standard declaration (an `any` receiver, a thenable) returned with its handlers unread. A non-computed `then`/`catch`/`finally` now reads a readable handler as an obligation region (`HandlerMayNotRun`: it may run on the flight, inline, or never), any other handler as unresolved, and continues down the receiver's chain. Now uncertifiable: `aw-then-any` 16 (false clean on 0140ec6fb). `aw-then-cast` (`as unknown as Promise<number>`) was already exact: 16 agree before and after. Owners: `static_rules/after_await.rs`.
 
+<a id="adr-0888"></a>
+## ADR 0888 — A call past a dominating await gives its callee no owned run
+Part 16 FP `aw-helper-late`: `call_owner_edge` gave a call in the rest of a block an await of its own async function dominates a `MayResumeUnowned` edge, which keeps the caller's owned bit, and ADR 0577's owned-run throw read that bit as a proven owned run (SC4002 V where rc.21 throws `NoOwnerError`). Such a call now takes `ResumesUnowned` (a caller that never runs resumes nothing). Not where the function probes `getOwner()` (as ADR 0493's climb). The row passes only once the judge reads Solid's class-named console errors (`NoOwnerError: …`, logged by the reading effect), the judge owner's change. Fixture `context-callee-past-await`. Owner: `owners/owner_context.rs`.
+
 <a id="adr-0851"></a>
 ## ADR 0851 — Generator steps carry the owner and execution role
 
