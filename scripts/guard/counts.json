@@ -81,7 +81,7 @@
   "SC4001 owner-varies-by-caller": 77,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 1,
-  "SC4002 computation-error-unobserved": 8,
+  "SC4002 computation-error-unobserved": 5,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
   "SC4002 owner-unproven": 4,
@@ -379,6 +379,18 @@
     "open": "reactive-ir/helper-prop-read"
    },
    "note": "Not a proof and not a rename: a relabel, still uncertifiable at the same span. helper-prop-read GeneratorHelper's `yield props.value` (start 7847): callee-callback-timing -> SC1001 function-run-unplaced under ADR 0851 (a generator's creating call runs none of its body; its steps are placed by generator_creations). The key's other 6 rows in helper-prop-read stay. Same row as origin/claude/flip-census, from this branch's count."
+  },
+  {
+   "key": "SC4002 computation-error-unobserved",
+   "from": 8,
+   "to": 5,
+   "adr": "ADR 0893",
+   "proof": "rust/crates/solid-reactive-ir/src/stored_throw.rs::holder_reports",
+   "fixtures": {
+    "proved": "reactive-ir/owner-callback-prop",
+    "open": "reactive-ir/stored-throw-observation"
+   },
+   "note": "Proved, U to V: owner-callback-prop BodyCall, DestructuredCall and JsxCall: the holder's body is followed to a direct call of the prop, in a component body, and Chrome throws ContextNotFoundError. The twin PropRunInChildTry, a try around that call, stays U."
   }
  ],
  "renames": []
