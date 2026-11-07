@@ -473,6 +473,9 @@ enum Slot {
     /// An argument [`read_only_builtin`] names by its spelling: the project
     /// decides whether the member is still the standard one (review R19b).
     ReadOnlyBuiltin,
+    /// `path.find((el) => el instanceof Node && ...)`: no window comes back
+    /// while `Node` and `instanceof` are the standard ones.
+    PathFind,
 }
 
 fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
@@ -612,7 +615,15 @@ fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
             && !file.ast.type_names.contains(&identifier.span)
             && !in_type_query(identifier.span)
             && !callees.contains_key(&identifier.span)
-            && handed(identifier.span, Obtained::Function)
+            && match logical_timer_call(file, identifier.span) {
+                Some(call) => {
+                    at_calls
+                        .borrow_mut()
+                        .push((call, Slot::TimerCallback, Obtained::Global));
+                    false
+                }
+                None => handed(identifier.span, Obtained::Function),
+            }
     }) || file.ast.calls.iter().any(|call| {
         // Review R19e: a bubbling event's path ends at the window.
         file.ast
@@ -822,19 +833,189 @@ fn listener_reaches_nothing(file: &FileFacts, function: &ast::FunctionFact) -> b
                     .is_some_and(|text| names.contains(&text))
         })
     };
-    function.parameters.iter().all(|parameter| {
-        parameter.shape == ast::BindingShape::Identifier
-            && parameter.names.iter().all(|name| !referenced(name.span))
-    }) && function
-        .rest_parameter_names
+    function
+        .parameters
         .iter()
-        .all(|name| !referenced(name.span))
+        .enumerate()
+        .all(|(index, parameter)| {
+            parameter.shape == ast::BindingShape::Identifier
+                && parameter.names.iter().all(|name| {
+                    !referenced(name.span) || (index == 0 && event_only_read(file, name.span))
+                })
+        })
+        && function
+            .rest_parameter_names
+            .iter()
+            .all(|name| !referenced(name.span))
         && !within(&["eval", "Function"])
         && (function.kind == ast::FunctionKind::Arrow
             || (file
                 .source_text(function.span)
                 .is_some_and(|text| !crate::execution_role::mentions_receiver(text))
                 && !within(&["arguments"])))
+}
+
+/// What a listener may read of its event: facts about the input, and the
+/// methods that only flag the event. None of them is or holds the window;
+/// `detail` is what the program put there, and the window put anywhere is
+/// counted where it is put. Closed: `target`, `currentTarget`, `view`,
+/// `source`, `composedPath`, `srcElement`, `relatedTarget` and any other key
+/// may reach it.
+const EVENT_READS: &[&str] = &[
+    "altKey",
+    "button",
+    "buttons",
+    "clientX",
+    "clientY",
+    "code",
+    "ctrlKey",
+    "defaultPrevented",
+    "deltaMode",
+    "deltaX",
+    "deltaY",
+    "deltaZ",
+    "detail",
+    "isComposing",
+    "isTrusted",
+    "key",
+    "metaKey",
+    "movementX",
+    "movementY",
+    "newValue",
+    "offsetX",
+    "offsetY",
+    "oldValue",
+    "pageX",
+    "pageY",
+    "persisted",
+    "pointerId",
+    "pointerType",
+    "preventDefault",
+    "repeat",
+    "screenX",
+    "screenY",
+    "shiftKey",
+    "stopImmediatePropagation",
+    "stopPropagation",
+    "timeStamp",
+    "type",
+];
+
+/// Whether every reference to the event parameter named at `name` only tests
+/// it, compares it, or reads one of [`EVENT_READS`] by a literal key (review
+/// D21, T3). A write through it or a hand-on is none of these.
+fn event_only_read(file: &FileFacts, name: Span) -> bool {
+    file.ast.identifiers.iter().all(|identifier| {
+        identifier.role != ast::IdentifierRole::Reference
+            || identifier.span == name
+            || file.ast.reference_declaration(identifier.span) != Some(name)
+            || only_compared(file, identifier.span)
+            || tested(file, identifier.span)
+            || file
+                .ast
+                .members
+                .iter()
+                .find(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
+                .is_some_and(|member| {
+                    member_key(file, member).is_some_and(|key| EVENT_READS.contains(&key))
+                        && !file
+                            .ast
+                            .write_targets
+                            .iter()
+                            .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+                })
+    })
+}
+
+/// The timers and frame requests the platform calls one callback from.
+const TIMER_CALLERS: [&str; 4] = [
+    "setTimeout",
+    "setInterval",
+    "requestAnimationFrame",
+    "requestIdleCallback",
+];
+
+/// The platform's name for the operand at `span`: a global timer, or one read
+/// off the global object.
+fn timer_operand(file: &FileFacts, span: Span) -> Option<&str> {
+    let span = file.ast.peel_ts_sugar_span(span);
+    let name = global_name(file, span).or_else(|| {
+        let member = file.ast.member_at(span)?;
+        global_name(file, file.ast.peel_ts_sugar_span(member.object))
+            .filter(|name| WINDOW_NAMES.contains(name))?;
+        member_key(file, member)
+    })?;
+    TIMER_CALLERS.contains(&name).then_some(name)
+}
+
+/// `(window.requestIdleCallback || setTimeout)(f)`: the call whose callee is a
+/// logical of two platform timers, one of them at `span` (review D21, T3: each
+/// arm passes by itself).
+fn logical_timer_call(file: &FileFacts, span: Span) -> Option<Span> {
+    let logical = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|logical| logical.left == span || logical.right == span)?;
+    timer_operand(file, logical.left)?;
+    timer_operand(file, logical.right)?;
+    file.ast
+        .calls
+        .iter()
+        .find(|call| file.ast.peel_ts_sugar_span(call.callee) == logical.span)
+        .map(|call| call.span)
+}
+
+/// The two names of [`logical_timer_call`]'s callee, for the project's check
+/// that neither was written.
+fn logical_timer_keys<'a>(file: &'a FileFacts, call: &ast::CallFact) -> Vec<&'a str> {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    file.ast
+        .logical_expressions
+        .iter()
+        .find(|logical| logical.span == callee)
+        .map(|logical| {
+            [logical.left, logical.right]
+                .into_iter()
+                .filter_map(|span| timer_operand(file, span))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `(el) => el instanceof Node && ...`, the test first and nothing that can
+/// answer without it: what `find` returns is a `Node` or nothing, and the
+/// window is no `Node` (review D21, T3).
+fn callback_guards_node(file: &FileFacts, call: &ast::CallFact) -> bool {
+    let Some(function) = call
+        .arguments
+        .first()
+        .filter(|argument| !argument.spread)
+        .and_then(|argument| function_literal(file, argument.span))
+    else {
+        return false;
+    };
+    let ([parameter], true) = (
+        function.parameters.as_slice(),
+        function.kind == ast::FunctionKind::Arrow && function.rest_parameter_names.is_empty(),
+    ) else {
+        return false;
+    };
+    let ([name], ast::BindingShape::Identifier) = (parameter.names.as_slice(), parameter.shape)
+    else {
+        return false;
+    };
+    let (Some(parameter), Some(body)) =
+        (file.source_text(name.span), file.source_text(function.body))
+    else {
+        return false;
+    };
+    let guard = format!("{parameter} instanceof Node &&");
+    let node_is_global = file.ast.identifiers.iter().any(|identifier| {
+        function.body.contains(identifier.span)
+            && global_name(file, identifier.span) == Some("Node")
+    });
+    body.starts_with(&guard) && !body.contains(['|', '?']) && node_is_global
 }
 
 /// The global object's own names.
@@ -872,9 +1053,9 @@ enum Obtained {
 }
 
 /// [`crate::base::Hazard::IntrinsicHandedAtCall`]'s value: the call's ordinal,
-/// what it receives, and where: an argument (60 and up as 60: past any
-/// parameter a function names, so a rest parameter's or none's), 61 a
-/// read-only builtin's, 62 a timer's callback, 63 the receiver.
+/// what it receives, and where: an argument (59 and up as 59: past any
+/// parameter a function names, so a rest parameter's or none's), 60 a path's
+/// `find`, 61 a read-only builtin's, 62 a timer's callback, 63 the receiver.
 fn handed_call_entry(ordinal: u32, slot: Slot, kind: Obtained) -> u32 {
     let kind = match kind {
         Obtained::Intrinsic => 0,
@@ -883,7 +1064,8 @@ fn handed_call_entry(ordinal: u32, slot: Slot, kind: Obtained) -> u32 {
         Obtained::Path => 3,
     };
     let slot = match slot {
-        Slot::Argument(index) => u32::try_from(index.min(ARGUMENT_CAP)).unwrap_or(60),
+        Slot::Argument(index) => u32::try_from(index.min(ARGUMENT_CAP)).unwrap_or(59),
+        Slot::PathFind => 60,
         Slot::ReadOnlyBuiltin => 61,
         Slot::TimerCallback => 62,
         Slot::This => 63,
@@ -892,7 +1074,7 @@ fn handed_call_entry(ordinal: u32, slot: Slot, kind: Obtained) -> u32 {
 }
 
 /// The last argument index [`handed_call_entry`] tells apart.
-const ARGUMENT_CAP: usize = 60;
+const ARGUMENT_CAP: usize = 59;
 
 fn handed_call_of(entry: u32) -> (usize, Slot, Obtained) {
     let kind = match (entry >> 6) & 3 {
@@ -902,6 +1084,7 @@ fn handed_call_of(entry: u32) -> (usize, Slot, Obtained) {
         _ => Obtained::Path,
     };
     let slot = match entry & 63 {
+        60 => Slot::PathFind,
         61 => Slot::ReadOnlyBuiltin,
         62 => Slot::TimerCallback,
         63 => Slot::This,
@@ -926,7 +1109,7 @@ pub(crate) fn handed_to_unseen_code(lookup: &SemanticLookup<'_>) -> bool {
                 crate::base::Hazard::IntrinsicHandedAtCall => {
                     let (ordinal, slot, kind) = handed_call_of(*entry);
                     file.ast.calls.get(ordinal).is_none_or(|call| {
-                        !received_by_seen_code(lookup, file, call, slot, kind, SEEN_DEPTH)
+                        !received_by_seen_code(lookup, file, call, slot, kind, SEEN_DEPTH, None)
                     })
                 }
                 crate::base::Hazard::WindowValuedCandidate => candidates
@@ -971,7 +1154,7 @@ fn window_handed_to_unseen_code(lookup: &SemanticLookup<'_>, file: &FileFacts, s
     } else {
         handed_on(file, span, Obtained::Global, HANDED_BUDGET, &nested)
     };
-    handed || !nested_calls_seen(lookup, file, &nested, SEEN_DEPTH)
+    handed || !nested_calls_seen(lookup, file, &nested, SEEN_DEPTH, None)
 }
 
 /// Whether some reference to the binding named at `name` hands a value of
@@ -996,13 +1179,16 @@ fn nested_calls_seen(
     file: &FileFacts,
     nested: &AtCalls,
     depth: usize,
+    frame: Option<&Frame<'_>>,
 ) -> bool {
     nested.borrow().iter().all(|(span, slot, kind)| {
         file.ast
             .calls
             .iter()
             .find(|call| call.span == *span)
-            .is_some_and(|call| received_by_seen_code(lookup, file, call, *slot, *kind, depth))
+            .is_some_and(|call| {
+                received_by_seen_code(lookup, file, call, *slot, *kind, depth, frame)
+            })
     })
 }
 
@@ -1016,6 +1202,7 @@ fn received_by_seen_code(
     slot: Slot,
     kind: Obtained,
     depth: usize,
+    frame: Option<&Frame<'_>>,
 ) -> bool {
     match slot {
         // A timer calls a function callback with the window as `this` (review
@@ -1026,18 +1213,39 @@ fn received_by_seen_code(
                 .ast
                 .member_at(file.ast.peel_ts_sugar_span(call.callee))
                 .map(|member| member_key(file, member));
+            let logical = logical_timer_keys(file, call);
             return member
                 .is_none_or(|name| name.is_some_and(|name| standard_member_intact(lookup, name)))
-                && (function_at(lookup, file, call, 0).is_some_and(|(callee_file, function)| {
-                    function.kind == ast::FunctionKind::Arrow
-                        || callee_file
-                            .source_text(function.span)
-                            .is_some_and(|text| !crate::execution_role::mentions_receiver(text))
-                }) || timer_runs_promise_settler(lookup, file, call));
+                && logical
+                    .iter()
+                    .all(|name| standard_member_intact(lookup, name))
+                && (argument_seen(
+                    lookup,
+                    file,
+                    call,
+                    0,
+                    frame,
+                    depth,
+                    &|callee_file, function| {
+                        function.kind == ast::FunctionKind::Arrow
+                            || callee_file
+                                .source_text(function.span)
+                                .is_some_and(|text| !crate::execution_role::mentions_receiver(text))
+                    },
+                ) || timer_runs_promise_settler(lookup, file, call));
         }
         Slot::ReadOnlyBuiltin => {
             return read_only_builtin(file, call)
                 .is_some_and(|name| standard_member_intact(lookup, &name));
+        }
+        Slot::PathFind => {
+            return [
+                "Node",
+                "NodeConstructor.hasInstance",
+                "Function.hasInstance",
+            ]
+            .iter()
+            .all(|name| standard_member_intact(lookup, name));
         }
         Slot::This | Slot::Argument(_) => {}
     }
@@ -1053,17 +1261,35 @@ fn received_by_seen_code(
         // A method run with the value as `this`: seen only for a closed list
         // of the window's methods that call nothing with it, and a listener
         // that can reach neither its `this` nor its event (review D3).
-        return standard.is_some_and(|declaration| {
-            let name = declaration.qualified_name.as_ref();
+        // The value is the window, so with no declaration (a dependency's
+        // untyped parameter) its method is the window's by key.
+        let name = standard
+            .map(|declaration| declaration.qualified_name.as_ref())
+            .or_else(|| {
+                let member = file
+                    .ast
+                    .member_at(file.ast.peel_ts_sugar_span(call.callee))?;
+                (kind == Obtained::Global
+                    && lookup
+                        .resolved_callee_call(file, call.callee)
+                        .is_none_or(|resolved| resolved.declaration.is_none()))
+                .then(|| member_key(file, member))
+                .flatten()
+            });
+        return name.is_some_and(|name| {
             standard_member_intact(lookup, name)
                 && (!name.ends_with("dispatchEvent")
                     || dispatched_event_stays_inline(lookup, file, call))
                 && (THIS_SEEN.iter().any(|(seen, _)| *seen == name)
                     || (LISTENER_ADDERS.contains(&name)
-                        && function_at(lookup, file, call, 1).is_some_and(
-                            |(callee_file, function)| {
-                                listener_reaches_nothing(callee_file, function)
-                            },
+                        && argument_seen(
+                            lookup,
+                            file,
+                            call,
+                            1,
+                            frame,
+                            depth,
+                            &listener_reaches_nothing,
                         )))
         });
     };
@@ -1100,7 +1326,21 @@ fn received_by_seen_code(
         let Some((callee_file, function)) = function_value_at(lookup, file, member.object) else {
             return false;
         };
-        return parameter_hands_nothing(lookup, callee_file, function, argument - 1, kind, depth);
+        let called = Called {
+            file,
+            call,
+            shift: 1,
+            parent: frame,
+        };
+        return parameter_hands_nothing(
+            lookup,
+            callee_file,
+            function,
+            argument - 1,
+            kind,
+            depth,
+            called,
+        );
     }
     if depth == 0 {
         return false;
@@ -1113,7 +1353,324 @@ fn received_by_seen_code(
     else {
         return false;
     };
-    parameter_hands_nothing(lookup, callee_file, function, argument, kind, depth)
+    let called = Called {
+        file,
+        call,
+        shift: 0,
+        parent: frame,
+    };
+    parameter_hands_nothing(lookup, callee_file, function, argument, kind, depth, called)
+}
+
+/// The call a followed function was entered by: what its parameters hold at
+/// the one call that hands the window on (review D21's T2, by call rather than
+/// by every caller: another call with another target hands no window).
+#[derive(Clone, Copy)]
+struct Called<'f> {
+    file: &'f FileFacts,
+    call: &'f ast::CallFact,
+    /// How many leading arguments no parameter takes (`call`'s `this`).
+    shift: usize,
+    parent: Option<&'f Frame<'f>>,
+}
+
+/// A followed function and the call that entered it.
+struct Frame<'f> {
+    function: &'f ast::FunctionFact,
+    called: Called<'f>,
+}
+
+/// Decides one function a platform caller may call.
+type CallbackTest<'t> = &'t dyn Fn(&FileFacts, &ast::FunctionFact) -> bool;
+
+/// Whether the call's argument at `index` is a callback `test` passes.
+fn argument_seen(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+    index: usize,
+    frame: Option<&Frame<'_>>,
+    depth: usize,
+    test: CallbackTest<'_>,
+) -> bool {
+    !call
+        .arguments
+        .iter()
+        .take(index + 1)
+        .any(|argument| argument.spread)
+        && call
+            .arguments
+            .get(index)
+            .is_some_and(|argument| callback_seen(lookup, file, argument.span, frame, depth, test))
+}
+
+/// Whether every function the value at `span` may be passes `test`: a literal,
+/// a name that holds one now, either branch of a conditional, `null` or
+/// `undefined`, what a function returns on each of its paths, or a parameter
+/// by what the entering call gave it. Anything else may be any function.
+fn callback_seen(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+    frame: Option<&Frame<'_>>,
+    depth: usize,
+    test: CallbackTest<'_>,
+) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(function) = function_literal(file, span) {
+        return test(file, function);
+    }
+    if matches!(file.source_text(span), Some("null" | "undefined"))
+        && file.ast.reference_declaration(span).is_none()
+    {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    if let Some(conditional) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|conditional| conditional.span == span)
+    {
+        return callback_seen(lookup, file, conditional.consequent, frame, depth - 1, test)
+            && callback_seen(lookup, file, conditional.alternate, frame, depth - 1, test);
+    }
+    if let Some(inner) = file.ast.call_at(span).filter(|inner| !inner.construct) {
+        return call_result_seen(lookup, file, inner, frame, depth, test);
+    }
+    if let Some(frame) = frame
+        && let Some(declaration) = file.ast.reference_declaration(span)
+        && frame.function.span.contains(declaration)
+        && let Some(argument) = parameter_argument(file, frame, declaration)
+    {
+        return callback_seen(
+            lookup,
+            frame.called.file,
+            argument,
+            frame.called.parent,
+            depth - 1,
+            test,
+        );
+    }
+    if let Some(declaration) = file.ast.reference_declaration(span) {
+        if let Some(functions) = assigned_literals(file, declaration) {
+            return functions.into_iter().all(|function| test(file, function));
+        }
+        if let Some(seen) = closed_parameter_seen(lookup, file, declaration, depth, test) {
+            return seen;
+        }
+    }
+    function_value_at(lookup, file, span)
+        .is_some_and(|(callee_file, function)| test(callee_file, function))
+}
+
+/// The functions a binding declared with no value can hold, when every write
+/// to it is a plain assignment of a literal (`let wake; wake = () => ...`): a
+/// destructuring, a loop or `??=` is a write no assignment here names.
+fn assigned_literals(file: &FileFacts, declaration: Span) -> Option<Vec<&ast::FunctionFact>> {
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.shape == ast::BindingShape::Identifier
+            && matches!(binding.names.as_slice(), [name] if name.span == declaration)
+    })?;
+    let exported = file.ast.exports.iter().any(|export| {
+        export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .any(|specifier| {
+                specifier.local.span == declaration
+                    || file.ast.reference_declaration(specifier.local.span) == Some(declaration)
+            })
+    });
+    if binding.initializer.is_some() || exported {
+        return None;
+    }
+    let writes = file
+        .ast
+        .write_targets
+        .iter()
+        .filter(|target| {
+            file.ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(**target))
+                == Some(declaration)
+        })
+        .count();
+    let functions = file
+        .ast
+        .assignments
+        .iter()
+        .filter(|assignment| {
+            file.ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(assignment.target))
+                == Some(declaration)
+        })
+        .map(|assignment| {
+            (!assignment.reads_target && assignment.logical.is_none())
+                .then(|| function_literal(file, assignment.value_span))
+                .flatten()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (writes == functions.len() && !functions.is_empty()).then_some(functions)
+}
+
+/// A parameter whose function is entered only by direct calls in this file
+/// (never exported, never a value): what each call gives it. `None` when
+/// `declaration` is no such parameter (review D21, T2).
+fn closed_parameter_seen(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    declaration: Span,
+    depth: usize,
+    test: CallbackTest<'_>,
+) -> Option<bool> {
+    let function = file.ast.functions.iter().find(|function| {
+        function
+            .parameters
+            .iter()
+            .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+    })?;
+    let name = match function.kind {
+        ast::FunctionKind::Declaration => function.name.as_ref()?.span,
+        _ => {
+            file.ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.immutable
+                        && binding.shape == ast::BindingShape::Identifier
+                        && binding.initializer.is_some_and(|initializer| {
+                            file.ast.peel_ts_sugar_span(initializer) == function.span
+                        })
+                })?
+                .names
+                .first()?
+                .span
+        }
+    };
+    let exported = file.ast.exports.iter().any(|export| {
+        export.span.contains(name)
+            || export
+                .specifiers
+                .iter()
+                .chain(export.declarations.iter())
+                .any(|specifier| {
+                    specifier.local.span == name
+                        || file.ast.reference_declaration(specifier.local.span) == Some(name)
+                })
+    });
+    if exported {
+        return Some(false);
+    }
+    let mut calls = Vec::new();
+    for identifier in &file.ast.identifiers {
+        if identifier.role != ast::IdentifierRole::Reference
+            || identifier.span == name
+            || file.ast.reference_declaration(identifier.span) != Some(name)
+        {
+            continue;
+        }
+        let Some(call) = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| file.ast.peel_ts_sugar_span(call.callee) == identifier.span)
+        else {
+            return Some(false);
+        };
+        calls.push(call);
+    }
+    Some(calls.into_iter().all(|call| {
+        let frame = Frame {
+            function,
+            called: Called {
+                file,
+                call,
+                shift: 0,
+                parent: None,
+            },
+        };
+        parameter_argument(file, &frame, declaration)
+            .is_some_and(|argument| callback_seen(lookup, file, argument, None, depth - 1, test))
+    }))
+}
+
+/// Whether every value the exact function `inner` calls can return passes
+/// `test`. Falling off the end returns `undefined`, which no platform calls.
+fn call_result_seen(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    inner: &ast::CallFact,
+    frame: Option<&Frame<'_>>,
+    depth: usize,
+    test: CallbackTest<'_>,
+) -> bool {
+    let Some((callee_file, function, true)) =
+        crate::execution_role::declared_callee_at_parameter(file, inner, 0, lookup)
+    else {
+        return false;
+    };
+    if function.r#async || function.generator {
+        return false;
+    }
+    let entered = Frame {
+        function,
+        called: Called {
+            file,
+            call: inner,
+            shift: 0,
+            parent: frame,
+        },
+    };
+    callee_file.ast.own_returns(function).all(|returned| {
+        returned.argument.is_none_or(|argument| {
+            callback_seen(
+                lookup,
+                callee_file,
+                argument,
+                Some(&entered),
+                depth - 1,
+                test,
+            )
+        })
+    })
+}
+
+/// The argument the entering call gives the parameter declared at
+/// `declaration`: a plain name, never written, with no default and no
+/// `arguments` beside it. `None` when none can be named: the value is open.
+fn parameter_argument(file: &FileFacts, frame: &Frame<'_>, declaration: Span) -> Option<Span> {
+    let function = frame.function;
+    let index = function.parameters.iter().position(|parameter| {
+        parameter.shape == ast::BindingShape::Identifier
+            && parameter.initializer.is_none()
+            && matches!(parameter.names.as_slice(), [name] if name.span == declaration)
+    })?;
+    let written = file.ast.write_targets.iter().any(|target| {
+        file.ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(*target))
+            == Some(declaration)
+    });
+    let reads_arguments = function.kind != ast::FunctionKind::Arrow
+        && file.ast.identifiers.iter().any(|identifier| {
+            function.span.contains(identifier.span)
+                && identifier.role == ast::IdentifierRole::Reference
+                && file.source_text(identifier.span) == Some("arguments")
+        });
+    if written || reads_arguments {
+        return None;
+    }
+    let position = index + frame.called.shift;
+    let arguments = &frame.called.call.arguments;
+    if arguments
+        .iter()
+        .take(position + 1)
+        .any(|argument| argument.spread)
+    {
+        return None;
+    }
+    arguments.get(position).map(|argument| argument.span)
 }
 
 /// The sleep idiom (`new Promise((done) => setTimeout(done, ms))`, review D11):
@@ -1310,24 +1867,6 @@ fn function_value_at<'a>(
         .filter(|(callee_file, function)| lookup.function_value_is_current(callee_file, function))
 }
 
-/// The function a call's argument at `index` is: a literal there, or the
-/// function its value names.
-fn function_at<'a: 'f, 'f>(
-    lookup: &SemanticLookup<'a>,
-    file: &'f FileFacts,
-    call: &ast::CallFact,
-    index: usize,
-) -> Option<(&'f FileFacts, &'f ast::FunctionFact)> {
-    let argument = call
-        .arguments
-        .get(index)
-        .filter(|argument| !argument.spread)?;
-    if let Some(function) = function_literal(file, argument.span) {
-        return Some((file, function));
-    }
-    function_value_at(lookup, file, argument.span)
-}
-
 /// The window's methods that, run with the window as `this`, call no code
 /// with it, by declaration (as a `Window` member and as the global function),
 /// and why. Closed (review D3).
@@ -1469,6 +2008,7 @@ fn parameter_hands_nothing(
     index: usize,
     kind: Obtained,
     depth: usize,
+    called: Called<'_>,
 ) -> bool {
     let arguments_read = callee_file.ast.identifiers.iter().any(|identifier| {
         function.span.contains(identifier.span)
@@ -1493,8 +2033,9 @@ fn parameter_hands_nothing(
         return false;
     }
     let nested: AtCalls = std::cell::RefCell::new(Vec::new());
+    let frame = Frame { function, called };
     !references_handed_on(callee_file, name.span, kind, &nested)
-        && nested_calls_seen(lookup, callee_file, &nested, depth - 1)
+        && nested_calls_seen(lookup, callee_file, &nested, depth - 1, Some(&frame))
 }
 
 /// How many bindings [`handed_on`] follows before it answers yes.
@@ -1584,6 +2125,18 @@ fn handed_on(
                 file.ast.peel_ts_sugar_span(call.callee) == member.span
                     && callback_only_compares(file, call)
             }),
+            (Obtained::Path, Some("find")) => {
+                let guarded = file.ast.calls.iter().find(|call| {
+                    file.ast.peel_ts_sugar_span(call.callee) == member.span
+                        && callback_guards_node(file, call)
+                });
+                if let Some(call) = guarded {
+                    at_calls
+                        .borrow_mut()
+                        .push((call.span, Slot::PathFind, kind));
+                }
+                guarded.is_none()
+            }
             (Obtained::Path, Some(_)) => true,
             (Obtained::Path, None) => next(Obtained::Global),
             // The global object again, or one of its intrinsics by name.
@@ -1616,8 +2169,14 @@ fn handed_on(
                             && next(Obtained::Function)
                     }
                     Some(call) => {
-                        let timer =
-                            kind == Obtained::Global && matches!(key, "setTimeout" | "setInterval");
+                        let timer = kind == Obtained::Global
+                            && matches!(
+                                key,
+                                "setTimeout"
+                                    | "setInterval"
+                                    | "requestAnimationFrame"
+                                    | "requestIdleCallback"
+                            );
                         let slot = if timer {
                             Slot::TimerCallback
                         } else {

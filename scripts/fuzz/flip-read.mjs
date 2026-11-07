@@ -139,6 +139,9 @@ const ITER_PATCHES = {
   "iter-object-proto-member": `const itKn: PropertyKey[] = ["__itp"]; (Object.prototype as any)[itKn[0]] = function (this: any) { const g = this; delete (Object.prototype as any)[itKn[0]]; ${ITER_G} }; (window as any).__itp?.();`,
   // Review of 37ce9020a: a subclass's constructor keeps the event, whose `target` stays the window after dispatch.
   "iter-event-subclass": `let itKept: any; class ItE extends Event { constructor() { super("itx"); itKept = this; } } window.dispatchEvent(new ItE()); { const g = itKept.target; ${ITER_G} }`,
+  // The listener is read at the call that hands the window on: one that reaches it through a helper's parameter, by its event.
+  "iter-bind-reads-window": `const itBind = (t: EventTarget, type: string, h: (e: any) => void) => { t.addEventListener(type, h); }; itBind(window, "itx", (e) => { const g = e.currentTarget; ${ITER_G} }); window.dispatchEvent(new Event("itx"));`,
+  "iter-listener-reads-target": `const itOn = (e: any) => { const g = e.target; ${ITER_G} }; window.addEventListener("itx", itOn); window.dispatchEvent(new Event("itx"));`,
   "iter-event-target": `const itEv = new Event("itx"); window.dispatchEvent(itEv); (itEv.target as any).Function(${JSON.stringify(ITER_CODE)})();`,
   "iter-window-computed": `const itK = ["con", "firm"].join(""); const itC = window.confirm; (window as any)[itK] = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); (window as any)[itK] = itC; return true; }; window.confirm("y");`,
   // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.
