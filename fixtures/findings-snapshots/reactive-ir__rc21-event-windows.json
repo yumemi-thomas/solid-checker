@@ -24,6 +24,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 403,
+      "end": 418,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 716,
+      "end": 730,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -57,6 +79,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 1546,
+      "end": 1560,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -75,6 +108,17 @@
       "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
       "start": 1951,
       "end": 1956,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-event-windows/App.tsx",
+      "start": 1987,
+      "end": 2002,
       "fixes": 0
     }
   ]

@@ -131,6 +131,7 @@ pub(crate) fn check_file(
     {
         return;
     }
+    let mut reached = !reads.is_empty();
     for call in sites {
         let reaches = call
             .arguments
@@ -142,10 +143,21 @@ pub(crate) fn check_file(
                 .get(1)
                 .is_some_and(|listener| reaches_project_code(file, listener.span, lookup));
         if reaches {
+            reached = true;
             push(file, call.span, defects);
         }
     }
     for read in reads {
         push(file, read, defects);
+    }
+    // The stack a read runs on is the dispatch's: the same obligation stands at
+    // the call that delivers, in this file, where Chrome's frame is. A
+    // registration above says nothing about that position (ADR 0815).
+    if reached {
+        for site in lookup.event_dispatch_sites() {
+            if site.withholds_listener_proofs() && site.path == file.path.as_str() {
+                push(file, site.span, defects);
+            }
+        }
     }
 }

@@ -804,6 +804,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 1507,
+      "end": 1548,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",

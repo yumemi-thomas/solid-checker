@@ -57,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1040,
+      "end": 1154,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
