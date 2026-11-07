@@ -856,9 +856,9 @@ fn listener_reaches_nothing(file: &FileFacts, function: &ast::FunctionFact) -> b
 }
 
 /// What a listener may read of its event: facts about the input, and the
-/// methods that only flag the event. None of them is or holds the window;
-/// `detail` is what the program put there, and the window put anywhere is
-/// counted where it is put. Closed: `target`, `currentTarget`, `view`,
+/// methods that only flag the event. None of them is the window by itself:
+/// `detail` and `data` hold what the program put there, and `handed_on` counts
+/// the window stored in any object literal, an event's init among them. Closed: `target`, `currentTarget`, `view`,
 /// `source`, `composedPath`, `srcElement`, `relatedTarget` and any other key
 /// may reach it.
 const EVENT_READS: &[&str] = &[
@@ -902,6 +902,13 @@ const EVENT_READS: &[&str] = &[
     "type",
 ];
 
+/// The members of [`EVENT_READS`] a listener may call.
+const EVENT_FLAGS: [&str; 3] = [
+    "preventDefault",
+    "stopPropagation",
+    "stopImmediatePropagation",
+];
+
 /// Whether every reference to the event parameter named at `name` only tests
 /// it, compares it, or reads one of [`EVENT_READS`] by a literal key (review
 /// D21, T3). A write through it or a hand-on is none of these.
@@ -918,12 +925,20 @@ fn event_only_read(file: &FileFacts, name: Span) -> bool {
                 .iter()
                 .find(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
                 .is_some_and(|member| {
-                    member_key(file, member).is_some_and(|key| EVENT_READS.contains(&key))
-                        && !file
-                            .ast
-                            .write_targets
-                            .iter()
-                            .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+                    // A listed value may hold a function, which a call would
+                    // run with the event as `this` (review R53).
+                    let called = file
+                        .ast
+                        .calls
+                        .iter()
+                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span);
+                    member_key(file, member).is_some_and(|key| {
+                        EVENT_READS.contains(&key) && (!called || EVENT_FLAGS.contains(&key))
+                    }) && !file
+                        .ast
+                        .write_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
                 })
     })
 }
@@ -1802,6 +1817,21 @@ fn absent_window_member(
         && !lookup.hazard_present(crate::base::contributions::classic_script_dunder(key))
 }
 
+/// The global event classes a program dispatches, whose constructors keep no
+/// reference to the event.
+const EVENT_CLASSES: [&str; 10] = [
+    "Event",
+    "CustomEvent",
+    "StorageEvent",
+    "MessageEvent",
+    "KeyboardEvent",
+    "MouseEvent",
+    "PointerEvent",
+    "FocusEvent",
+    "PopStateEvent",
+    "HashChangeEvent",
+];
+
 /// Review D21: the event `dispatchEvent` is given keeps `target`, the window,
 /// once dispatched. Seen only when nothing else can read it: `new Event(...)`
 /// in place, or a binding the call is the only use of.
@@ -1823,7 +1853,7 @@ fn dispatched_event_stays_inline(
         file.ast.call_at(span).is_some_and(|construct| {
             construct.construct
                 && global_name(file, file.ast.peel_ts_sugar_span(construct.callee))
-                    .is_some_and(|name| name.ends_with("Event"))
+                    .is_some_and(|name| EVENT_CLASSES.contains(&name))
                 && lookup
                     .standard_library_declaration(file, construct, typefacts::CallKind::Construct)
                     .is_some()

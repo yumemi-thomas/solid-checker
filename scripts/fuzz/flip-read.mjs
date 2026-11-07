@@ -145,6 +145,8 @@ const ITER_PATCHES = {
   // Reviews R51, R52: an arrow's expression body is its return; a named function expression is entered by its own name.
   "iter-returned-expression-body": `const itMk = () => (e: any) => { const g = e.currentTarget; ${ITER_G} }; window.addEventListener("itx", itMk()); window.dispatchEvent(new Event("itx"));`,
   "iter-named-expression-param": `const itE = (e: any) => { const g = e.currentTarget; ${ITER_G} }; const itF = function itG(cb: any) { if (cb !== itE) itG(itE); window.addEventListener("itx", cb); }; itF(() => {}); window.dispatchEvent(new Event("itx"));`,
+  // Review R53: a listed event value, called, runs with the event as `this`.
+  "iter-event-value-called": `window.addEventListener("itx", (e: any) => e.data()); window.dispatchEvent(new MessageEvent("itx", { data() { const g = (this as any).currentTarget; ${ITER_G} } } as any));`,
   "iter-event-target": `const itEv = new Event("itx"); window.dispatchEvent(itEv); (itEv.target as any).Function(${JSON.stringify(ITER_CODE)})();`,
   "iter-window-computed": `const itK = ["con", "firm"].join(""); const itC = window.confirm; (window as any)[itK] = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); (window as any)[itK] = itC; return true; }; window.confirm("y");`,
   // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.
