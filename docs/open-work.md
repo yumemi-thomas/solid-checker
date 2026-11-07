@@ -153,7 +153,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - `leaf-owner-forbidden-call` (SC3001), SC9012 obligations (ADR 0439; 561 in the rc.17 corpus): members of fields or call results, packages with no source, parameter or destructured functions, inherited methods, project constructors and DOM dispatchers (about 25) stay open. A std-library call without arguments in an imported helper or method has no resolved call (ADR 0192); demanding it everywhere cleared 7 and moved other rules. The plain `canvas.getContext("webgl")` is trusted though it fires an event.
 - A pending read through a hook's returned member in `createTrackedEffect` (`vals.a1()`, PENDING_ASYNC_FORBIDDEN_SCOPE, 10 `mx-combo` rows): rc.17 reports it, SC5001 is an obligation on main too. The smoke manifest of 2026-10-30 still held it proven; which change lost it is not known.
 - ADR 0838 accounts SC5001, SC5003 and SC5008 only: SC1002's walks (`after_await.rs` `report_helper_reads`, `visit_call`, `report_call_read`, `expand`/`expand_mapped`, `follow_generators`) can still end with no row (ADRs 0850-0854).
-- `sync-memo-jsx-read` (patterns/flip): `createMemo(async () => 1, { sync: true })` read in JSX is an SC5003 violation; Chrome rc.21 reports only SYNC_NODE_RECEIVED_ASYNC (false positive, open).
+- ADR 0889: a source with a `sync` option not proved `false` has every pending claim uncertifiable; an async-literal compute's reads could be proved clean under a client-only rendering premise (not built).
 
 ## 2. Decisions not to build
 

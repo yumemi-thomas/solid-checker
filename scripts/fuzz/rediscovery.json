@@ -5784,5 +5784,17 @@
     "mx-caught-reactive-read-handed-flush-each-get-literal-direct-none"
    ],
    "rediscovered": "flip-r3c/ids/mx-ca.json (4,232, Chrome confirmed, run from r3c's generator): build mg2 1,641 false cleans, pa2 638, pa6 510 (+64 wrong-rule), pa9 24; ADR 0838 (pa11) 0 false cleans, 0 wrong-rule, 524 violations Chrome agrees with. Fixture reactive-ir/pending-read-accounted EscapedComponentFlush, StoreKeysCaught, GetterCaught"
+  },
+  {
+   "finding": "a `sync: true` async memo read in tracked JSX (`createMemo(async () => 1, { sync: true })`) proved ASYNC_OUTSIDE_LOADING_BOUNDARY while Chrome rc.21 reports only SYNC_NODE_RECEIVED_ASYNC: a sync node is never pending",
+   "found": "Part 16's stricter judge, patterns/flip/sync-memo-jsx-read",
+   "fixed": "ADR 0889",
+   "grid": "mx-recall",
+   "code": "SYNC_NODE_RECEIVED_ASYNC",
+   "ids": [
+    "mx-sync-node-received-async-jsx-sync-memo-read-direct-none",
+    "mx-sync-node-received-async-jsx-sync-memo-read-direct-iife"
+   ],
+   "rediscovered": "SYNC_NODE_RECEIVED_ASYNC jsx sync-memo-read (6, Chrome confirmed): build pa11 (5870569bb) 4 wrong-rule (SC5003 violation Chrome does not report); ADR 0889 (pa12) 6 agree, SC5003 uncertifiable. Fixture reactive-ir/sync-memo-read (twin SyncFalseRead keeps its violation)"
   }
 ]

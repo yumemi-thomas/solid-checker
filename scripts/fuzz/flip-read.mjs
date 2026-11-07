@@ -294,6 +294,11 @@ export const CAUGHT_HANDED_READS = {
   "caught-handed-map": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; void [1].map(hf);` },
   "caught-handed-call": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; hf.call(undefined);` },
 };
+// R2h (patterns/flip/sync-memo-jsx-read): a `sync: true` async memo read in tracked JSX. Chrome rc.21 reports SYNC_NODE_RECEIVED_ASYNC
+// only: the node errors, it is never pending, so no boundary claim holds; the build before proved ASYNC_OUTSIDE_LOADING_BOUNDARY there.
+export const SYNC_NODE_READS = {
+  "sync-memo-read": { kind: "plain", contexts: ["jsx"], bindings: ["direct"], imports: ["createMemo"], text: () => "const sm = createMemo(async () => 1, { sync: true }); void sm();" },
+};
 // Review R17: an exported helper holds the read, one local call is placed (tracked, under `<Loading>`), and another module calls it: no walk here sees
 // that caller. `other` runs it in `onSettled` (Chrome: PENDING_ASYNC_FORBIDDEN_SCOPE) or in a handler never clicked. The source is module-level, so only this variant takes these contexts.
 const exportedHelperFile = (run) => ({ "eo.tsx": `import { onSettled } from "solid-js";\nimport { eRead } from "./App";\nexport function EO() {\n  ${run}\n}\n` });
@@ -469,6 +474,7 @@ export const FLIP_READ_VARIANTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: EXPORT_READS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS },
   CAUGHT_REACTIVE_READ: { ...CAUGHT_CHAINS, ...CAUGHT_HANDED_READS },
+  SYNC_NODE_RECEIVED_ASYNC: SYNC_NODE_READS,
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");

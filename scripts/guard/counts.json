@@ -94,14 +94,14 @@
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 source-pending-unproven": 342,
-  "SC5003 async-options-opaque": 25,
+  "SC5003 async-options-opaque": 29,
   "SC5003 async-provenance-unproven": 110,
   "SC5003 async-read-caught": 3,
   "SC5003 async-read-unaccounted": 336,
   "SC5003 call-attributed-read": 82,
   "SC5003 carrier-run-unproven": 1,
   "SC5003 mount-form-window": 2,
-  "SC5003 mount-unresolved": 325,
+  "SC5003 mount-unresolved": 323,
   "SC5003 root-mount-pass-unproven": 39,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
@@ -119,7 +119,7 @@
   "SC7001 effect-returned-function-run-unproven": 1,
   "SC7001 effect-runtime-entry-uncertain": 1,
   "SC7002 callee-callback-timing": 1,
-  "SC7002 compute-return-unproven": 9,
+  "SC7002 compute-return-unproven": 10,
   "SC7005 boundary-settle-order-unproven": 6,
   "SC7005 response-head-position-unproven": 9,
   "SC7005 server-rendering-unresolved": 2,
@@ -338,6 +338,17 @@
    "fixtures": {
     "proved": "reactive-ir/store-write-literal-links",
     "open": "reactive-ir/local-alias-member-reads"
+   }
+  },
+  {
+   "key": "SC5003 mount-unresolved",
+   "from": 325,
+   "to": 323,
+   "adr": "ADR 0889",
+   "proof": "rust/crates/solid-reactive-ir/src/source_discovery/async_server.rs::async_source_options",
+   "fixtures": {
+    "proved": "reactive-ir/sync-memo-read",
+    "open": "reactive-ir/unplaced-site-obligations"
    }
   }
  ],
