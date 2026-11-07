@@ -32,7 +32,9 @@ export const namedKey = (finding) => `${finding.id}/${finding.blocker}@${finding
  * gate (open-rows.mjs --final, `make flip-final`) fails while this cause holds a row.
  */
 export const F2_OPEN = "R-F2-open";
-export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => row.cause === F2_OPEN).map(([id]) => `${grid}/${id}`));
+/** `flw-guard-yield`: a site past a generator step, its U at the generator: W's F1 places it. Must reach 0 before #173 moves, as F2. */
+export const F1_OPEN = "R-F1-open";
+export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN].includes(row.cause)).map(([id]) => `${grid}/${id}`));
 
 /** Whether a row answers an entry: same id prefix, code, contexts, source and variant prefix. */
 const answers = (entry, row) => String(row.id).startsWith(entry.idPrefix) && entry.code === row.code

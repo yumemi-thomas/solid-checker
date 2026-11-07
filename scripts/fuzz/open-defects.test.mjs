@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { finalBlockers, gridStanding, heldGridEntry, ledgerCounts, ledgerCovers, namedKey, offLedger, ratchetDifferences, readOpenDefects } from "./open-defects.mjs";
-import { NOT_LISTED, inStopGroup, ledgerChange, runSeed, stopFinding } from "./open-rows.mjs";
+import { inStopGroup, ledgerChange, runSeed, stopFinding } from "./open-rows.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { PATTERNS, comparePatterns, expectedSilent, judgePattern, patternCases } from "./patterns.mjs";
 
@@ -106,11 +106,12 @@ describe("the row ledger (ADR 0815, R23)", () => {
     const rows = { grids: { g: { a: { outcome: "false-clean", certified: true, cause: "R-F2-open" }, b: { outcome: "false-clean", certified: true, cause: "R" } } } };
     expect(finalBlockers({ rows })).toEqual(["g/a"]);
     expect(finalBlockers({ rows: { grids: { g: { b: rows.grids.g.b } } } })).toEqual([]);
+    expect(finalBlockers({ rows: { grids: { g: { c: { outcome: "false-clean", cause: "R-F1-open" } } } } })).toEqual(["g/c"]);
     expect(ledgerCounts(rows)).toMatchObject({ certified: 1, certifiedF2: 1 });
     if (process.env.FLIP_FINAL) expect(finalBlockers(readOpenDefects())).toEqual([]);
   });
   it("lists no row of ADR 0866's contradiction: those are R5's, and fail the smoke", () => {
-    for (const rows of Object.values(readOpenDefects().rows.grids)) for (const id of Object.keys(rows)) expect(NOT_LISTED({ id, context: /-(flw-guard-[a-z]+(?:-[a-z]+)?)-/.exec(id)?.[1] }), id).toBe(false);
+    for (const rows of Object.values(readOpenDefects().rows.grids)) for (const id of Object.keys(rows)) expect(id).not.toMatch(/-flw-guard-(?:early|probe-loop)-/);
   });
   it("a stop row stays held only while its listed uncertifiable stands, on every run (R27)", () => {
     const named = { id: "SC9012", blocker: "value-in-carrier", line: 5, column: 7 };
