@@ -1,0 +1,3 @@
+# generator-step-owner
+
+**Claim (ADR 0851).** Code past a `yield` of a generator that an async compute steps across one of its suspensions (`for await` over the generator, or a `for…of` whose body starts with an `await`) runs on the compute's continuation: no owner, no observer. A signal write there is not SC2001, and `onCleanup` there is SC5001 `missing-owner`. A loop whose `await` is not first in its body leaves both open (uncertifiable). Negatives: a sync generator drained before the compute's only `await`, a generator's first segment, and a generator with another use keep the compute's context.

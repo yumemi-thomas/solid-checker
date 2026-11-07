@@ -401,6 +401,10 @@ function render(program, instrument) {
       case "gen-next": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}await gen().next();`;
       case "gen-sync-loop": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
       case "gen-prefix": return `async function* gen() ${block(c.body, depth, null, [], ["await Promise.resolve();", "yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gstep": {
+        const body = c.mode === "first" ? block(c.body, depth, null, [], ["yield 1;"]) : block(c.body, depth, null, ["yield 1;"]);
+        return c.holder ? `const ${c.holder} = { *${c.name}() ${body} };` : `function* ${c.name}() ${body}`;
+      }
       case "gen-drain": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) void _y;\n${ind(depth)}await Promise.resolve();`;
       default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); if (c.form.startsWith("chain-") || c.form.startsWith("forward-")) return chainText(c, depth); throw new Error(`cannot print control form ${c.form}`);
     }

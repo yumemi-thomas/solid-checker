@@ -192,7 +192,10 @@ none it is **uncertifiable**. One proof makes it legal (ADR 0333): it runs
 after an await that dominates it (later in the await's block, a `try` block
 included; its `catch` or `finally` only when the block starts by awaiting a
 call of an async function with inert arguments; not in a generator, JSX or
-an instance field). A write that only may follow an await in its own function
+an instance field), or it is past a `yield` of a generator its async caller
+steps across one of its own suspensions (ADR 0851: `for await` over it, or a
+`for…of` whose body starts with an `await`; a later `await` in the body leaves
+it uncertifiable). A write that only may follow an await in its own function
 (a `catch` or `finally` past another `try` head, code after an await in a
 branch) runs on the stack its function was entered on or on a later task with
 no owner: it takes its function's entries' role when that role is permissive

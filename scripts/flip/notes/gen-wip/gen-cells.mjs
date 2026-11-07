@@ -1,0 +1,10 @@
+const wt = process.argv[2];
+const m = await import(`${wt}/scripts/fuzz/matrix.mjs`);
+const l = await import(`${wt}/scripts/fuzz/legal.mjs`);
+const f = await import(`${wt}/scripts/fuzz/focus.mjs`);
+const gen = (c) => c.context === "gen-yield" || c.context === "gen-sync-loop";
+console.log(Object.keys(f.GRIDS).join(" "));
+console.log("mx base cells", m.cellList({}).filter(gen).length, "recall", m.cellList({ recall: true }).filter(gen).map(c=>c.code+"/"+c.context).join(","));
+console.log("lg cells", l.legalCells({}).filter(gen).length, "lg recall", l.legalCells({ recall: true }).filter(gen).length);
+console.log("pair cells", l.pairLegalCells({}).filter(gen).length);
+const all = l.legalCells({ recall: true }).map(c=>c.context); console.log("lg-recall contexts sample", [...new Set(all)].filter(c=>/gen|yield|await|async/.test(c)).join(","));

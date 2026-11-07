@@ -2448,6 +2448,16 @@ pub(super) fn write_role_walk<'f>(
             ExecutionRole::Unreported
         );
     }
+    // ADR 0851: the same past a `yield` of a generator its async caller steps
+    // across one of that caller's suspensions (`for await`, or a loop that
+    // awaits): the step that runs the write is called from the continuation.
+    let generator_resumed = generator_step_resumption(file, span, lookup);
+    if generator_resumed == Some(true) {
+        return role_arm!(
+            "write_roles.write_role_walk.unreported-generator",
+            ExecutionRole::Unreported
+        );
+    }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`
@@ -2463,7 +2473,9 @@ pub(super) fn write_role_walk<'f>(
     // function is the same; and whatever role a position names (a named
     // tracked compute, an effect compute, the entries), only a permissive one
     // holds past a possible suspension.
-    let suspendable = may_follow_suspension(file, span) || layered_suspension == Some(false);
+    let suspendable = may_follow_suspension(file, span)
+        || layered_suspension == Some(false)
+        || generator_resumed == Some(false);
     if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
     }

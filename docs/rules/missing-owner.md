@@ -32,7 +32,11 @@ generator no binding holds). After a `yield` of a native promise
 (`Promise.resolve()`, `new Promise(…)`, or any `yield` of an async generator)
 the next step runs from the promise's continuation with no owner, whatever the
 caller; after a `yield` of a plain value the caller's owner stays; any other
-operand is an obligation.
+operand is an obligation. A generator an async computation steps across one of its own
+suspensions (`for await` over it, or a `for…of` whose body starts with an
+`await`) runs past its first `yield` on that computation's continuation: an
+operation there is unowned, and an obligation where the step only may follow
+the suspension (ADR 0851).
 
 `Loading(props)` or `Errored(props)` called as a function creates its boundary
 in the call, and rc.17 warns `NO_OWNER_BOUNDARY` when no owner is current. The
