@@ -2498,12 +2498,64 @@ pub(super) fn write_role_walk<'f>(
     // ADR 0851: a generator's entries are its steps, which the role at the
     // site already took (`callee_roles.generator-steps`); a call of it runs
     // none of its body, so the walk over its callers below does not apply.
-    if crate::owners::containing_ast_function(&file.ast, span)
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
         .filter(|function| function.generator && function.body.contains(span))
-        .is_some_and(|generator| {
-            crate::owners::generator_creations(file, generator, lookup).is_some()
-        })
+        && let Some(calls) = crate::owners::generator_creations(file, generator, lookup)
     {
+        // The write walk at each step site, which knows the write
+        // adjustments the read role at the site does not: one role where
+        // every step agrees, none where they differ or a step is unplaced.
+        let key = (file.path.to_string(), generator.span);
+        if !crate::owners::generator_exported(file, generator) && visiting.insert(key.clone()) {
+            let mut sites = Vec::new();
+            let mut unplaced = false;
+            for call in calls {
+                match crate::owners::iterator_steps(file, call, lookup) {
+                    crate::owners::IteratorSteps::InPlace => sites.push(call.span),
+                    crate::owners::IteratorSteps::Held(steps) => sites.extend(steps),
+                    crate::owners::IteratorSteps::Unplaced => unplaced = true,
+                }
+            }
+            let mut role: Option<ExecutionRole> = None;
+            let mut differ = unplaced;
+            for site in sites {
+                if differ {
+                    break;
+                }
+                let at = semantic_write_execution_role_within(
+                    file,
+                    site,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                );
+                differ |= role.is_some_and(|role| role != at);
+                role = Some(at);
+            }
+            visiting.remove(&key);
+            match role {
+                // A step that may resume on the continuation (ADR 0851) holds
+                // only a permissive role there, as a possible await does.
+                Some(role)
+                    if !differ
+                        && role != ExecutionRole::Unknown
+                        && !(generator_resumed == Some(false)
+                            && role.reports_disallowed_write()) =>
+                {
+                    return role_arm!("write_roles.generator-steps-walked", role);
+                }
+                None if !differ => {
+                    return role_arm!(
+                        "write_roles.generator-never-stepped",
+                        ExecutionRole::Unreported
+                    );
+                }
+                _ => {}
+            }
+        }
         return if direct == ExecutionRole::Unknown {
             role_arm!("write_roles.generator-steps-unknown", unknown)
         } else {
