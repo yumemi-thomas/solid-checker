@@ -249,6 +249,11 @@ const FLOW_VALUES = {
     const [g, el] = [kit.name("g"), kit.name("el")];
     return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{${g} as any}</Show>) as any`, undefined, ["Show"]))], view: [button(kit.name("b"), [expr(domExpr(`${el}()()`))])] };
   },
+  // Reviewer R57: an inline `length` 0 child is a value too; held, and run in the body, it runs there, not in an insert.
+  "flw-flow-show-inline-body": (stmts, kit) => {
+    const [g, el] = [kit.name("g"), kit.name("el")];
+    return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{(() => ${g}()) as any}</Show>) as any`, undefined, ["Show"])), expr(domExpr(`${el}()()`))], view: [] };
+  },
   // Reviewer's R48: `Kid`'s function child is Kid's to run, here on a timer: the flow tag around it says nothing.
   "flw-flow-show-kid": (stmts, kit) => ({
     hoisted: [decl("Kid1", domExpr("(props: { children: (v: number) => unknown }) => { setTimeout(() => props.children(1), 0); return <i />; }"))],

@@ -150,10 +150,59 @@ pub(crate) fn control_flow_execution_role(
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| dialect.children_callback_requires_parameters(primitive))
     {
-        return Some(role_arm!(
-            "control_flow.control_flow_execution_role.tracked-jsx",
-            ExecutionRole::TrackedJsx
-        ));
+        // Reviewer R57: it runs in the insert's tracked effect only where the
+        // element's value is inserted. Proven for an element written inside
+        // another element's child or a fragment, or returned, with no
+        // function between; a value held and called (`shown()()`) runs where
+        // it is called, which the position does not say.
+        let between = |outer: Span| {
+            file.ast.functions.iter().any(|function| {
+                outer.contains(function.span) && function.span.contains(element.span)
+            })
+        };
+        // Or returned (a component's return is rendered; reviewer R57's
+        // second proof), with no function between.
+        let returned = file
+            .ast
+            .returns
+            .iter()
+            .chain(
+                file.ast
+                    .functions
+                    .iter()
+                    .filter_map(|function| function.expression_return.as_ref()),
+            )
+            .filter_map(|returned| returned.argument)
+            .any(|argument| argument.contains(element.span) && !between(argument));
+        let inserted = returned
+            || file.ast.jsx_elements.iter().any(|outer| {
+                outer.span != element.span
+                    && outer
+                        .children
+                        .iter()
+                        .any(|child| child.contains(element.span) && !between(*child))
+            })
+            || file.ast.jsx_fragments.iter().any(|fragment| {
+                fragment.contains(element.span)
+                    && *fragment != element.span
+                    && !between(*fragment)
+                    && !file.ast.jsx_elements.iter().any(|outer| {
+                        outer.span != element.span
+                            && fragment.contains(outer.span)
+                            && outer.span.contains(element.span)
+                    })
+            });
+        return Some(if inserted {
+            role_arm!(
+                "control_flow.control_flow_execution_role.tracked-jsx",
+                ExecutionRole::TrackedJsx
+            )
+        } else {
+            role_arm!(
+                "control_flow.control_flow_execution_role.value-not-inserted",
+                ExecutionRole::Unknown
+            )
+        });
     }
     // A fragment has no element fact, so its children are consulted through
     // its own span table: `<>{tone()}</>` is as tracked as `<b>{tone()}</b>`.

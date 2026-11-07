@@ -55,3 +55,19 @@ export function NamedValueInBody(props: { name: number }) {
   shown()();
   return <span />;
 }
+
+// Reviewer R57: the inline twin of the case above. `Show` returns the value
+// and the body runs it: the same strict read.
+export function InlineValueInBody(props: { name: number }) {
+  const shown = (
+    <Show when={1}>
+      {
+        (() => {
+          props.name;
+        }) as any
+      }
+    </Show>
+  ) as any;
+  shown()();
+  return <span />;
+}

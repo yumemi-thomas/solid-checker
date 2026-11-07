@@ -5920,5 +5920,17 @@
    "mx-strict-read-untracked-flw-flow-show-value-signal-direct-none"
   ],
   "rediscovered": "the 6 ids, judge at 72e9b2ff6: rk1 6 false positives; fp40 0, 6 not fired. Twin: a value run in the body keeps a U"
+ },
+ {
+  "finding": "An inline Show/Match child of length 0 got the insert's tracked role wherever the element was written, so a held value run in the body (`shown()()`) read strictly with no row; Chrome raises STRICT_READ_UNTRACKED (reviewer R57)",
+  "found": "reviewer R57 on 9f64d027e",
+  "fixed": "R57: the inline arm needs the element inserted",
+  "grid": "mx-census",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-flw-flow-show-inline-body-signal-direct-none",
+   "mx-strict-read-untracked-flw-flow-show-inline-body-memo-direct-none"
+  ],
+  "rediscovered": "census ids flw-flow-show-inline-body (2, Chrome confirmed): fp40 2 certified false cleans; r57 0 (2 uncertifiable); flw-flow-show-value unchanged (2 not fired)"
  }
 ]
