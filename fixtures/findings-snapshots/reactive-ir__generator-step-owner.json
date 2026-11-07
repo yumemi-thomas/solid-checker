@@ -1,0 +1,361 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 560,
+      "end": 569,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 807,
+      "end": 816,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 1101,
+      "end": 1108,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 1114,
+      "end": 1123,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 1469,
+      "end": 1476,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 1715,
+      "end": 1722,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2019,
+      "end": 2026,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2177,
+      "end": 2186,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2189,
+      "end": 2197,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2200,
+      "end": 2207,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2210,
+      "end": 2219,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2222,
+      "end": 2229,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2232,
+      "end": 2240,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2511,
+      "end": 2520,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2558,
+      "end": 2567,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2761,
+      "end": 2770,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 3039,
+      "end": 3046,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 3048,
+      "end": 3057,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "async-flight-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/context_not_found-gen-sync-each.tsx",
+      "start": 265,
+      "end": 275,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "async-flight-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/context_not_found-gen-yield-each.tsx",
+      "start": 271,
+      "end": 281,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "async-flight-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/dynamic_static_promise-gen-sync-each.tsx",
+      "start": 240,
+      "end": 247,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "async-flight-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/dynamic_static_promise-gen-yield-each.tsx",
+      "start": 246,
+      "end": 253,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 292,
+      "end": 298,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 302,
+      "end": 311,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 366,
+      "end": 372,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 376,
+      "end": 385,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 492,
+      "end": 498,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 502,
+      "end": 511,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 724,
+      "end": 730,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/Exported.ts",
+      "start": 736,
+      "end": 745,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "async-flight-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/no_owner_context-gen-sync-each.tsx",
+      "start": 258,
+      "end": 268,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "async-flight-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/no_owner_context-gen-yield-each.tsx",
+      "start": 264,
+      "end": 274,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-step-owner/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

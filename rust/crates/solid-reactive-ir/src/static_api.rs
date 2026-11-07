@@ -428,6 +428,17 @@ impl StaticApiContext<'_> {
                     StaticSource::Open => Some(("is not proven to return synchronously", true)),
                 };
                 if let Some((proof, uncertain)) = reported {
+                    // ADR 0852: the source's thenable return proves the guard,
+                    // but a throw in a generator its async caller steps rejects
+                    // that caller's flight. Error observation is a separate,
+                    // unproved step; do not claim a visible runtime error.
+                    let flight_error_unobserved = crate::execution_role::generator_step_resumption(
+                        file,
+                        call.span,
+                        self.lookup,
+                    )
+                    .is_some();
+                    let uncertain = uncertain || flight_error_unobserved;
                     result.violations.push(StaticViolation {
                         id: "SC2007".into(),
                         rule: "static-dynamic-async-source".into(),
@@ -440,7 +451,9 @@ impl StaticApiContext<'_> {
                             dialect.boundary_name(solid_dialect::Boundary::Async)
                         ),
                         location: location(file.path.shared(), call.callee),
-                        analysis_context: if uncertain {
+                        analysis_context: if flight_error_unobserved {
+                            crate::blockers::ASYNC_FLIGHT_ERROR_UNOBSERVED.to_owned()
+                        } else if uncertain {
                             crate::blockers::STATIC_SOURCE_UNPROVEN.to_owned()
                         } else {
                             String::new()

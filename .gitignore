@@ -1101,6 +1101,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/generator-stepped/node_modules/**
 !fixtures/reactive-ir/generator-hand-off/node_modules/
 !fixtures/reactive-ir/generator-hand-off/node_modules/**
+!fixtures/reactive-ir/generator-step-owner/node_modules/
+!fixtures/reactive-ir/generator-step-owner/node_modules/**
 !fixtures/reactive-ir/tuple-accessor-slots/node_modules/
 !fixtures/reactive-ir/tuple-accessor-slots/node_modules/**
 !fixtures/reactive-ir/tuple-accessor-slots-vetoed/node_modules/

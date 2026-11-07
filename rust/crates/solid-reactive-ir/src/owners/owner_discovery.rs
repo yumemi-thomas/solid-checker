@@ -243,19 +243,67 @@ pub(crate) fn discover_owner_file(
                     .ast
                     .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
                     .is_some_and(|declaration| crate::indexes::binding_written(file, declaration)));
-        if let Some(target) = target {
-            let (source, kind) = if unproven_callee
-                || (kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span))
-            {
-                may_run()
-            } else {
-                (source.clone(), kind)
-            };
-            edges.push(SymbolicOwnerEdge {
-                source,
+        // ADR 0851: calling a generator runs none of its body: the edge is a
+        // step's, from where the step runs. A literal called in place is the
+        // ADR 0516 arm's below; an action's stepped generator is its own.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let steps = (!call.construct
+            && file.ast.function_at(callee).is_none()
+            && matches!(
                 target,
-                kind,
-            });
+                Some(OwnerTarget::Symbol(_) | OwnerTarget::Function(..))
+            )
+            && lookup
+                .function_called_at(file.path.as_str(), callee)
+                .or_else(|| lookup.object_member_function(file, call.callee))
+                .is_some_and(|(_, function)| function.generator))
+        .then(|| crate::owners::iterator_steps(file, call, lookup));
+        if let Some(target) = target {
+            match steps {
+                Some(crate::owners::IteratorSteps::Held(sites)) => {
+                    for site in sites {
+                        let in_list = list_site(site);
+                        let source = owner_at(site).filter(|_| !in_list).map(|span| OwnerSource {
+                            path: file.path.to_string(),
+                            span,
+                        });
+                        let kind = if in_list {
+                            OwnerEdgeKind::MayBeUnowned
+                        } else {
+                            call_owner_edge(file, site, lookup)
+                        };
+                        let kind = if kind == OwnerEdgeKind::Preserve && !runs_every_time(site) {
+                            OwnerEdgeKind::MayRun
+                        } else {
+                            kind
+                        };
+                        edges.push(SymbolicOwnerEdge {
+                            source,
+                            target: target.clone(),
+                            kind,
+                        });
+                    }
+                }
+                Some(crate::owners::IteratorSteps::Unplaced) => edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
+                }),
+                Some(crate::owners::IteratorSteps::InPlace) | None => {
+                    let (source, kind) = if unproven_callee
+                        || (kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span))
+                    {
+                        may_run()
+                    } else {
+                        (source.clone(), kind)
+                    };
+                    edges.push(SymbolicOwnerEdge {
+                        source,
+                        target,
+                        kind,
+                    });
+                }
+            }
         }
         // ADR 0347: an invoked function literal runs in the call, under the
         // owner of the code around it (`invocation_runs_under_owner`).
