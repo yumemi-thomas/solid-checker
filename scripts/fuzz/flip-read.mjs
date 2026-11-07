@@ -332,6 +332,22 @@ export const STORED_CONTEXTS = [...Object.keys(STORED_READS), ...Object.keys(STO
 export const STORED_ASYNC_CONTEXTS = Object.keys(STORED_ASYNC);
 const STORED_THROWS = ["RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "DYNAMIC_STATIC_PROMISE", "CONTEXT_NOT_FOUND"];
 
+// R54: a wrapper that holds the parameter off its own stack: the walk may not read it as run there.
+const AW_FORWARDS = {
+  "aw-forward-timer": "(g: () => void) => { setTimeout(() => g(), 0); }",
+  "aw-forward-onclick": `(g: () => void) => { document.createElement("div").onclick = () => g(); }`,
+  "aw-forward-return": "(g: () => void) => () => g()",
+  "aw-forward-await": "async (g: () => void) => { await Promise.resolve(); g(); }",
+  // A call or a hand-on behind a branch: not on every completion, and this program's branch is not taken.
+  "aw-forward-cond": "(g: () => void, on = false) => { if (on) g(); }",
+  "aw-forward-cond-hop": "(g: () => void, on = false) => { const inner = (h: () => void) => { h(); }; if (on) inner(g); }",
+  // A hand-on that doubles per hop: the walk asks each parameter once, the program never calls it.
+  "aw-forward-fan": "function hop(g: () => void, n = 0): void { if (n > 0) { hop(g, n - 1); hop(g, n - 2); } }",
+  // The positives beside them: on the wrapper's stack.
+  "aw-forward-direct": "(g: () => void) => { g(); }",
+  "aw-forward-fan-run": "function hop(g: () => void, n = 1): void { if (n > 0) { hop(g, n - 1); hop(g, n - 2); } g(); }",
+};
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
@@ -346,7 +362,7 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "then-withheld", "then-withheld-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
@@ -369,7 +385,7 @@ FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT = [...(FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT ?
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-forward-timer", "aw-forward-onclick", "aw-forward-return", "aw-forward-cond", "aw-forward-cond-hop", "aw-forward-fan", "gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
@@ -818,6 +834,13 @@ function freshCopy(stmts, kit) {
 }
 
 export function flipReadContext(context, stmts, kit) {
+  if (AW_FORWARDS[context]) {
+    const [h, m, w] = [kit.name("f"), kit.name("m"), kit.name("w")];
+    const held = decl(h, fn([...stmts, ret(num(1))]));
+    const wrapper = decl(w, domExpr(AW_FORWARDS[context]));
+    const compute = fn([expr(domExpr(`${P_AWAIT};`)), expr(domExpr(`await ${w}(() => { ${h}(); });`)), ret(num(1))], { async: true });
+    return { body: [held, wrapper, decl(m, prim("memo", compute)), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
   if (STORED_READS[context]) { const m = kit.name("m"); const made = STORED_READS[context](m, kit); return { body: [decl(m, prim("memo", fn([...stmts, ret(num(1))]))), ...(made.body ?? [])], view: made.view ?? [] }; }
   if (STORED_ASYNC[context]) { const m = kit.name("m"); const made = STORED_ASYNC[context](m, kit); return { body: [decl(m, prim("memo", fn([expr(domExpr(`${P_AWAIT};`)), ...stmts, ret(num(1))], { async: true }))), ...(made.body ?? [])], view: [] }; }
   if (STORED_SITES[context]) return STORED_SITES[context](stmts, kit);

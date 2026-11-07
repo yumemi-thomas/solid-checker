@@ -357,3 +357,5 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 The async computation may be named exactly (a named function expression's binding, an object literal's member), and a comma, conditional, logical or assignment callee after an await (`(slot = r)()`) is a read when it always yields one accessor, else an obligation (ADR 0517). An object literal's arrow member names its function even when its text spells `this` (a nested class's `this.m = …`): an arrow binds no `this` of its own (ADR 0581).
 
 A `.then` handler handed by name is followed as a literal is. A parameter called after an await is uncertifiable, blocker `handed-read-after-await` (ADR 0669).
+
+An exact forwarding wrapper chain runs a callback on the continuation only when each whole-argument hand-on and the final parameter call occur directly in the wrapper’s synchronous prefix on every completion (ADR 0895). A deferred, conditional, reassigned or unresolved hand-on keeps `handed-read-after-await` at the reads. Closed literal members holding a function by name are followed too.
