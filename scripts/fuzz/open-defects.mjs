@@ -44,11 +44,13 @@ export const UNJUDGED = "R-unjudged-unplaced";
 export const F1_OPEN = "R-F1-open";
 /** `flw-owned-*` rows whose callee never resolves as a primitive, so they have no owner site (R5; its alias rule is open). flip-final fails on them too. */
 export const ALIAS_OWNER = "R-alias-owner";
+/** Casts stage 2: a built-in prototype reached by a key no fact names, or by `Object.getPrototypeOf` (ADR 0841). C2's; flip-final fails on these rows. */
+export const CASTS_STAGE2 = "R-casts-stage2";
 /**
  * The rows #173 may not move with (`make flip-final`, open-rows.mjs --final): R-F1-open and R-F2-open, and any certified false clean or false
  * positive the ledger holds, whatever its cause: the ratchet's `certified`, `certifiedF2` and `falsePositive` must all be 0 (coordinator, Part 16).
  */
-export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN, ALIAS_OWNER].includes(row.cause) || row.certified === true || row.outcome === "false-positive").map(([id]) => `${grid}/${id}`));
+export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN, ALIAS_OWNER, CASTS_STAGE2].includes(row.cause) || row.certified === true || row.outcome === "false-positive").map(([id]) => `${grid}/${id}`));
 
 /**
  * The agent a ledger row is assigned to (open-defects.json `owners`, by exact `grid/id`), written into the row by open-rows.mjs. A certified
@@ -62,7 +64,7 @@ export function ownerProblems(list) {
     if (!rows.has(key)) out.push(`${key}: an owner for no ledger row`);
     else if (rows.get(key).owner !== owner) out.push(`${key}: the row says ${rows.get(key).owner ?? "no owner"}, owners says ${owner}`);
   }
-  const familyless = (row) => row.cause === row.outcome || (String(row.cause).startsWith("R-") && ![F1_OPEN, F2_OPEN, ALIAS_OWNER, STOP_NAMED_U].includes(row.cause));
+  const familyless = (row) => row.cause === row.outcome || (String(row.cause).startsWith("R-") && ![F1_OPEN, F2_OPEN, ALIAS_OWNER, CASTS_STAGE2, STOP_NAMED_U].includes(row.cause));
   for (const [key, row] of rows) if ((row.certified === true || row.outcome === "false-positive") && familyless(row) && !owners[key]) out.push(`${key}: ${row.certified ? "certified" : "false positive"} under ${row.cause} with no owner`);
   return out;
 }

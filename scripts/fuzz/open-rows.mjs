@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
-import { ALIAS_OWNER, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
+import { ALIAS_OWNER, CASTS_STAGE2, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
 
 /** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
 const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "stacked-claim", "unjudged-claim", "secondary-false-clean", "not-legal"];
@@ -16,10 +16,13 @@ export const NOT_LISTED = (row) => /^flw-guard-(?:early|probe-loop)$/.test(Strin
 const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted"];
 /** The callee never resolves as a primitive in these bindings: a `flw-owned-*` row has no owner site (R5). */
 const ALIAS_OWNER_BINDINGS = [...ALIAS_BINDINGS, "bind", "call", "or-assign", "ns-nested", "ns-held"];
+/** The contexts casts stage 2 closes. */
+const CASTS_STAGE2_CONTEXTS = ["patch-getproto", "patch-key-proto", "patch-key-alias", "patch-assign-key-proto"];
 const PLACELESS = ["CAUGHT_REACTIVE_READ", "SETTLED_CLEANUP_UNOWNED", "ASYNC_OUTSIDE_LOADING_BOUNDARY"];
 
 /** Why a failing row fails, from what the row itself says. A row of a family already named keeps that name. */
 export function causeOf(row, problem, entry) {
+  if (CASTS_STAGE2_CONTEXTS.includes(row.context)) return CASTS_STAGE2;
   if (/^flw-owned-/.test(String(row.context ?? ""))) return ALIAS_OWNER_BINDINGS.includes(row.binding) ? ALIAS_OWNER : F2_OPEN;
   if (row.context === "flw-guard-yield") return F1_OPEN;
   if (entry && !entry.item.startsWith("R-")) return entry.item;
@@ -118,7 +121,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.includes("--final")) {
     const blockers = finalBlockers(readOpenDefects());
-    console.log(`final gate: ${blockers.length} rows under ${F1_OPEN}, ${F2_OPEN} or ${ALIAS_OWNER}, certified or false positive`);
+    console.log(`final gate: ${blockers.length} rows under ${F1_OPEN}, ${F2_OPEN}, ${ALIAS_OWNER} or ${CASTS_STAGE2}, certified or false positive`);
     process.exit(blockers.length ? 1 : 0);
   }
   const at = args.indexOf("--update");
