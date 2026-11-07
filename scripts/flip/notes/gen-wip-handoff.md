@@ -1,5 +1,7 @@
 # gen-wip handoff (2026-11-07; NOT green)
 
+- 0ce3cd34a (Codex tree) had EDITED scripts/fuzz/smoke/mx-census.json and added rediscovery entries: the brief's stop condition. Both restored to 97c1bb966 content in this commit; the exact diff is gen-wip/proposed-smoke-and-rediscovery.patch, for the owner. g4 make verify: rediscovery test failed on that (now fixed) + the known flaky backend_process cache-repeat test.
+
 ## g4 = 50bb44efc measured (sc VM release, uncached Chrome on every row; gen-wip/g4-*.jsonl, v0850-all-ctx.jsonl)
 - All 22 generator contexts (gstep-*, gen-yield-each/sync-each, gen-await..gen-drain; 954 programs): 97c1bb966 43 FP, 14 FC (12 Chrome-confirmed), 1 wrong-rule -> g4 0 FP, 0 FC, 0 wrong-rule. Chrome-differs left: only the pre-existing throw-in-flight family in untouched contexts (gen-await, gen-iife, gen-wrap, gen-delegate, gen-next, gen-prefix, gen-drain).
 - gen cells (88): 0 FP/FC; the 4 throw-in-flight rows are now U (recall-gap/not-fired). lg twins (1,316): unchanged.
