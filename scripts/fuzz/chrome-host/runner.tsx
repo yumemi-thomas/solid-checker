@@ -79,9 +79,34 @@ async function runCase() {
   Error.stackTraceLimit = 41;
   const onError = (event: ErrorEvent) => {
     // Chrome's ErrorEvent.message reads "Uncaught Error: <message>"; the error's own message is what Happy DOM and the oracle record.
-    errors.push({ phase, kind: 'window-error', message: String(event.error?.message ?? event.message), stack: String(event.error?.stack ?? '') });
+    // Its `cause` too (Part 16, B1): rc.21 wraps a compute's throw in a StatusError made at the read, and the throw's own frame (the
+    // `resolve` line) is only in `cause.stack`.
+    errors.push({ phase, kind: 'window-error', ...describeError(event.error ?? { message: event.message, stack: '' }) });
     event.preventDefault();
   };
+  // A throw inside a window `error` listener is never dispatched to the error listeners (Part 16, B2: the program's own report-error
+  // listener called dynamic(), which threw; only Playwright's pageerror saw it). The program's listeners are wrapped: what one throws is
+  // recorded, then rethrown, so the page sees what it would have.
+  const wrapped = new WeakMap<object, EventListener>();
+  const addListener = window.addEventListener, removeListener = window.removeEventListener;
+  const wrapFor = (listener: any): any => {
+    if (!listener || listener === onError) return listener;
+    let wrap = wrapped.get(listener);
+    if (!wrap) {
+      wrap = function (this: any, event: Event) {
+        try { return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event); }
+        catch (e) { errors.push({ phase, kind: 'error-listener', ...describeError(e) }); throw e; }
+      };
+      wrapped.set(listener, wrap);
+    }
+    return wrap;
+  };
+  window.addEventListener = function (this: any, type: string, listener: any, options?: any) {
+    return addListener.call(this, type, type === 'error' ? wrapFor(listener) : listener, options);
+  } as typeof window.addEventListener;
+  window.removeEventListener = function (this: any, type: string, listener: any, options?: any) {
+    return removeListener.call(this, type, type === 'error' && listener ? (wrapped.get(listener) ?? listener) : listener, options);
+  } as typeof window.removeEventListener;
   const onRejection = (event: PromiseRejectionEvent) => {
     errors.push({ phase, kind: 'unhandledrejection', ...describeError(event.reason) });
     event.preventDefault();
@@ -169,6 +194,7 @@ async function runCase() {
     for (const dispose of disposers) try { dispose(); } catch (e) { errors.push({ phase: 'dispose', kind: 'dispose', ...describeError(e) }); }
     window.removeEventListener('error', onError);
     window.removeEventListener('unhandledrejection', onRejection);
+    window.addEventListener = addListener; window.removeEventListener = removeListener;
     console.error = oldError; console.warn = oldWarn;
     (window as any).__scResolve({
       id, wallMs: Math.round(performance.now() - started), failure, witnesses, hits, order, hitsDom, quiescent,

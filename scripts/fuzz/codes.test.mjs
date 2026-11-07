@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCodeAt, decliningRules, withheldAtStack, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules } from "./codes.mjs";
+import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCodeAt, decliningRules, withheldAtStack, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules, codeOfLogged, stripErrorClass, codeOfUncaught } from "./codes.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 /** The source text of a top-level `const name = [...]` or `{...}` literal in the oracle. */
@@ -82,6 +82,22 @@ describe("every claimed code and rule is real", () => {
     expect(codesForRule("no-store-mutation-outside-setter")).toEqual(["STORE_WRITE_OUTSIDE_SETTER"]);
     expect(ruleHasRuntimeCounterpart("no-store-mutation-outside-setter")).toBe(true);
     expect(readFileSync(join(repo, "docs/rules/no-store-mutation-outside-setter.md"), "utf8")).toMatch(/SC2003/);
+  });
+});
+
+describe("a logged or uncaught error's code (Part 16, R3e)", () => {
+  it("strips the error's class name, Solid's own classes too, then reads the message", () => {
+    expect(codeOfLogged("NoOwnerError: Context can only be accessed under a reactive root")).toBe("NO_OWNER_CONTEXT");
+    expect(codeOfLogged("Error: Cannot call resolve inside a reactive scope; it only resolves the current value")).toBe("RESOLVE_IN_REACTIVE_SCOPE");
+    expect(codeOfLogged("Context can only be accessed under a reactive root")).toBe("NO_OWNER_CONTEXT");
+    expect(codeOfLogged("TypeError: x is not a function")).toBe(null);
+    expect(stripErrorClass("ContextNotFoundError: no provider")).toBe("no provider");
+    expect(stripErrorClass("Uncaught Error: x")).toBe("Uncaught Error: x");
+    expect(codeOfUncaught("NoOwnerError: Context can only be accessed under a reactive root")).toBe("NO_OWNER_CONTEXT");
+    expect(codeOfLogged("ContextNotFoundError: Context has no provider above this read and no default value.")).toBe("CONTEXT_NOT_FOUND");
+    // A prefix that is not the error's own class (the runner's "render failed" note) is read as text, so nothing is coded.
+    expect(codeOfLogged("render failed C1 NoOwnerError: Context can only be accessed under a reactive root.")).toBe(null);
+    expect(codeOfLogged(undefined)).toBe(null);
   });
 });
 

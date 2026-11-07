@@ -249,11 +249,19 @@ export function codeOfThrown(message) {
 }
 
 /**
+ * A logged or uncaught error's text without its class prefix: `Error: `, and Solid's own classes (`NoOwnerError: `, `ContextNotFoundError: `),
+ * which a console.error of the error object prints (R3e, Part 16: the `Error: `-only strip dropped those reports).
+ */
+export const stripErrorClass = (text) => String(text ?? "").replace(/^[A-Za-z]*Error: /, "");
+/** The code of a logged or reported error's text (`codeOfThrown` after `stripErrorClass`), or null. */
+export const codeOfLogged = (text) => codeOfThrown(stripErrorClass(text));
+
+/**
  * ADR 0858: the Solid code an uncaught throw's message carries, or null: a `[CODE]` tag naming a code of the policy table, or a message
  * `thrownCodes` knows. Such a throw is the program's own runtime result; any other failure is the harness's.
  */
 export function codeOfUncaught(message) {
-  const text = String(message ?? "").replace(/^Error: /, "");
+  const text = stripErrorClass(message);
   const tag = /^\[([A-Z][A-Z_]+)\]/.exec(text)?.[1];
   return tag && codePolicy[tag] ? tag : codeOfThrown(text);
 }

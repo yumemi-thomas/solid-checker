@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
-import { besideCode, codeOfThrown, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
+import { besideCode, codeOfLogged, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { stackedProblems } from "./stacked.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
@@ -79,7 +79,7 @@ async function mapStacks(server, lookup, caseDir, rec) {
   };
   const stacks = {};
   for (const row of rec.sites ?? []) {
-    const code = row.code ?? codeOfThrown(String(row.message).replace(/^Error: /, "")) ?? /^\[([A-Z][A-Z_]+)\]/.exec(String(row.message))?.[1];
+    const code = row.code ?? codeOfLogged(row.message) ?? /^\[([A-Z][A-Z_]+)\]/.exec(String(row.message))?.[1];
     if (!code) continue;
     const stack = [];
     for (const frame of row.frames ?? []) {
@@ -137,7 +137,7 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
         await page.goto(`${base}index.html?id=${id.replace("/", "--")}`, { waitUntil: "load" });
         await page.waitForFunction(() => window.__rec !== undefined, null, { timeout: 15000 });
         const rec = await page.evaluate(() => window.__rec);
-        const thrown = rec.errors.map((message) => codeOfThrown(String(message).replace(/^Error: /, ""))).filter(Boolean);
+        const thrown = rec.errors.map((message) => codeOfLogged(message)).filter(Boolean);
         const entry = rec.errors.find((message) => String(message).startsWith("entry: "));
         const stacks = await mapStacks(server, lookup, join(root, "cases", id.replace("/", "--")), rec);
         records.set(id, { codes: [...new Set([...rec.diagnostics, ...thrown])], stacks, ...(entry ? { failure: entry.slice(0, 160) } : {}) });
