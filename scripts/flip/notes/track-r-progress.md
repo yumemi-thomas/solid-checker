@@ -549,3 +549,52 @@ Worktree `/Users/thomas/dev/sc-worktrees.noindex/r3c`, branch `claude/flip-r3c` 
 **Open (mine before the context limit):** the false positive above (route); item 2 of the coordinator's next job, after_await row-less ends B1, B3/B4, B2 (scout map `/Users/thomas/dev/sc-scratch.noindex/research/scout-bind-afterawait.md` part B): not started, no design sent. Rebase on W's gen-await (97c1bb966) first; a design goes to the coordinator and the rolling reviewer before building; each end needs a misuse.mjs/flip-read.mjs fuzz context first.
 
 **Traps.** A census row's judge reads the program's own runtime; `matrix.mjs` is read live by running grids (do not edit it under a queued run). `git stash` is shared across worktrees: pop by message. Fixture stubs need `git add` before coverage sees them. A rediscovery entry names one grid. The census treats a JSX-returning function handed only to a carrier as an escaped component: its body's violations become `component-identity-unproven` obligations.
+
+## R3d handoff (stopped at context limit)
+
+Branch claude/flip-r3c, worktree /Users/thomas/dev/sc-worktrees.noindex/r3c, scratch /Users/thomas/dev/sc-scratch.noindex/flip-r3c
+(helpers: bldf.sh/sc-build, covf.sh <tag> [update], fz*.sh, tools/tab.mjs, tools/snapdiff.py, tools/addsrc.py, tools/mkids.mjs, tools/show2.mjs).
+
+Commits (R3d): 0140ec6fb (ADRs 0870-0873, B1-B4/B2), 224500272 (guard count), 042bf168b (eslint-corpus pin 22),
+8f0005a43 (ADRs 0879-0882, B5-B8), 1b38ca3e9 (merge of origin/claude/flip-gen-await 8d9f18636, the coordinator's ruling).
+
+### Open, in order (coordinator's list)
+1. FP mx-context-not-found-aw-helper-late-x-direct-none (mx-census): `useContext` in an async helper `f1` that the memo awaits
+   after its own await; Chrome silent. ADR 0852 class (W 34a681ffc: `flight_error_unobserved` in owners/owner_emission.rs,
+   blocker ASYNC_FLIGHT_ERROR_UNOBSERVED, only for generator steppers). Extend the flag: a context read whose run is on an
+   async computation's flight past one of its suspensions (own or the caller's: the helper is awaited past the memo's
+   await) keeps the context-read obligation open. Ids: scratch ids/fp4.json, runner fzfp.sh <tag> <build> (sc-light).
+2. FP x3 mx-{resolve-in-reactive-scope,until-in-reactive-scope,dynamic-static-promise}-flush-read-stored-x-direct-none:
+   the memo holding `flush(() => hkTwice(() => resolve(...)))` is never read. Probe cases/fs (rc.21 Chrome, console):
+   p1 census program: silent; p2 same + `createEffect(() => m1(), ...)`: throws "Cannot call resolve inside a reactive
+   scope"; p3 `createMemo(() => { flush(() => { resolve(() => 1); }); return 1; })` unread: silent; p4 p3 + reader:
+   throws. So a throw in a memo compute is observed only when the memo is read (the memo stores the error).
+   Checker today: SC2004 V on all four (p3 is a false positive too, outside the census ids).
+   Fix direction: a throwing static-API row (SC2004 resolve/until, static-dynamic-async-source) whose only scope is a
+   memo compute is a violation only when that memo is proven read (its accessor called in a running effect compute,
+   JSX expression, or another proven-run read); otherwise U with a named blocker (new, e.g. computation-error-unobserved).
+   Measure the V cost on fixtures (handed-flush, flush-callback-in-helper) and corpus before committing; design to the
+   coordinator first (it adds a proof requirement, not an exemption, but moves V to U).
+3. Misplaced 32 (mx-recall aw-*) and unplaced 50 (mx-census aw-*): ids in
+   /Users/thomas/dev/sc-scratch.noindex/flip-reads/m16/rows-p7-dryrun.json (grids -> outcome misplaced/unplaced, ids with
+   `aw-`). Not read yet.
+4. R14 (review/findings-rolling.md:420): ADR 0858 judge; the `unexecuted` early return drops `secondary`, and a halting
+   throw's own code at another line is judged by no row. Fix: a row ending `unexecuted` (or `harness` with a coded
+   failure) carries the halting code as a secondary judged anywhere in the file. Judge change: say so before.
+5. Fable review rise 2 (research/fable-u-review.md): in B2 (static_rules/handed_compute.rs at_call), exclude lib.dom /
+   lib.es callees outside the census list, same standard as ADR 0781/0840 and open-work line 305 (~1,500 rows: 1,463
+   test, 71 source). Exact declarations only; a patched member stays U through the census; test-runner callbacks stay in
+   scope (no name premise). Short design to the coordinator first.
+6. Review residual on 8f0005a43: `unresolved_chain_handlers` (static_rules/after_await.rs) returns with no row on a
+   computed callee, `p["then"](h)` on an unresolved receiver. Fuzz shape first (a THEN_HANDLERS entry in
+   scripts/fuzz/flip-read.mjs: `(Promise.resolve(1) as any)["then"](${h})`), then treat a computed member whose key is
+   the literal "then"/"catch"/"finally" as the named one, and any other computed key as unresolved (push_unfollowed).
+
+### State at 1b38ca3e9
+- Green on 8f0005a43: verify-delta BASE=f1a8da6a4 rc 0 (covers 0140ec6fb, 224500272, 042bf168b), ownership-gate 96 cases.
+  On the merge 1b38ca3e9: coverage passes with no move, fuzz unit tests 1,106, guard count passes; no verify-delta yet.
+- Builds: scratch rg5 = 0140ec6fb, rg7 = 8f0005a43 (release). Fuzz id sets in scratch ids/: aw-mx, aw-lg, ip-mx, ip-lg,
+  b5-mx, th-mx, th-lg, fp4, aw-ta. Corpus sweeps: sweep-f9 (f1a8da6a4), sweep-g5 (0140ec6fb), sweep-g6.
+- B2 corpus rise (g5 vs f9): 3,802 function-run-unplaced rows, 3,543 in test files (async functions handed to vitest
+  `it`/`test`), 259 in source (app-game paint-core retry/queue helpers, neverthrow ResultAsync.fromThrowable).
+- Designs sent: D-R3d-1 (in-place wrapper, review D12 applied), D-R3d-2 (B5-B8, review D14 applied).
