@@ -6660,6 +6660,29 @@
    ],
    "rediscovered": "SYNC_NODE_RECEIVED_ASYNC jsx sync-memo-read (6, Chrome confirmed): build pa11 (5870569bb) 4 wrong-rule (SC5003 violation Chrome does not report); ADR 0889 (pa12) 6 agree, SC5003 uncertifiable. Fixture reactive-ir/sync-memo-read (twin SyncFalseRead keeps its violation)"
   },
+  {
+   "finding": "a flow element whose result is dropped (`const f = () => <Show when={a()}>...`, `f()`) proved ASYNC_OUTSIDE_LOADING_BOUNDARY while Chrome rc.21 is silent: no render reads the component's result",
+   "found": "R2h, ADR 0892's fuzz shapes",
+   "fixed": "ADR 0892",
+   "grid": "mx-recall",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "ids": [
+    "mx-async-outside-loading-boundary-jsx-flow-show-direct-closure",
+    "mx-async-outside-loading-boundary-jsx-flow-show-direct-helper"
+   ],
+   "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY jsx flow-show (18, Chrome confirmed): build pa13 (e18f1899f's tree) 16 false positive, 2 agree; pa16 16 not-fired, 2 recall-gap (those 2 were V and rendered, now uncertifiable), 0 false positive"
+  },
+  {
+   "finding": "a read in the `when` of a `Match` outside a `Switch` (`(<Match when={a()}>...</Match> as any).when`) runs in the body, since `Match` returns its props; the tracked role accounted for SC5001 and Chrome rc.21 reports PENDING_ASYNC_UNTRACKED_READ",
+   "found": "R2h, review D20's shape",
+   "fixed": "ADR 0892",
+   "grid": "mx-recall",
+   "code": "PENDING_ASYNC_UNTRACKED_READ",
+   "ids": [
+    "mx-pending-async-untracked-read-body-flow-match-direct-none"
+   ],
+   "rediscovered": "PENDING_ASYNC_UNTRACKED_READ body flow-match (6, Chrome confirmed): build pa13 1 false clean, 5 recall-gap; pa16 6 recall-gap"
+  },
  {
   "finding": "ADR 0868's walk stopped at a closed named layer: `wrapUse` called from an `f` that escapes stayed certified, and the click raises the site's NO_OWNER_* code (every wrapper binding of the flw-owned contexts)",
   "found": "Part 16's smoke on the merged build",

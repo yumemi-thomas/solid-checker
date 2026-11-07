@@ -556,6 +556,19 @@ export const EXPORT_READS = {
     files: exportedHelperFile('void onSettled;\n  return <button onClick={() => eRead()}>x</button>;'),
   },
 };
+// ADR 0892 review D20: reads a flow prop's own computation does not hold. `/*@static*/` drops the getter, a JSX element between evaluates its own props in the
+// body, and `Match` returns its props object.
+const FLOW_READ = { kind: "async", contexts: ["body"], bindings: ["direct"] };
+export const FLOW_PROP_READS = {
+  "flow-static": { ...FLOW_READ, imports: ["Show"], text: (o) => `void (<Show when={/*@static*/ ${o}()}><i /></Show>);` },
+  "flow-element": { ...FLOW_READ, imports: ["Show"], importLines: ["const FlowKid = (p: { y: unknown }) => <i>{String(p.y)}</i>;"], text: (o) => `void (<Show when={<FlowKid y={${o}()} />}><i /></Show>);` },
+  "flow-match": { ...FLOW_READ, imports: ["Match"], text: (o) => `void (<Match when={${o}()}><i /></Match> as any).when;` },
+};
+// ADR 0892: a read a flow prop's own computation holds: no pending-read throw, ASYNC_OUTSIDE_LOADING_BOUNDARY with no `Loading`.
+export const FLOW_PROP_HELD = {
+  "flow-show": { ...PEEK, contexts: ["jsx"], imports: ["Show"], text: (o) => `return <Show when={${o}()}><i /></Show>;` },
+  "flow-for": { ...PEEK, contexts: ["jsx"], imports: ["For"], text: (o) => `return <For each={[${o}()]}>{() => <i />}</For>;` },
+};
 export const PENDING_SLOTS = {
   "pending-slot": { ...PEEK, text: (o) => `const useM = () => [${o}] as const; const [m] = useM(); void m();` },
 };
@@ -738,12 +751,12 @@ export const AWAIT_USES = {
 export const FLIP_READ_VARIANTS = {
   UNTRACKED_READ_AFTER_AWAIT: AWAIT_USES,
   MISSING_EFFECT_FN: SUPPRESSED_EFFECTS,
-  PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
+  PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] }, ...FLOW_PROP_READS },
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   PENDING_ASYNC_FORBIDDEN_SCOPE: EXPORT_READS,
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS },
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS, ...FLOW_PROP_HELD },
   CAUGHT_REACTIVE_READ: { ...CAUGHT_CHAINS, ...CAUGHT_HANDED_READS },
   SYNC_NODE_RECEIVED_ASYNC: SYNC_NODE_READS,
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },

@@ -1,0 +1,169 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 406,
+      "end": 415,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 529,
+      "end": 538,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 682,
+      "end": 691,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "closed-parameter-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 1152,
+      "end": 1161,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 1187,
+      "end": 1193,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 1456,
+      "end": 1465,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "carrier-run-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 1456,
+      "end": 1465,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 1767,
+      "end": 1776,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2031,
+      "end": 2040,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2252,
+      "end": 2261,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2252,
+      "end": 2261,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2503,
+      "end": 2512,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2702,
+      "end": 2711,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2702,
+      "end": 2711,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2702,
+      "end": 2711,
+      "fixes": 0
+    }
+  ]
+}

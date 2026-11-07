@@ -472,6 +472,15 @@ pub(crate) fn account_pending_reads(
                 && violation.location.start_byte < site.location.end_byte
                 && site.location.start_byte < violation.location.end_byte
         });
+        let loose_match = file.zip(span).is_some_and(|(file, span)| {
+            crate::owners::read_in_loose_match(
+                file,
+                span,
+                ctx.entities,
+                ctx.symbol_names,
+                lookup.dialect,
+            )
+        });
         for rule in PendingRule::ALL {
             if rule == PendingRule::Caught && (!caught_claim || caught_row) {
                 continue;
@@ -486,6 +495,9 @@ pub(crate) fn account_pending_reads(
                 reported_rule(row) == Some(rule)
                     || row_reasons(lookup, row)
                         .iter()
+                        .filter(|reason| {
+                            !(loose_match && **reason == PendingSafe::SuspendsInComputation)
+                        })
                         .any(|reason| reason.rules_out().contains(&rule))
                     || (rule == PendingRule::Unsuspendable && opened_by_strict_read(draft, row))
             });
@@ -616,6 +628,12 @@ fn site_reasons(
         // readers are sites of their own (`over_async`, ADR 0802).
         reasons.push(PendingSafe::SuspendsInComputation);
         reasons.push(PendingSafe::NotRenderEffect);
+    }
+    // ADR 0892: never with `NotRenderEffect` (review D20): a flow component's
+    // prop is read for the render it feeds, and the boundary claim stands.
+    if crate::owners::read_in_flow_prop(file, span, ctx.entities, ctx.symbol_names, lookup.dialect)
+    {
+        reasons.push(PendingSafe::SuspendsInComputation);
     }
     if ctx
         .entities

@@ -2498,6 +2498,15 @@ impl Dialect for Solid2 {
     /// synchronous `render()` window, and never for a memo or a user effect's
     /// compute. `createRenderEffect` is the one user-callable render effect;
     /// compiled JSX positions are classified from compiler facts instead.
+    /// Source: rc.21 `solid.dev.js`: `Show` reads `when` in
+    /// `createMemo(() => props.when)`, `For` hands `() => props.each` to
+    /// `mapArray`, and `Switch` reads each `Match`'s `when` in a memo. Read from
+    /// rc.21 only; `Match` returns its props, so the caller needs its `Switch`.
+    fn flow_prop_read_in_own_computation(&self, tag: &str, prop: &str) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21
+            && matches!((tag, prop), ("Show" | "Match", "when") | ("For", "each"))
+    }
+
     fn computation_read_is_render(&self, primitive: Primitive) -> bool {
         primitive == Primitive::CreateRenderEffect
     }

@@ -98,7 +98,7 @@ const CALL_WALK_BUDGET: usize = 512;
 
 /// What `function` may return: each `return`'s value (`None` for a bare one), or
 /// the expression of an arrow with no block.
-fn returned_values(
+pub(crate) fn returned_values(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
 ) -> Vec<Option<solid_facts::core::Span>> {
@@ -6756,7 +6756,14 @@ impl LocalAccessContext<'_, '_> {
                     || placed_at.is_some_and(|carrier| {
                         !crate::carrier_runs::carrier_provably_runs(file, carrier, self.lookup)
                     })
-                    || crate::carrier_runs::carrier_run_unproven(file, timing_at, self.lookup),
+                    || crate::carrier_runs::carrier_run_unproven(file, timing_at, self.lookup)
+                    || crate::owners::flow_prop_element_unrendered(
+                        file,
+                        call.span,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    ),
                 // The proof climbs from the read to the apply itself, so a
                 // read in a closure the apply calls (its own role the body's)
                 // is placed there too.

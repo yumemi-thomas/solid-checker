@@ -1023,17 +1023,6 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "async-read-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/r-push-prop-reads.tsx",
-      "start": 567,
-      "end": 576,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",

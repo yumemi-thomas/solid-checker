@@ -147,7 +147,7 @@ operator, template or loop there or in the body before the effect, which may
 throw through a coercion (ADR 0511 closes ADR 0507's residual). The climb also passes a `<Loading>` with a literal
 `fallback` and no `on`, which renders its one child at creation (ADR 0511).
 
-A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent. A walk cut on one path leaves the read its own rows, whatever the other paths placed. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889).
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent. A walk cut on one path leaves the read its own rows, whatever the other paths placed. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
 
 ## Examples
 
@@ -201,3 +201,5 @@ A source whose compute returns `any`, or may throw `NotReadyError`, is uncertifi
 A member tag of a same-file `const` holder ADR 0342 accounts (`<Ui.Panel value={data()} />`) renders the stored function, so its pending getter reaches the child's prop as a plain tag's does. A prop read in a leaf owner whose callers do not exclude a pending getter is SC9012 `prop-pending-unproven` (ADR 0823).
 
 A destructure of a props object reads every slot it binds and asks the same question (ADR 0824): a caller's async getter outside tracked JSX, or in a leaf owner, is SC9012 `async-prop-getter`; an open caller set in a leaf owner is `prop-pending-unproven`.
+
+A read written in `Show`'s or `Match`'s `when` or `For`'s `each` on rc.21 is held by the component's own computation: no SC5001 (ADR 0892). A `/*@static*/` value, an element or function between, a spread on the tag and a `Match` outside a `Switch` stay open.

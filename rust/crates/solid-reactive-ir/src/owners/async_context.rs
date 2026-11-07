@@ -1333,6 +1333,139 @@ pub(crate) fn tracked_computation_read(
     })
 }
 
+/// ADR 0892: the read at `span` is written in the value of a prop that an
+/// exactly resolved flow component reads only in a computation of its own
+/// (`<Show when={a()}>`, `<For each={a()}>`, `<Match when={a()}>` as a direct
+/// child of a `Switch`): a pending value suspends that computation, so no
+/// strict-read window sees it. Review D20: no element or function may stand
+/// between the read and the attribute (it evaluates elsewhere), no comment may
+/// sit in the value (`/*@static*/` drops the getter), and no spread may stand
+/// on the tag.
+pub(crate) fn read_in_flow_prop(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> bool {
+    let holding = |inner: Span| {
+        file.ast
+            .jsx_elements
+            .iter()
+            .filter(|element| element.span.contains(inner) && element.span != inner)
+            .min_by_key(|element| element.span.end - element.span.start)
+    };
+    let Some(element) = holding(span) else {
+        return false;
+    };
+    if !element.spreads.is_empty() {
+        return false;
+    }
+    let Some(attribute) = element.attributes.iter().find(|attribute| {
+        attribute.namespace.is_none()
+            && attribute
+                .expression
+                .is_some_and(|value| value.contains(span))
+    }) else {
+        return false;
+    };
+    if file
+        .source_text(attribute.span)
+        .is_none_or(|text| text.contains("/*") || text.contains("//"))
+    {
+        return false;
+    }
+    let function = |at: Span| containing_ast_function(&file.ast, at).map(|function| function.span);
+    if function(span) != function(element.span) {
+        return false;
+    }
+    let tag = |element: &solid_facts::ast::JsxElementFact| {
+        jsx_primitive_name(file, element, entities, symbol_names, dialect)
+    };
+    let Some(name) = tag(element) else {
+        return false;
+    };
+    let name: &str = &name;
+    if !file
+        .source_text(attribute.name)
+        .is_some_and(|prop| dialect.flow_prop_read_in_own_computation(name, prop))
+    {
+        return false;
+    }
+    // `Match` returns its props: only `Switch` reads them in a computation.
+    name != "Match"
+        || holding(element.span).is_some_and(|parent| {
+            parent.children.contains(&element.span)
+                && tag(parent).is_some_and(|parent| &*parent == "Switch")
+        })
+}
+
+/// ADR 0892: `Match` returns its props, so outside a `Switch` a read in its
+/// `when` runs wherever that object is read: no tracked role speaks for it.
+pub(crate) fn read_in_loose_match(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> bool {
+    let Some(element) = file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(span) && element.span != span)
+        .min_by_key(|element| element.span.end - element.span.start)
+    else {
+        return false;
+    };
+    element.attributes.iter().any(|attribute| {
+        attribute
+            .expression
+            .is_some_and(|value| value.contains(span))
+            && file.source_text(attribute.name) == Some("when")
+    }) && jsx_primitive_name(file, element, entities, symbol_names, dialect).as_deref()
+        == Some("Match")
+        && !read_in_flow_prop(file, span, entities, symbol_names, dialect)
+}
+
+/// ADR 0892: a read in a flow prop warns from the render that reads the
+/// component's result. An element that is no JSX child and no return of a
+/// component may be dropped (`const f = () => <Show when={a()}>...`, `f()`):
+/// Chrome rc.21 is silent there, so the boundary claim is not proved.
+pub(crate) fn flow_prop_element_unrendered(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if !read_in_flow_prop(file, span, entities, symbol_names, lookup.dialect) {
+        return false;
+    }
+    let Some(element) = file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(span) && element.span != span)
+        .min_by_key(|element| element.span.end - element.span.start)
+    else {
+        return false;
+    };
+    let child = file
+        .ast
+        .jsx_elements
+        .iter()
+        .any(|parent| parent.children.contains(&element.span));
+    let returned = containing_ast_function(&file.ast, element.span).is_some_and(|function| {
+        lookup.function_may_be_component(file, function)
+            && crate::local_access::returned_values(file, function)
+                .iter()
+                .flatten()
+                .any(|value| file.ast.peel_ts_sugar_span(*value) == element.span)
+    });
+    !(child || returned)
+}
+
 pub(crate) fn jsx_element_is_loading(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
