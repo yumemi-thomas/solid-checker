@@ -386,6 +386,10 @@ export const VALUE_USES = {
   "use-store-map-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["createStore"], importLines: ["const [esm] = createStore({ v: 1 });", 'const esmm = new Map([["s", esm]]);'], text: (o) => `void ${o}; void esmm.get("s")!.v;` },
   "use-store-nullish-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["createStore"], importLines: ["const [esn] = createStore({ v: 1 });", "const esn2 = ((): typeof esn | null => null)() ?? esn;"], text: (o) => `void ${o}; void esn2.v;` },
   "use-hook-module-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ['import { useEhs } from "./ehm";'], files: { "ehm.ts": 'import { createStore } from "solid-js";\nconst [ehs] = createStore({ v: 1 });\nexport function useEhs() { return ehs; }\n' }, text: (o) => `void ${o}; void useEhs().v;` },
+  // W3 (review of 7c0eff2d9): a write into a call's result (`ecb().v = ecc`), and an escaped read in a store setter's callback (run on
+  // the caller's stack, though its role is a deferred callback).
+  "use-call-target-apart": { ...USE_READ, imports: ["createStore"], legal: ["memo", "effect-compute"], importLines: ["const [ect] = createStore({ a: 1 });", "const ech: any = {};", "const ecb = () => ech;", "ecb().s = ect;"], text: (o) => `void ${o}; void ech.s.a;` },
+  "use-setter-apart": { ...USE_READ, contexts: ["body"], importLines: ['import { setSw2 } from "./sw2";', "const [esp] = createSignal(1);", "const esph = ((): (() => number) | null => null)() ?? esp;"], files: SETTER_STORE.files, text: (o) => `void ${o}; setSw2((d) => { d.n = esph(); });` },
   "use-export-let": { ...USE_READ, importLines: ['const [elc] = createSignal(1);', 'export let elRead = elc;', 'import { readEl } from "./el";'], files: { "el.ts": 'import { elRead } from "./App";\nexport const readEl = () => elRead();\n' }, text: (o) => `void ${o}; void readEl();` },
 };
 const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
