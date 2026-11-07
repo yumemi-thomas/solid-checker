@@ -61,6 +61,17 @@
       "start": 366,
       "end": 371,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-store-key-probes/App.tsx",
+      "start": 414,
+      "end": 444,
+      "fixes": 0
     }
   ]
 }

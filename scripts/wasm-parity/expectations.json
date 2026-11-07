@@ -690,9 +690,9 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 7,
-        "proofObligations": 5,
+        "proofObligations": 6,
         "cachedSummaries": 0,
-        "unresolvedObligations": 2
+        "unresolvedObligations": 3
       },
       "premises": [
         "standard runtime configuration (ADRs 0266/0268)",

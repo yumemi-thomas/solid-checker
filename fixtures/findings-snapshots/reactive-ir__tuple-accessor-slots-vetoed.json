@@ -5,6 +5,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots-vetoed/patched.tsx",
+      "start": 218,
+      "end": 263,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-accessor-slots-vetoed/patched.tsx",

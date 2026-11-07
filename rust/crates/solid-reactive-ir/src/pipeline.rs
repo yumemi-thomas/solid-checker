@@ -53,6 +53,10 @@ pub(crate) struct ProgramDraft {
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
+    /// ADR 0860: obligations no other producer's row may yield to: pushed
+    /// after every producer has run, so a row at the same start keeps its
+    /// place.
+    pub(crate) deferred_defects: Vec<StaticDefect>,
 }
 
 impl ProgramDraft {
@@ -659,6 +663,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             semantic_lookup,
         ));
     for defect in dependency_source_call_error_defects(facts) {
+        draft.push_defect(defect);
+    }
+    for defect in std::mem::take(&mut draft.deferred_defects) {
         draft.push_defect(defect);
     }
     draft.discard_deleted_static_diagnostics(facts);

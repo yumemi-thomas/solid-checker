@@ -5712,5 +5712,32 @@
    "mx-pending-async-forbidden-scope-tracked-rerun-x-wrapper-chain-5"
   ],
   "rediscovered": "deep-layer ids of PENDING_ASYNC_FORBIDDEN_SCOPE, PENDING_ASYNC_UNTRACKED_READ, ASYNC_OUTSIDE_LOADING_BOUNDARY (1,372, Chrome confirmed): build fp3 (e5589a4aa) settled wrapper chain-5 certified false clean, tracked and tracked-rerun false clean under another rule; ADR 0835 all three recall-gap, nothing else moved. Fixture reactive-ir/walk-bounds reads0 (silent there before)"
+ },
+ {
+  "finding": "a read or write through a value the census could not follow (a Map, ??, Object.assign, forEach, a global's slot, untrack's result, a method answering this, a hook another module exports) on a later line than its escape had no row at the read: the only SC9012 stood where the value escaped, so the read Chrome reports (STRICT_READ_UNTRACKED, STORE_WRITE_OUTSIDE_SETTER) was clean at its site",
+  "found": "the integrator's site-aware judge (4c), 18 fuzz patterns",
+  "fixed": "ADR 0860, ADR 0862",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-map-apart-direct-none",
+   "mx-strict-read-untracked-body-use-global-apart-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-untrack-apart-direct-none",
+   "mx-strict-read-untracked-root-use-self-apart-direct-none",
+   "mx-strict-read-untracked-body-use-store-map-apart-direct-none"
+  ],
+  "rediscovered": "the -apart ids in the sc VM (540 STRICT_READ_UNTRACKED, 72 STORE_WRITE_OUTSIDE_SETTER, Chrome confirmed): build b40d5d6a7 270 + 36 recall-gap with only a remote SC9012 (false cleans at the site); the escaped walk 0 remote (540 recall-gap at the site; 36 at the site, 36 agree). Legal twins (360): no false positive on either; 12 use-each-apart wrapper twins clean to uncertifiable. The 18 patterns: 0 of 18 with a row at the read, then 18 of 18. Package-global shapes (d8) are not generated: the grids carry no package; held by the pattern lane"
+ },
+ {
+  "finding": "a write through a store the census could not follow (a Map, ??) on a later line than its escape had no row at the write: the only SC9012 stood where the store escaped (STORE_WRITE_OUTSIDE_SETTER clean at its site)",
+  "found": "the integrator's site-aware judge (4c), 18 fuzz patterns",
+  "fixed": "ADR 0860, ADR 0862",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-map-apart-direct-none",
+   "mx-store-write-outside-setter-handler-sw-map-apart-direct-closure"
+  ],
+  "rediscovered": "the -apart ids in the sc VM (540 STRICT_READ_UNTRACKED, 72 STORE_WRITE_OUTSIDE_SETTER, Chrome confirmed): build b40d5d6a7 270 + 36 recall-gap with only a remote SC9012 (false cleans at the site); the escaped walk 0 remote (540 recall-gap at the site; 36 at the site, 36 agree). Legal twins (360): no false positive on either; 12 use-each-apart wrapper twins clean to uncertifiable. The 18 patterns: 0 of 18 with a row at the read, then 18 of 18. Package-global shapes (d8) are not generated: the grids carry no package; held by the pattern lane"
  }
 ]

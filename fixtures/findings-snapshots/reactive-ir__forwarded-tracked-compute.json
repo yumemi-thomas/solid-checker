@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 329,
+      "end": 338,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -27,6 +38,17 @@
       "code": "SC5003",
       "kind": "uncertifiable",
       "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 525,
+      "end": 534,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
       "start": 525,
@@ -49,6 +71,17 @@
       "code": "SC5003",
       "kind": "uncertifiable",
       "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 966,
+      "end": 975,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
       "start": 966,
@@ -221,6 +254,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 369,
+      "end": 378,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -235,6 +279,17 @@
       "code": "SC5003",
       "kind": "uncertifiable",
       "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 627,
+      "end": 636,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
       "start": 627,

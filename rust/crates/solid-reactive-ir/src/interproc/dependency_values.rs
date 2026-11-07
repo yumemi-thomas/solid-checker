@@ -22,7 +22,7 @@ pub(super) fn dependency_value_obligations(
     let (packages, project): (Vec<_>, Vec<_>) = files
         .iter()
         .partition(|file| facts.dependency_source_root(file.path.as_str()).is_some());
-    let globals = global_reads(facts, &packages, lookup, provenance);
+    let (globals, installed) = global_reads(facts, &packages, lookup, provenance);
     for file in project {
         for import in &file.ast.imports {
             if import.type_only {
@@ -52,6 +52,45 @@ pub(super) fn dependency_value_obligations(
                 fixes: vec![],
                 uncertain: true,
             });
+        }
+        // ADR 0862: each call of what a package installs on a global is a site
+        // the function may read a source at: the row stands there too, not
+        // only at the import.
+        if !globals.is_empty() {
+            let allowed = allowed_callback_spans(file, lookup);
+            for call in &file.ast.calls {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                let Some(name) = installed_callee(file, callee, &installed) else {
+                    continue;
+                };
+                let role = semantic_execution_role(
+                    file,
+                    call.span,
+                    &allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                );
+                if !role.reports_untracked_read() && !role.reports_unplaced() {
+                    continue;
+                }
+                obligations.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: name.to_owned(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), call.span),
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::DEPENDENCY_GLOBAL_READ,
+                        &format!(
+                            "{} installs {name} on a global, and it may read a source here",
+                            globals.join(", ")
+                        ),
+                    ),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
         }
         let mut allowed = None;
         let mut untracked = |span: Span| {
@@ -153,15 +192,66 @@ pub(super) fn dependency_value_obligations(
     obligations
 }
 
+/// ADR 0862: the global keys the packages install a function that may read a
+/// source on. `any`: a key no text names, so every member of a global.
+#[derive(Default)]
+struct Installed {
+    any: bool,
+    keys: HashSet<String>,
+}
+
+/// The name of an installed function a call's callee names: `window.k` (or
+/// another global object, unshadowed), or the bare global `k` itself.
+fn installed_callee<'f>(
+    file: &'f solid_facts::FileFacts,
+    callee: Span,
+    installed: &Installed,
+) -> Option<&'f str> {
+    let ast = &file.ast;
+    let global = |at: Span| {
+        file.source_text(at)
+            .is_some_and(|text| GLOBAL_OBJECTS.contains(&text))
+            && ast.reference_declaration(at).is_none()
+    };
+    if let Some(member) = ast.member_at(callee) {
+        if !global(ast.peel_ts_sugar_span(member.object)) {
+            return None;
+        }
+        let key = match ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == member.span)
+        {
+            Some(literal) => Some(literal.key.as_str()),
+            None if ast.computed_members.contains(&member.span) => None,
+            None => file.source_text(member.property),
+        };
+        return match key {
+            Some(key) if installed.any || installed.keys.contains(key) => Some(key),
+            None if installed.any || !installed.keys.is_empty() => file.source_text(member.span),
+            _ => None,
+        };
+    }
+    let name = file.source_text(callee)?;
+    (installed.keys.contains(name)
+        && ast.reference_declaration(callee).is_none()
+        && ast.identifiers_within(callee).any(|identifier| {
+            identifier.span == callee
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }))
+    .then_some(name)
+}
+
 /// The package names of the selected roots that assign a member of a global
-/// object a function that may read a source.
+/// object a function that may read a source, and the keys they assign.
 fn global_reads(
     facts: &ProjectFacts,
     files: &[&solid_facts::FileFacts],
     lookup: &SemanticLookup<'_>,
     provenance: &accessor_provenance::Resolver<'_, '_>,
-) -> Vec<String> {
+) -> (Vec<String>, Installed) {
     let mut packages = Vec::new();
+    let mut installed = Installed::default();
     for file in files {
         let Some(root) = facts.dependency_source_root(file.path.as_str()) else {
             continue;
@@ -170,10 +260,7 @@ fn global_reads(
             continue;
         };
         let package = package.trim_end_matches('/').to_owned();
-        if packages.contains(&package) {
-            continue;
-        }
-        let assigns = file.ast.assignments.iter().any(|assignment| {
+        let assigns = file.ast.assignments.iter().filter(|assignment| {
             let Some(member) = file
                 .ast
                 .member_at(file.ast.peel_ts_sugar_span(assignment.target))
@@ -219,9 +306,35 @@ fn global_reads(
                 .source_text(value)
                 .is_none_or(accessor_provenance::plain_value_text)
         });
-        if assigns {
+        let mut any = false;
+        for assignment in assigns {
+            any = true;
+            let Some(member) = file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(assignment.target))
+            else {
+                continue;
+            };
+            let key = match file
+                .ast
+                .literal_computed_members
+                .iter()
+                .find(|literal| literal.span == member.span)
+            {
+                Some(literal) => Some(literal.key.as_str()),
+                None if file.ast.computed_members.contains(&member.span) => None,
+                None => file.source_text(member.property),
+            };
+            match key {
+                Some(key) => {
+                    installed.keys.insert(key.to_owned());
+                }
+                None => installed.any = true,
+            }
+        }
+        if any && !packages.contains(&package) {
             packages.push(package);
         }
     }
-    packages
+    (packages, installed)
 }

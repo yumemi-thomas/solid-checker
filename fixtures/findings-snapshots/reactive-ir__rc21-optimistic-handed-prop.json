@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1310,
+      "end": 1336,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "uncertifiable",

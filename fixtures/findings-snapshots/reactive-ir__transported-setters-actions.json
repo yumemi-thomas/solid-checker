@@ -58,6 +58,17 @@
       "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-setters-actions/App.tsx",
+      "start": 1374,
+      "end": 1385,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/transported-setters-actions/hook.ts",
       "start": 364,
       "end": 389,
