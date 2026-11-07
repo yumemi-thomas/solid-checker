@@ -6999,5 +6999,80 @@
   "found": "reviewer, on T1b",
   "fixed": "ADR 0803 step 2 (absent_window_member, ClassicScriptDunder); now uncertifiable",
   "outside": "iter-window-any-written is uncertifiable on rf9 already (128), since the member write withdraws; a classic script cannot be generated (each program is an ES module), and the definer and valueOf shapes are fixture cases: handed-definer-parameter, handed-classic-script-member, handed-window-valueof, handed-window-define-getter, handed-window-any-raf, handed-window-any-timer, handed-window-any-written. make ir-edit-fuzz family census adds a definer and a classic declaration to handed-window-absent-member: 0 mismatches"
+ },
+ {
+  "finding": "a write whose own chain reaches a standard prototype (`const gp = Object.getPrototypeOf(p); gp.then = f`, `(globalThis as any)[k].prototype[m] = f`, a `let`, `.call`, `.apply`, `.bind`, a bracket, a comma, `__proto__`, `Foo.prototype = Promise.prototype`, a helper handed the prototype) raised no patch: `then` stayed standard, certified, Chrome warns",
+  "found": "review of ADR 0840, scout-casts-stage23.md; Part 16's merged build",
+  "fixed": "ADR 0876",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-patch-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-assign-key-proto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-key-alias-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-define-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-reflect-set-proto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-descriptor-proto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-let-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-const-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-call-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-apply-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-bind-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-bracket-getproto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-owner-rebound-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-owner-member-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-handed-proto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-each-proto-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-return-proto-signal-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs patch-*, matrix.mjs --grid --recall --ids, Chrome confirming: m22 34 false-clean across 17 contexts; m25 0, 44 recall-gap of 44. Part 16's 292 ledger rows (120 certified, 48 false positive) on m25: 0 false clean, 0 false positive. Patterns types/lc-g3-getproto-then and lc-g6-key-global-alias: fine on m26. patch-owner-assign, -defines, -opaque and patch-let-assigned-key (review R45, R46) are twins that do not fail the old build: `named_written` and ADR 0803's obtained-intrinsic hold mask them there, so no program separates the fix"
+ },
+ {
+  "finding": "`\"x\".replace(t, f)` with `t[Symbol.replace]` queueing `f` was SC2001 V: the dispatch test sat on the primitive arm, and `standard_made`'s String arm accepted the same receiver",
+  "found": "review of ADR 0840, scout-casts-stage23.md; Part 16's merged build",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-recv-replace-late-refresh-assign-callee-closure",
+   "lg-reactive-write-in-owned-scope-recv-replace-late-refresh-direct-switch",
+   "lg-reactive-write-in-owned-scope-recv-replace-late-refresh-namespace-closure"
+  ],
+  "rediscovered": "flip-read.mjs recv-replace-late, legal.mjs --grid --recall --ids, Chrome confirming: m24 16 false-positive; m25 0, 16 uncertifiable"
+ },
+ {
+  "finding": "the callee in `document.getElementById(\"ready\")!.title = v` counted as written, so ADR 0874's `Document` key vetoed `document.getElementById` and the mount went unproven: six V became U on the merge",
+  "found": "review of ADR 0840, scout-casts-stage23.md; Part 16's merged build",
+  "fixed": "ADR 0874",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-rnd-shadow-x-direct-none"
+  ],
+  "rediscovered": "the six ids on their own grids: mg8, m0 and w2 agree; m1 through rc1 recall-gap; m26 agree"
+ },
+ {
+  "finding": "a reached patch withheld `Object.assign`, so `mutation_builtin` found no mutator, the wildcard on transported members went, transport claimed an exact target and the handed-member row at the call dropped; `f.bind(x)()` lost its row the same way",
+  "found": "lost-row chase on tier A, the corpus against m22 (`viewportNavigation.isMultitouch`, OrbitControls)",
+  "fixed": "ADR 0876",
+  "outside": "no certified false clean: a function `Object.assign` can install keeps its own read row, so flip-read.mjs patch-key-assign and patch-key-bind are recall-gap on m28 and on the fix. fixtures/reactive-ir/impostor-withheld-mutation holds both rows: absent on m28, present since m30"
+ },
+ {
+  "finding": "`count[Math.round(d) % 4] += 1` and `g[Symbol.for(key)] = v` counted the callee in the target as written: a false patch of `Math.round`, `Symbol.for` opening every receiver",
+  "found": "lost-row chase on tier A: probus-hk railLayout.ts, @solid-primitives/utils dist/index.js",
+  "fixed": "ADR 0874",
+  "outside": "the fix proves more, no grid program holds such a target beside a site it decides; fixtures/reactive-ir/host-call-member-write holds the assignment_writes rule"
+ },
+ {
+  "finding": "ADR 0877: const-held symbol mistaken for an open global key",
+  "found": "C2 corpus writer probe and symbol-key-const fixture",
+  "fixed": "ADR 0877",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-proto-const-symbol-signal-direct-none",
+   "lg-strict-read-untracked-proto-const-symbol-signal-direct-closure"
+  ],
+  "rediscovered": "m35: four uncertifiable legal twins; m36: four clean, Chrome silent on all four. symbol-key-const fails on m35 with standard-member-impostor at sort and passes on m36; patch-const-symbol misuse twins remain held on both builds."
  }
 ]

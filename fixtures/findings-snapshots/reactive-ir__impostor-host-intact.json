@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "no-write-in-pure-computation",
@@ -65,6 +65,36 @@
       "path": "fixtures/reactive-ir/impostor-host-intact/App.tsx",
       "start": 839,
       "end": 842,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-host-intact/App.tsx",
+      "start": 1185,
+      "end": 1191,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-host-intact/App.tsx",
+      "start": 1371,
+      "end": 1377,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-host-intact/App.tsx",
+      "start": 1423,
+      "end": 1429,
       "fixes": 0
     },
     {

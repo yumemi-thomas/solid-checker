@@ -315,17 +315,6 @@
       "start": 1891,
       "end": 1906,
       "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
-      "start": 2094,
-      "end": 2162,
-      "fixes": 0
     }
   ]
 }

@@ -2614,7 +2614,10 @@ impl<'f, 'a> Reach<'f, 'a> {
         {
             Some(resolved) => (resolved, false),
             None => {
-                if !ctx.semantic_lookup.impostor_withheld(file, call.callee) {
+                if !ctx
+                    .semantic_lookup
+                    .standard_call_withheld(file, call.callee)
+                {
                     self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
                     return;
                 }

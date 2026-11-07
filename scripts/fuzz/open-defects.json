@@ -695,16 +695,6 @@
    "outcome": "not-legal",
    "item": "R-not-legal",
    "note": "Legal-grid iter-* programs: a hidden iteration patch runs the write inside the compute, so Solid reports the code the generator labels legal. Held open by id; not classified as fine."
-  },
-  {
-   "idPrefix": "lg-reactive-write-in-owned-scope-",
-   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-   "contexts": [
-    "recv-replace-late"
-   ],
-   "outcome": "false-positive",
-   "item": "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`",
-   "note": "SC2001 violation at the setter in `f` on every build measured (mg8 census tip, m0, m6, m10: not a casts regression). The write-role walk logs the write Unknown (`write_roles.walk-unknown-11`), and the read twin (STRICT_READ_UNTRACKED) stays uncertifiable, so another SC2001 producer takes `replace`'s inline callback timing past ADR 0874's `replace` veto; not traced (C2 commit report)"
   }
  ],
  "patterns": [
@@ -907,24 +897,6 @@
    "certified": false
   },
   {
-   "id": "types/lc-g3-getproto-then",
-   "item": "R-casts-stage2: a built-in prototype reached by a key no fact names, or by Object.getPrototypeOf; the U stands at the call, none at the write",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/lc-g6-key-global-alias",
-   "item": "R-casts-stage2: a built-in prototype reached by a key no fact names, or by Object.getPrototypeOf; the U stands at the call, none at the write",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
    "id": "flip/st-tracked-handled-flush",
    "item": "R3e: V in a helper a tracked effect runs under <Errored>: the boundary handles the throw and Chrome logs nothing. Kept here when b6b38884b took st-* out of the census",
    "outcome": "false-positive",
@@ -980,23 +952,6 @@
  "owners": {
   "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-direct-handoff-reflect": "R5",
   "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-namespace-handoff-tagged": "R5",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-assign-callee-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-direct-switch": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-namespace-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-reexport-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-reexport-ns-none": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-wrapper-chain-5": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-signal-direct-do": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-signal-getter-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-signal-hook-member-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-alias-for": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-destructured-closure-m-show-signal": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-direct-try-finally": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-hook-while": "C2",
-  "lg-recall/lg-strict-read-untracked-recv-replace-late-memo-hook-member-none-m-show-later": "C2",
-  "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-label": "C2",
-  "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-none": "C2",
-  "mx-census/mx-action-called-in-owned-scope-recv-replace-late-x-direct-none": "C2",
   "mx-census/mx-loading-on-accessor-flw-flow-show-value-accessor-direct-none": "R5",
   "mx-census/mx-loading-on-accessor-flw-flow-show-value-arrow-direct-none": "R5",
   "mx-census/mx-loading-on-accessor-flw-flow-show-value-memo-direct-none": "R5",
@@ -1006,9 +961,9 @@
   "mx-recall/mx-settled-cleanup-unowned-flw-flow-for-async-x-ns-exported-none": "R5"
  },
  "ratchet": {
-  "certified": 124,
+  "certified": 4,
   "certifiedF2": 0,
-  "falsePositive": 72,
+  "falsePositive": 7,
   "stackedClaim": 185,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -1024,10 +979,9 @@
   "unjudgedClaim": 3,
   "causes": {
    "R-not-legal": 1885,
-   "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`": 13,
-   "false-positive": 11,
+   "false-positive": 7,
    "createRoot inside onCleanup inside createRoot": 2,
-   "R-casts-stage2": 307,
+   "R-casts-stage2": 15,
    "R-unplaced": 165,
    "R-unjudged-unplaced": 3,
    "R-stacked": 185,

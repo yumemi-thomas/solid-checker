@@ -298,7 +298,8 @@ pub(super) fn tuple_mutation_method<'a>(
 ) -> Option<&'a str> {
     // A library signature on an alias is insufficient to certify the runtime
     // callee, but is sufficient to retain a possible mutation as a veto.
-    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0876: so is a withheld call's: this only vetoes.
+    let declaration = lookup.placing_standard_declaration(file, call)?;
     let (method, library) = match declaration.qualified_name.as_ref() {
         "ObjectConstructor.assign" => ("assign", "lib.es2015.core.d.ts"),
         "ObjectConstructor.defineProperty" => ("defineProperty", "lib.es5.d.ts"),
@@ -1285,11 +1286,13 @@ fn standard_member_intact(lookup: &SemanticLookup<'_>, qualified_name: &str) -> 
         .map_or(qualified_name, |(_, member)| member);
     // The base index, not the assigned-member memo: this census runs inside
     // the member-stability memo probe, which may read no memo.
+    // ADR 0876: `patch_vetoed` adds a write to a project's own `prototype`
+    // once some `prototype` key may be anyone's (`Foo.prototype.k = f`), and
+    // `reached_patch` a write whose chain reaches a standard prototype.
+    let hazard = |hazard| lookup.hazard_present(hazard);
     !lookup.member_name_assigned_in_base(member)
-        && !(lookup.hazard_present(crate::base::Hazard::AnyStandardPatch)
-            && crate::base::contributions::patch_veto(qualified_name)
-                .into_iter()
-                .any(|hazard| lookup.hazard_present(hazard)))
+        && !crate::base::contributions::patch_vetoed(qualified_name, &hazard)
+        && !crate::base::contributions::reached_patch(qualified_name, &hazard)
 }
 
 /// The function the value at `span` is: a name whose binding holds it now
@@ -2826,7 +2829,8 @@ pub(crate) fn mutation_builtin<'a>(
     call: &ast::CallFact,
     lookup: &'a SemanticLookup<'_>,
 ) -> Option<&'a str> {
-    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0876: this only vetoes, so a withheld call stays a possible mutation.
+    let declaration = lookup.placing_standard_declaration(file, call)?;
     let (global, property, library) =
         mutation_builtin_spelling(declaration.qualified_name.as_ref())?;
     let member = file.ast.members.iter().find(|member| {

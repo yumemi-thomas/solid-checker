@@ -578,7 +578,8 @@ fn handed_call(
     // ADR 0772: `useA.call(null)` and `useA.bind(null)` answer as `useA`, a
     // standard method's (`Array.prototype.slice.call(p.xs)`) below.
     if callee_member.is_some_and(|member| {
-        function_prototype_dispatch(t.lookup, file, call) && !rooted_at_global(file, member.object)
+        function_prototype_dispatch_placing(t.lookup, file, call)
+            && !rooted_at_global(file, member.object)
     }) {
         return true;
     }
@@ -625,17 +626,31 @@ pub(crate) fn function_prototype_dispatch(
 ) -> bool {
     lookup
         .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        .is_some_and(|declaration| {
-            matches!(
-                declaration.qualified_name.as_ref(),
-                "Function.call"
-                    | "Function.apply"
-                    | "Function.bind"
-                    | "CallableFunction.call"
-                    | "CallableFunction.apply"
-                    | "CallableFunction.bind"
-            )
-        })
+        .is_some_and(function_prototype_declaration)
+}
+
+/// ADR 0876: [`function_prototype_dispatch`] where the answer opens a row and
+/// proves nothing: a withheld `f.bind(x)()` keeps the row a resolved one has.
+fn function_prototype_dispatch_placing(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    lookup
+        .placing_standard_declaration(file, call)
+        .is_some_and(function_prototype_declaration)
+}
+
+fn function_prototype_declaration(declaration: &typefacts::ResolvedDeclaration) -> bool {
+    matches!(
+        declaration.qualified_name.as_ref(),
+        "Function.call"
+            | "Function.apply"
+            | "Function.bind"
+            | "CallableFunction.call"
+            | "CallableFunction.apply"
+            | "CallableFunction.bind"
+    )
 }
 
 /// Whether the member chain at `span` starts at a name no declaration in the
@@ -2451,7 +2466,7 @@ impl LocalAccessContext<'_, '_> {
             let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
                 return;
             };
-            if !function_prototype_dispatch(self.lookup, file, call)
+            if !function_prototype_dispatch_placing(self.lookup, file, call)
                 || self
                     .lookup
                     .function_called_at(file.path.as_str(), member.object)
