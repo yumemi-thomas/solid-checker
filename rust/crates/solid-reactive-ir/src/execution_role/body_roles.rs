@@ -815,6 +815,40 @@ pub(crate) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -
         || may_follow_own_await(file, span)
 }
 
+/// ADR 0852: whether the generator holding `span` (past in-place layers) is
+/// iterated by a call written in an async, non-generator function: a throw in
+/// a step then rejects that function's flight. A generator handed on as a
+/// value, or stepped only elsewhere, is not.
+pub(crate) fn generator_flight_stepped(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let span = if containing_ast_function(ast, span).is_some_and(|function| function.generator) {
+        span
+    } else {
+        match super::write_roles::climb_in_place_layers(file, span, lookup) {
+            Some(climb) => climb.at,
+            None => return false,
+        }
+    };
+    let Some(generator) = containing_ast_function(ast, span).filter(|function| function.generator) else {
+        return false;
+    };
+    crate::local_access::function_reference_hand_offs(file, generator, lookup).is_some_and(|references| {
+        references.iter().any(|(at, hand_off)| {
+            *hand_off == crate::local_access::HandOff::Call
+                && ast.calls.iter().any(|call| {
+                    ast.peel_ts_sugar_span(call.callee) == *at
+                        && ast.iterated_operands.contains(&call.span)
+                        && containing_ast_function(ast, call.span)
+                            .is_some_and(|holder| holder.r#async && !holder.generator)
+                })
+        })
+    })
+}
+
 /// ADR 0851: whether code at `span`, in a generator's own body, runs on the
 /// continuation of the async function that steps the generator across one of
 /// its suspensions: `Some(true)` on every run, `Some(false)` on some run,

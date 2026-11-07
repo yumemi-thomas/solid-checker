@@ -315,7 +315,11 @@ pub(super) fn emit_file(
         // Its owner context proves the guard, not propagation to an observed
         // read or error boundary. Keep the context-read obligation open.
         let flight_error_unobserved =
-            candidate.operation == "context-read" && generator_resumed.is_some();
+            candidate.operation == "context-read"
+                && generator_resumed.is_some()
+                && possible_site.is_some_and(|site| {
+                    crate::execution_role::generator_flight_stepped(file, site, lookup)
+                });
         let after_yield =
             step_resumption == Some(StepResumption::Proven) || generator_resumed == Some(true);
         let after_await = after_await || after_yield;
