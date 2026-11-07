@@ -57,7 +57,7 @@ import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "unexecuted", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "false-positive", "tsc-overlap"];
+export const OUTCOMES = ["typed-away", "harness", "unexecuted", "pending-uncaught", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "false-positive", "tsc-overlap"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -165,6 +165,13 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
       : checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable") ? "false-clean" : "false-clean-certified"])
     .filter(([, verdict]) => verdict !== "agree"));
   if (!atSite.length && !unplaced.length && !unattributed) {
+    // ADR 0815: Solid's NotReadyError, uncaught, ended the page: a pending read with nothing to hold it at a mount (`render(f1, el)` with
+    // `f1` reading a pending memo). It has no code and an empty message, and it is the program's result, not the harness's: judged by the
+    // rows at the site, whose read Chrome's stack cannot place (the error's stack is the memo's creation).
+    if (runtime.failure?.name === "NotReadyError" && !events.length) {
+      const atRead = relevant.filter((finding) => inLines(finding, region) && ((codeRules[code] ?? []).includes(finding.rule) || withholdingRules.includes(finding.rule) || finding.rule === "pending-async-unsuspendable-read" || finding.rule === "strict-read-untracked"));
+      return atRead.length ? { outcome: "pending-uncaught", detail: { findings: atRead.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } } : { outcome: "false-clean", detail: { uncaughtPending: true, findings: relevant.filter((finding) => inLines(finding, region)).map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), certified: !relevant.some((finding) => finding.kind === "uncertifiable") } };
+    }
     if (runtime.failure && !events.length && !failureCode) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
     // ADR 0858: the throw halted the page before the site ran: nothing was measured there, neither a pass nor a problem.
     if (failureCode && !events.length && hitCount(runtime.hits, site?.hit) === 0) return { outcome: "unexecuted", detail: { why: `the page halted on ${failureCode} before the site ran` } };

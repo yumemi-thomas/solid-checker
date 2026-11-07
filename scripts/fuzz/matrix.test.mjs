@@ -464,3 +464,17 @@ describe("a withholding at a call's argument (ADR 0815, R20)", () => {
     expect(judged("STRICT_READ_UNTRACKED", [{ file: "helpers.ts", line: 3, column: 1 }, { file: "App.tsx", line: 1, column: 11 }], withheld(1, 16), helper, { line: 1, aux: [] })).toBe("false-clean");
   });
 });
+
+describe("an uncaught NotReadyError (ADR 0815)", () => {
+  const failure = { name: "NotReadyError", message: "", phase: "import", stack: "Error" };
+  const code = "PENDING_ASYNC_UNTRACKED_READ";
+  const judged = (findings) => judge({ code, site: { line: 6, aux: [] }, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([], { failure }) }).outcome;
+  it("is the program's result: a row at the read is judged, none is a false clean", () => {
+    expect(judged([{ rule: "pending-async-unsuspendable-read", kind: "uncertifiable", line: 6, endLine: 6, column: 3 }])).toBe("pending-uncaught");
+    expect(judged([{ rule: "pending-async-unsuspendable-read", kind: "uncertifiable", line: 2, endLine: 2, column: 3 }])).toBe("false-clean");
+    expect(judged([])).toBe("false-clean");
+  });
+  it("leaves any other failure the harness's", () => {
+    expect(judge({ code, site: { line: 6, aux: [] }, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime: run([], { failure: { ...failure, name: "TypeError", message: "x" } }) }).outcome).toBe("harness");
+  });
+});

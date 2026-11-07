@@ -162,7 +162,7 @@ function select(from, out, perBehaviour) {
 
 /** Outcomes from best to worst, a misuse grid's and a legal grid's: a move down this list is a regression. */
 const RANK = [
-  ["agree", "recall-gap", "not-fired", "typed-away", "harness", "wrong-rule", "false-clean", "misplaced", "unplaced", "false-positive", "tsc-overlap"],
+  ["agree", "recall-gap", "pending-uncaught", "not-fired", "typed-away", "harness", "wrong-rule", "false-clean", "misplaced", "unplaced", "false-positive", "tsc-overlap"],
   ["clean", "uncertifiable", "unexecuted", "disturbed", "typed-away", "not-legal", "harness", "false-positive", "tsc-overlap"],
 ];
 const worse = (from, to) => RANK.some((rank) => rank.includes(from) && rank.includes(to) && rank.indexOf(to) > rank.indexOf(from));
