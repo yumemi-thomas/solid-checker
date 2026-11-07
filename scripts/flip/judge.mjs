@@ -46,8 +46,11 @@ export function judgeWitness(w, out) {
   let ok;
   // `closedBy`: the census closes the row, under SC9012. A row of its own needs that finding, or a proved violation: an unrelated
   // uncertifiable elsewhere in the program must not pass a witness (`endstage-report.md` 1a).
-  // `closedAt`: the line and blocker of the row that covers the runtime site, read by hand; a `closedBy` row without it fails.
-  if (w.kind === "clean") ok = w.closedBy ? Boolean(w.closedAt) && findings.some((f) => f.id === w.closedBy && f.primaryLocation?.line === w.closedAt.line && (f.analysisContext ?? "").split(":")[0] === w.closedAt.blocker) : w.rule === "SC9012" ? findings.some((f) => f.id === "SC9012" || f.kind === "violation") : own.length > 0;
+  // `closedAt`: the line and blocker of the row that covers the runtime site, read by hand; a `closedBy` or SC9012 row without it fails.
+  // An SC9012 row passes only at its `closedAt` too (review item 4a): an SC9012 elsewhere says nothing about the site. `closedAt.id`
+  // names a proved violation at the site instead of an SC9012 row.
+  const closedAt = (id) => Boolean(w.closedAt) && findings.some((f) => f.primaryLocation?.line === w.closedAt.line && (w.closedAt.id ? f.id === w.closedAt.id && f.kind === "violation" : f.id === id && (f.analysisContext ?? "").split(":")[0] === w.closedAt.blocker));
+  if (w.kind === "clean") ok = w.closedBy ? closedAt(w.closedBy) : w.rule === "SC9012" ? closedAt("SC9012") : own.length > 0;
   else if (w.kind === "pref") ok = own.some((f) => f.kind === (w.proved ? "violation" : "uncertifiable"));
   else if (w.kind === "warn") ok = !own.some((f) => f.kind === "violation");
   else if (w.kind === "keep") ok = was.filter((f) => f.startsWith(w.rule)).every((f) => now.includes(f));
@@ -56,17 +59,29 @@ export function judgeWitness(w, out) {
 }
 
 /**
- * Rows may not vanish (endstage-report.md 1a, rule 7): every row at `base` stays with the same `source`, `kind` and `runtime`, or
- * `retired` lists `{ id, adr, why }` and `decisions` (docs/decisions.md's text) has that ADR's anchor. Returns the failures.
+ * Rows may not vanish (endstage-report.md 1a, rule 7): every row at `base` stays with every field the same, both ways, or `retired`
+ * lists `{ id, adr, why }` (and, for a row still there, `fields`: each changed field) and `decisions` (docs/decisions.md's text) has
+ * that ADR's anchor. Returns the failures.
  */
 export function vanishedRows(base, rows, retired, decisions) {
   const out = [];
   const reasons = new Map(retired.map((entry) => [entry.id, entry]));
   for (const [id, was] of Object.entries(base)) {
     const now = rows[id];
-    const same = now && ["source", "kind", "runtime", "files"].every((key) => JSON.stringify(now[key]) === JSON.stringify(was[key]));
-    if (same) continue;
+    // Every field, both ways (review item 8): `rule`, `closedBy`, `closedAt`, `before` and `proved` decide how a row is judged.
+    const keys = [...new Set([...Object.keys(was), ...Object.keys(now ?? {})])];
+    const changed = now ? keys.filter((key) => JSON.stringify(now[key]) !== JSON.stringify(was[key])) : null;
+    if (changed && !changed.length) continue;
     const reason = reasons.get(id);
+    // A retired row for a row still there names the fields it excuses; any other changed field fails.
+    if (changed && reason) {
+      const named = Array.isArray(reason.fields) ? reason.fields : [];
+      const unnamed = changed.filter((key) => !named.includes(key));
+      if (unnamed.length) {
+        out.push(`${id}: ${unnamed.join(", ")} changed, not named by its retired row's fields`);
+        continue;
+      }
+    }
     const anchor = /^ADR (\d{4})$/.exec(reason?.adr ?? "")?.[1];
     if (!reason?.why || !anchor || !decisions.includes(`<a id="adr-${anchor}"></a>`)) out.push(`${id}: ${now ? "changed" : "removed"} with no retired row naming an ADR in docs/decisions.md`);
   }

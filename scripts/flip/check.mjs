@@ -98,8 +98,12 @@ rmSync(work, { recursive: true, force: true });
 // Rows may not vanish against the merge base with main (`WITNESS_BASE` overrides), or a retired row names an ADR (judge.mjs).
 const retired = JSON.parse(readFileSync(join(here, "witnesses-retired.json"), "utf8"));
 if (rule === "all") {
-  const base = process.env.WITNESS_BASE ?? spawnSync("git", ["merge-base", "HEAD", "origin/main"], { cwd: repo, encoding: "utf8" }).stdout.trim();
-  const at = (file) => { const r = spawnSync("git", ["show", `${base}:scripts/flip/${file}`], { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28 }); return r.status === 0 ? JSON.parse(r.stdout) : null; };
+  const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28 });
+  // The merge base with main, or, while main has no witnesses.json, the commit that added it (review item 8: the guard compared nothing).
+  const first = () => git("log", "--diff-filter=A", "--format=%H", "--", "scripts/flip/witnesses.json").stdout.trim().split("\n").pop();
+  const main = git("merge-base", "HEAD", "origin/main").stdout.trim();
+  const base = process.env.WITNESS_BASE ?? (main && git("cat-file", "-e", `${main}:scripts/flip/witnesses.json`).status === 0 ? main : first());
+  const at = (file) => { const r = git("show", `${base}:scripts/flip/${file}`); return r.status === 0 ? JSON.parse(r.stdout) : null; };
   const was = base ? at("witnesses.json") : null;
   if (!was) console.log(`witnesses: no witnesses.json at base ${base || "(none)"}, no row compared`);
   else {

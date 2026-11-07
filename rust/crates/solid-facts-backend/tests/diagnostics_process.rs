@@ -1022,17 +1022,55 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
             assert_eq!(row["kind"], "uncertifiable", "{name}: {row:#?}");
         }
     }
-    let eval_rows = findings
+    // The eval case is a project of its own (ADR 0803: its `eval` withdraws
+    // every tuple slot of the project it is in). Its read at `count()`:
+    // SC1001 uncertifiable, and the withdrawal at the accessor.
+    let Some(eval_findings) = diagnostic_fixture("forwarded-event-prop/variants/eval-handler")
+    else {
+        return;
+    };
+    let eval_source = include_str!(
+        "../../../../fixtures/reactive-ir/forwarded-event-prop/variants/eval-handler/EvalHandler.tsx"
+    );
+    let start = eval_source.find("count();").unwrap() as u64;
+    let mut eval_rows = eval_findings
         .iter()
-        .filter(|row| {
-            row["primaryLocation"]["path"]
-                .as_str()
-                .is_some_and(|path| path.ends_with("/EvalHandler.tsx"))
+        .map(|row| {
+            (
+                row["id"].as_str().unwrap_or_default(),
+                row["kind"].as_str().unwrap_or_default(),
+                row["analysisContext"].as_str().unwrap_or_default(),
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/EvalHandler.tsx")),
+                row["primaryLocation"]["startByte"].as_u64(),
+                row["primaryLocation"]["endByte"].as_u64(),
+            )
         })
         .collect::<Vec<_>>();
-    assert_eq!(eval_rows.len(), 1, "{eval_rows:#?}");
-    assert_eq!(eval_rows[0]["id"], "SC1001");
-    assert_eq!(eval_rows[0]["kind"], "uncertifiable");
+    eval_rows.sort();
+    assert_eq!(
+        eval_rows,
+        vec![
+            (
+                "SC1001",
+                "uncertifiable",
+                "callee-callback-timing",
+                true,
+                Some(start),
+                Some(start + 7)
+            ),
+            (
+                "SC9012",
+                "uncertifiable",
+                "tuple-iteration-written",
+                true,
+                Some(start),
+                Some(start + 5)
+            ),
+        ],
+        "{eval_findings:#?}"
+    );
 }
 
 #[test]
@@ -1365,25 +1403,35 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
             .collect::<Vec<_>>();
-        // ADR 0801: gateways.ts obtains `Function`, so an accessor slot is
-        // never exact here. A kept case also has that SC9012 at AccessorRead's
-        // call, beside ADR 0222's read; a vetoed one has ADR 0282's there.
+        // ADR 0801: gateways.ts exports `Function`, handed on, so an accessor
+        // slot is never exact here, and (ADR 0803) neither is factory.ts's own
+        // `[count]`. A kept case has ADR 0801's SC9012 at AccessorRead's call
+        // and `tuple-iteration-written` at TupleRead's, one each, beside the
+        // two held reads; a vetoed one has ADR 0282's there.
+        let kept = case["veto"] != true;
+        fn held(row: &serde_json::Value, context: &str) -> bool {
+            row["id"] == "SC9012" && row["analysisContext"] == context
+        }
         let (slot, read): (Vec<_>, Vec<_>) = read.into_iter().partition(|row| {
-            case["veto"] != true
-                && row["id"] == "SC9012"
-                && row["analysisContext"] == "returned-callable-outside-source-universe"
+            kept && (held(row, "returned-callable-outside-source-universe")
+                || held(row, "tuple-iteration-written"))
         });
-        assert_eq!(
-            slot.len(),
-            usize::from(case["veto"] != true),
-            "{}: {slot:#?}",
-            case["name"]
-        );
+        for context in [
+            "returned-callable-outside-source-universe",
+            "tuple-iteration-written",
+        ] {
+            assert_eq!(
+                slot.iter().filter(|row| held(row, context)).count(),
+                usize::from(kept),
+                "{} {context}: {slot:#?}",
+                case["name"]
+            );
+        }
         assert_eq!(read.len(), 2, "{}: {rows:#?}", case["name"]);
         let (kind, code) = if case["veto"] == true {
             ("uncertifiable", "SC9012")
         } else {
-            ("violation", "SC1001")
+            ("uncertifiable", "SC1001")
         };
         assert_eq!(read[0]["kind"], kind, "{}: {read:#?}", case["name"]);
         assert_eq!(read[0]["id"], code, "{}: {read:#?}", case["name"]);

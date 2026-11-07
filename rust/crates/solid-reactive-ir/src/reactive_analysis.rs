@@ -412,6 +412,10 @@ pub(crate) fn collect_project<'facts>(
         .collect::<Vec<_>>();
     callables.sort_unstable();
     callables.dedup();
+    // ADR 0811: a store member write SC2003 decides is that use's row
+    // (`holder.store.count = 5`); its pass runs after this one.
+    let member_writes = upstream_compat::MemberWrites::new(ctx);
+    let decided_writes = |file: &solid_facts::FileFacts| member_writes.decided(file);
     let mut census = crate::value_use::Census::new(
         ctx.semantic_lookup,
         ctx.entities,
@@ -436,7 +440,8 @@ pub(crate) fn collect_project<'facts>(
             )
             .chain(handed.iter().map(|obligation| &obligation.location))
             .chain(draft.static_defects.iter().map(|defect| &defect.location)),
-    );
+    )
+    .with_member_writes(&decided_writes);
     let census_obligation =
         |callee: &str, location: typefacts::Location, blocker: &str| crate::StaticDefect {
             kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
@@ -942,7 +947,49 @@ pub(crate) fn collect_project<'facts>(
                 && uncaptured.contains(&defect.location))
         });
     }
+    hold_withdrawn_static_rows(draft);
     interprocedural.factory_instances
+}
+
+/// ADR 0803, review a9fc #7: a static row (upstream_compat's, a static rule's)
+/// names no source symbol, so one that rests on a withdrawn slot is found by
+/// place: its span holds a reference of one, which carries the
+/// `tuple-iteration-written` obligation. Such a row is a claim about the
+/// primitive's own slot, which nothing proves now: uncertain.
+fn hold_withdrawn_static_rows(draft: &mut ProgramDraft) {
+    let held_references = draft
+        .static_defects
+        .iter()
+        .filter(|defect| defect.analysis_context == crate::blockers::TUPLE_ITERATION_WRITTEN)
+        .map(|defect| defect.location.clone())
+        .collect::<Vec<_>>();
+    if held_references.is_empty() {
+        return;
+    }
+    let holds = |at: &crate::Location| {
+        held_references.iter().any(|reference| {
+            reference.path == at.path
+                && at.start_byte <= reference.start_byte
+                && reference.end_byte <= at.end_byte
+        })
+    };
+    for violation in &mut draft.static_violations {
+        if !violation.uncertain && holds(&violation.location) {
+            violation.uncertain = true;
+            if !crate::blockers::named(&violation.analysis_context) {
+                crate::blockers::TUPLE_ITERATION_WRITTEN
+                    .clone_into(&mut violation.analysis_context);
+            }
+        }
+    }
+    for defect in &mut draft.static_defects {
+        if !defect.uncertain && holds(&defect.location) {
+            defect.uncertain = true;
+            if !crate::blockers::named(&defect.analysis_context) {
+                crate::blockers::TUPLE_ITERATION_WRITTEN.clone_into(&mut defect.analysis_context);
+            }
+        }
+    }
 }
 
 /// ADR 0803: a withdrawn slot stays a source, so transport, the handed net and

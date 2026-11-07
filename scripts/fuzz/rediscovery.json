@@ -5565,6 +5565,44 @@
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
  },
  {
+  "finding": "item 5: a pattern over a store root reached through a holder slot (`const o = { st }; const { a } = o.st;`) was followed with no row; the file certified while Chrome warns",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-store-holder-pattern-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-store-holder-pattern-direct-none",
+   "mx-strict-read-untracked-root-use-store-holder-pattern-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs use-store-holder-pattern and use-namespace-throw (108 programs, body, effect-apply, root; Chrome warns on each): mg1 (e57cc0dc5) 106 false-clean, all certified, 2 typed-away; ADR 0812 0 false-clean (106 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PatternThroughSlot, negative PatternOnRoot"
+ },
+ {
+  "finding": "item 6: a namespace member (`import * as S`; `throw S.count`, then called) is listed at its property, which no identifier reference names, so the census skipped it; the file certified while Chrome warns",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-namespace-throw-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-namespace-throw-direct-none",
+   "mx-strict-read-untracked-root-use-namespace-throw-direct-none"
+  ],
+  "rediscovered": "the same run as item 5 (use-namespace-throw, 54 of the 108). Fixture reactive-ir/value-use-census ReviewTwo.tsx NamespaceThrown with ReviewNs.ts, negative NamespaceTracked; router-params/variants/use-action-imported-namespace gains its row at `actions.save`"
+ },
+ {
+  "finding": "item 10: a source not proven sync as an element's bare child (`<b>{v as unknown as string}</b>`, the only tsc-clean spelling) was followed with no row; the file certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-net-bare-child-direct-none",
+   "mx-async-outside-loading-boundary-show-net-bare-child-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs net-bare-child (36 programs, jsx and show; Chrome warns on each): mg1 36 false-clean, all certified; ADR 0812 0 false-clean (36 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PendingChild, negative SyncChild"
+ },
+ {
   "finding": "`flush()` in a closure handed through forwarding helpers (`hc1(() => flush())`, `hc1 = (g) => hc0(g)`) inside `action(function* …)` certified while Chrome throws FLUSH_IN_ACTION: the action-step climb stops at a forwarded closure and the unplaced net placed it",
   "found": "W's recall grids at 4c81fcc00 (origin/claude/flip-research-w 41ccacbc0, research-w-grids-merged.md), every row rerun uncached in Chrome",
   "fixed": "ADR 0832",
@@ -5589,6 +5627,53 @@
    "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-module-helper"
   ],
   "rediscovered": "setter-fn ids (18, Chrome confirmed): build fl1 (4787f08e1) 6 certified false cleans (wrapper, every layer), alias and direct agree; ADR 0833 0 (wrapper recall-gap, SC1001 U function-run-unplaced at the read), alias and direct agree. Fixture reactive-ir/setter-callback-in-helper (InHelper U; fl1 silent there)"
+ },
+ {
+  "finding": "SC2003 V-D1, the whole lg-recall noop-* set: a store operation that writes nothing on its run was a violation (ADR 0718's entry above, 540 programs then); the set grew to 720 and its open-defects.json entry stayed after the fix",
+  "found": "W's full grids at 4c81fcc00 (research-w-grids-merged.md, origin/claude/flip-research-w 41ccacbc0): 720 rows open-defect-fixed",
+  "fixed": "ADR 0718",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-noop-nullish-direct-none",
+   "lg-store-write-outside-setter-handler-noop-nullish-wrapper-none",
+   "lg-store-write-outside-setter-handler-noop-and-alias-none"
+  ],
+  "rediscovered": "W at 4c81fcc00: 720 of 720 no longer false positives (234 clean, 486 uncertifiable). Part 13 on mg2 (75c33dbbc's build): every 12th of the 720 ids (60) through legal.mjs --grid --recall with Chrome confirming: 0 false-positive, 19 clean, 41 uncertifiable. W's rolling grid confirms the full set on the next tip"
+ },
+ {
+  "finding": "ADR 0803's gate missed iteration patched where no write spells it: a Function held in a parameter and run with a string (patterns types/s02-setter-slot-function-escaped, types/s03-local-setter-function-escaped), `new Function(code)()`, `Array.prototype` handed to a helper that writes it. A primitive's or a hook's setter slot stayed exact: SC2001 V where Chrome is quiet (the patch hands back a no-op). Pattern values/d3-new-function (`new Function(\"g\", \"return g()\")(a)`) certified a read Chrome warns on",
+  "found": "R1c, patterns s02 and s03 (Chrome and tsc); R1e, flip-read.mjs iter-fn-escaped, iter-fn-new, iter-handed-proto",
+  "fixed": "ADR 0803, item 3 (visible side: writes that can reach iteration; hidden side: ADR 0801's census) (R1e); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-fn-escaped-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-fn-new-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-handed-proto-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, contexts iter-fn-escaped, iter-fn-new, iter-handed-proto, layers none (570 programs): 7788b7295 234 false-positive (78 per context, each Chrome-confirmed), item 3 0 false-positive, 0 disturbed. Patterns s02, s03 and values/d3-new-function now uncertifiable"
+ },
+ {
+  "finding": "review a9fc #1, #2: a write to Array.prototype under a key no literal names, reached through `Object.getPrototypeOf([])`, `([] as any).__proto__`, `[].constructor.prototype`, a global alias (`const g = globalThis; g.Array.prototype`) or a destructured `getPrototypeOf`, left a primitive's own setter exact: SC2001 V where Chrome is quiet (the patch hands back a no-op setter)",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md items 1, 2); R1e, flip-read.mjs iter-gpo-key and the alias spellings",
+  "fixed": "ADR 0803 (review a9fc); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-gpo-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-proto-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-ctor-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-global-alias-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-gpo-destructure-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, these five contexts, layers none: 7788b7295 78 false-positive each (Chrome-confirmed); item 3 before the review fixes (0228b92e3) 0 for gpo/proto/ctor-key and 78 each for global-alias and gpo-destructure; this build 0. The hook-slot form (#1) is fixture iteration-written-slots/global-alias-hook: on 7788b7295 and 0228b92e3 `now()` had no row"
+ },
+ {
+  "finding": "review a9fc #7: ADR 0803's hold covered reads, writes and async reads only; upstream_compat's uncalled-accessor arm proved SC1005 V on `${c}` of a withdrawn slot, and a store write on a withdrawn store slot stayed SC2003 V",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md item 7)",
+  "fixed": "ADR 0803 (review a9fc, hold_withdrawn_static_rows); now uncertifiable",
+  "outside": "no runtime code claims SC1005, so no grid judges it; fixture iteration-written-slots/uncalled-accessor (SC1005 V on 7788b7295 and 0228b92e3, uncertifiable here) and uncalled-accessor-intact (proved V)"
  },
  {
   "finding": "an async memo read through a helper chain an IIFE runs in a JSX expression of a `For` row (`<For>{() => <p>{(() => { hc4(); })()}</p>}</For>`, `wrapUse` reading the memo) certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY: a site in a nested function of the row took the row's deferred handler answer",

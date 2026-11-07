@@ -3257,49 +3257,11 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
-     },
-     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "span": {
-       "textRange": [
-        119,
-        124
-       ]
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
-      }
-     },
-     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "span": {
-       "textRange": [
-        194,
-        206
-       ]
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
-      }
      }
     ],
     "absent": []
    },
-   "note": "ADR 0482: a member read of an exclusive object-literal arrow result is the `const` it names (ADR 0481), so `holder.store` is the store's root and `.count` its own property. Upstream eslint-plugin-solid 0.14.5 roots a write at the identifier `holder` and never reports it: a kept divergence, since rc.17's proxy drops the write outside the setter (`dist/dev.js:5691-5700`) exactly as it does for `store.count = 5`. Found by the misuse matrix's `hook-member` binding (certified false cleans)."
+   "note": "ADR 0482: a member read of an exclusive object-literal arrow result is the `const` it names (ADR 0481), so `holder.store` is the store's root and `.count` its own property. Upstream eslint-plugin-solid 0.14.5 roots a write at the identifier `holder` and never reports it: a kept divergence, since rc.17's proxy drops the write outside the setter (`dist/dev.js:5691-5700`) exactly as it does for `store.count = 5`. Found by the misuse matrix's `hook-member` binding (certified false cleans). ADR 0811: SC2003 decided the write, so the census follows `store` through the holder (was SC9012 `value-held-in-binding`)."
   },
   {
    "id": "no-store-mutation-outside-setter/hook-member-write-in-setter/001",
@@ -3308,6 +3270,28 @@
     "extension": ".ts",
     "prelude": "",
     "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nconst useState = () => ({ store, setStore });\nconst holder = useState();\nholder.setStore(() => {\n  holder.store.count = 5;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ],
+    "silent": true
+   },
+   "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut. ADR 0811: the write SC2003 proves legal is the census's row for that use, so `store` is followed (was SC9012 `value-held-in-binding`); measured in Chrome rc.21, quiet, the write commits."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/hook-member-handed/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nconst useState = () => ({ store, setStore });\nconst holder = useState();\ndeclare function f(x: unknown): void;\nholder.setStore(() => {\n  holder.store.count = 5;\n});\nf(holder.store);\n"
    },
    "ruleOptions": {},
    "presets": [],
@@ -3340,8 +3324,8 @@
       "severity": "warning",
       "span": {
        "textRange": [
-        192,
-        204
+        260,
+        272
        ]
       },
       "fix": {
@@ -3359,7 +3343,7 @@
      }
     ]
    },
-   "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut."
+   "note": "ADR 0811, the negative: the write in the setter is decided, but the same holder member is also handed to a function no source describes, so `store` stays open (SC9012 `value-to-unresolved-callee`). A decided write speaks only for its own use; the handed use has its own row (ADR 0831)."
   },
   {
    "id": "jsx-no-duplicate-props/solid-v2/open-spread/001",

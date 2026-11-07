@@ -311,6 +311,10 @@ pub(crate) struct Census<'l, 'a> {
     resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
     /// Where each file has a read, write or action row, or an obligation.
     rows: BTreeMap<String, Vec<(u64, u64)>>,
+    /// ADR 0811: the store member writes SC2003 decides in a file, asked
+    /// once per file the walk reaches a root's member in.
+    member_writes: &'l dyn Fn(&FileFacts) -> Vec<Span>,
+    decided_writes: HashMap<String, Vec<Span>>,
     /// What a call of the walked value does.
     carried: Carried,
     steps: usize,
@@ -355,6 +359,8 @@ impl<'l, 'a> Census<'l, 'a> {
             sources,
             resolved,
             rows,
+            member_writes: &no_member_writes,
+            decided_writes: HashMap::default(),
             carried: Carried::Either,
             steps: 0,
             parameter_hops: 0,
@@ -455,15 +461,57 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some((file, span)) = self.place(reference) else {
             return Some(blockers::VALUE_USE_UNCLASSIFIED);
         };
-        if !is_value_reference(file, span) {
-            return None;
-        }
         self.walked.clear();
         self.steps = 0;
+        if !is_value_reference(file, span) {
+            return self.unnamed_reference(file, span, mode);
+        }
         match self.position(file, span, mode) {
             Position::Followed => None,
             Position::Open(blocker) => Some(blocker),
         }
+    }
+
+    /// Review item 6: a reference that is no identifier read. A type query
+    /// or a declaration's own name holds no value; a namespace member
+    /// (`S.count`, the property naming the export) is the member's value; a
+    /// pattern slot naming it holds it. Anything else is open, never skipped.
+    fn unnamed_reference(
+        &mut self,
+        file: &'a FileFacts,
+        span: Span,
+        mode: Mode,
+    ) -> Option<&'static str> {
+        let ast = &file.ast;
+        if ast.type_queries.iter().any(|query| query.contains(span)) {
+            return None;
+        }
+        if let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| member.property == span && !ast.computed_members.contains(&member.span))
+        {
+            return match self.position(file, member.span, mode) {
+                Position::Followed => None,
+                Position::Open(blocker) => Some(blocker),
+            };
+        }
+        let slot = ast.bindings.iter().any(|binding| {
+            binding
+                .object_slots
+                .iter()
+                .any(|slot| slot.local.span == span || slot.local.span.contains(span))
+        });
+        if slot {
+            return Some(blockers::VALUE_HELD_IN_BINDING);
+        }
+        let declared = ast.identifiers_within(span).any(|identifier| {
+            identifier.span == span && identifier.role == IdentifierRole::Binding
+        });
+        if declared {
+            return None;
+        }
+        Some(blockers::VALUE_USE_UNCLASSIFIED)
     }
 
     fn key(&mut self, key: &str) -> Slot {
@@ -740,6 +788,27 @@ impl<'l, 'a> Census<'l, 'a> {
             })
     }
 
+    /// ADR 0811: where the census asks which store member writes SC2003
+    /// decides in a file. Without it, none.
+    pub(crate) fn with_member_writes(
+        mut self,
+        member_writes: &'l dyn Fn(&FileFacts) -> Vec<Span>,
+    ) -> Self {
+        self.member_writes = member_writes;
+        self
+    }
+
+    /// ADR 0811: whether a store member write SC2003 decided stands on the
+    /// chain of `member`.
+    fn write_decided(&mut self, file: &FileFacts, member: Span) -> bool {
+        let member_writes = self.member_writes;
+        self.decided_writes
+            .entry(file.path.to_string())
+            .or_insert_with(|| member_writes(file))
+            .iter()
+            .any(|written| written.start == member.start && written.end >= member.end)
+    }
+
     /// Whether the call at `callee` runs where the rules of what it may do do
     /// not speak: an accessor's read, a setter's or an action's write. No row
     /// says so at a call the walk reached through a name.
@@ -779,7 +848,7 @@ impl<'l, 'a> Census<'l, 'a> {
                 let rowed = self.rows.get(file.path.as_str()).is_some_and(|rows| {
                     rows.iter()
                         .any(|(row_start, row_end)| *row_start == start && *row_end >= end)
-                });
+                }) || self.write_decided(file, member.span);
                 return if rowed {
                     Position::Followed
                 } else {
@@ -876,8 +945,14 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some(index) = jsx_child_parent(file, at) else {
             return Position::Open(blockers::VALUE_IN_CARRIER);
         };
+        // An element inserts and calls a bare accessor child: a source that
+        // may be pending is read there with no row (review item 10).
         if intrinsic(file, index) {
-            return Position::Followed;
+            return if self.async_walk && mode == Mode::Value {
+                Position::Open(blockers::VALUE_PENDING_IN_JSX)
+            } else {
+                Position::Followed
+            };
         }
         let element = &file.ast.jsx_elements[index];
         let primitive = crate::exact_jsx_primitive_name(
@@ -966,17 +1041,54 @@ impl<'l, 'a> Census<'l, 'a> {
         let mut answer = Position::Followed;
         for name in &parameter.names {
             let identifier = parameter.shape == solid_facts::ast::BindingShape::Identifier;
-            if !identifier && file.source_text(name.span) != Some(prop) {
-                continue;
+            // A pattern names the prop by its key, not its local (review item
+            // 3); a rest element or a nested pattern holds props no key names.
+            if !identifier {
+                match parameter
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == name.span)
+                {
+                    Some(slot) if slot.property.as_str() == prop => {}
+                    Some(_) => continue,
+                    None => {
+                        if answer == Position::Followed {
+                            answer = Position::Open(blockers::VALUE_FORWARDED);
+                        }
+                        continue;
+                    }
+                }
             }
             for reference in self.references(file, name.span) {
                 let at = if identifier {
-                    match file.ast.members.iter().find(|member| {
-                        file.ast.peel_ts_sugar_span(member.object) == reference
-                            && file.source_text(member.property) == Some(prop)
-                    }) {
-                        Some(member) => member.span,
-                        None => continue,
+                    // Another prop's static Get holds nothing of this one; any
+                    // other use of the props object hands it on.
+                    let member = file
+                        .ast
+                        .members
+                        .iter()
+                        .find(|member| file.ast.peel_ts_sugar_span(member.object) == reference);
+                    let key = member.and_then(|member| {
+                        match file
+                            .ast
+                            .literal_computed_members
+                            .iter()
+                            .find(|literal| literal.span == member.span)
+                        {
+                            Some(literal) => Some(literal.key.as_str()),
+                            None if file.ast.computed_members.contains(&member.span) => None,
+                            None => file.source_text(member.property),
+                        }
+                    });
+                    match (member, key) {
+                        (Some(member), Some(key)) if key == prop => member.span,
+                        (Some(_), Some(_)) => continue,
+                        _ => {
+                            if answer == Position::Followed {
+                                answer = Position::Open(blockers::VALUE_FORWARDED);
+                            }
+                            continue;
+                        }
                     }
                 } else {
                     reference
@@ -1065,8 +1177,14 @@ impl<'l, 'a> Census<'l, 'a> {
         if !identifier && mode == Mode::RootParameter {
             return held(Position::Open(blockers::VALUE_ROOT_IN_HELPER));
         }
+        // The root's own reference only: reached through a slot, an alias or
+        // a prop, no row sees the pattern's keys (review item 5).
         if !identifier && mode == Mode::Root {
-            return held(Position::Followed);
+            return held(if self.steps <= 1 {
+                Position::Followed
+            } else {
+                Position::Open(blockers::VALUE_HELD_IN_BINDING)
+            });
         }
         let each = match mode {
             Mode::Holder(_) if !identifier => Mode::Value,
@@ -1562,6 +1680,10 @@ fn intrinsic(file: &FileFacts, element: usize) -> bool {
             .source_text(element.name.span)
             .and_then(|tag| tag.chars().next())
             .is_some_and(char::is_lowercase)
+}
+
+fn no_member_writes(_: &FileFacts) -> Vec<Span> {
+    Vec::new()
 }
 
 /// The literal a property or array holder row names.
