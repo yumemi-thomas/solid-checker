@@ -218,7 +218,7 @@ fuzz-test:
 fuzz-patterns: build-checker-release
 	node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(ARGS)
 
-# Fails until R-F2-open is empty; must pass before #173 moves.
+# Fails while the row ledger holds an R-F1-open or R-F2-open row, a certified false clean or a false positive; must pass before #173 moves.
 flip-final:
 	node scripts/fuzz/open-rows.mjs --final
 

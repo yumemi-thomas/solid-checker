@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cover, gridRows, sample } from "./cover.mjs";
+import { cover, gridRows, ledgerIds, requiredIds, sample } from "./cover.mjs";
 
 const row = (id, code, context, variant, layer) => ({ id, side: "misuse", code, context, variant, binding: "direct", layer });
 
@@ -14,6 +14,14 @@ describe("the covering sample", () => {
     const chosen = rows.filter((one) => ids.includes(one.id));
     expect(pairsOf(chosen)).toEqual(pairsOf(rows));
     expect(ids.length).toBeLessThan(rows.length);
+  });
+  it("takes every ledger row, so a listed row is judged at every seed (Part 16: 74 rows a moved cover had dropped)", () => {
+    const ledger = ledgerIds();
+    expect(ledger.length).toBeGreaterThan(0);
+    const required = new Set(requiredIds());
+    expect(ledger.filter((id) => !required.has(id))).toEqual([]);
+    expect(requiredIds({ rows: ["zz-ledger"] })).toContain("zz-ledger");
+    for (const seed of [1, 2, 3]) expect(cover(rows, { seed, required: ["d"] }).ids).toContain("d");
   });
   it("is one sample for one seed and code state, and a seed moves it", () => {
     expect(cover(rows, { seed: 1 }).ids).toEqual(cover(rows, { seed: 1 }).ids);

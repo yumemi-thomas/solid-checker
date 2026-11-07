@@ -34,7 +34,28 @@ export const namedKey = (finding) => `${finding.id}/${finding.blocker}@${finding
 export const F2_OPEN = "R-F2-open";
 /** `flw-guard-yield`: a site past a generator step, its U at the generator: W's F1 places it. Must reach 0 before #173 moves, as F2. */
 export const F1_OPEN = "R-F1-open";
-export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN].includes(row.cause)).map(([id]) => `${grid}/${id}`));
+/**
+ * The rows #173 may not move with (`make flip-final`, open-rows.mjs --final): R-F1-open and R-F2-open, and any certified false clean or false
+ * positive the ledger holds, whatever its cause: the ratchet's `certified`, `certifiedF2` and `falsePositive` must all be 0 (coordinator, Part 16).
+ */
+export const finalBlockers = (list) => Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN].includes(row.cause) || row.certified === true || row.outcome === "false-positive").map(([id]) => `${grid}/${id}`));
+
+/**
+ * The agent a ledger row is assigned to (open-defects.json `owners`, by exact `grid/id`), written into the row by open-rows.mjs. A certified
+ * or false-positive row whose cause names no family (`R-*`, or the bare outcome) must have one; an owner names a row the ledger holds.
+ */
+export function ownerProblems(list) {
+  const owners = list.owners ?? {};
+  const rows = new Map(Object.entries(list.rows?.grids ?? {}).flatMap(([grid, entries]) => Object.entries(entries).map(([id, row]) => [`${grid}/${id}`, row])));
+  const out = [];
+  for (const [key, owner] of Object.entries(owners)) {
+    if (!rows.has(key)) out.push(`${key}: an owner for no ledger row`);
+    else if (rows.get(key).owner !== owner) out.push(`${key}: the row says ${rows.get(key).owner ?? "no owner"}, owners says ${owner}`);
+  }
+  const familyless = (row) => row.cause === row.outcome || (String(row.cause).startsWith("R-") && ![F1_OPEN, F2_OPEN, STOP_NAMED_U].includes(row.cause));
+  for (const [key, row] of rows) if ((row.certified === true || row.outcome === "false-positive") && familyless(row) && !owners[key]) out.push(`${key}: ${row.certified ? "certified" : "false positive"} under ${row.cause} with no owner`);
+  return out;
+}
 
 /** Whether a row answers an entry: same id prefix, code, contexts, source and variant prefix. */
 const answers = (entry, row) => String(row.id).startsWith(entry.idPrefix) && entry.code === row.code
