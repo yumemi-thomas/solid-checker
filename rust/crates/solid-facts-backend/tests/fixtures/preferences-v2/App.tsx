@@ -30,12 +30,6 @@ function AccessorProps(props: { items: () => string[] }) {
   return <ul>{props.items().map((item) => item)}</ul>;
 }
 
-class ReactiveCollection {
-  map(callback: (item: string) => string) {
-    return [callback("custom")];
-  }
-}
-
 function ShadowedSources() {
   const createSignal = <T,>(value: T) => [() => value] as const;
   const [items] = createSignal(["shadowed"]);
@@ -61,7 +55,6 @@ export const App = () => {
   const localReady = true;
   const derivedItems = () => items();
   const aliasedStoreItems = state.items;
-  const [customCollection] = createSignal(new ReactiveCollection());
 
   return (
     <main>
@@ -84,7 +77,6 @@ export const App = () => {
       {capturedReady && <span>captured accessor</span>}
       {capturedStoreReady ? <span>captured store</span> : <span>waiting</span>}
       <ul>{externalList().map((item) => item)}</ul>
-      <ul>{customCollection().map((item) => item)}</ul>
       <ul>{items().map(async (item) => item)}</ul>
       {externalReady() && <span>external</span>}
       <ul>{staticItems.map((item) => <span title={String(ready())}>{item}</span>)}</ul>

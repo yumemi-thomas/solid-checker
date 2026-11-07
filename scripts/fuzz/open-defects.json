@@ -695,17 +695,28 @@
    "outcome": "not-legal",
    "item": "R-not-legal",
    "note": "Legal-grid iter-* programs: a hidden iteration patch runs the write inside the compute, so Solid reports the code the generator labels legal. Held open by id; not classified as fine."
+  },
+  {
+   "idPrefix": "lg-reactive-write-in-owned-scope-",
+   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+   "contexts": [
+    "recv-replace-late"
+   ],
+   "outcome": "false-positive",
+   "item": "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`",
+   "partial": true,
+   "note": "SC2001 violation at the setter in `f` on every build measured (mg8 census tip, m0, m6, m10: not a casts regression). The write-role walk logs the write Unknown (`write_roles.walk-unknown-11`), and the read twin (STRICT_READ_UNTRACKED) stays uncertifiable, so another SC2001 producer takes `replace`'s inline callback timing past ADR 0874's `replace` veto; not traced (C2 commit report)"
   }
  ],
  "patterns": [
   {
-   "id": "types/p3-cast-field",
-   "item": "R2 P3 residual: the assertion is away from the receiver",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
+   "id": "types/s02-setter-slot-function-escaped",
+   "item": "R1c: ADR 0282's census misses a Function held in a parameter and called with a string that patches iteration; a hook's setter slot is then taken as exact (same on 0818e258a)",
+   "outcome": "false-positive",
+   "codes": [],
+   "rules": [
+    "no-write-in-pure-computation"
+   ]
   },
   {
    "id": "types/p3-cast-param",
@@ -993,6 +1004,14 @@
   {
    "item": "no-run",
    "note": "3 programs no runner accepts: a decorator, a removed `on:` attribute, a compile refusal; listed with their reason"
+  },
+  {
+   "item": "R9 (ADR 0874): fixture reactive-ir/read-after-await-reach, ShadowedUndefinedResolve, SC1002 handed-read-after-await at `value()` (App.tsx 43219-43224)",
+   "note": "lost since ADR 0840: `.then(() => value())` and `.catch` are withheld (a `*` census site), and the after-await walk follows neither (`has_promise_seed`, `expand` read the standard resolution); SC1001 function-run-unplaced and the impostor row stand at the site. Not a Chrome-visible defect (the rejected promise never runs the handler), so no pattern holds it"
+  },
+  {
+   "item": "R9 (ADR 0874): fixture reactive-ir/solid2-precision, SC9012 function-call-target-unresolved at `makePredicate((post) => …)` handed to `result.filter(...)` (App.tsx 3909-3953)",
+   "note": "lost since ADR 0840: `result.filter` is withheld (a `*` census site), and the row naming the function filter runs goes with the call's resolution; the call's standard-member-impostor row stands on the same statement (3895-3908), not at the same start; the predicate's reads keep their SC1001 and SC1002 rows"
   }
  ],
  "owners": {

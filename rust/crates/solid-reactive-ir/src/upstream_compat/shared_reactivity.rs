@@ -2718,9 +2718,10 @@ impl<'c> ParameterFlow<'_, 'c> {
                 })
                 .map(|argument| argument.span)
         };
-        if let Some(declaration) =
-            lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)
-        {
+        if let Some(declaration) = lookup.placing_standard_declaration(file, call) {
+            // ADR 0874: the row stays at its site, and a value a withheld
+            // call answers proves no store.
+            self.open |= lookup.impostor_withheld(file, call.callee);
             let qualified = declaration.qualified_name.as_ref();
             let method = qualified
                 .strip_prefix("Array.")
@@ -4101,7 +4102,10 @@ fn write_window_standing(
                 }
                 at = call;
             }
-            crate::execution_role::LayerRun::InPlaceAmongOthers(_) if inside => {
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+            | crate::execution_role::LayerRun::Withheld(_)
+                if inside =>
+            {
                 return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::FreshStack if inside => return WriteStanding::Dropped,
@@ -5298,16 +5302,15 @@ fn no_store_mutator_call(
         {
             continue;
         }
-        let Some(declaration) =
-            context
-                .lookup
-                .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        else {
+        let Some(declaration) = context.lookup.placing_standard_declaration(file, call) else {
             continue;
         };
         if declaration.qualified_name.as_ref() != format!("Array.{}", text(file, member.property)) {
             continue;
         }
+        // ADR 0874: a withheld mutator may be the program's: the row stays
+        // at its site, and nothing proves it writes.
+        let withheld = context.lookup.impostor_withheld(file, call.callee);
         let Some(root) = member_root(file, callee) else {
             continue;
         };
@@ -5328,11 +5331,14 @@ fn no_store_mutator_call(
             .ast
             .call_at(file.ast.peel_ts_sugar_span(root))
             .is_some();
-        let Some((symbol, name)) = proven.filter(|_| !call_root) else {
-            if call_root || source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+        let Some((symbol, name)) = proven.filter(|_| !call_root && !withheld) else {
+            if withheld
+                || call_root
+                || source.is_none_or(|symbol| !context.accessors.contains_key(symbol))
+            {
                 let sink = SinkWrite {
                     member: callee,
-                    may_not_write: !mutator_always_writes(text(file, member.property)),
+                    may_not_write: withheld || !mutator_always_writes(text(file, member.property)),
                     delete: false,
                     linked: false,
                 };

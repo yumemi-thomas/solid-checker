@@ -4,7 +4,7 @@
 //   flipReadContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
 //   FLIP_READ_LEGAL     { [code]: [context, ...] }, appended to that code's recallLegal
 //   FLIP_READ_VARIANTS  { [code]: { [variant]: { kind, contexts } } }, a source of that kind, in those contexts, added to the code's recall variants
-import { apiSignal, button, call, child, ctl, decl, domExpr, expr, flush, fn, iife, jsx, jsxExpr, mounted, num, prim, ref, ret } from "./model.mjs";
+import { apiSignal, awaitStmt, button, call, child, ctl, decl, domExpr, expr, flush, fn, iife, jsx, jsxExpr, member, mounted, num, prim, ref, ret } from "./model.mjs";
 
 // ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
 export const STATIC_SOURCES = {
@@ -44,19 +44,94 @@ export const STORE_DESTRUCTURES = {
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.
 const SYNC_THEN = "{ then(f: () => void) { f(); } }";
+const SYNC_PROTO = "function (this: any, f: any) { f(); return this; }";
+const PATCH_KEYS = 'const pk = ["Pro", "mise"].join(""), pm = ["th", "en"].join("");';
 const PATCHES = {
   "patch-global": ["(globalThis as any).setTimeout = (f: () => void) => { f(); return 0; };", "setTimeout"],
   "patch-window": ["window.setTimeout = ((f: () => void) => { f(); return 0; }) as any;", "setTimeout"],
   "patch-define": ['Object.defineProperty(globalThis, "setTimeout", { value: (f: () => void) => { f(); return 0; } });', "setTimeout"],
   "patch-proto": ["Promise.prototype.then = function (this: any, f: any) { f(); return this; } as any;", "Promise.resolve().then"],
   "patch-proto-alias": ["const proto = Promise.prototype; proto.then = function (this: any, f: any) { f(); return this; } as any;", "Promise.resolve().then"],
+  // ADR 0841: the prototype or the global reached by a key no fact names, or by `Object.getPrototypeOf`.
+  "patch-key-proto": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-getproto": [`const gp = Object.getPrototypeOf(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-assign-key-proto": [`${PATCH_KEYS} Object.assign((globalThis as any)[pk].prototype, { [pm]: ${SYNC_PROTO} });`, "Promise.resolve().then"],
+  "patch-key-alias": [`${PATCH_KEYS} const gC = (globalThis as any)[pk]; gC.prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-key-ctor": [`${PATCH_KEYS} let gA = false; const gR = (globalThis as any)[pk]; (globalThis as any)[pk] = class extends gR { static resolve(v?: unknown) { return gA ? ((gA = false), { then(f: () => void) { f(); } }) : gR.resolve(v); } };`, "(gA = true, Promise.resolve()).then"],
 };
+// ADR 0840: the impostor away from the receiver (a parameter, a field, a return, a generic, a member), and with no assertion at all
+// (`any`, an array's covariance, a type guard, an own `then` put on a real promise). Each `then` runs the callback on the caller's stack.
+const RUN_THEN = "(p: Promise<void>, f: () => void) => { p.then(f); }";
 const CASTS = {
   "cast-then": (t) => ({ held: [decl(t, domExpr(SYNC_THEN))], callee: `(${t} as unknown as Promise<void>).then` }),
   "cast-any-then": (t) => ({ held: [decl(t, domExpr(`${SYNC_THEN} as any`))], callee: `(${t} as Promise<void>).then` }),
   "cast-held-then": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(`${t} as unknown as Promise<void>`))], callee: `${q}.then` }),
+  "cast-param": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(RUN_THEN))], call: (h) => `${q}(${t} as any, ${h})` }),
+  "cast-field": (t, q) => ({ hoisted: [expr(domExpr(`class ${q} { p = ${SYNC_THEN} as unknown as Promise<void>; }`))], held: [], callee: `new ${q}().p.then` }),
+  "cast-return": (t) => ({ held: [decl(t, domExpr(`(): Promise<void> => (${SYNC_THEN}) as unknown as Promise<void>`))], callee: `${t}().then` }),
+  "cast-generic": (t, q) => ({ hoisted: [expr(domExpr(`function ${q}<T>(x: unknown): T { return x as T; }`))], held: [decl(t, domExpr(`${q}<Promise<void>>(${SYNC_THEN})`))], callee: `${t}.then` }),
+  "cast-nested": (t) => ({ held: [decl(t, domExpr(`{ p: ${SYNC_THEN} } as unknown as { p: Promise<void> }`))], callee: `${t}.p.then` }),
+  "cast-any-param": (t, q) => ({ held: [expr(domExpr(`const ${t}: any = ${SYNC_THEN}`)), decl(q, domExpr(RUN_THEN))], call: (h) => `${q}(${t}, ${h})` }),
+  "cast-covariance": (t, q) => ({ hoisted: [expr(domExpr(`const ${t}: Promise<void>[] = []; const ${q}: (Promise<void> | { then(f: () => void): void })[] = ${t}; ${q}.push(${SYNC_THEN})`))], held: [], callee: `${t}[0].then` }),
+  "cast-guard": (t, q) => ({ hoisted: [expr(domExpr(`function ${q}(x: unknown): x is Promise<void> { return typeof x === "object" && x !== null && "then" in x; }`))], held: [expr(domExpr(`const ${t}: unknown = ${SYNC_THEN}`))], call: (h) => `if (${q}(${t})) ${t}.then(${h})` }),
+  "cast-instance": (t) => ({ held: [decl(t, domExpr("Promise.resolve()")), expr(domExpr(`Object.assign(${t}, { then: (f: () => void) => { f(); } })`))], callee: `${t}.then` }),
 };
 const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
+// ADR 0874: a receiver the census took for the standard library's, with the program's own member on it. Each runs the callback at once
+// on the caller's stack. The event type names the program's own: the runtime's listeners keep the built-in.
+const ADD_SYNC = 'function (this: any, t: string, cb: any, ...r: any[]) { if (t === "x-sync") cb(); else (hO as any).call(this, t, cb, ...r); }';
+const HOST_CALL = (target) => (h) => `${target}.addEventListener("x-sync", ${h})`;
+const HOST_HOLD = "const hO = EventTarget.prototype.addEventListener;";
+const IN_RUN = '/\\bC\\d+\\b/.test(new Error().stack ?? "")';
+const RECEIVERS = {
+  // R10c: a host global's own member, written under its lowercase spelling, through an alias, or handed to a helper.
+  "recv-doc-patch": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} (document as any).addEventListener = ${ADD_SYNC};`))], held: [], call: HOST_CALL("document") }),
+  "recv-win-patch": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} (window as any).addEventListener = ${ADD_SYNC};`))], held: [], call: HOST_CALL("window") }),
+  "recv-body-patch": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} (document.body as any).addEventListener = ${ADD_SYNC};`))], held: [], call: HOST_CALL("document.body") }),
+  "recv-doc-alias": (t) => ({ hoisted: [expr(domExpr(`${HOST_HOLD} const ${t}: any = document; ${t}.addEventListener = ${ADD_SYNC};`))], held: [], call: HOST_CALL("document") }),
+  "recv-doc-handed": (t) => ({ hoisted: [expr(domExpr(`${HOST_HOLD} const ${t} = (o: any) => { o.addEventListener = ${ADD_SYNC}; }; ${t}(document);`))], held: [], call: HOST_CALL("document") }),
+  "recv-target-proto": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} EventTarget.prototype.addEventListener = ${ADD_SYNC} as any;`))], held: [], call: HOST_CALL("document") }),
+  // Review D7: the object replaced under its members: a new prototype, by call or by a `__proto__` write, or `self` itself.
+  "recv-doc-setproto": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} Object.setPrototypeOf(document, Object.create(Object.getPrototypeOf(document), { addEventListener: { value: ${ADD_SYNC} } }));`))], held: [], call: HOST_CALL("document") }),
+  "recv-doc-dunder": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} (document as any).__proto__ = Object.create(Object.getPrototypeOf(document), { addEventListener: { value: ${ADD_SYNC} } });`))], held: [], call: HOST_CALL("document") }),
+  "recv-self-fake": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} (globalThis as any).self = { addEventListener: ${ADD_SYNC} };`))], held: [], call: HOST_CALL("self") }),
+  // Review D10: the withheld call's result is the function: `find` hands back the handler, which the program calls.
+  "recv-result": (t, q) => ({ hoisted: [expr(domExpr(`const ${t}: unknown[] = []; ${t}[Number("0")] = () => 0;`))], held: [decl(q, domExpr("(x: (() => void)[]) => x"))], call: (h) => `${q}([${h}]).find(() => true)?.()` }),
+  // ADR 0875: the program's only computed key is a same-file `const` bound to `Symbol(...)`, which names no member: the receiver's `forEach`
+  // is the standard one, run in place (Chrome warns). The build before took the key for `*` and withheld every census member.
+  "recv-symbol-const": (t, q) => ({ hoisted: [expr(domExpr(`const ${t}k = Symbol("k"); const ${t}o: any = {}; ${t}o[${t}k] = () => 0;`))], held: [decl(q, domExpr("(x: number[]) => x"))], callee: `${q}([1]).forEach` }),
+  "recv-symbol-for-const": (t, q) => ({ hoisted: [expr(domExpr(`const ${t}k = Symbol.for("k"); const ${t}o: any = {}; ${t}o[${t}k] = () => 0;`))], held: [decl(q, domExpr("(x: number[]) => x"))], callee: `${q}([1]).forEach` }),
+  // R10b: a promise's species, the prototype's constructor replaced by a class the standard's own then builds from.
+  "recv-species-promise": (t) => ({ hoisted: [expr(domExpr(`class ${t} { static get [Symbol.species](): unknown { return ${IN_RUN} ? ${t} : Promise; } constructor(run: (a: unknown, b: unknown) => void) { run(() => {}, () => {}); } then(f: () => void) { f(); return this; } } (Promise.prototype as any).constructor = ${t};`))], held: [], callee: "Promise.resolve().then(() => 0).then" }),
+};
+// The same, quiet in Chrome: the checker took the program's own late method for the standard's in-place one. Each hands the callback to a microtask.
+const LATE_EACH = "(cb: () => void) => { queueMicrotask(cb); }";
+const LATE_RECEIVERS = {
+  // R10a: an array method hands the receiver to its callback, and a method the program put on the prototype gets it as this.
+  "recv-handed-late": (t) => ({ hoisted: [expr(domExpr(`const ${t} = [1]; ${t}.map((_v, _i, a) => { (a as any).forEach = ${LATE_EACH}; return 0; });`))], held: [], callee: `${t}.forEach` }),
+  "recv-reduce-late": (t) => ({ hoisted: [expr(domExpr(`const ${t} = [1, 2]; ${t}.reduce((c, _v, _i, a) => { (a as any).forEach = ${LATE_EACH}; return c; }, 0);`))], held: [], callee: `${t}.forEach` }),
+  "recv-this-late": (t) => ({ hoisted: [expr(domExpr(`(Array.prototype as any).hand = function (this: any) { this.forEach = ${LATE_EACH}; }; const ${t} = [1]; (${t} as any).hand();`))], held: [], callee: `${t}.forEach` }),
+  // Review D7: a listed method the program replaced runs with the array as this.
+  "recv-slice-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}o = Array.prototype.slice; (Array.prototype as any).slice = function (this: any, ...a: any[]) { if (this[0] === 7) this.forEach = ${LATE_EACH}; return ${t}o.apply(this, a); }; const ${t} = [7]; ${t}.slice();`))], held: [], callee: `${t}.forEach` }),
+  // Review R33: a member that answers with its receiver hands it on.
+  "recv-answer-late": (t) => ({ hoisted: [expr(domExpr(`const ${t} = [1, 2]; const ${t}y: any = ${t}.reverse(); ${t}y.forEach = ${LATE_EACH};`))], held: [], call: (h) => `${t}.forEach(() => { ${h}(); })` }),
+  // R10b: an array's species, as a promise's above.
+  "recv-species-array": (t) => ({ hoisted: [expr(domExpr(`class ${t} { static get [Symbol.species](): unknown { return ${IN_RUN} ? ${t} : Array; } forEach(f: () => void) { queueMicrotask(f); } } (Array.prototype as any).constructor = ${t};`))], held: [], callee: "[1].map((v) => v).forEach" }),
+  // ADR 0875: a key that only looks like a symbol puts the program's late `forEach` on the array: a string from a symbol
+  // (`.description`, `Symbol.keyFor`), a shadowed `Symbol`, a `let` rebound to a string. The build before read the first two as symbols.
+  "recv-symbol-desc-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = [1]; ${t}[Symbol("forEach").description!] = ${LATE_EACH};`))], held: [], callee: `(${t} as number[]).forEach` }),
+  "recv-symbol-keyfor-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = [1]; ${t}[Symbol.keyFor(Symbol.for("forEach"))!] = ${LATE_EACH};`))], held: [], callee: `(${t} as number[]).forEach` }),
+  "recv-symbol-desc-const-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}k = Symbol("forEach").description!; const ${t}: any = [1]; ${t}[${t}k] = ${LATE_EACH};`))], held: [], callee: `(${t} as number[]).forEach` }),
+  "recv-symbol-let-late": (t) => ({ hoisted: [expr(domExpr(`let ${t}k: any = Symbol("k"); ${t}k = "forEach"; const ${t}: any = [1]; ${t}[${t}k] = ${LATE_EACH};`))], held: [], callee: `(${t} as number[]).forEach` }),
+  // Review D15: `Symbol` replaced in a second module the program imports for its effect; `Symbol.species` gives the array a class
+  // whose `forEach` is late (`Symbol.species` names a member's builder, never a symbol that replaces no member).
+  "recv-symbol-patched-module-late": (t) => ({ importLines: ['import "./symbol-patch";'], files: { "symbol-patch.ts": '(globalThis as any).Symbol = (_: string) => "forEach";\nexport {};\n' }, hoisted: [expr(domExpr(`const ${t}k = Symbol("k"); const ${t}: any = [1]; ${t}[${t}k] = ${LATE_EACH};`))], held: [], callee: `(${t} as number[]).forEach` }),
+  "recv-symbol-for-patched-module-late": (t) => ({ importLines: ['import "./symbol-for-patch";'], files: { "symbol-for-patch.ts": '(Symbol as any).for = (_: string) => "forEach";\nexport {};\n' }, hoisted: [expr(domExpr(`const ${t}k = Symbol.for("k"); const ${t}: any = [1]; ${t}[${t}k] = ${LATE_EACH};`))], held: [], callee: `(${t} as number[]).forEach` }),
+  "recv-symbol-species-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}k = Symbol.species; class ${t}A extends Array { forEach(f: (...a: any[]) => void): void { queueMicrotask(() => f()); } } Object.defineProperty(Array, ${t}k, { configurable: true, get: () => ${t}A });`))], held: [], callee: "[1].map((v) => v).forEach" }),
+  "recv-symbol-shadow-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = [1]; { const Symbol = (_: string) => "forEach"; const ${t}k = Symbol("k"); ${t}[${t}k] = ${LATE_EACH}; }`))], held: [], callee: `(${t} as number[]).forEach` }),
+  // R10d: replace dispatches through the first argument's Symbol.replace.
+  "recv-replace-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = { [Symbol.replace]: (s: string, cb: () => void) => { queueMicrotask(cb); return s; } };`))], held: [], call: (h) => `"x".replace(${t}, ${h} as any)` }),
+};
 // ADR 0803: the iterator written back unchanged. The tripwires fire and the write still runs (Chrome warns): never a silent clean.
 const ITER_SAME = { "iter-same": "Array.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];" };
 
@@ -162,28 +237,30 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "then-withheld", "then-withheld-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
-  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(ITER_SAME)],
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, ...Object.keys(RECEIVERS), "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
 };
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
+  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["handler-chain-placed", "export-placed-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL],
+  // ADR 0874, review R30-R32: a withheld call's callback proves no run: the program's own `forEach` queues it.
+  FLUSH_IN_ACTION: ["wh-action-late"],
+  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS)],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(ITER_PATCHES)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
   RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
   UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
@@ -721,10 +798,11 @@ export function flipReadContext(context, stmts, kit) {
       default: return { body: [held], view: [button(kit.name("b"), [expr(call(ref(h)))]), button(kit.name("b"), [expr(call(ref(h)))])] };
     }
   }
-  if (CASTS[context]) {
-    const { held, callee } = CASTS[context](kit.name("t"), kit.name("q"));
+  const cast = CASTS[context] ?? RECEIVERS[context] ?? LATE_RECEIVERS[context];
+  if (cast) {
+    const { hoisted = [], held, callee, call: run, files, importLines } = cast(kit.name("t"), kit.name("q"));
     const h = kit.name("f");
-    return { body: [...held, decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
+    return { hoisted, body: [...held, decl(h, fn(stmts)), expr(domExpr(run ? run(h) : `${callee}(${h})`))], view: [], ...(files ? { files, importLines } : {}) };
   }
   if (PATCHES[context]) {
     const [patch, callee] = PATCHES[context];
@@ -768,6 +846,33 @@ export function flipReadContext(context, stmts, kit) {
     if (effect) return { body: [expr(prim("effect", fn(body, { async: true }), { apply: fn([]) }))], view: [] };
     const m = kit.name("m");
     return { body: [decl(m, prim("memo", fn(body, { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
+  // ADR 0874, review R30-R32: `names` is the program's own object, typed as a list: its `forEach` runs nothing on this stack.
+  if (context === "wh-helper-late" || context === "wh-action-late" || context === "wh-root-cleanup") {
+    const [own, names, f, h] = [kit.name("o"), kit.name("n"), kit.name("f"), kit.name("h")];
+    const each = context === "wh-root-cleanup" ? "(cb: () => void) => { onCleanup(cb); }" : "(cb: () => void) => { queueMicrotask(cb); }";
+    const hold = expr(domExpr(`const ${own}: any = {}; ${own}.forEach = ${each}; const ${names}: string[] = ${own};`, undefined, context === "wh-root-cleanup" ? ["onCleanup"] : undefined));
+    const site = decl(f, fn(stmts));
+    if (context === "wh-helper-late") return { body: [hold, site, decl(h, domExpr(`() => { ${names}.forEach(() => { ${f}(); }); }`)), expr(domExpr(`${h}()`))], view: [] };
+    if (context === "wh-action-late") return { body: [hold, site, decl(h, domExpr(`action(function* () { ${names}.forEach(() => { ${f}(); }); yield; })`, undefined, ["action"])), expr(domExpr(`${h}()`))], view: [] };
+    return { body: [hold, site, expr(domExpr(`${names}.forEach(() => { createRoot(() => { ${f}(); }); })`, undefined, ["createRoot"]))], view: [] };
+  }
+  // ADR 0874: `then` on a receiver no fact proves, under a key no fact names: the read past the await keeps its rule's row. Chrome warns there.
+  if (context === "then-withheld" || context === "then-withheld-named") {
+    const [t, f, m, q] = [kit.name("t"), kit.name("f"), kit.name("m"), kit.name("q")];
+    const star = expr(domExpr(`const ${t}: unknown[] = []; ${t}[Number("0")] = () => 0;`));
+    const own = decl(q, domExpr("(x: Promise<number>) => x"));
+    // Raw text, as `then-named`: the validator types no member of a call's result. The inline form keeps an arrow at the call.
+    const named = context === "then-withheld-named";
+    const flight = domExpr(`${q}(Promise.resolve(1)).then(${named ? f : `() => ${f}()`})`);
+    const compute = fn([awaitStmt(), ret(flight)], { async: true });
+    return { hoisted: [star], body: [own, decl(f, fn([...stmts, ret(num(1))])), decl(m, prim("memo", compute)), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
+  // ADR 0874: R10e, a `then` the program put on Object.prototype makes the awaited array thenable: `await` hands back its object, whose forEach never runs the callback.
+  if (context === "await-object-then") {
+    const [t, f, m] = [kit.name("t"), kit.name("f"), kit.name("m")];
+    const patch = 'Object.defineProperty(Object.prototype, "then", { configurable: true, get(this: any) { return Array.isArray(this) && this[0] === 7 ? (r: any) => r({ forEach() {} }) : undefined; } });';
+    return { hoisted: [expr(domExpr(patch))], body: [decl(f, fn(stmts)), decl(m, prim("memo", fn([decl(t, domExpr("await [7]")), expr(domExpr(`${t}.forEach(${f})`)), ret(num(1))], { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
   }
   if (context === "then-named") {
     const [f, m] = [kit.name("f"), kit.name("m")];

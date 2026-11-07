@@ -5565,6 +5565,42 @@
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
  },
  {
+  "finding": "A lying cast or impostor away from the receiver: `run(t as any)` into a `Promise<void>` parameter, a field or return holding the cast (p3-cast-*), `const t: any`, an array's covariance, `coerce<T>`, a cast literal's member, `Object.assign(p, { then })` on a real promise, and a global `Promise` replaced under a key no fact names whose `resolve` hands back a thenable (g2): `then` resolved to Promise.then from the written type, a write in the callback certified, Chrome warns (research-w-lying-casts.md c1-c4, c7, g2)",
+  "found": "research-w-lying-casts.md (Q1, Q2), patterns types/p3-cast-* and types/lc-*",
+  "fixed": "ADR 0840",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-cast-param-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-field-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-return-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-any-param-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-covariance-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-generic-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-nested-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-instance-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-key-ctor-signal-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs cast-* and patch-key-ctor (matrix --recall --grid --layers none, the sc VM, one generator for both): e57cc0dc5 720 false-clean in REACTIVE_WRITE (80 per context; cast-guard 0, the base already open there), ADR 0840 0 (recall-gap)"
+ },
+ {
+  "finding": "The same impostors around a read: certified, Chrome warns",
+  "found": "the fuzzer, this slice's own shapes",
+  "fixed": "ADR 0840",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-cast-field-signal-direct-none",
+   "mx-strict-read-untracked-cast-return-signal-direct-none",
+   "mx-strict-read-untracked-cast-covariance-signal-direct-none",
+   "mx-strict-read-untracked-cast-generic-signal-direct-none",
+   "mx-strict-read-untracked-cast-nested-signal-direct-none",
+   "mx-strict-read-untracked-cast-instance-signal-direct-none",
+   "mx-strict-read-untracked-patch-key-ctor-signal-direct-none"
+  ],
+  "rediscovered": "the same run: e57cc0dc5 413 false-clean in STRICT_READ (59 per context; cast-param, cast-any-param and cast-guard 0 there), ADR 0840 0. Both codes: 1,133 false cleans (994 cast, 139 patch-key-ctor), 1,267 of the old build's false cleans in the 14 contexts had no uncertifiable finding. patch-getproto (139) and patch-key-proto, patch-key-alias, patch-assign-key-proto (15 each) stay false-clean on both builds: Q2's"
+ },
+ {
   "finding": "item 5: a pattern over a store root reached through a holder slot (`const o = { st }; const { a } = o.st;`) was followed with no row; the file certified while Chrome warns",
   "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
   "fixed": "ADR 0812",
@@ -6645,5 +6681,80 @@
    "mx-primitive-in-forbidden-scope-tracked-root-alias-depth-17"
   ],
   "rediscovered": "depth-15/16/17 ids of the three forbidden-scope codes in settled, tracked and their contexts (450, Chrome confirmed): build r9 75 false cleans; r13: 0, 330 uncertifiable, 120 agree"
+ },
+ {
+  "finding": "SC4001: a helper the component body runs (owned) and a withheld call's callback runs (`hand(arr).forEach(h)`, the program's own forEach on that receiver queues it) was certified: ADR 0840's census withheld the call and with it every owner edge of the callback, so the body's owned call alone placed the helper; Chrome (rc.21) reports no owner from the microtask (corpus: solid-dockview `watch`, R9 review)",
+  "found": "C2 exact-span re-measure of ADR 0840's removed rows (R9)",
+  "fixed": "ADR 0874",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-flw-withheld-late-effect-direct-none",
+   "mx-no-owner-effect-flw-withheld-late-render-direct-none"
+  ],
+  "rediscovered": "the checker at 3c921e7dd plus R9/R10 (C2 build m6) on matrix.mjs --grid --recall --ids (codes NO_OWNER_EFFECT, NO_OWNER_CLEANUP; flip-write.mjs context flw-withheld-late), judged by the census tip's 4c judge ff31e12bb: 3 false-clean of 6 (Chrome 3/3 same), 3 typed-away; the fix (m7): 0 false-clean, 3 recall-gap (missing-owner uncertifiable at the site), 3 typed-away"
+ },
+ {
+  "finding": "SC4001: a helper the component body runs (owned) and a withheld call's callback runs (`hand(arr).forEach(h)`, the program's own forEach on that receiver queues it) was certified: ADR 0840's census withheld the call and with it every owner edge of the callback, so the body's owned call alone placed the helper; Chrome (rc.21) reports no owner from the microtask (corpus: solid-dockview `watch`, R9 review)",
+  "found": "C2 exact-span re-measure of ADR 0840's removed rows (R9)",
+  "fixed": "ADR 0874",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-withheld-late-x-direct-none"
+  ],
+  "rediscovered": "the checker at 3c921e7dd plus R9/R10 (C2 build m6) on matrix.mjs --grid --recall --ids (codes NO_OWNER_EFFECT, NO_OWNER_CLEANUP; flip-write.mjs context flw-withheld-late), judged by the census tip's 4c judge ff31e12bb: 3 false-clean of 6 (Chrome 3/3 same), 3 typed-away; the fix (m7): 0 false-clean, 3 recall-gap (missing-owner uncertifiable at the site), 3 typed-away"
+ },
+ {
+  "finding": "SC1001 V at a helper's call: `function h() { names.forEach(() => { r(); }); } h();` where `names` is the program's own object whose `forEach` queues the callback: a withheld call's callback was a proven run; Chrome quiet",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-wh-helper-late-signal-direct-none",
+   "lg-strict-read-untracked-wh-helper-late-memo-direct-none",
+   "lg-strict-read-untracked-wh-helper-late-store-link-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 3 false-positive; m19 0, uncertifiable"
+ },
+ {
+  "finding": "SC2006 V in an action step: `names.forEach(() => { flush(); })` on the same object: the step climb crossed a withheld call; Chrome quiet",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "lg-flush-in-action-wh-action-late-x-direct-none",
+   "lg-flush-in-action-wh-action-late-x-direct-none-m-show-signal",
+   "lg-flush-in-action-wh-action-late-x-direct-none-m-show-later"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 5 disturbed (the V stood where Chrome reports nothing); m19 0, uncertifiable"
+ },
+ {
+  "finding": "SC2001 V: `names.forEach(() => { createRoot(() => set(1)); })` where the program's `forEach` hands the callback to `onCleanup`: the disposal climb crossed a withheld call as a run outside a disposal; the write is legal in a disposal",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-wh-root-cleanup-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-wh-root-cleanup-store-direct-none",
+   "lg-reactive-write-in-owned-scope-wh-root-cleanup-refresh-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 12 unexecuted; m19 0, uncertifiable"
+ },
+ {
+  "finding": "R10a's exemption took `reverse`, `sort`, `fill`, `copyWithin`, Map `set`, Set `add` as handing nothing on, but each answers with its receiver: `const ys: any = xs.reverse(); ys.forEach = late; xs.forEach(() => { … })` was a standard call; Chrome quiet",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-recv-answer-late-signal-direct-none",
+   "lg-strict-read-untracked-recv-answer-late-memo-direct-none",
+   "lg-strict-read-untracked-recv-answer-late-store-link-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 3 false-positive; m19 0, uncertifiable"
  }
 ]

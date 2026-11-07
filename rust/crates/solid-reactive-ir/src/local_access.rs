@@ -500,8 +500,8 @@ fn iteration_receiver_of_parameter(
             .iter()
             .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == callback.span)
     })?;
-    t.lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0874: this only opens obligations.
+    t.lookup.placing_standard_declaration(file, call)?;
     file.ast
         .member_at(file.ast.peel_ts_sugar_span(call.callee))
         .map(|member| member.object)
@@ -608,9 +608,8 @@ fn handed_call(
         return true;
     }
     // F-B: a standard call hands on what it was given (`m.get("f")`).
-    t.lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        .is_some()
+    // ADR 0874: this only opens obligations.
+    t.lookup.placing_standard_declaration(file, call).is_some()
         && (handed_argument()
             || file
                 .ast
@@ -2011,6 +2010,11 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
             );
             if execution == ExecutionRole::DiscardedRendering {
+                continue;
+            }
+            // ADR 0874: a call an impostor may run, or never: not silent.
+            if crate::execution_role::runs_in_withheld_layer(file, call.span, self.lookup) {
+                retained_in_layer = true;
                 continue;
             }
             let candidates = self.lookup.callee_symbols(file, call.callee);
@@ -8935,7 +8939,9 @@ fn placed_nowhere(
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    function_escapes_unfollowed(file, span, lookup)
+    // ADR 0874: a withheld call proves no run, and an impostor may make one.
+    crate::execution_role::runs_in_withheld_layer(file, span, lookup)
+        || function_escapes_unfollowed(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
         || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
 }

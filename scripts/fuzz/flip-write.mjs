@@ -97,6 +97,22 @@ const MIXED_OWNERS = {
       view: [],
     };
   },
+  // ADR 0874: the site in a helper the body runs, and a withheld call's callback too. The program's own `forEach` on that receiver runs
+  // it from a microtask, with no owner (Chrome: NO_OWNER_EFFECT, NO_OWNER_CLEANUP); the build before gave the callback no owner context,
+  // so the body's owned call alone placed the helper, and it certified it. Handed by name: no frame of Chrome's report is the call's line.
+  "flw-withheld-late": (stmts, kit) => {
+    const [h, a, q] = [kit.name("h"), kit.name("lateEach"), kit.name("hand")];
+    return {
+      // Raw text: the validator reads names declared in the component, and these are module scope.
+      hoisted: [
+        decl(h, fn(stmts)),
+        expr(domExpr(`const ${a}: any = [1]; ${a}.forEach = (cb: () => void) => { queueMicrotask(cb); }`)),
+        decl(q, domExpr("(x: number[]) => x")),
+      ],
+      body: [expr(domExpr(`${h}()`)), expr(domExpr(`${q}(${a}).forEach(${h})`))],
+      view: [],
+    };
+  },
 };
 
 /**

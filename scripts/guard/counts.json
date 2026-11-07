@@ -141,7 +141,7 @@
   "SC8015 preference-read-unproven": 13,
   "SC9005 package-source-unavailable": 60,
   "SC9012 async-prop-getter": 3,
-  "SC9012 closed-parameter-member-dispatch": 66,
+  "SC9012 closed-parameter-member-dispatch": 67,
   "SC9012 composite-callee-unresolved": 4,
   "SC9012 computed-call-target-unresolved": 15,
   "SC9012 created-accessor-read-unproven": 1,
@@ -149,9 +149,9 @@
   "SC9012 dependency-source-program-call-error": 1,
   "SC9012 dependency-value-unfollowed": 22,
   "SC9012 derived-read-under-untrack": 6,
-  "SC9012 exported-parameter-member-dispatch": 72,
+  "SC9012 exported-parameter-member-dispatch": 73,
   "SC9012 forwarded-to-undescribed-callee": 28,
-  "SC9012 function-call-target-unresolved": 9,
+  "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 1,
   "SC9012 handed-member-dispatch": 361,
   "SC9012 handed-member-read": 62,
@@ -176,6 +176,7 @@
   "SC9012 returned-callable-outside-source-universe": 47,
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
+  "SC9012 standard-member-impostor": 104,
   "SC9012 store-key-undecided": 12,
   "SC9012 tuple-iteration-written": 45,
   "SC9012 type-only-source": 85,
@@ -214,6 +215,28 @@
    "fixtures": {
     "proved": "reactive-ir/store-write-literal-links",
     "open": "reactive-ir/local-alias-member-reads"
+   }
+  },
+  {
+   "key": "SC1001 host-callback-timing",
+   "from": 17,
+   "to": 12,
+   "adr": "ADR 0840",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::impostor_veto",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-census",
+    "open": "reactive-ir/host-callback-listener-real"
+   }
+  },
+  {
+   "key": "SC9012 value-in-carrier",
+   "from": 252,
+   "to": 247,
+   "adr": "ADR 0840",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::impostor_veto",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-census",
+    "open": "engine/eslint-reactivity-v2"
    }
   },
   {

@@ -1748,6 +1748,13 @@ impl<'w> FileRead<'_, '_, 'w> {
                 callee,
                 name,
                 |span| self.entity_at(span),
+            )
+            || crate::base::contributions::impostor_veto(
+                self.view.file,
+                callee,
+                name,
+                |hazard| self.ctx.hazard(hazard),
+                |member| self.ctx.defined_reflectively(member),
             );
         (!vetoed).then_some(resolved)
     }

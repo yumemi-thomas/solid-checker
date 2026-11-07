@@ -1415,6 +1415,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
+      "start": 1437,
+      "end": 1460,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1426,6 +1437,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
+      "start": 1721,
+      "end": 1734,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1434,6 +1456,17 @@
       "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
       "start": 1809,
       "end": 1830,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
+      "start": 1955,
+      "end": 1968,
       "fixes": 0
     },
     {

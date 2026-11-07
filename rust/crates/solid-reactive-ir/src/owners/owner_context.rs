@@ -1409,10 +1409,45 @@ pub(crate) fn inline_carrier_arguments(
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<usize> {
+    inline_carrier_arguments_by(
+        file,
+        call,
+        lookup,
+        lookup.resolved_callee_call(file, call.callee),
+    )
+}
+
+/// ADR 0874: [`inline_carrier_arguments`] for a call the impostor census
+/// withholds, read through its placing resolution: the arguments the standard
+/// carrier would run in place. An impostor may run them there, later, or
+/// never, so this proves no run and no owner; it only keeps the callback
+/// from losing every owner context.
+pub(crate) fn withheld_carrier_arguments(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<usize> {
+    if !lookup.impostor_withheld(file, call.callee) {
+        return Vec::new();
+    }
+    inline_carrier_arguments_by(
+        file,
+        call,
+        lookup,
+        lookup.placing_callee_call(file, call.callee),
+    )
+}
+
+fn inline_carrier_arguments_by(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+    resolved: Option<&typefacts::ResolvedCall>,
+) -> Vec<usize> {
     if lookup.primitive_at_call(file, call.span).is_some() {
         return Vec::new();
     }
-    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+    let Some(resolved) = resolved else {
         return Vec::new();
     };
     call.arguments

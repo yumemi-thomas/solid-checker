@@ -517,7 +517,7 @@ fn detached_in_place(
                 among_others = true;
                 at = call;
             }
-            LayerRun::FreshStack | LayerRun::Elsewhere => break,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => break,
         }
         layered = true;
     }
@@ -809,7 +809,7 @@ fn runs_in_disposal_uncached(
                 among_others = true;
                 at = call;
             }
-            LayerRun::Elsewhere => {
+            LayerRun::Elsewhere | LayerRun::Withheld(_) => {
                 return match lookup.function_component_status(file, function) {
                     ComponentStatus::Proven => component_mount_reach(file, function, lookup, depth),
                     // ADR 0782: a handler literal is no component, whatever it
@@ -1551,7 +1551,7 @@ fn in_place_in_root_named_callback(
         }
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => at = call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return false,
         }
     }
     // ADR 0532: the layers past the bound are unread; the permissive role
@@ -1759,7 +1759,9 @@ fn control_flow_nested_layers(
                 at = call;
             }
             LayerRun::FreshStack => return None,
-            LayerRun::Elsewhere => return Some(ControlFlowLayers::Unrun),
+            LayerRun::Elsewhere | LayerRun::Withheld(_) => {
+                return Some(ControlFlowLayers::Unrun);
+            }
         }
     }
     Some(ControlFlowLayers::Unrun)
@@ -1818,7 +1820,7 @@ fn unrun_layer_in_owner_keeping_callback(
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
             LayerRun::FreshStack => return false,
-            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => {
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) | LayerRun::Withheld(_) => {
                 unrun = true;
                 at = function.span;
             }
@@ -1883,6 +1885,13 @@ pub(super) fn semantic_write_execution_role_within(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // ADR 0874: nothing places code an impostor may run, or never run.
+    if !super::discarded_region_contains(file, span) && runs_in_withheld_layer(file, span, lookup) {
+        return role_arm!(
+            "write_roles.semantic_write_execution_role_within.withheld-callback",
+            ExecutionRole::Unknown
+        );
+    }
     let mut decided = false;
     let role = write_role_walk(
         file,
@@ -3252,7 +3261,9 @@ fn layers_run_inline(
         let call = match layer_run(file, layer, lookup) {
             LayerRun::FreshStack => return fresh_stack_ok,
             LayerRun::InPlace(call) => call,
-            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => return false,
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) | LayerRun::Withheld(_) => {
+                return false;
+            }
         };
         // The layer runs on its call's stack, so the next layer is the
         // function that owns the call: the enclosing function, or the function
@@ -3291,6 +3302,12 @@ pub(crate) enum LayerRun {
     FreshStack,
     /// Anything else: stored, handed on, or run by a call this does not know.
     Elsewhere,
+    /// ADR 0874: an argument a call the census withholds would run inline were
+    /// it the standard one. It proves no run at all: an impostor may run it
+    /// anywhere, or never. Every reader takes this as [`LayerRun::Elsewhere`]
+    /// but [`withheld_layer_call`], which only places a row. Matched by name,
+    /// so that a new reader decides.
+    Withheld(Span),
 }
 
 /// ADR 0611: whether code at `span` runs past a suspension of a function it
@@ -3307,7 +3324,7 @@ pub(crate) fn suspension_through_in_place_layers(
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
     let mut calls = Vec::new();
-    let climb = climb_in_place_layers_recording(file, span, lookup, None, &mut calls)?;
+    let climb = climb_in_place_layers_recording(file, span, lookup, false, None, &mut calls)?;
     if climb.among_others || climb.exhausted {
         return None;
     }
@@ -3358,7 +3375,7 @@ pub(crate) fn layer_run(
             file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
         })
         .find_map(|(call, index)| {
-            let resolved = lookup.resolved_callee_call(file, call.callee)?;
+            let resolved = lookup.placing_callee_call(file, call.callee)?;
             resolved
                 .declaration
                 .as_ref()
@@ -3368,8 +3385,23 @@ pub(crate) fn layer_run(
                 .entity_at(file.path.as_str(), call.arguments[index].span)
                 .and_then(|entity| entity.callability);
             crate::runtime_semantics::argument_behavior(resolved, callability, index)
-                .map(|behavior| (call.span, behavior))
+                .map(|behavior| (call, behavior))
         });
+    // ADR 0874: a call the census withholds places its inline callback's rows
+    // as a standard one would, for one run among others, never the sole run:
+    // a site there has no role (`runs_in_withheld_layer`), and a scheduler's
+    // fresh stack is no fact. Callers that take a run here as proof ask
+    // `impostor_withheld` themselves (after_await's ADR 0565 arm).
+    let withheld = behavior
+        .as_ref()
+        .is_some_and(|(call, _)| lookup.impostor_withheld(file, call.callee));
+    if withheld {
+        return match behavior {
+            Some((call, RuntimeArgumentBehavior::InlineCallback)) => LayerRun::Withheld(call.span),
+            _ => LayerRun::Elsewhere,
+        };
+    }
+    let behavior = behavior.map(|(call, behavior)| (call.span, behavior));
     match (behavior, iife) {
         (Some((_, RuntimeArgumentBehavior::FreshStackCallback)), _) => LayerRun::FreshStack,
         (Some((call, RuntimeArgumentBehavior::InlineCallback)), _) => LayerRun::InPlace(call),
@@ -3381,6 +3413,81 @@ pub(crate) fn layer_run(
                 .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
         },
     }
+}
+
+/// ADR 0874: whether the site at `span` runs only as a function handed to a
+/// call the census withholds does: directly in that function, or in layers
+/// that run in place in it. A function a primitive runs, or a JSX expression
+/// the compiler wraps, between the two keeps its own role: it does not depend
+/// on who runs the function around it.
+pub(crate) fn runs_in_withheld_layer(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    withheld_layer_call(file, span, lookup).is_some()
+}
+
+/// [`runs_in_withheld_layer`]'s withheld call, by span: where the standard
+/// carrier would run the site, which only places a row and proves nothing.
+pub(crate) fn withheld_layer_call(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut at = span;
+    for _ in 0..32 {
+        let function = crate::owners::owning_function(&file.ast, at)?;
+        if let Some(call) = handed_to_withheld_call(file, function, lookup) {
+            return Some(call);
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call)
+            | LayerRun::InPlaceAmongOthers(call)
+            | LayerRun::Withheld(call)
+                if call != at =>
+            {
+                if super::callee_roles::own_jsx_compiler_role(file, call).is_some() {
+                    return None;
+                }
+                at = call;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Whether the call nearest around `function` is a withheld one with the
+/// function in its arguments (under a condition or an assertion too), or a
+/// reference to the function's name is such an argument.
+fn handed_to_withheld_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let nearest = |span: Span| {
+        ast.arguments_containing(span)
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+    };
+    if let Some((call, _)) =
+        nearest(function.span).filter(|(call, _)| lookup.impostor_withheld(file, call.callee))
+    {
+        return Some(call.span);
+    }
+    let name = crate::owners::function_binding_name(file, function)?;
+    ast.references_to(name.span)
+        .iter()
+        .filter(|reference| **reference != name.span)
+        .find_map(|reference| {
+            nearest(*reference)
+                .filter(|(call, index)| {
+                    ast.peel_ts_sugar_span(call.arguments[*index].span) == *reference
+                        && lookup.impostor_withheld(file, call.callee)
+                })
+                .map(|(call, _)| call.span)
+        })
 }
 
 /// ADR 0479: the one call that runs a function bound to a name, when it is the
@@ -3452,6 +3559,9 @@ pub(crate) struct InPlaceClimb {
     /// A site on the way follows an await in its layer: on every path
     /// (`Some(true)`), or possibly (`Some(false)`).
     pub(crate) suspended: Option<bool>,
+    /// ADR 0874: the climb crossed a call the census withholds, which only
+    /// [`in_place_run_site_placing`] does: a row it places is undecided.
+    pub(crate) withheld: bool,
 }
 
 /// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
@@ -3494,7 +3604,7 @@ pub(crate) fn climb_crosses_library_callback(
         }
         at = match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return true,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return true,
         };
     }
     true
@@ -3661,7 +3771,7 @@ pub(crate) fn runs_nothing_before_in_layers(
         }
         let call = match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return false,
         };
         let Some(fact) = ast.call_at(call) else {
             return false;
@@ -4398,7 +4508,7 @@ fn read_on_every_completion_of_apply(
         }
         at = match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return false,
         };
     }
     false
@@ -4629,7 +4739,7 @@ pub(crate) fn climb_in_place_layers_within(
     lookup: &SemanticLookup<'_>,
     within: Option<Span>,
 ) -> Option<InPlaceClimb> {
-    climb_in_place_layers_recording(file, span, lookup, within, &mut Vec::new())
+    climb_in_place_layers_recording(file, span, lookup, false, within, &mut Vec::new())
 }
 
 /// [`climb_in_place_layers_within`], appending to `passed` the call of each
@@ -4638,6 +4748,7 @@ fn climb_in_place_layers_recording(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+    crossing: bool,
     within: Option<Span>,
     passed: &mut Vec<Span>,
 ) -> Option<InPlaceClimb> {
@@ -4647,6 +4758,7 @@ fn climb_in_place_layers_recording(
         in_list: false,
         among_others: false,
         suspended: None,
+        withheld: false,
     };
     // Bounded: each step moves to the call that holds the previous function.
     for step in 0..16 {
@@ -4662,7 +4774,12 @@ fn climb_in_place_layers_recording(
                 climb.among_others = true;
                 call
             }
-            LayerRun::FreshStack | LayerRun::Elsewhere => break,
+            LayerRun::Withheld(call) if crossing => {
+                climb.among_others = true;
+                climb.withheld = true;
+                call
+            }
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => break,
         };
         // A layer called in a JSX expression runs where the compiler places
         // that expression (an insert's tracked computation), which the
@@ -4732,19 +4849,32 @@ pub(crate) fn in_place_run_site_within(
     lookup: &SemanticLookup<'_>,
     within: Option<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
-    in_place_run_site_recording(file, span, lookup, within, &mut Vec::new())
+    in_place_run_site_recording(file, span, lookup, false, within, &mut Vec::new())
+}
+
+/// ADR 0874: [`in_place_run_site_within`] across a call the census withholds,
+/// for a summary that places rows: it proves no run, so a row through
+/// [`InPlaceClimb::withheld`] is undecided. Nothing else may cross one.
+pub(crate) fn in_place_run_site_placing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+) -> Option<(InPlaceClimb, bool)> {
+    in_place_run_site_recording(file, span, lookup, true, within, &mut Vec::new())
 }
 
 /// The calls [`in_place_run_site`] passes from `span` outwards, innermost
 /// first: each layer's call and each stepped generator's creating call. Empty
-/// when `span` crosses no layer.
+/// when `span` crosses no layer. ADR 0874: past a call the census withholds
+/// too, for [`in_place_run_site_placing`]'s reader.
 pub(crate) fn in_place_run_calls(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<Span> {
     let mut passed = Vec::new();
-    in_place_run_site_recording(file, span, lookup, None, &mut passed);
+    in_place_run_site_recording(file, span, lookup, true, None, &mut passed);
     passed
 }
 
@@ -4752,6 +4882,7 @@ fn in_place_run_site_recording(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+    crossing: bool,
     within: Option<Span>,
     passed: &mut Vec<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
@@ -4761,13 +4892,16 @@ fn in_place_run_site_recording(
         in_list: false,
         among_others: false,
         suspended: None,
+        withheld: false,
     };
     let mut through_generator = false;
     for step in 0..8 {
-        if let Some(next) = climb_in_place_layers_recording(file, climb.at, lookup, within, passed)
+        if let Some(next) =
+            climb_in_place_layers_recording(file, climb.at, lookup, crossing, within, passed)
         {
             climb.in_list |= next.in_list;
             climb.among_others |= next.among_others;
+            climb.withheld |= next.withheld;
             climb.suspended = match (climb.suspended, next.suspended) {
                 (Some(true), _) | (_, Some(true)) => Some(true),
                 (Some(false), _) | (_, Some(false)) => Some(false),

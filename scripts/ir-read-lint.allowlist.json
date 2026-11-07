@@ -97,7 +97,8 @@
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
-    "file_by_path": 1
+    "file_by_path": 1,
+    "placing-call": 1
   },
   "rust/crates/solid-reactive-ir/src/execution_role.rs": {
     "file_by_path": 2
@@ -108,7 +109,8 @@
   "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
     "facts.files": 4,
     "file_by_path": 2,
-    "symbols_by_id": 2
+    "symbols_by_id": 2,
+    "placing-call": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
     "files()": 4,
@@ -196,6 +198,9 @@
   "rust/crates/solid-reactive-ir/src/interproc/dependency_values.rs": {
     "facts.files": 1
   },
+  "rust/crates/solid-reactive-ir/src/interproc/graph.rs": {
+    "placing-call": 1
+  },
   "rust/crates/solid-reactive-ir/src/interproc/obligations.rs": {
     "hashmap-iteration": 2
   },
@@ -262,7 +267,8 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_context.rs": {
-    "file_by_path": 1
+    "file_by_path": 1,
+    "placing-call": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
     "facts.files": 2,
@@ -286,7 +292,7 @@
     ]
   },
   "rust/crates/solid-reactive-ir/src/pipeline.rs": {
-    "facts.files": 7,
+    "facts.files": 9,
     "files()": 1
   },
   "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
@@ -299,8 +305,8 @@
   },
   "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
     "facts.files": 1,
-    "files()": 1,
-    "file_by_path": 1
+    "files()": 2,
+    "file_by_path": 4
   },
   "rust/crates/solid-reactive-ir/src/route_components.rs": {
     "facts.files": 5
@@ -352,7 +358,8 @@
   "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
     "facts.files": 3,
     "files()": 3,
-    "typescript-table": 3
+    "typescript-table": 3,
+    "placing-call": 1
   },
   "rust/crates/solid-reactive-ir/src/static_rules/pre_await.rs": {
     "facts.files": 2,
