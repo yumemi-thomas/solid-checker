@@ -63,8 +63,14 @@ pub(super) fn dependency_value_obligations(
                 let Some(name) = installed_callee(file, callee, &installed) else {
                     continue;
                 };
-                let role =
-                    semantic_execution_role(file, call.span, &allowed, entities, symbol_names, lookup);
+                let role = semantic_execution_role(
+                    file,
+                    call.span,
+                    &allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                );
                 if !role.reports_untracked_read() && !role.reports_unplaced() {
                     continue;
                 }
@@ -222,9 +228,7 @@ fn installed_callee<'f>(
         };
         return match key {
             Some(key) if installed.any || installed.keys.contains(key) => Some(key),
-            None if installed.any || !installed.keys.is_empty() => {
-                file.source_text(member.span)
-            }
+            None if installed.any || !installed.keys.is_empty() => file.source_text(member.span),
             _ => None,
         };
     }

@@ -555,7 +555,14 @@ impl<'l, 'a> Census<'l, 'a> {
 
     /// ADR 0860: an open position past which the walk goes on as an escaped
     /// value. A walk that is already past one goes on by itself.
-    fn escape(&mut self, file: &'a FileFacts, at: Span, row: Holder, mode: Mode, blocker: &'static str) {
+    fn escape(
+        &mut self,
+        file: &'a FileFacts,
+        at: Span,
+        row: Holder,
+        mode: Mode,
+        blocker: &'static str,
+    ) {
         let root = match mode {
             Mode::Value | Mode::Holder(_) => false,
             Mode::Root | Mode::RootHolder(_) | Mode::RootParameter => true,
@@ -1045,9 +1052,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::Argument(call, index) => self.escaped_argument(file, at, call, index, mode),
             // An element inserts its child tracked, unless it may be pending.
             Holder::JsxChild => match jsx_child_parent(file, at) {
-                Some(element) if intrinsic(file, element) && !self.async_walk => {
-                    Position::Followed
-                }
+                Some(element) if intrinsic(file, element) && !self.async_walk => Position::Followed,
                 _ => Position::Open(blockers::VALUE_IN_CARRIER),
             },
             Holder::JsxValue(element, _) | Holder::JsxSpread(element) => {
@@ -1067,7 +1072,10 @@ impl<'l, 'a> Census<'l, 'a> {
                     .iter()
                     .flat_map(|function| &function.parameters)
                     .find(|parameter| {
-                        parameter.initializer.map(|value| ast.peel_ts_sugar_span(value)) == Some(at)
+                        parameter
+                            .initializer
+                            .map(|value| ast.peel_ts_sugar_span(value))
+                            == Some(at)
                     });
                 let Some(parameter) = parameter else {
                     return Position::Open(blockers::VALUE_AS_PARAMETER_DEFAULT);
@@ -1165,11 +1173,12 @@ impl<'l, 'a> Census<'l, 'a> {
             let value = file.ast.peel_ts_sugar_span(argument.span);
             let function = match file.ast.function_at(value) {
                 Some(function) => Some((file, function)),
-                None => crate::owners::exact_function_argument(file, value, self.lookup)
-                    .and_then(|(path, span)| {
+                None => crate::owners::exact_function_argument(file, value, self.lookup).and_then(
+                    |(path, span)| {
                         let target = self.lookup.file_by_path(&path)?;
                         Some((target, target.ast.function_at(span)?))
-                    }),
+                    },
+                ),
             };
             let Some((holder, function)) = function else {
                 continue;
@@ -1204,15 +1213,15 @@ impl<'l, 'a> Census<'l, 'a> {
         if self.lookup.primitive_at_call(file, call.span).is_some() {
             return Position::Open(blockers::VALUE_IN_CARRIER);
         }
-        if let Some(resolved) = self
-            .lookup
-            .resolved_callee_call(file, call.callee)
-            .filter(|resolved| {
-                resolved
-                    .declaration
-                    .as_ref()
-                    .is_some_and(|declaration| declaration.standard_library)
-            })
+        if let Some(resolved) =
+            self.lookup
+                .resolved_callee_call(file, call.callee)
+                .filter(|resolved| {
+                    resolved
+                        .declaration
+                        .as_ref()
+                        .is_some_and(|declaration| declaration.standard_library)
+                })
         {
             if crate::runtime_semantics::reads_keys_only(resolved) {
                 return Position::Followed;
