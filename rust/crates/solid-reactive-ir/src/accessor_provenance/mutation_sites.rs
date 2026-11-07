@@ -902,6 +902,15 @@ const EVENT_READS: &[&str] = &[
     "type",
 ];
 
+/// Whether the member at `span` is a tagged template's tag: called, with its
+/// object as `this`.
+fn tagged(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .tagged_templates
+        .iter()
+        .any(|template| file.ast.peel_ts_sugar_span(template.tag) == span)
+}
+
 /// The members of [`EVENT_READS`] a listener may call.
 const EVENT_FLAGS: [&str; 3] = [
     "preventDefault",
@@ -931,7 +940,8 @@ fn event_only_read(file: &FileFacts, name: Span) -> bool {
                         .ast
                         .calls
                         .iter()
-                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span);
+                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+                        || tagged(file, member.span);
                     member_key(file, member).is_some_and(|key| {
                         EVENT_READS.contains(&key) && (!called || EVENT_FLAGS.contains(&key))
                     }) && !file
@@ -2217,6 +2227,9 @@ fn handed_on(
                     .iter()
                     .find(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span);
                 match call {
+                    // A tag runs with the value as `this`, and no call fact
+                    // records it.
+                    None if tagged(file, member.span) => true,
                     None => {
                         kind == Obtained::Global
                             && PLATFORM_CALLERS.contains(&key)
