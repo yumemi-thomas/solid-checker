@@ -90,6 +90,13 @@ How to judge the run:
 ## Update (build with the deferred-defects fix, same tree as this commit)
 Measured on it: the 18 patterns have a row at the read in 18 of 18. Corpus base against the change: V 294 → 294, 0 rows removed, +2,035 SC9012 U (value-to-unresolved-callee 1,146, value-forwarded 333, value-in-carrier 282, value-through-await 111; app-game 900, kui 629, solid-groove 99, compass-ui 78, expenses-app 68). Fixtures: +175 U, 0 removed; snapshots regenerated on this build. Still owed: the ownership gate rerun, the VM run, verify.
 
+## VM run t1 (2026-11-07, sc VM, own dirs `carrier-{old,new}`, generator of this tree)
+Ownership gate: passes (96 cases), with the case [86] edit. Each program was confirmed in Chrome.
+- mx-recall STRICT_READ_UNTRACKED (540 `-apart` ids): old b40d5d6a7 has 270 `recall-gap` with `remote` (an SC9012 only on the escape's line, a false clean under the site judge) and 270 at the site. New: 540 at the site.
+- mx-recall STORE_WRITE_OUTSIDE_SETTER (72): old has 36 remote and 36 agree. New: 36 at the site and 36 agree.
+- lg-recall (360 twins): no false positive on either build. Old 144 U / 216 clean, new 156 / 204. The 12 moved are all `use-each-apart` `wrapper` twins (the forEach callback's role is not proven tracked), clean to U.
+- The rediscovery entry is added, with the reason the d8 package shape is not generated. Outputs: `~/EDF/tmp/flipcarrier/vm-t1/`.
+
 ## Next steps
 
 1. Rebuild. Rerun `sites.mjs` (still 18 of 18) and `coverage-update` against the before-snapshots (`~/EDF/tmp/flipcarrier/snap-before`, `tools/snaptext.py` prints each row with its source line). Read every moved row.
