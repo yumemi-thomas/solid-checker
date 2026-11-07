@@ -8,8 +8,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 406,
-      "end": 415,
+      "start": 415,
+      "end": 424,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "root-mount-pass-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 529,
-      "end": 538,
+      "start": 538,
+      "end": 547,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "root-mount-pass-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 682,
-      "end": 691,
+      "start": 691,
+      "end": 700,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "closed-parameter-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 1152,
-      "end": 1161,
+      "start": 1161,
+      "end": 1170,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "async-read-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 1187,
-      "end": 1193,
+      "start": 1196,
+      "end": 1202,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "invocation-context-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 1456,
-      "end": 1465,
+      "start": 1465,
+      "end": 1474,
       "fixes": 0
     },
     {
@@ -74,8 +74,8 @@
       "blocker": "carrier-run-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 1456,
-      "end": 1465,
+      "start": 1465,
+      "end": 1474,
       "fixes": 0
     },
     {
@@ -84,8 +84,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 1767,
-      "end": 1776,
+      "start": 1776,
+      "end": 1785,
       "fixes": 0
     },
     {
@@ -95,8 +95,8 @@
       "blocker": "root-mount-pass-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2031,
-      "end": 2040,
+      "start": 2040,
+      "end": 2049,
       "fixes": 0
     },
     {
@@ -106,8 +106,8 @@
       "blocker": "async-read-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2252,
-      "end": 2261,
+      "start": 2261,
+      "end": 2270,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "blocker": "root-mount-pass-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2252,
-      "end": 2261,
+      "start": 2261,
+      "end": 2270,
       "fixes": 0
     },
     {
@@ -128,8 +128,30 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2503,
-      "end": 2512,
+      "start": 2580,
+      "end": 2601,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2588,
+      "end": 2595,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
+      "start": 2798,
+      "end": 2807,
       "fixes": 0
     },
     {
@@ -139,8 +161,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2702,
-      "end": 2711,
+      "start": 2997,
+      "end": 3006,
       "fixes": 0
     },
     {
@@ -150,8 +172,8 @@
       "blocker": "callee-callback-timing",
       "severity": "error",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2702,
-      "end": 2711,
+      "start": 2997,
+      "end": 3006,
       "fixes": 0
     },
     {
@@ -161,8 +183,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flow-prop-read/App.tsx",
-      "start": 2702,
-      "end": 2711,
+      "start": 2997,
+      "end": 3006,
       "fixes": 0
     }
   ]

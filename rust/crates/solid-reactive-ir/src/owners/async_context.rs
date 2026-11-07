@@ -1379,6 +1379,13 @@ pub(crate) fn read_in_flow_prop(
     if function(span) != function(element.span) {
         return false;
     }
+    // Review R40: a call the read is an argument of may run it elsewhere:
+    // `untrack(p, "x")` sets a strict window inside the computation.
+    if file.ast.arguments_containing(span).any(|(call, _)| {
+        attribute.expression.is_some_and(|value| value.contains(call.span))
+    }) {
+        return false;
+    }
     let tag = |element: &solid_facts::ast::JsxElementFact| {
         jsx_primitive_name(file, element, entities, symbol_names, dialect)
     };

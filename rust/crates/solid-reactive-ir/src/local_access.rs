@@ -2295,6 +2295,52 @@ impl LocalAccessContext<'_, '_> {
         })
     }
 
+    /// ADR 0894: the reference at `call`'s first argument, when `call` runs it
+    /// at least once before it returns: a setter or accessor handed to a list
+    /// carrier (`[1].forEach(setC)`: the window stays, and an accessor ignores
+    /// `(v, i, arr)`), or an accessor handed to `untrack` with a label, which
+    /// sets the strict window an unlabelled `untrack(c)` does not. Index 0
+    /// only: `hand_off_at` answers Unfollowed for a primitive's position, so
+    /// `untrack` has its own arm. A census row at the argument says nothing of
+    /// the run.
+    fn inline_carried_target(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<solid_facts::core::Span> {
+        let ast = &file.ast;
+        let first = call.arguments.first().filter(|argument| !argument.spread)?;
+        let value = ast.peel_ts_sugar_span(first.span);
+        let symbol = self.lookup.callee_symbol(file, value)?;
+        if !crate::carrier_runs::carrier_provably_runs(file, call.span, self.lookup) {
+            return None;
+        }
+        if self.lookup.primitive_at_call(file, call.span)
+            == Some(solid_dialect::Primitive::Untrack)
+        {
+            let label = call.arguments.get(1).filter(|argument| !argument.spread)?;
+            return (self.accessors.contains_key(symbol)
+                && file
+                    .source_text(ast.peel_ts_sugar_span(label.span))
+                    .is_some_and(|text| {
+                        text.len() > 2 && text.starts_with(['"', '\'']) && text.ends_with(['"', '\''])
+                    }))
+            .then_some(value);
+        }
+        if !self.setters.contains_key(symbol) && !self.accessors.contains_key(symbol) {
+            return None;
+        }
+        let declared = ast.reference_declaration(value)?;
+        let mut placed = Vec::new();
+        binding_reference_hand_offs(file, declared, self.lookup, &mut placed);
+        placed
+            .iter()
+            .any(|(reference, hand_off)| {
+                *reference == value && matches!(hand_off, HandOff::Inline(at) if *at == call.span)
+            })
+            .then_some(value)
+    }
+
     /// ADR 0516: the reference `f` of a `Function.prototype` dispatch callee
     /// (`f.call`, `f.apply`, or a call `f.bind(…)`, non-computed members)
     /// when `f` is a known setter, accessor or action.
@@ -2497,6 +2543,11 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
         seen: &mut HashSet<(Arc<str>, u64, u64)>,
     ) {
+        // ADR 0894: a setter or accessor handed whole to a carrier that
+        // provably runs it is judged as its call at the carrier.
+        if let Some(target) = self.inline_carried_target(file, call) {
+            self.discover_call_as(file, call, target, allowed, result, seen);
+        }
         // ADR 0516: `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` invoke `f`
         // through `Function.prototype`. With `f` a known setter, accessor or
         // action the call is `f`'s, judged as `f(…)` at this call

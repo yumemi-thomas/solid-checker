@@ -709,42 +709,6 @@
  ],
  "patterns": [
   {
-   "id": "queue/T-foreach-setter",
-   "item": "ADR 0815 no row at the run (a setter handed to a native callback runner: `[1].forEach(setC)`; a census row at the argument is no answer, R20)",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/h08-setter-as-cb",
-   "item": "ADR 0815 no row at the run (a setter handed to a native callback runner: `[1].forEach(setW)`; a census row at the argument is no answer, R20)",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "queue/T-untrack-label",
-   "item": "ADR 0815 no row at the run (an accessor handed to `untrack` as its function, with a label; a census row at the argument is no answer, R20)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/e804-accessor-label",
-   "item": "ADR 0815 no row at the run (an accessor handed to `untrack` as its function, with a label; a census row at the argument is no answer, R20)",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "api/r01-values-inline",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
