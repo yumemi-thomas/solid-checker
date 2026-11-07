@@ -370,6 +370,9 @@
     "files()": 2,
     "typescript-table": 2
   },
+  "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
+    "file_by_path": 1
+  },
   "rust/crates/solid-reactive-ir/src/symbols.rs": {
     "facts.files": 1,
     "files()": 1,

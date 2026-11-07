@@ -1,10 +1,11 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
       "start": 547,
@@ -14,7 +15,8 @@
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
       "start": 768,
@@ -24,7 +26,8 @@
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
       "start": 1005,

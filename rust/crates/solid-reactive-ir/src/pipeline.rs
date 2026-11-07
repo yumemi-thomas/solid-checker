@@ -731,6 +731,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft,
         &mut build_timings,
     );
+    crate::stored_throw::mark_owner_requirements(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,

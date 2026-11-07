@@ -1949,7 +1949,7 @@
 },
 "SC2007/n01-ctl": {
 "rule": "SC2007",
-"kind": "keep",
+"kind": "warn",
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nexport function App() { try { const D = dynamic(async () => (() => <b />), { static: true }); return <D />; } catch (e: any) { log(\"t\", e.message.slice(0,60)); return <i />; } }\n",
 "runtime": {
 "diagnostics": [],
@@ -5367,6 +5367,23 @@
 "before": {
 "status": "certified",
 "findings": []
+}
+},
+"SC2007/n11-uncaught": {
+"rule": "SC2007",
+"kind": "keep",
+"source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nexport function App() { const D = dynamic(async () => (() => <b />), { static: true }); return <D />; }\n",
+"runtime": {
+"diagnostics": [],
+"errors": [
+"render: dynamic(): a static source must resolve synchronously, not to a promise"
+]
+},
+"before": {
+"status": "violation",
+"findings": [
+"SC2007/v@6"
+]
 }
 }
 }

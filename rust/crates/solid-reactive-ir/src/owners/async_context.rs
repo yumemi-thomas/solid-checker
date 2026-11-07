@@ -463,7 +463,7 @@ fn intrinsic_element(
 }
 
 /// The dialect primitive `element` renders, by its index in the file's JSX.
-fn element_primitive(
+pub(crate) fn element_primitive(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
@@ -1025,7 +1025,7 @@ pub(crate) fn tag_provided(
 }
 
 /// The module-scope renders that mount `component` itself (ADR 0503).
-pub(super) fn direct_render_sites<'a>(
+pub(crate) fn direct_render_sites<'a>(
     lookup: &SemanticLookup<'a>,
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,

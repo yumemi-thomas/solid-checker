@@ -1916,5 +1916,13 @@
     "blocker": "primitive-value"
    }
   }
+ },
+ {
+  "id": "SC2007/n01-ctl",
+  "adr": "ADR 0893",
+  "why": "a throw the program catches fires no diagnostic and is no violation by default (coordinator's ruling); the recorded run has none, so keep moves to warn; SC2007/n11-uncaught, the same source uncaught, keeps the V",
+  "fields": [
+   "kind"
+  ]
  }
 ]

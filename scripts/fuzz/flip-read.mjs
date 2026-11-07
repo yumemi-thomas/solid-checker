@@ -223,6 +223,87 @@ const THEN_HANDLERS = {
 const COND_AWAITS_LEGAL = ["aw-else", "aw-else-flip", "aw-early"];
 const HELPER_AWAITS = ["aw-shared-after", "aw-shared-before", "aw-helper-late", "aw-wrapper", "aw-wrapper-2", ...IN_PLACE_USED];
 
+
+// ADR 0893: a plain throw in a computation that stores its error (a memo and the other `Creates` computes) is seen only when a reader takes it
+// where it is reported. `STORED_READS` holds the site in a memo and varies the reader; `STORED_SITES` moves the site. All measured on rc.21 Chrome.
+const solid = (text, ...names) => domExpr(text, undefined, names);
+const effectReading = (text, arms = "() => {}") => expr(solid(`createEffect(() => ${text}, ${arms});`, "createEffect"));
+const HANDLED = "fallback={(e) => <i>{String(e())}</i>}";
+const LOGGED = "fallback={() => <i>x</i>}";
+const under = (fallback, inner) => solid(`<Errored ${fallback}>${inner}</Errored>`, "Errored");
+const STORED_READS = {
+  "st-unread": () => ({}),
+  "st-chain-unread": (m, kit) => ({ body: [decl(kit.name("m"), prim("memo", fn([ret(call(ref(m)))])))] }),
+  "st-chain-read": (m, kit) => { const n = kit.name("m"); return { body: [decl(n, prim("memo", fn([ret(call(ref(m)))]))), effectReading(`${n}()`)] }; },
+  "st-read-effect": (m) => ({ body: [effectReading(`${m}()`)] }),
+  "st-read-try": (m) => ({ body: [expr(solid(`createEffect(() => { try { return ${m}(); } catch { return 0; } }, () => {});`, "createEffect"))] }),
+  "st-read-caller-try": (m, kit) => { const r = kit.name("r"); return { body: [decl(r, domExpr(`() => ${m}()`)), expr(solid(`createEffect(() => { try { return ${r}(); } catch { return 0; } }, () => {});`, "createEffect"))] }; },
+  "st-read-helper": (m, kit) => { const r = kit.name("r"); return { body: [decl(r, domExpr(`() => ${m}()`)), effectReading(`${r}()`)] }; },
+  "st-read-ispending": (m) => ({ body: [expr(solid(`createEffect(() => isPending(() => ${m}()), () => {});`, "createEffect", "isPending"))] }),
+  "st-read-latest": (m) => ({ body: [expr(solid(`createEffect(() => latest(() => ${m}()), () => {});`, "createEffect", "latest"))] }),
+  "st-read-untrack": (m) => ({ body: [expr(solid(`createEffect(() => untrack(() => ${m}()), () => {});`, "createEffect", "untrack"))] }),
+  "st-read-err-arm": (m) => ({ body: [effectReading(`${m}()`, "{ effect: () => {}, error: () => {} }")] }),
+  "st-read-await": (m) => ({ body: [expr(domExpr(`void (async () => { await 0; ${m}(); })();`))] }),
+  "st-read-then": (m) => ({ body: [expr(domExpr(`void Promise.resolve(1).then(() => ${m}());`))] }),
+  "st-read-then-catch": (m) => ({ body: [expr(domExpr(`void Promise.resolve(1).then(() => ${m}()).catch(() => {});`))] }),
+  "st-read-handler": (m, kit) => ({ view: [button(kit.name("b"), [expr(call(ref(m)))])] }),
+  "st-read-jsx": (m, kit) => ({ view: [mounted(kit.name("v"), domExpr(`{${m}()}`))] }),
+  "st-read-attr": (m, kit) => ({ view: [mounted(kit.name("v"), domExpr(`<i title={String(${m}())}></i>`))] }),
+  "st-read-errored-handled": (m, kit) => ({ view: [mounted(kit.name("v"), under(HANDLED, `<i>{${m}()}</i>`))] }),
+  "st-read-errored-logged": (m, kit) => ({ view: [mounted(kit.name("v"), under(LOGGED, `<i>{${m}()}</i>`))] }),
+  "st-read-errored-element": (m, kit) => ({ view: [mounted(kit.name("v"), under("fallback={<i>x</i>}", `<i>{${m}()}</i>`))] }),
+  "st-read-getter-ignored": (m, kit) => { const k = kit.name("K"); return { body: [decl(k, domExpr("(props: { v: number }) => <i></i>"))], view: [mounted(kit.name("v"), domExpr(`<${k} v={${m}()} />`))] }; },
+  "st-read-getter": (m, kit) => { const k = kit.name("K"); return { body: [decl(k, domExpr("(props: { v: number }) => <i>{props.v}</i>"))], view: [mounted(kit.name("v"), domExpr(`<${k} v={${m}()} />`))] }; },
+  "st-read-show-false": (m, kit) => ({ view: [mounted(kit.name("v"), solid(`<Show when={false}><i>{${m}()}</i></Show>`, "Show"))] }),
+  "st-read-show-true": (m, kit) => ({ view: [mounted(kit.name("v"), solid(`<Show when={true}><i>{${m}()}</i></Show>`, "Show"))] }),
+};
+const storedForm = (name, tail, value) => (stmts) => prim("memo", fn([...stmts, ret(value ?? num(1))]), { creator: { name, tail } });
+const OBJECT_VALUE = domExpr("{ a: 1 }");
+const STORED_FORMS = {
+  "st-c-deferred": storedForm("createDeferred", ""),
+  "st-c-signal": storedForm("createSignal", ""),
+  "st-c-optimistic": storedForm("createOptimistic", ""),
+  "st-c-store": storedForm("createStore", ", { a: 0 }", OBJECT_VALUE),
+  "st-c-optimistic-store": storedForm("createOptimisticStore", ", { a: 0 }", OBJECT_VALUE),
+  "st-c-projection": storedForm("createProjection", ", { a: 0 }", OBJECT_VALUE),
+  "st-c-children": storedForm("children", ""),
+};
+const helperOf = (stmts, kit) => { const h = kit.name("f"); return [h, decl(h, fn([...stmts, ret(num(1))]))]; };
+const STORED_SITES = {
+  "st-helper-effect": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, decl(kit.name("m"), domExpr(`createMemo(() => ${h}())`, undefined, ["createMemo"])), effectReading(`${h}()`)], view: [] }; },
+  "st-helper-body": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, decl(kit.name("m"), domExpr(`createMemo(() => ${h}())`, undefined, ["createMemo"])), expr(domExpr(`${h}();`))], view: [] }; },
+  // R36: a reference is no run, and what runs a handed function may take its throw.
+  "st-ref-only": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, decl(kit.name("c"), domExpr(h))], view: [] }; },
+  "st-handed-catch": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const t = kit.name("t"); return { body: [held, decl(t, domExpr("(g: () => unknown) => { try { g(); } catch { } }")), effectReading(`(${t}(${h}), 1)`)], view: [] }; },
+  "st-prop-catch": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, domExpr("(p: { run: () => unknown }) => { try { p.run(); } catch { } return <i></i>; }"))], view: [mounted(kit.name("v"), domExpr(`<${k} run={() => ${h}()} />`))] }; },
+  // R37: a promise handler's throw rejects a promise something may hold.
+  "st-then-catch": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(domExpr(`void Promise.resolve(1).then(${h}).catch(() => {});`))], view: [] }; },
+  "st-then-await-try": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(domExpr(`void (async () => { try { await Promise.resolve(1).then(${h}); } catch { } })();`))], view: [] }; },
+  // R34: a render or tracked effect's throw escalates to the boundary above; a user effect's is logged past it.
+  "st-render-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`() => { createRenderEffect(() => ${h}(), () => {}); return <i></i>; }`, "createRenderEffect"))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
+  "st-tracked-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`() => { createTrackedEffect(() => { ${h}(); }); return <i></i>; }`, "createTrackedEffect"))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
+  "st-user-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`() => { createEffect(() => ${h}(), () => {}); return <i></i>; }`, "createEffect"))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
+  "st-render-plain": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(solid(`createRenderEffect(() => ${h}(), () => {});`, "createRenderEffect"))], view: [] }; },
+  "st-alias-unread": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const c = kit.name("c"); return { body: [held, decl(c, domExpr(h)), decl(kit.name("m"), domExpr(`createMemo(${c})`, undefined, ["createMemo"]))], view: [] }; },
+  // ADR 0893: a throw the program catches fires no diagnostic, around the site or a caller.
+  "st-try-site": (stmts) => ({ body: [expr(prim("effect", fn([ctl("try-catch", stmts), ret(num(1))]), { apply: fn([]) }))], view: [] }),
+  "st-try-caller": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(solid(`createEffect(() => { try { return ${h}(); } catch { return 0; } }, () => {});`, "createEffect"))], view: [] }; },
+  "st-effect-err-arm": (stmts) => ({ body: [expr(prim("effect", fn([...stmts, ret(num(1))]), { apply: fn([]), errorBundle: true }))], view: [] }),
+  "st-helper-err-arm": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, effectReading(`${h}()`, "{ effect: () => {}, error: () => {} }")], view: [] }; },
+  "st-jsx-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held], view: [mounted(kit.name("v"), under(HANDLED, `<i>{${h}()}</i>`))] }; },
+  "st-jsx-logged": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held], view: [mounted(kit.name("v"), under(LOGGED, `<i>{${h}()}</i>`))] }; },
+  "st-body-handled": (stmts, kit) => { const k = kit.name("K"); return { body: [decl(k, fn([...stmts, ret(domExpr("<i></i>"))]))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
+  "st-child-memo-handled": (stmts, kit) => { const k = kit.name("K"); const m = kit.name("m"); return { body: [decl(k, fn([decl(m, prim("memo", fn([...stmts, ret(num(1))]))), ret(domExpr(`<i>{${m}()}</i>`))]))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
+};
+const STORED_ASYNC = {
+  "st-async-unread": () => ({}),
+  "st-async-read": (m) => ({ body: [effectReading(`${m}()`)] }),
+};
+/** ADR 0893: every shape above, by the name its row carries. */
+export const STORED_CONTEXTS = [...Object.keys(STORED_READS), ...Object.keys(STORED_FORMS).flatMap((form) => [`${form}-unread`, ...(["st-c-deferred", "st-c-children"].includes(form) ? [`${form}-read`] : [])]), ...Object.keys(STORED_SITES)];
+export const STORED_ASYNC_CONTEXTS = Object.keys(STORED_ASYNC);
+const STORED_THROWS = ["RESOLVE_IN_REACTIVE_SCOPE", "UNTIL_IN_REACTIVE_SCOPE", "DYNAMIC_STATIC_PROMISE", "CONTEXT_NOT_FOUND"];
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
@@ -243,6 +324,15 @@ export const FLIP_READ_CONTEXTS = {
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
   REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, ...Object.keys(RECEIVERS), "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
 };
+
+// ADR 0893, measured on rc.21 Chrome over every code here: silent with the error stored unread, in a `try`, under a handling boundary, an effect's
+// `error` arm or `isPending`. `st-helper-body` throws in the body for a code that throws on every run; `resolve` and `until` need an observer.
+const STORED_SILENT = ["st-unread", "st-chain-unread", "st-read-try", "st-read-caller-try", "st-read-ispending", "st-read-err-arm", "st-read-errored-handled", "st-read-getter-ignored", "st-read-show-false",
+  "st-read-then-catch", "st-prop-catch", "st-ref-only", "st-handed-catch", "st-then-catch", "st-then-await-try", "st-render-handled", "st-tracked-handled", "st-alias-unread", "st-try-site", "st-try-caller", "st-effect-err-arm", "st-helper-err-arm", "st-jsx-handled", "st-body-handled", "st-child-memo-handled", ...Object.keys(STORED_FORMS).map((form) => `${form}-unread`)];
+const observerOnly = (code) => code === "RESOLVE_IN_REACTIVE_SCOPE" || code === "UNTIL_IN_REACTIVE_SCOPE";
+const storedSilent = (code) => [...STORED_SILENT, ...(observerOnly(code) ? ["st-helper-body"] : [])];
+for (const code of STORED_THROWS) FLIP_READ_CONTEXTS[code] = [...(FLIP_READ_CONTEXTS[code] ?? []), ...STORED_CONTEXTS.filter((context) => !storedSilent(code).includes(context))];
+FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT = [...(FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT ?? []), "st-async-read"];
 
 // ADR 0661, ADR 0668: quiet in Chrome. A mount after `render()` returned has no boundary check, and the source settled; a `<Dynamic>` body has
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
@@ -265,6 +355,9 @@ export const FLIP_READ_LEGAL = {
   RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
   UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
 };
+
+for (const code of STORED_THROWS) FLIP_READ_LEGAL[code] = [...(FLIP_READ_LEGAL[code] ?? []), ...storedSilent(code)];
+FLIP_READ_LEGAL.NO_OWNER_CONTEXT = [...(FLIP_READ_LEGAL.NO_OWNER_CONTEXT ?? []), "st-async-unread", "st-then-catch"];
 
 // ADR 0665: a source no type proves sync or async. Each is pending at the read; the build before took it for a settled signal.
 // ADR 0689: a hook's result used on the spot, or iterated: the hook's closure reads what the site handed it, and no binding holds the result.
@@ -686,6 +779,11 @@ function freshCopy(stmts, kit) {
 }
 
 export function flipReadContext(context, stmts, kit) {
+  if (STORED_READS[context]) { const m = kit.name("m"); const made = STORED_READS[context](m, kit); return { body: [decl(m, prim("memo", fn([...stmts, ret(num(1))]))), ...(made.body ?? [])], view: made.view ?? [] }; }
+  if (STORED_ASYNC[context]) { const m = kit.name("m"); const made = STORED_ASYNC[context](m, kit); return { body: [decl(m, prim("memo", fn([expr(domExpr(`${P_AWAIT};`)), ...stmts, ret(num(1))], { async: true }))), ...(made.body ?? [])], view: [] }; }
+  if (STORED_SITES[context]) return STORED_SITES[context](stmts, kit);
+  const stored = STORED_CONTEXTS.includes(context) && STORED_FORMS[context.replace(/-(un)?read$/, "")];
+  if (stored) { const c = kit.name("c"); return { body: [decl(c, stored(stmts)), ...(context.endsWith("-read") ? [effectReading(`${c}()`)] : [])], view: [] }; }
   if (context === ASYNC_ENTRY || context === "async-entry-late") {
     const h = kit.name("f");
     const held = decl(h, fn(context === ASYNC_ENTRY ? stmts : [expr(domExpr("await 0;")), ...stmts], { async: true }));

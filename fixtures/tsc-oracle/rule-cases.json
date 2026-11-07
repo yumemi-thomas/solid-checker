@@ -591,7 +591,7 @@
       "expect": "silent",
       "checker": "reports",
       "why": "`resolve` returns a Promise and is called correctly; the claim is that the runtime's observer guard throws when it runs directly in a tracked scope.",
-      "code": "import { createMemo, resolve } from \"solid-js\";\nexport const value = createMemo(() => resolve(() => 1));\n"
+      "code": "import { createMemo, resolve } from \"solid-js\";\nexport function Value() {\n  const value = createMemo(() => resolve(() => 1));\n  return <div>{String(value())}</div>;\n}\n"
     },
     {
       "rule": "sync-computation-received-async",

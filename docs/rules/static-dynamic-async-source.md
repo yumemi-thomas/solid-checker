@@ -117,3 +117,7 @@ A throw inside a generator stepped by an async caller rejects that caller's flig
 - [sync-computation-received-async](sync-computation-received-async.md) — the
   same "asserted synchronous, given a Promise" defect on `sync: true`
   computations
+
+## A stored throw needs a read that reports it
+
+`resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893).

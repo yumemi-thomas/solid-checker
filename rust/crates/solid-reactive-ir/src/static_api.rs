@@ -15,6 +15,7 @@ use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
+use crate::stored_throw::{ThrowEnd, Thrower, throw_end};
 use crate::{
     ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation, location,
 };
@@ -29,7 +30,19 @@ pub(super) struct StaticDirectiveFileResult {
 /// Runs the project-level static API stage and merges its independent file
 /// results into the program draft.
 pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let checker = StaticApiContext {
+    let checker = context_of(ctx);
+    for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
+        draft.static_defects.extend(result.defects);
+        draft.static_violations.extend(result.violations);
+        draft.writes.extend(result.writes);
+        draft
+            .write_action_obligations
+            .extend(result.write_action_obligations);
+    }
+}
+
+pub(crate) fn context_of<'a>(ctx: &AnalysisContext<'a>) -> StaticApiContext<'a> {
+    StaticApiContext {
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
         symbol_names: ctx.symbol_names,
@@ -41,14 +54,27 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         client_build: !ctx.rule_options.runtime.selects_server_build()
             || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect),
         package_instances: &ctx.rule_options.runtime.package_instances,
-    };
-    for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
-        draft.static_defects.extend(result.defects);
-        draft.static_violations.extend(result.violations);
-        draft.writes.extend(result.writes);
-        draft
-            .write_action_obligations
-            .extend(result.write_action_obligations);
+    }
+}
+
+/// ADR 0893: a primitive whose failure is a plain throw, and every entry read
+/// ends in a stored error no read reports.
+fn plain_throw_unobserved(
+    file: &FileFacts,
+    site: Span,
+    allowed: &[Span],
+    context: &StaticApiContext<'_>,
+    plain: bool,
+    thrower: Thrower,
+) -> bool {
+    plain && throw_end(file, site, allowed, context, thrower) == ThrowEnd::Unobserved
+}
+
+fn unobserved_note(unobserved: bool) -> &'static str {
+    if unobserved {
+        "; but the throw is stored on a computation or taken by a `try` or an error boundary, and no read that reports it is proven"
+    } else {
+        ""
     }
 }
 
@@ -329,17 +355,31 @@ impl StaticApiContext<'_> {
             if kind == Some(Primitive::Resolve)
                 && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
             {
+                // ADR 0893: the throw may end stored on a compute no read reports.
+                let unobserved = plain_throw_unobserved(
+                    file,
+                    call.span,
+                    &allowed,
+                    self,
+                    dialect.plain_throw(Primitive::Resolve),
+                    Thrower::UnderObserver,
+                );
                 result.violations.push(StaticViolation {
                     id: "SC2004".into(),
                     rule: "no-await-primitive-in-tracked-scope".into(),
                     message: format!(
-                        "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
+                        "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev{}",
+                        unobserved_note(unobserved)
                     ),
                     hint: "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: if unobserved {
+                        crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned()
+                    } else {
+                        String::new()
+                    },
                     fixes: vec![],
-                    uncertain: false,
+                    uncertain: unobserved,
                 });
             }
             // The same guard where nothing places the call: a helper that a
@@ -370,17 +410,31 @@ impl StaticApiContext<'_> {
             if kind == Some(Primitive::Until)
                 && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
             {
+                // ADR 0893: the throw may end stored on a compute no read reports.
+                let unobserved = plain_throw_unobserved(
+                    file,
+                    call.span,
+                    &allowed,
+                    self,
+                    dialect.plain_throw(Primitive::Until),
+                    Thrower::UnderObserver,
+                );
                 result.violations.push(StaticViolation {
                     id: "SC2005".into(),
                     rule: "no-await-primitive-in-tracked-scope".into(),
                     message: format!(
-                        "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate"
+                        "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate{}",
+                        unobserved_note(unobserved)
                     ),
                     hint: "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: if unobserved {
+                        crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned()
+                    } else {
+                        String::new()
+                    },
                     fixes: vec![],
-                    uncertain: false,
+                    uncertain: unobserved,
                 });
             }
             // The same guard where nothing places the call: a helper that a
@@ -438,7 +492,17 @@ impl StaticApiContext<'_> {
                         self.lookup,
                     )
                     .is_some();
-                    let uncertain = uncertain || flight_error_unobserved;
+                    // ADR 0893: a throw stored on a compute no read reports.
+                    let stored_unobserved = !flight_error_unobserved
+                        && plain_throw_unobserved(
+                            file,
+                            call.span,
+                            &allowed,
+                            self,
+                            dialect.plain_throw(Primitive::DynamicStatic),
+                            Thrower::Always,
+                        );
+                    let uncertain = uncertain || flight_error_unobserved || stored_unobserved;
                     result.violations.push(StaticViolation {
                         id: "SC2007".into(),
                         rule: "static-dynamic-async-source".into(),
@@ -453,6 +517,8 @@ impl StaticApiContext<'_> {
                         location: location(file.path.shared(), call.callee),
                         analysis_context: if flight_error_unobserved {
                             crate::blockers::ASYNC_FLIGHT_ERROR_UNOBSERVED.to_owned()
+                        } else if stored_unobserved {
+                            crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned()
                         } else if uncertain {
                             crate::blockers::STATIC_SOURCE_UNPROVEN.to_owned()
                         } else {

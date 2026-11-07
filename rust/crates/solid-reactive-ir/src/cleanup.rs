@@ -197,6 +197,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         possible: !guaranteed,
                         via: Some(via.clone()),
                         identity_unproven,
+                        computation_error_unobserved: false,
                     });
                 }
                 if complete {
@@ -212,6 +213,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: false,
                     via: None,
                     identity_unproven: false,
+                    computation_error_unobserved: false,
                 });
                 continue;
             }
@@ -240,6 +242,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 possible: false,
                 via: None,
                 identity_unproven: false,
+                computation_error_unobserved: false,
             });
             continue;
         };
@@ -392,6 +395,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: false,
                     via: None,
                     identity_unproven: false,
+                    computation_error_unobserved: false,
                 });
                 continue;
             }
@@ -444,6 +448,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         possible: !guaranteed,
                         via: Some(via.clone()),
                         identity_unproven,
+                        computation_error_unobserved: false,
                     });
                 }
                 if !complete {
@@ -457,6 +462,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         possible: false,
                         via: Some(via),
                         identity_unproven: false,
+                        computation_error_unobserved: false,
                     });
                 }
                 continue;
@@ -490,6 +496,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 possible: false,
                 via: None,
                 identity_unproven: !identity_proven,
+                computation_error_unobserved: false,
             });
         }
         // ADR 0537: a tagged template written in the callback's own extent
@@ -526,6 +533,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: !guaranteed,
                     via: Some(via.clone()),
                     identity_unproven,
+                    computation_error_unobserved: false,
                 });
             }
             if !complete {
@@ -539,6 +547,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: false,
                     via: Some(via),
                     identity_unproven: false,
+                    computation_error_unobserved: false,
                 });
             }
         }
