@@ -5884,5 +5884,29 @@
    "mx-no-owner-effect-flw-named-apply-and-timer-jsx-insert-direct-none"
   ],
   "rediscovered": "both contexts, direct binding (6 judged, Chrome confirmed): r22 (33ad17deb) 6 false cleans; r24 0, 6 uncertifiable"
+ },
+ {
+  "finding": "SC3002 stopped at the lexical role, so `runWithOwner(owner, () => Reflect.apply(hf, null, []))` in a handler, with `hf` calling onFlush, was certified where Chrome warns (ADR 0885)",
+  "found": "the integrator's smoke",
+  "fixed": "ADR 0885",
+  "grid": "mx-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-pos-handler-owner-x-direct-handoff-reflect",
+   "mx-on-flush-in-owned-scope-pos-handler-owner-x-direct-handoff-tagged"
+  ],
+  "rediscovered": "pos-handler-owner handoff ids (10, Chrome confirmed): r24 10 false cleans; r26 0, 10 uncertifiable"
+ },
+ {
+  "finding": "A Solid primitive called through a namespace default, an extracted member or a namespace member was matched by no rule, so its site was certified where Chrome raises the code (ADR 0884)",
+  "found": "the integrator's smoke (R-alias-call)",
+  "fixed": "ADR 0884",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-async-for-await-render-ns-member-closure",
+   "mx-no-owner-effect-flw-guard-loop-effect-ns-member-none"
+  ],
+  "rediscovered": "alias ids (319, Chrome confirmed, origin's judge): r22 319 false cleans; r27 63 false cleans, 256 uncertifiable. The 63 stay open"
  }
 ]

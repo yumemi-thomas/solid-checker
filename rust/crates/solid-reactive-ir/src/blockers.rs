@@ -91,6 +91,9 @@ pub(crate) const TUPLE_ITERATION_WRITTEN: &str = "tuple-iteration-written";
 pub(crate) const CREATED_ACCESSOR_READ_UNPROVEN: &str = "created-accessor-read-unproven";
 
 // `value_use.rs`: where a proven source leaves what the analysis follows.
+/// ADR 0884: a call whose compiler-resolved declaration is a dialect primitive,
+/// through a name no primitive rule resolves.
+pub(crate) const PRIMITIVE_ALIAS_CALL: &str = "primitive-alias-call";
 pub(crate) const VALUE_HELD_IN_BINDING: &str = "value-held-in-binding";
 pub(crate) const VALUE_HELD_IN_MEMBER: &str = "value-held-in-member";
 pub(crate) const VALUE_THROUGH_LOGICAL: &str = "value-through-logical";

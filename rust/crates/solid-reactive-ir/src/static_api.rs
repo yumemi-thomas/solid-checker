@@ -149,6 +149,34 @@ impl StaticApiContext<'_> {
                 self.symbol_names,
                 dialect,
             ) else {
+                // ADR 0884: the compiler says this call is a primitive, and no
+                // rule can read it as one: the operation must not go unseen.
+                if let Some(name) = crate::owners::aliased_primitive(file, call, self.lookup) {
+                    for (id, rule) in alias_claims(dialect, &name) {
+                        result.violations.push(StaticViolation {
+                            id: (*id).into(),
+                            rule: (*rule).into(),
+                            message: format!(
+                                "This call resolves to Solid's {name} through a name solid-checker cannot follow, so whether {rule} applies here cannot be proven"
+                            ),
+                            hint: "Call the primitive directly by its imported name.".into(),
+                            location: location(file.path.shared(), call.callee),
+                            analysis_context: crate::blockers::PRIMITIVE_ALIAS_CALL.into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
+                    result.defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                            callee: name,
+                            member: None,
+                        },
+                        location: location(file.path.shared(), call.callee),
+                        analysis_context: crate::blockers::PRIMITIVE_ALIAS_CALL.into(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
                 continue;
             };
             // `primitive` stays as the spelling to report; `kind` is what the
@@ -653,7 +681,9 @@ impl StaticApiContext<'_> {
             // effect's apply, a leaf and an event handler have no such owner.
             if kind == Some(Primitive::OnFlush) {
                 let allowed = crate::execution_role::allowed_callback_spans(file, self.lookup);
-                let role = crate::execution_role::semantic_write_execution_role(
+                // `action`'s guard, so `action`'s walk: a role legal where the
+                // call is written may be rejected at a carrier.
+                let role = crate::local_access::handed_write_execution(
                     file,
                     call.callee,
                     &allowed,
@@ -661,6 +691,15 @@ impl StaticApiContext<'_> {
                     self.symbol_names,
                     self.lookup,
                     crate::execution_role::RootBodyGuard::Rejects,
+                    crate::execution_role::semantic_write_execution_role(
+                        file,
+                        call.callee,
+                        &allowed,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                        crate::execution_role::RootBodyGuard::Rejects,
+                    ),
                 );
                 if role.reports_disallowed_write() || role.reports_unplaced() {
                     result.violations.push(StaticViolation {
@@ -1419,6 +1458,28 @@ fn static_source_state(
         StaticSource::Sync
     } else {
         StaticSource::Open
+    }
+}
+
+/// ADR 0884: the rules a primitive's call may answer to, each a U at an alias
+/// call: a code with no site line is covered only by its own rule's row.
+fn alias_claims(
+    dialect: &dyn solid_dialect::Dialect,
+    name: &str,
+) -> &'static [(&'static str, &'static str)] {
+    use solid_dialect::Primitive;
+    const CREATES: (&str, &str) = ("SC6002", "primitive-in-effect-callback");
+    const SYNC: (&str, &str) = ("SC7002", "sync-computation-received-async");
+    match dialect.primitive(name) {
+        Some(Primitive::Flush) => &[
+            ("SC2006", "flush-in-action"),
+            ("SC2008", "flush-in-effect-callback"),
+        ],
+        Some(Primitive::CreateMemo | Primitive::CreateEffect | Primitive::CreateRenderEffect) => {
+            &[CREATES, SYNC]
+        }
+        Some(Primitive::CreateSignal | Primitive::CreateRoot) => &[CREATES],
+        _ => &[],
     }
 }
 

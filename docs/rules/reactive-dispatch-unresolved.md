@@ -197,6 +197,7 @@ Every reference of a proven source is followed, or it is this rule's uncertifiab
 | `analysisContext` | Position |
 |---|---|
 | `value-held-in-binding` | a `let`, an assignment, or a name no row reads |
+| `primitive-alias-call` | a call the compiler resolves to a Solid primitive, through a name no rule reads (ADR 0884) |
 | `value-held-in-member` | a member assignment |
 | `value-through-logical` | a value of `? :`, `&&`, `\|\|`, `??` or a comma that goes on |
 | `value-in-class-field` | a class field or `this.x` |
