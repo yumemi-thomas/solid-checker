@@ -1121,3 +1121,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/import-unresolved/node_modules/**
 !fixtures/reactive-ir/setter-callback-in-helper/node_modules/
 !fixtures/reactive-ir/setter-callback-in-helper/node_modules/**
+!fixtures/reactive-ir/pending-read-caught-module/node_modules/
+!fixtures/reactive-ir/pending-read-caught-module/node_modules/**

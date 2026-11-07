@@ -5674,5 +5674,16 @@
   "found": "independent review of a9fcbe8f1 (findings-a9fc.md item 7)",
   "fixed": "ADR 0803 (review a9fc, hold_withdrawn_static_rows); now uncertifiable",
   "outside": "no runtime code claims SC1005, so no grid judges it; fixture iteration-written-slots/uncalled-accessor (SC1005 V on 7788b7295 and 0228b92e3, uncertifiable here) and uncalled-accessor-intact (proved V)"
+ },
+ {
+  "finding": "census mount-named: `const f1 = () => { try { a1(); } catch {} return <i />; }; render(f1, el)` at module scope, `a1` an async memo: SC5001 V at the read; Chrome is silent (the pending read throws a plain NotReadyError while the module evaluates, and the catch swallows it)",
+  "found": "R3 smoke refresh (owner item); restored to open-defects by b7f560940 (Part 13)",
+  "fixed": "ADR 0855; now uncertifiable (async-read-caught), not proved",
+  "grid": "mx-census",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-mount-named-async-direct-none"
+  ],
+  "rediscovered": "matrix --census, Chrome confirming, by id: 75c33dbbc false-positive, this build not-fired (SC5001 uncertifiable). Fixture pending-read-caught-module"
  }
 ]

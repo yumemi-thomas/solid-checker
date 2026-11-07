@@ -81,6 +81,7 @@
   "SC5001 async-component-prop": 2,
   "SC5001 async-options-opaque": 15,
   "SC5001 async-provenance-unproven": 13,
+  "SC5001 async-read-caught": 2,
   "SC5001 binding-before-initialization": 1,
   "SC5001 call-attributed-read": 3,
   "SC5001 callee-callback-timing": 5,

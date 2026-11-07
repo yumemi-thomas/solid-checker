@@ -1,0 +1,47 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-caught",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-caught-module/App.tsx",
+      "start": 299,
+      "end": 305,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-caught",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-caught-module/App.tsx",
+      "start": 484,
+      "end": 490,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-caught-module/App.tsx",
+      "start": 712,
+      "end": 719,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-caught-module/uncaught.tsx",
+      "start": 222,
+      "end": 228,
+      "fixes": 0
+    }
+  ]
+}

@@ -68,16 +68,6 @@
    "note": "As RESOLVE_IN_REACTIVE_SCOPE's handed-flush, with a pending read in a try. An uncertifiable elsewhere in the file, not at the site; the same on 80db411e5"
   },
   {
-   "idPrefix": "mx-caught-reactive-read-",
-   "code": "CAUGHT_REACTIVE_READ",
-   "contexts": [
-    "mount-named"
-   ],
-   "outcome": "false-positive",
-   "item": "caught pending read under a named render",
-   "note": "Owner item. `const f1 = () => { try { a1(); } catch {} return <i />; }; render(f1, el)` at module level, `a1` an async memo: SC5001 (pending-async-unsuspendable-read) is a violation at the read, Chrome reports nothing there. The same on 80db411e5 and bfd336ce8, Chrome-confirmed (R3, smoke refresh)"
-  },
-  {
    "idPrefix": "mx-async-outside-loading-boundary-",
    "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
    "outcome": "false-clean",
