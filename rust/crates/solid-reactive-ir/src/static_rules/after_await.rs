@@ -2324,6 +2324,18 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// ADR 0537: the exact, current project function the identifier at
     /// `span` names (a carrier's argument, a `call`/`apply` receiver, a
     /// template's tag), through the exact reference resolution.
+    /// The function a closed literal's member holds: written there, or named.
+    fn closed_member(
+        &self,
+        file: &FileFacts,
+        member: &solid_facts::ast::MemberFact,
+    ) -> Option<(&'f FileFacts, &'f FunctionFact)> {
+        let lookup = self.ctx.semantic_lookup;
+        lookup
+            .closed_member_function(file, member)
+            .or_else(|| self.named_function(file, lookup.closed_member_value(file, member)?))
+    }
+
     fn named_function(
         &self,
         file: &FileFacts,
@@ -2723,6 +2735,10 @@ impl<'f, 'a> Reach<'f, 'a> {
                         continue;
                     }
                     // ADR 0669: a project function handed by name runs as a literal does.
+                    let member = file
+                        .ast
+                        .member_at(file.ast.peel_ts_sugar_span(argument.span))
+                        .filter(|member| !file.ast.computed_members.contains(&member.span));
                     let Some((handler_file, callback)) =
                         callback_argument_literal(file, argument.span)
                             .map(|callback| (file, callback))
@@ -2731,10 +2747,20 @@ impl<'f, 'a> Reach<'f, 'a> {
                                     .then(|| self.named_function(file, argument.span))
                                     .flatten()
                             })
+                            .or_else(|| member.and_then(|member| self.closed_member(file, member)))
                     else {
-                        // ADR 0880: a handler the walk cannot read (a member,
-                        // a call's result, a parameter) may read on the
-                        // flight. A plain value is no function: no handler.
+                        // A member handler the slot does not resolve exactly
+                        // reads on the flight if it runs: an obligation of the
+                        // rule, at the call (R41), never a name match.
+                        if member.is_some() {
+                            let mut obligation = typed_after_await_obligation(file, call.callee);
+                            obligation.analysis_context = "handed-read-after-await".to_owned();
+                            draft.push_defect(obligation);
+                            continue;
+                        }
+                        // ADR 0880: a handler the walk cannot read (a call's
+                        // result, a parameter) may read on the flight. A plain
+                        // value is no function: no handler.
                         if !plain_value(file, argument.span) {
                             self.push_unfollowed(draft, walk, file, call, argument.span);
                         }
