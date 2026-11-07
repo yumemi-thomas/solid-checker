@@ -313,6 +313,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-dom.tsx",
+      "start": 288,
+      "end": 303,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-dom.tsx",
@@ -648,6 +659,17 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-default-forwarded.tsx",
       "start": 618,
       "end": 630,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-default.tsx",
+      "start": 294,
+      "end": 352,
       "fixes": 0
     },
     {

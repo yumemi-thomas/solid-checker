@@ -878,6 +878,8 @@ pub(super) struct SemanticLookup<'a> {
     synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
     /// ADR 0613: every reference to the flush primitive, classified.
     synchronous_flush: OnceLock<Vec<flush_census::FlushSite>>,
+    /// Whether any analyzed registration or method read reaches project code.
+    listener_project_reach: OnceLock<bool>,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
@@ -1265,6 +1267,7 @@ impl<'a> SemanticLookup<'a> {
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
             synchronous_flush: OnceLock::new(),
+            listener_project_reach: OnceLock::new(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
             raw_store_values: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
@@ -1937,6 +1940,9 @@ impl<'a> SemanticLookup<'a> {
             }
             Section::FlushVeto => {
                 hasher.update([u8::from(self.flush_veto())]);
+            }
+            Section::ListenerProjectReach => {
+                hasher.update([u8::from(self.listener_project_reach())]);
             }
             Section::RawStoreValues => {
                 hasher.update([u8::from(self.raw_store_values_present())]);

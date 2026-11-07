@@ -2284,3 +2284,7 @@ Six uncached Chrome disagreements (`gen-yield-each` and `gen-sync-each`, NO_OWNE
 ## ADR 0853 — An aliased generator's creation calls prove no write context
 
 Snapshot review found `shared` in `generator-step-owner`: a generator read as a value as well as called under an async memo bypassed `generator_creations` and the write walk resumed following creation calls, producing SC2001 V after yield. Named generators with unplaced references now terminate that walk with an obligation; their unplaced references also retain possible resumption in the owner analysis instead of assuming the creation owner persists. Primitive-stepped generators retain their dialect path. `gen-yield-alias` generates the failure; an existing fixture pins it. Owner: `execution_role/write_roles.rs`.
+
+<a id="adr-0896"></a>
+## ADR 0896 — listener-reach stands at a withheld dispatch in any analyzed file
+ADR 0645 follow-up (ADR 0815 limit closed): listener-reach also stands at a withheld dispatch in another analyzed file. The existing project-code registration predicate, including open reads of addEventListener, is an analyzed-project existential; it changes no registration/read U. A per-build boolean records ListenerProjectReach on every answer, false too; its section fingerprint recomputes the full predicate against the next build’s files and symbol/index answers. No event/target relation, V or clean proof is added. Fixture rc21-listener-cross-file pins direct, deferred, no-registration and open method-read forms.
