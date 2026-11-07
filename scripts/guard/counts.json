@@ -100,7 +100,7 @@
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 source-pending-unproven": 342,
-  "SC5003 async-options-opaque": 25,
+  "SC5003 async-options-opaque": 29,
   "SC5003 async-provenance-unproven": 110,
   "SC5003 async-read-caught": 3,
   "SC5003 async-read-unaccounted": 336,
@@ -381,6 +381,17 @@
     "open": "reactive-ir/helper-prop-read"
    },
    "note": "Not a proof and not a rename: a relabel, still uncertifiable at the same span. helper-prop-read GeneratorHelper's `yield props.value` (start 7847): callee-callback-timing -> SC1001 function-run-unplaced under ADR 0851 (a generator's creating call runs none of its body; its steps are placed by generator_creations). The key's other 6 rows in helper-prop-read stay."
+  },
+  {
+   "key": "SC5003 mount-unresolved",
+   "from": 325,
+   "to": 323,
+   "adr": "ADR 0889",
+   "proof": "rust/crates/solid-reactive-ir/src/source_discovery/async_server.rs::async_source_options",
+   "fixtures": {
+    "proved": "reactive-ir/sync-memo-read",
+    "open": "reactive-ir/unplaced-site-obligations"
+   }
   }
  ],
  "renames": []
