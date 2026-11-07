@@ -78,6 +78,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 pub mod package_boundary;
+mod pending_accounting;
 mod pipeline;
 mod projection;
 mod reachability;
@@ -1548,6 +1549,20 @@ pub struct AsyncRead {
     /// strict read withdrawn through [`Self::pending_origin`] lies in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_apply: Option<Location>,
+    /// ADR 0838: the read this row stands for, where the row sits elsewhere
+    /// (a call-attributed row at the call of the function that reads): the
+    /// pending-read accounting finds the read's row through it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Location>,
+    /// ADR 0838: the pending-read accounting added this row for a claim no
+    /// producer accounted for (`async-read-unaccounted`): never a violation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unaccounted: bool,
+    /// ADR 0835, review R1/R6: an unplaced row a call-attributed walk left at
+    /// its read because it cut a path; the rows it placed at calls then
+    /// account for no path but their own.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub walk_cut: bool,
 }
 
 fn default_async_provenance() -> bool {

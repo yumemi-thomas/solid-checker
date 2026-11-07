@@ -195,15 +195,17 @@ pub(crate) fn collect_project<'facts>(
     } = local_access.result;
     // ADR 0835: `discover` keeps these per file; any left here are kept the
     // same way, never dropped.
+    // Review R1: per rule, as `discover` keeps them.
     let placed = async_reads
         .iter()
-        .map(|read| read.location.clone())
+        .filter_map(|read| {
+            crate::pending_accounting::reported_rule(read).map(|rule| (read.location.clone(), rule))
+        })
         .collect::<HashSet<_>>();
-    async_reads.extend(
-        bounded_async_reads
-            .into_iter()
-            .filter(|read| !placed.contains(&read.location)),
-    );
+    async_reads.extend(bounded_async_reads.into_iter().filter(|read| {
+        crate::pending_accounting::reported_rule(read)
+            .is_none_or(|rule| !placed.contains(&(read.location.clone(), rule)))
+    }));
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -677,8 +679,11 @@ pub(crate) fn collect_project<'facts>(
             root_pass_unproven: false,
             carrier_run_unproven: false,
             apply_first_run_pending: false,
-            pending_origin: None,
+            pending_origin: read.origin.clone(),
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            walk_cut: false,
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(synthesized);
@@ -758,8 +763,11 @@ pub(crate) fn collect_project<'facts>(
                 root_pass_unproven: false,
                 carrier_run_unproven: false,
                 apply_first_run_pending: false,
-                pending_origin: None,
+                pending_origin: read.origin.clone(),
                 pending_apply: None,
+                origin: None,
+                unaccounted: false,
+                walk_cut: false,
             })
         })
         .collect::<Vec<_>>();
@@ -948,6 +956,21 @@ pub(crate) fn collect_project<'facts>(
         });
     }
     hold_withdrawn_static_rows(draft);
+    // ADR 0838: after every producer, every pending read is accounted for.
+    crate::pending_accounting::account_pending_reads(
+        ctx,
+        &|symbol| {
+            source.async_sources.contains(symbol)
+                || local_access_context.source_compute_open(symbol, &open_computes)
+        },
+        &|symbol| {
+            source
+                .source_async_options
+                .get(symbol)
+                .is_some_and(|options| options.declared_loading)
+        },
+        draft,
+    );
     interprocedural.factory_instances
 }
 

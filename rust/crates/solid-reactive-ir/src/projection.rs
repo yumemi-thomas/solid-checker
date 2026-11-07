@@ -654,7 +654,9 @@ pub fn project_findings(
     let async_unproven_reads = program
         .async_reads
         .iter()
-        .filter(|read| read.async_provenance && !read.apply_first_run_pending)
+        // ADR 0838: an accounting row adds a claim, it never opens a strict
+        // read the producers decided.
+        .filter(|read| read.async_provenance && !read.apply_first_run_pending && !read.unaccounted)
         .map(|read| &read.location)
         .collect::<std::collections::HashSet<_>>();
     let open_reads = program
@@ -871,7 +873,7 @@ fn action_reported(action: &crate::ActionInvocation) -> bool {
     action.execution.reports_disallowed_write() || action.execution.reports_unplaced()
 }
 
-fn async_read_reported(read: &crate::AsyncRead) -> bool {
+pub(crate) fn async_read_reported(read: &crate::AsyncRead) -> bool {
     // Deletion first, ahead of the leaf-owner short-circuit
     // below. Every clause after this one is a claim about a
     // read that happens -- "a pending read here throws at
@@ -1267,6 +1269,10 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
+            // ADR 0838: a claim no producer accounted for proves nothing.
+            if read.unaccounted {
+                finding.kind = "uncertifiable".into();
+            }
             // Fail-honest: an options argument the analyzer cannot read may
             // declare a loadingValue or seedLoadingValue, and a declared first
             // flight neither throws (SC5001) nor needs a boundary (SC5003,

@@ -89,7 +89,10 @@ export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn"],
-  PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
+  PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed", "apply-placed-twin"],
+  // ADR 0835 review R1/R6: a helper's read placed at one call (tracked, under `<Loading>`) and cut on another path (a chain past the walk's
+  // bound in `onSettled`): the cut path's claim needs a row of its own.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "settled-member-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop"],
@@ -106,6 +109,8 @@ export const FLIP_READ_LEGAL = {
   UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
+  // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["handler-chain-placed"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
@@ -274,6 +279,11 @@ export const SETTLED_SLOTS = {
   "settled-slot-writer": { ...SETTLED_SLOT, ...nowHook("createSignal, onSettled", "onSettled(() => { const t = setInterval(() => setNow(new Date()), interval); return () => clearInterval(t); });") },
 };
 // ADR 0801: the same slot over a pending source is a proved read of it.
+// Review R18: a probe reads the source too; a first load throws from `latest`/`isPending` to the surrounding boundary (legal under `<Loading>`).
+export const PROBE_READS = {
+  "probe-latest": { ...PEEK, contexts: ["jsx"], imports: ["latest"], text: (o) => `void latest(() => ${o}());` },
+  "probe-is-pending": { ...PEEK, contexts: ["jsx"], imports: ["isPending"], text: (o) => `void isPending(() => ${o}());` },
+};
 export const PENDING_SLOTS = {
   "pending-slot": { ...PEEK, text: (o) => `const useM = () => [${o}] as const; const [m] = useM(); void m();` },
 };
@@ -431,7 +441,7 @@ export const FLIP_READ_VARIANTS = {
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS },
   CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
@@ -463,6 +473,23 @@ const holderForms = (k) => ({
 });
 
 export function flipReadContext(context, stmts, kit) {
+  // ADR 0835 review R1/R6: the helper `u` holds the site; one call of it is placed (tracked, under `<Loading>`), the other path is cut
+  // (a chain of five past the walk's bound in `onSettled`, a guarded effect apply, a handler).
+  if (["settled-chain-placed", "settled-member-placed", "apply-placed-twin", "handler-chain-placed"].includes(context)) {
+    const u = kit.name("u");
+    const hc = Array.from({ length: 5 }, () => kit.name("hc"));
+    const chain = hc.map((name, i) => decl(name, fn([expr(call(ref(i === 0 ? u : hc[i - 1])))])));
+    const placed = mounted(kit.name("v"), domExpr(`<Loading fallback={0}><i>{(${u}(), "x")}</i></Loading>`, undefined, ["Loading"]));
+    const other = {
+      "settled-chain-placed": [...chain, expr(prim("settled", fn([expr(call(ref(hc[4])))])))],
+      // Review R17: the other path reaches the helper through a member of a literal, a reference that is no call the walk follows.
+      "settled-member-placed": [decl(hc[1], fn([expr(call(ref(u)))])), decl(hc[2], domExpr(`{ h: ${hc[1]} }`)), expr(prim("settled", fn([expr(domExpr(`${hc[2]}.h()`))])))],
+      "apply-placed-twin": [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(u)))]) }))],
+      "handler-chain-placed": chain,
+    }[context];
+    const view = context === "handler-chain-placed" ? [button(kit.name("b"), [expr(call(ref(hc[4])))]), placed] : [placed];
+    return { body: [decl(u, fn(stmts)), ...other], view };
+  }
   if (context === "mount-named") {
     const h = kit.name("f");
     return { hoisted: [decl(h, fn([...stmts, ret(domExpr("<i />"))])), expr(domExpr(`render(${h}, document.createElement("div"));`, ["render"]))], body: [], view: [] };
