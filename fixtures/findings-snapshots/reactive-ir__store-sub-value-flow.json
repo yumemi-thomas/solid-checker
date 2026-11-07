@@ -72,6 +72,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 714,
+      "end": 741,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 736,
       "end": 738,
       "fixes": 0
@@ -80,6 +91,17 @@
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 762,
+      "end": 795,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 762,
@@ -112,6 +134,17 @@
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
+      "start": 816,
+      "end": 828,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-sub-value-flow/App.tsx",
       "start": 816,

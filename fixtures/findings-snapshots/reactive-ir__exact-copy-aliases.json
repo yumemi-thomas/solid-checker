@@ -92,6 +92,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",
+      "start": 835,
+      "end": 843,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/exact-copy-aliases/App.tsx",

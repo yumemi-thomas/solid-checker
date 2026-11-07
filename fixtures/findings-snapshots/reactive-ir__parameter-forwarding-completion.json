@@ -105,6 +105,28 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 50,
+      "end": 58,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 140,
+      "end": 148,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
       "start": 338,
       "end": 344,
       "fixes": 0
@@ -135,6 +157,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 794,
+      "end": 809,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
@@ -157,6 +190,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 983,
+      "end": 998,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
@@ -173,6 +217,17 @@
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
       "start": 1419,
       "end": 1425,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 1631,
+      "end": 1639,
       "fixes": 0
     },
     {

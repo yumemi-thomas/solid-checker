@@ -216,6 +216,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3601,
+      "end": 3613,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
@@ -227,11 +238,33 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3763,
+      "end": 3772,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-through-logical",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 3771,
       "end": 3772,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4053,
+      "end": 4062,
       "fixes": 0
     },
     {
