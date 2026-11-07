@@ -107,6 +107,7 @@ describe("the row ledger (ADR 0815, R23)", () => {
     expect(finalBlockers({ rows })).toEqual(["g/a", "g/b"]);
     expect(finalBlockers({ rows: { grids: { g: { b: rows.grids.g.b } } } })).toEqual(["g/b"]);
     expect(finalBlockers({ rows: { grids: { g: { c: { outcome: "false-clean", cause: "R-F1-open" } } } } })).toEqual(["g/c"]);
+    expect(finalBlockers({ rows: { grids: { g: { c: { outcome: "false-clean", cause: "R-alias-owner" } } } } })).toEqual(["g/c"]);
     expect(finalBlockers({ rows: { grids: { g: { d: { outcome: "false-positive", cause: "fam" } } } } })).toEqual(["g/d"]);
     expect(finalBlockers({ rows: { grids: { g: { e: { outcome: "false-clean", cause: "R" }, f: { outcome: "misplaced", cause: "fam" } } } } })).toEqual([]);
     expect(ledgerCounts(rows)).toMatchObject({ certified: 1, certifiedF2: 1 });
