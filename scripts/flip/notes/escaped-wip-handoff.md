@@ -139,3 +139,5 @@ Ownership gate: passes (96 cases), with the case [86] edit. Each program was con
 - Exact proposed assertion diff: `~/EDF/tmp/flipcarrier/assertion-proposal.patch`, NOT APPLIED. Asked the user for the explicit approval Job 1 requires before changing assertions. Existing site assertions remain; proposal also pins the new options() U rows. No further build dependent on that change until approval.
 - Final release rebuild/site/sweep script did not run: it stops on failed make verify. Previous saved semantic measurements still precede the recorded-read-only refactor.
 - Job 2 clarification approved by user: fixtures.proved must contain the key at baseline and have a lower current count; fixtures.open must contain it currently. No Job 2 implementation yet.
+
+- User approved the proposed Job 1 assertion update ("Do what is correct and recommended"). Applied it and rustfmt; no original per-read or violation assertion removed. The diagnostics suite is queued/running under lock and guard. Full verification must be rerun on this approved tree.
