@@ -4,38 +4,47 @@ import { LAYERS, SPEC, TEMPLATE_CODES, VALUE_BINDINGS, bindingsOf, gridBindingsO
 
 const site = { line: 10, aux: [4] };
 const ok = { ok: true, findings: [] };
-const event = (code, line, extra = {}) => ({ code, message: "m", positions: line === null ? [] : [{ file: "App.tsx", line }], ...extra });
+const event = (code, line, extra = {}) => ({ code, message: "m", positions: line === null ? [] : [{ file: "App.tsx", line, column: 1 }], ...extra });
 const run = (events, extra = {}) => ({ diagnostics: events, errors: [], witnesses: [], ...extra });
-const finding = (rule, kind, line = 10, endLine = line) => ({ rule, kind, line, endLine, id: "SC", file: "App.tsx" });
+const finding = (rule, kind, line = 10, endLine = line) => ({ rule, kind, line, column: 1, endLine, id: "SC", file: "App.tsx" });
 const verdict = (over) => judge({ code: "FLUSH_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker: ok, runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 10)]), ...over });
 
 describe("judge", () => {
   it("judges a thrown code an <Errored> boundary logged instead of rethrowing (unplaced)", () => {
     const logged = run([], { consoleErrors: ["Error: Context must either be created with a default value or a value must be provided before accessing it."] });
-    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: logged }).outcome).toBe("false-clean");
-    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-context-provider", "violation")] }, runtime: logged }).outcome).toBe("agree");
+    // Review 4c, R8: a diagnostic of a code with a place and no position cannot be judged: `unplaced`, never a pass or a false clean.
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: logged }).outcome).toBe("unplaced");
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-context-provider", "violation")] }, runtime: logged }).outcome).toBe("unplaced");
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: run([], { consoleErrors: ["unrelated"] }) }).outcome).toBe("not-fired");
   });
   it("regions are the site line and the wrapper's line", () => expect(regionOf(site)).toEqual([10, 4]));
-  it("agree: a violation of a rule that claims the code covers the site", () => {
-    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 9, 11)] } }).outcome).toBe("agree");
+  it("agree: a violation of a rule that claims the code covers it at the diagnostic's position, never by a line range (review 4c, R8)", () => {
+    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation")] } }).outcome).toBe("agree");
+    // The claiming rule's own violation starting elsewhere: the warning in the wrong place (`misplaced`).
+    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 9, 11)] } }).outcome).toBe("misplaced");
   });
-  it("agree when the claiming finding sits at the call that runs the misuse, away from its line (remote)", () => {
-    const result = verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 30)] } });
+  // The call that runs the misuse is a deeper frame of the code's stack: its exact position covers, on a line that mounts nothing.
+  const callAt30 = run([{ code: "FLUSH_IN_EFFECT_CALLBACK", message: "m", positions: [{ file: "App.tsx", line: 10, column: 1 }, { file: "App.tsx", line: 30, column: 1 }] }]);
+  const text30 = { files: { "App.tsx": Array.from({ length: 40 }, (_, index) => (index === 29 ? "  helper();" : "x();")).join("\n") } };
+  it("agree when the claiming finding sits at the call that runs the misuse, a deeper frame of its stack (remote)", () => {
+    const result = verdict({ runtime: callAt30, built: text30, checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 30)] } });
     expect(result).toMatchObject({ outcome: "agree", detail: { remote: "flush-in-effect-callback@30" } });
+    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 30)] } }).outcome).toBe("misplaced");
   });
-  it("recall-gap when only an uncertifiable claiming finding sits away from the site", () => {
-    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
+  it("recall-gap when only an uncertifiable claiming finding sits at a deeper frame's call; off the stack it covers nothing (R8)", () => {
+    expect(verdict({ runtime: callAt30, built: text30, checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
+    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("false-clean");
   });
   it("a coded error the page threw is an event even when the table has no pattern for it (Chrome)", () => {
     const thrown = run([], { errors: [{ kind: "page-error", message: "[SETTLED_CLEANUP_UNOWNED] onSettled returned a cleanup in an unowned scope", positions: [] }] });
     expect(judge({ code: "SETTLED_CLEANUP_UNOWNED", site, typecheck: { ok: true }, checker: ok, runtime: thrown }).outcome).toBe("false-clean");
   });
-  it("an unattributed code counts as an unplaced diagnostic", () => {
+  it("an unattributed placeless code is judged by file (ADR 0815)", () => {
     expect(judge({ code: "SETTLED_CLEANUP_UNOWNED", site, typecheck: { ok: true }, checker: ok, runtime: run([], { unattributed: ["SETTLED_CLEANUP_UNOWNED"] }) }).outcome).toBe("false-clean");
   });
-  it("agree through the wrapper's line", () => {
-    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 4)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 10)] } }).outcome).toBe("agree");
+  it("agree through the wrapper's line only at the diagnostic's position (R8)", () => {
+    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 4)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 4)] } }).outcome).toBe("agree");
+    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 4)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 10)] } }).outcome).toBe("misplaced");
   });
   it("wrong-rule: only another rule's violation covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "violation")] } }).outcome).toBe("wrong-rule");
@@ -67,8 +76,19 @@ describe("judge", () => {
     expect(result).toMatchObject({ outcome: "false-clean", detail: { unrelated: ["no-write-in-pure-computation/uncertifiable@10"] } });
     // A withholding (dispatch unresolved) declines every rule at its site.
     expect(verdict({ checker: { ok: true, findings: [finding("reactive-dispatch-unresolved", "uncertifiable")] } }).outcome).toBe("recall-gap");
-    // A claiming finding elsewhere in the file still makes it a gap.
-    expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable"), finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
+    // Review 4c: elsewhere it declines nothing; at the stack's top frame, or a deeper frame's exact call position, it does, unless that
+    // position mounts the program (a component's tag, a render call) or the program's text is unknown.
+    expect(verdict({ checker: { ok: true, findings: [finding("reactive-dispatch-unresolved", "uncertifiable", 30)] } })).toMatchObject({ outcome: "false-clean", detail: { certified: false } });
+    const deep = run([{ code: "FLUSH_IN_EFFECT_CALLBACK", message: "m", positions: [{ file: "App.tsx", line: 10, column: 1 }, { file: "App.tsx", line: 30, column: 1 }] }]);
+    const text = (line30) => ({ files: { "App.tsx": Array.from({ length: 40 }, (_, index) => (index === 29 ? line30 : "x();")).join("\n") } });
+    const withheld30 = { ok: true, findings: [finding("reactive-dispatch-unresolved", "uncertifiable", 30)] };
+    expect(verdict({ runtime: deep, checker: withheld30, built: text("  helper(n);") }).outcome).toBe("recall-gap");
+    expect(verdict({ runtime: deep, checker: withheld30, built: text("<C1 />;") })).toMatchObject({ outcome: "false-clean", detail: { withheldNear: "reactive-dispatch-unresolved@30:1" } });
+    expect(verdict({ runtime: deep, checker: withheld30 }).outcome).toBe("false-clean");
+    const top = run([{ code: "FLUSH_IN_EFFECT_CALLBACK", message: "m", positions: [{ file: "App.tsx", line: 30, column: 1 }, { file: "App.tsx", line: 10, column: 1 }] }]);
+    expect(verdict({ runtime: top, checker: withheld30 }).outcome).toBe("recall-gap");
+    // A claiming finding elsewhere in the file no longer makes it a gap (R8).
+    expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable"), finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("false-clean");
   });
   it("a declining rule's uncertifiable finding is a recall gap; its violation stays a wrong rule (codes.mjs `declining`)", () => {
     const ctx = (findings) => judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([event("CONTEXT_NOT_FOUND", 10)]) });
@@ -108,12 +128,12 @@ describe("judge", () => {
     expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 99)]) }).outcome).toBe("not-fired");
     expect(verdict({ runtime: run([event("NO_OWNER_CLEANUP", 10)]) }).outcome).toBe("not-fired");
   });
-  it("an unplaced diagnostic is confirmed, and covered by a claiming finding anywhere", () => {
-    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]) }).outcome).toBe("false-clean");
-    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 50)] } }).outcome).toBe("recall-gap");
+  it("an unplaced diagnostic cannot be judged: no finding has its position (R8, `unplaced`)", () => {
+    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]) }).outcome).toBe("unplaced");
+    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 50)] } }).outcome).toBe("unplaced");
   });
   it("a thrown coded error is a runtime event", () => {
-    const thrown = run([], { errors: [{ kind: "page-error", message: "[FLUSH_IN_ACTION] flush() inside an action body is not allowed.", positions: [{ file: "App.tsx", line: 10 }] }] });
+    const thrown = run([], { errors: [{ kind: "page-error", message: "[FLUSH_IN_ACTION] flush() inside an action body is not allowed.", positions: [{ file: "App.tsx", line: 10, column: 1 }] }] });
     expect(judge({ code: "FLUSH_IN_ACTION", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("flush-in-action", "violation")] }, runtime: thrown }).outcome).toBe("agree");
   });
   it("typed-away and harness failures are not checker evidence", () => {
@@ -386,9 +406,11 @@ describe("combination programs", () => {
   it("judges the primary site without the claims that cover another use", async () => {
     const { judge } = await import("./matrix.mjs");
     const site = { line: 10, aux: [] };
-    const runtime = { diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", positions: [{ file: "App.tsx", line: 10 }] }], errors: [] };
-    const elsewhere = { rule: "no-write-in-pure-computation", kind: "violation", line: 20, endLine: 20 };
-    const input = { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: { ok: true, findings: [elsewhere] }, runtime };
+    // The finding at line 20 is the call that runs the site, a deeper frame of the code's stack (R8).
+    const runtime = { diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", positions: [{ file: "App.tsx", line: 10, column: 1 }, { file: "App.tsx", line: 20, column: 1 }] }], errors: [] };
+    const elsewhere = { rule: "no-write-in-pure-computation", kind: "violation", line: 20, column: 1, endLine: 20 };
+    const built = { files: { "App.tsx": Array.from({ length: 30 }, () => "x();").join("\n") } };
+    const input = { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: { ok: true, findings: [elsewhere] }, runtime, built };
     expect(judge(input).outcome).toBe("agree");
     const { outcome, detail } = judge({ ...input, others: [[20]] });
     expect(outcome).toBe("false-clean");
@@ -407,5 +429,52 @@ describe("combination programs", () => {
     const shared = { sites: [{ code: "STRICT_READ_UNTRACKED", line: 5, aux: [], hit: 1, primary: true }, { code: "PENDING_ASYNC_UNTRACKED_READ", line: 9, aux: [], hit: 2 }], plan: { clicks: [] } };
     const rerun = { ...runtime, diagnostics: [{ code: "STRICT_READ_UNTRACKED", positions: [{ file: "App.tsx", line: 9 }] }] };
     expect(judgeLegalProgram({ code: "STRICT_READ_UNTRACKED", built: shared, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime: rerun }).detail.sites).toEqual(["STRICT_READ_UNTRACKED@5:clean", "PENDING_ASYNC_UNTRACKED_READ@9:clean"]);
+  });
+});
+
+describe("a withholding at a call's argument (ADR 0815, R20)", () => {
+  const withheld = (line, column) => ({ rule: "reactive-dispatch-unresolved", kind: "uncertifiable", line, column, endLine: line, id: "SC9012", file: "App.tsx" });
+  const text = (lines) => ({ files: { "App.tsx": lines.join("\n") } });
+  const judged = (code, positions, finding, lines, sites = { line: 1, aux: [] }) => judge({ code, site: sites, typecheck: { ok: true }, checker: { ok: true, findings: [finding] }, runtime: run([{ code, message: "m", positions }]), built: text(lines) }).outcome;
+
+  it("covers a read a native callee did on what it was handed", () => {
+    expect(judged("STRICT_READ_UNTRACKED", [{ file: "App.tsx", line: 1, column: 6 }], withheld(1, 16), ["JSON.stringify(st);", "x();"])).toBe("recall-gap");
+  });
+  it("covers no code the call raises itself: a setter's write, a primitive's own run", () => {
+    const setter = ['import { createSignal } from "solid-js";', "const [, set] = createSignal(0);", "set(holder.c);"];
+    expect(judged("REACTIVE_WRITE_IN_OWNED_SCOPE", [{ file: "App.tsx", line: 3, column: 1 }], withheld(3, 5), setter, { line: 3, aux: [] })).toBe("false-clean");
+    const untrack = ['import { untrack } from "solid-js";', "untrack(holder.c);"];
+    expect(judged("STRICT_READ_UNTRACKED", [{ file: "App.tsx", line: 2, column: 1 }], withheld(2, 9), untrack, { line: 2, aux: [] })).toBe("false-clean");
+  });
+  it("covers a store write only at a function's first argument: a member call writes its receiver (R22)", () => {
+    const list = ["list.push(holder.c);", "x();"];
+    expect(judged("STORE_WRITE_OUTSIDE_SETTER", [{ file: "App.tsx", line: 1, column: 6 }], withheld(1, 11), list)).toBe("false-clean");
+    const second = ["mutate(a, holder.c);", "x();"];
+    expect(judged("STORE_WRITE_OUTSIDE_SETTER", [{ file: "App.tsx", line: 1, column: 1 }], withheld(1, 11), second)).toBe("false-clean");
+    const first = ["mutate(st);", "x();"];
+    expect(judged("STORE_WRITE_OUTSIDE_SETTER", [{ file: "App.tsx", line: 1, column: 1 }], withheld(1, 8), first)).toBe("recall-gap");
+    const assign = ["Object.assign(st, x);", "y();"];
+    expect(judged("STORE_WRITE_OUTSIDE_SETTER", [{ file: "App.tsx", line: 1, column: 8 }], withheld(1, 15), assign)).toBe("recall-gap");
+  });
+  it("covers nothing at a deeper frame: another file's top frame keeps the App frame below depth 0", () => {
+    const tag = ["const holder = { c: 0 };", "export function App() { return <Child v={holder.c} />; }"];
+    const positions = [{ file: "helpers.ts" }, { file: "App.tsx", line: 2, column: 32 }];
+    expect(judged("STRICT_READ_UNTRACKED", positions, withheld(2, 32), tag, { line: 2, aux: [] })).toBe("false-clean");
+    const helper = ["const r = pick(holder.c);", "x();"];
+    expect(judged("STRICT_READ_UNTRACKED", [{ file: "helpers.ts", line: 3, column: 1 }, { file: "App.tsx", line: 1, column: 11 }], withheld(1, 16), helper, { line: 1, aux: [] })).toBe("false-clean");
+  });
+});
+
+describe("an uncaught NotReadyError (ADR 0815)", () => {
+  const failure = { name: "NotReadyError", message: "", phase: "import", stack: "Error" };
+  const code = "PENDING_ASYNC_UNTRACKED_READ";
+  const judged = (findings) => judge({ code, site: { line: 6, aux: [] }, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([], { failure }) }).outcome;
+  it("is the program's result: a row at the read is judged, none is a false clean", () => {
+    expect(judged([{ rule: "pending-async-unsuspendable-read", kind: "uncertifiable", line: 6, endLine: 6, column: 3 }])).toBe("pending-uncaught");
+    expect(judged([{ rule: "pending-async-unsuspendable-read", kind: "uncertifiable", line: 2, endLine: 2, column: 3 }])).toBe("false-clean");
+    expect(judged([])).toBe("false-clean");
+  });
+  it("leaves any other failure the harness's", () => {
+    expect(judge({ code, site: { line: 6, aux: [] }, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime: run([], { failure: { ...failure, name: "TypeError", message: "x" } }) }).outcome).toBe("harness");
   });
 });

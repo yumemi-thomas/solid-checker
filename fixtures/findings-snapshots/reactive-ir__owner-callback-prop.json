@@ -32,6 +32,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 1266,
+      "end": 1276,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -40,6 +51,17 @@
       "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
       "start": 1266,
       "end": 1276,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 1482,
+      "end": 1491,
       "fixes": 0
     },
     {

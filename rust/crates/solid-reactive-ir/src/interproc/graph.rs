@@ -1318,6 +1318,27 @@ fn record_runtime_argument_behavior(
         .and_then(|resolved_call| {
             argument_behavior(resolved_call, runtime_argument_callability, argument_index)
         })
+        // ADR 0874: a call the census withholds may run an argument its
+        // standard twin runs, now or later, or never: the edge stays (its rows
+        // stand at their sites), with no inline timing (as a thenable's).
+        .or_else(|| {
+            lookup
+                .impostor_withheld(file, call.callee)
+                .then(|| lookup.placing_callee_call(file, call.callee))
+                .flatten()
+                .and_then(|placing| {
+                    argument_behavior(placing, runtime_argument_callability, argument_index)
+                })
+                .filter(|behavior| {
+                    matches!(
+                        behavior,
+                        RuntimeArgumentBehavior::InlineCallback
+                            | RuntimeArgumentBehavior::DeferredCallback
+                            | RuntimeArgumentBehavior::FreshStackCallback
+                    )
+                })
+                .map(|_| RuntimeArgumentBehavior::DeferredCallback)
+        })
         .or_else(|| {
             proven_array_method(file, call, symbols.entities).and_then(|method| {
                 proven_array_method_argument_behavior(method, runtime_argument_callability)

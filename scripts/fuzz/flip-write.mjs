@@ -2,7 +2,7 @@
 // commit adds its shapes here, so neither track edits misuse.mjs or the other's file.
 //   FLIP_WRITE_CONTEXTS  { [code]: [context, ...] }, appended to that code's recallContexts
 //   flipWriteContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
-import { button, call, decl, domExpr, expr, fn, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
+import { button, call, ctl, decl, domExpr, expr, fn, iife, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
 
 /**
  * ADR 0705, the DOM dispatch list: a member that dispatches on its caller's stack, fired from `onSettled` (a leaf owner), with a
@@ -90,9 +90,26 @@ const MIXED_OWNERS = {
   "flw-mixed-dead": (stmts, kit) => {
     const h = kit.name("h");
     return {
-      // Raw text: the validator reads names declared in the component, and `h` is not one.
-      hoisted: [decl(h, fn(stmts)), expr(domExpr(`if (Math.random() > 2) ${h}();`))],
+      // Raw text: the validator reads names declared in the component, and `h` is not one. The dead call is a call node in a block
+      // (`dead-random`), so the run counts it: the judge reads its 0, not the module's entry (Part 16, 4 false positives).
+      hoisted: [decl(h, fn(stmts)), ctl("dead-random", [expr(call(domExpr(h)))])],
       body: [expr(domExpr(`${h}()`))],
+      view: [],
+    };
+  },
+  // ADR 0874: the site in a helper the body runs, and a withheld call's callback too. The program's own `forEach` on that receiver runs
+  // it from a microtask, with no owner (Chrome: NO_OWNER_EFFECT, NO_OWNER_CLEANUP); the build before gave the callback no owner context,
+  // so the body's owned call alone placed the helper, and it certified it. Handed by name: no frame of Chrome's report is the call's line.
+  "flw-withheld-late": (stmts, kit) => {
+    const [h, a, q] = [kit.name("h"), kit.name("lateEach"), kit.name("hand")];
+    return {
+      // Raw text: the validator reads names declared in the component, and these are module scope.
+      hoisted: [
+        decl(h, fn(stmts)),
+        expr(domExpr(`const ${a}: any = [1]; ${a}.forEach = (cb: () => void) => { queueMicrotask(cb); }`)),
+        decl(q, domExpr("(x: number[]) => x")),
+      ],
+      body: [expr(domExpr(`${h}()`)), expr(domExpr(`${q}(${a}).forEach(${h})`))],
       view: [],
     };
   },
@@ -123,6 +140,115 @@ const UNREACHED_WRITES = {
   },
 };
 
+/**
+ * ADR 0866, every owner rule: the site under `if (getOwner())` in an async function the component body calls. A suspension in the guarded
+ * block leaves the stack the probe saw (Chrome, rc.21: the site's NO_OWNER_* code), so the guard is no proof; the build before dropped
+ * the requirement. `flw-guard-early` and `flw-guard-probe-loop` are their legal twins.
+ */
+const guardedAsync = (form) => (stmts) => ({ body: [expr(iife(fn([ctl(form, stmts)], { async: true })))], view: [] });
+const GUARDED = { "flw-guard-for-await": guardedAsync("guard-for-await"), "flw-guard-loop": guardedAsync("guard-loop"), "flw-guard-await": guardedAsync("guard-await"), "flw-guard-yield": (stmts) => ({ body: [ctl("guard-yield", stmts)], view: [] }) };
+const GUARDED_LEGAL = { "flw-guard-early": guardedAsync("guard-early"), "flw-guard-probe-loop": guardedAsync("guard-probe-loop") };
+/**
+ * F2 (scout's owner-context map): the site's function is called in the component body, so an owned edge reaches it, and it is also handed
+ * somewhere a later click runs it with no owner. Chrome (rc.21): the site's NO_OWNER_* code on the click. The build before read the owned
+ * edge as every entry. `flw-owned-twice` and `flw-owned-removed` are legal: every run is on the body's stack.
+ */
+const ownedAnd = (place, { jsx: returnsJsx = false } = {}) => (stmts, kit) => {
+  const f = kit.name("f");
+  const { before = [], after, fires } = place(f, kit);
+  const body = returnsJsx ? [...stmts, ret(domExpr("<li />"))] : stmts;
+  return { body: [decl(f, fn(body)), expr(call(ref(f))), ...before, ...(after ?? [])], view: [button(kit.name("b"), [expr(domExpr(fires))])] };
+};
+const ESCAPES = {
+  "flw-owned-assigned": ownedAnd((f, kit) => {
+    const el = kit.name("el");
+    return { before: [decl(el, domExpr('document.createElement("button")')), expr(domExpr(`${el}.onclick = ${f}`))], fires: `${el}.click()` };
+  }),
+  "flw-owned-stored": ownedAnd((f, kit) => {
+    const items = kit.name("items");
+    return { before: [decl(items, domExpr("[] as (() => void)[]")), expr(domExpr(`${items}.push(${f})`))], fires: `${items}[0]()` };
+  }),
+  "flw-owned-member": ownedAnd((f, kit) => {
+    const slot = kit.name("slot");
+    return { before: [decl(slot, domExpr("{ run: () => {} }")), expr(domExpr(`${slot}.run = ${f}`))], fires: `${slot}.run()` };
+  }),
+  "flw-owned-map": ownedAnd((f, kit) => {
+    const map = kit.name("map");
+    return { before: [decl(map, domExpr("new Map<string, () => void>()")), expr(domExpr(`${map}.set("k", ${f})`))], fires: `${map}.get("k")!()` };
+  }),
+  "flw-owned-lib": ownedAnd((f, kit) => {
+    const [reg, on] = [kit.name("reg"), kit.name("on")];
+    return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(on, domExpr(`(cb: () => void) => { ${reg}.push(cb); }`)), expr(domExpr(`${on}(${f})`))], fires: `${reg}[0]()` };
+  }),
+  // Reviewer D13 on ADR 0868: each premise of the first cut, broken.
+  // 1: a Value reference beside a run the census must see.
+  "flw-owned-value-foreach": ownedAnd((f) => ({ before: [expr(domExpr(`document.body.removeEventListener("click", ${f})`))], fires: `[1].forEach(${f})` })),
+  // 2: a value-only argument that keeps the function (`this`, an `object` parameter).
+  "flw-owned-keep-this": ownedAnd((f, kit) => {
+    const [reg, keep] = [kit.name("reg"), kit.name("keep")];
+    return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(keep, domExpr(`function (this: () => void) { ${reg}.push(this); }`)), expr(domExpr(`${keep}.call(${f})`))], fires: `${reg}[0]()` };
+  }),
+  "flw-owned-keep-object": ownedAnd((f, kit) => {
+    const [reg, keep] = [kit.name("reg"), kit.name("keep")];
+    return { before: [decl(reg, domExpr("[] as object[]")), decl(keep, domExpr(`(o: object) => { ${reg}.push(o); }`)), expr(domExpr(`${keep}(${f})`))], fires: `(${reg}[0] as () => void)()` };
+  }),
+  // 3: an EventTarget whose removeEventListener keeps the listener.
+  "flw-owned-remove-impostor": ownedAnd((f, kit) => {
+    const [reg, t] = [kit.name("reg"), kit.name("t")];
+    return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(t, domExpr(`new (class extends EventTarget { override removeEventListener(_t: string, cb: any) { ${reg}.push(cb); } })() as EventTarget`)), expr(domExpr(`${t}.removeEventListener("x", ${f})`))], fires: `${reg}[0]()` };
+  }),
+  // 4: an unnamed layer held by an object slot, called in the body and assigned to a handler.
+  "flw-owned-slot": (stmts, kit) => {
+    const [o, el] = [kit.name("o"), kit.name("el")];
+    return { body: [decl(o, obj([["run", fn(stmts)]])), expr(call(member(ref(o), "run"))), decl(el, domExpr('document.createElement("button")')), expr(domExpr(`${el}.onclick = ${o}.run`))], view: [button(kit.name("b"), [expr(domExpr(`${el}.click()`))])] };
+  },
+  // 5: a layer that returns JSX, so it may be a component, never rendered as one.
+  "flw-owned-jsx-layer": ownedAnd((f, kit) => {
+    const el = kit.name("el");
+    return { before: [decl(el, domExpr('document.createElement("button")')), expr(domExpr(`${el}.onclick = () => { ${f}(); }`))], fires: `${el}.click()` };
+  }, { jsx: true }),
+  // 6: `eval` reaches the binding by name.
+  "flw-owned-eval": ownedAnd((f, kit) => {
+    const g = kit.name("g");
+    return { before: [decl(g, domExpr(`eval("${f}") as () => void`))], fires: `${g}()` };
+  }),
+  // R29: a primitive's whole argument is placed by the graph only where the primitive runs it under a known owner. `action` keeps a generator
+  // and steps it on the click; `createContext` holds a value (Chrome, rc.21: the site's NO_OWNER_* code on the click).
+  "flw-owned-action": ownedAnd((f, kit) => {
+    const act = kit.name("act");
+    return { before: [decl(act, domExpr(`action(${f} as any)`, undefined, ["action"]))], fires: `${act}()` };
+  }),
+  "flw-owned-action-gen": (stmts, kit) => {
+    const [f, act] = [kit.name("f"), kit.name("act")];
+    return { body: [decl(f, fn(stmts, { form: "generator" })), expr(domExpr(`${f}().next()`)), decl(act, domExpr(`action(${f})`, undefined, ["action"]))], view: [button(kit.name("b"), [expr(domExpr(`${act}()`))])] };
+  },
+  "flw-owned-context": ownedAnd((f, kit) => {
+    const [C, g] = [kit.name("C"), kit.name("g")];
+    return { before: [decl(C, domExpr(`createContext(${f})`, undefined, ["createContext"])), decl(g, domExpr(`useContext(${C})`, undefined, ["useContext"]))], fires: `${g}()` };
+  }),
+  "flw-owned-returned": (stmts, kit) => {
+    const [f, u, g] = [kit.name("f"), kit.name("u"), kit.name("g")];
+    return { body: [decl(u, fn([decl(f, fn(stmts)), expr(call(ref(f))), ret(ref(f))])), decl(g, call(ref(u)))], view: [button(kit.name("b"), [expr(call(ref(g)))])] };
+  },
+};
+const ESCAPES_LEGAL = {
+  "flw-owned-twice": (stmts, kit) => {
+    const f = kit.name("f");
+    return { body: [decl(f, fn(stmts)), expr(call(ref(f))), expr(call(ref(f)))], view: [] };
+  },
+  "flw-owned-slot-called": (stmts, kit) => {
+    const o = kit.name("o");
+    return { body: [decl(o, obj([["run", fn(stmts)]])), expr(call(member(ref(o), "run"))), expr(call(member(ref(o), "run")))], view: [] };
+  },
+  "flw-owned-removed": (stmts, kit) => {
+    const f = kit.name("f");
+    return { body: [decl(f, fn(stmts)), expr(call(ref(f))), expr(domExpr(`document.body.removeEventListener("click", ${f})`))], view: [] };
+  },
+};
+const OWNER_CODES = ["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED"];
+/** Legal recall contexts per runtime code, appended to that code's recallLegal. */
+export const FLIP_WRITE_LEGAL = Object.fromEntries(OWNER_CODES.map((code) => [code, [...Object.keys(GUARDED_LEGAL), ...Object.keys(ESCAPES_LEGAL)]]));
+
 export const FLIP_WRITE_CONTEXTS = {
   ACTION_CALLED_IN_OWNED_SCOPE: Object.keys(UNREACHED_WRITES),
   // ADR 0721: the same layers for a setter or refresh (SC2001).
@@ -137,8 +263,10 @@ export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
 };
 
+for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES)];
+
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
+  return (GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }

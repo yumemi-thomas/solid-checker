@@ -550,6 +550,51 @@ Worktree `/Users/thomas/dev/sc-worktrees.noindex/r3c`, branch `claude/flip-r3c` 
 
 **Traps.** A census row's judge reads the program's own runtime; `matrix.mjs` is read live by running grids (do not edit it under a queued run). `git stash` is shared across worktrees: pop by message. Fixture stubs need `git add` before coverage sees them. A rediscovery entry names one grid. The census treats a JSX-returning function handed only to a carrier as an escaped component: its body's violations become `component-identity-unproven` obligations.
 
+## Part 15 (integrator), handoff, 2026-11-07
+
+Stopped at the context limit. The successor takes the integrator's job in this worktree. Pushed: claude/flip-census = claude/flip-reads = ff31e12bb. Local tip, NOT green, NOT pushed: this commit, on e0f03c0b2.
+
+**ff31e12bb, measured.** a9d18c870's build, ff31e12bb changes a test file only: 42,309 U, 294 V, 0 unnamed, 0 moved; witnesses 336/336, HOST 25/25; patterns 1,241: 1,178 fine, 63 false clean, all listed; make verify 0 (1,320 fuzz tests), ir-edit-fuzz 0, count 7,963 rows. Smoke at seed 21400934: 1,916 false clean, 11 misplaced, 38 unplaced, 12 false positive, 1 unexecuted.
+
+**On the local tip since then, all merged.** ca222f945 4 manifest rows refreshed; flip-r3c f1a8da6a4; flip-r5 bbd9bfbf3 and bc2dad04e; b8492eafd `pending-uncaught`; 112068113 verify-delta runs backend-process for analysis and fixture paths (about 6 s); f137053a2 and a5dce506a `R-F2-open`, `R-F1-open`, `make flip-final`; flip-r3c 0140ec6fb (its merge commit has an invalid rediscovery.json, my slip); flip-gen-await 8d9f18636 in e0f03c0b2, which repairs it (344 entries, none lost).
+
+**Cycle at e0f03c0b2 (rp7, m15/cycle-p7.out).** Green: tsc-oracle, obligation-audit, repro-budget, ownership-gate, witnesses 336/336, HOST 25/25, patterns 1,178 fine, 63 false clean, coverage, ir-edit-fuzz. The aw-* certified false cleans are gone (594 -> 0 off the ledger). Red, in order:
+1. `rule_quality_process::eslint_plugin_solid_two_corpus_matches_native_rule_semantics`: reactive-read-after-await 22, pinned 20. R3d's message says eslint-plugin-corpus gained 2 rows, so this is its pin, as owner-presence was R5's. Read the commit message before calling it a loss. Bounce to R3d.
+2. Corpus 42,309 -> 45,723 U, 294 V unchanged: +3,633 SC9012 and +169 SC1002 `function-run-unplaced`, -409 handed-member rows; kui +1,948, solid-groove +641, dashiboard-ui +295, compass-ui +287, rest in m15 cmp-p7.txt. W's message says its corpus delta is 0, so it looks like R3d's. Sampled: SC9012 at `fetchMock.mock.calls.at`, `adminRequest<...>()`, including test files: plain non-Solid calls after an await. That looks too wide. Not read further. Coordinator and R3d must see this before any push: it is a large rise of a plain-call shape.
+3. count.mjs: SC1001 callee-callback-timing 402 -> 401 has no drops row: W's relabel of helper-prop-read to function-run-unplaced, still U. A relabel of part of a key is not a rename (needs equal counts) and not a proved drop: W to name it, or a drops row saying so. Then `count.mjs --update` (SC9014 118 and others).
+4. Ledger: open-defects test red until the next update writes `certifiedF2` and the new causes.
+
+**Ledger update, when the above is in.** Read every off-ledger row group first, then `node scripts/fuzz/open-rows.mjs --update <finished pinned-seed smoke dir> --allow-new`, then edit `ratchet` in open-defects.json in the same diff (exact, causes, certified, certifiedF2, falsePositive). At rp7 642 rows are off the ledger (`m15/4c/off.mjs <smoke dir>`):
+- `flw-owned-*`: R-F2-open, owner's yes, certified 291 at p6: state the number at listing. Must reach 0 before #173 moves (`make flip-final`).
+- `flw-guard-yield`: R-F1-open, same condition. Coordinator says W's 34a681ffc should place them; recheck, they may have cleared.
+- `flw-guard-await`, `-for-await`, `-loop`, the flw-getter-helper row: R-alias-call by id, my read agreed, the rule is in causeOf.
+- `flw-guard-early`, `-probe-loop`: 2 certified CONTEXT_NOT_FOUND, may not be listed (NOT_LISTED): R5's small fix first.
+- Not read, new at rp7: `gstep` MISSING_EFFECT_FN 34 and census gstep 6, W's contexts, ns-default alias in the sample, so probably R-alias-call plus W's 95 smoke ids being checked; `aw-helper` misplaced 32: V at 21:9 (`f3` call's chain), read at 14:9 inside a helper a hand-off runs, R3d's; census `aw-*` unplaced about 40; ON_FLUSH 12 in pos-handler, pos-class, cleanup-root; flush-read 9; the 2 extra not-legal. No row enters without a read.
+
+**Still reported, not pinned.** 5 harness row is now 1: flw-settled-report-error, no record after about 60 s on every run (hang, place unconfirmed). 4 mount-named rows are `pending-uncaught`, each with a V at the read, 0 false clean. 2 inconclusive oracle runs. Smoke's exit is the signal once the ledger is current; say exactly which rows keep it red.
+
+**Rules that bit me.** Read a branch's commit message before bouncing it. Chain with && . Run the whole judge test directory's affected files: `unexecuted.test.mjs` was outside my hand list. Judge edits go in `/Users/thomas/dev/sc-worktrees.noindex/p14-4c` (branch claude/flip-4c) while a cycle runs in this worktree, because grid processes read scripts live. flip-census never moves backward: follow-ups are new commits (`git diff <tip> <work> | git apply --index`). `git show "$r:path"` in zsh needs `"${r}:path"`.
+
+**After that.** Merge what is reported: R1f, R2h, C2 (casts, only when the coordinator says), W's branches, R5's F2/F4 and small fix. Last, the doc budget at the owner's sizes: decisions 590,000 (616,000+ now), open-work 95,000, docs 1,230,000, fixture READMEs 505,000, tsc-oracle README 8,000; set the owner's sizes, condense old text, and restore the exit in scripts/doc-budget.mjs.
+
+**Machinery** (`/Users/thomas/dev/sc-scratch.noindex/flip-reads/m15`). `cycle.sh <tag> <prev-sweep>` (sc-build for builds, sc-first via heavy.sh for the rest, ends with the pinned smoke in gates3.sh); `4c/off.mjs <smoke dir>` off-ledger rows by group; `4c/delta.mjs <old> <new>` moved rows; `4c/show2.mjs <grid dir> <ids>` a row's program; `ledger.mjs <ours> <theirs>` during a merge, before committing. sc-light for up to 50 ids: `matrix.mjs --grid --census --seed 1 --ids <manifest json> --no-cache`; a pattern probe is a temporary dir under scripts/fuzz/patterns/probe with `export function App`, removed after.
+
+### R2g handoff, 2026-11-07 (WIP, not green)
+
+Branch `claude/flip-r2g-wip` (WIP commit on 3aa2b4e3f, not green: no coverage-update, no sweep, no verify-delta). Scratch `$S` = `/Users/thomas/dev/sc-scratch.noindex/flip-r2`.
+
+**Review items applied in code, not measured: R17 and R18** (review/findings-rolling.md). R17: in `push_call_attributed_async_reads`, an exported binding or any reference that is neither a followed direct call nor inside an inline carrier sets `cut |= !decided`. R18: `PendingProbe` rules out SC5001 only; a site reason `UnderLoading` comes from `read_loading_cover`; in the walk, a probe position is decided only under a covering `Loading`, otherwise it is a cut. New fuzz shapes in flip-read.mjs: `settled-member-placed` (R17) and the ASYNC_OUTSIDE variants `probe-latest` and `probe-is-pending` (R18). Replies are in `$S/review-replies.md`.
+
+**ADR 0838** (pending reads accounted per (site, rule) and per path): code in `rust/crates/solid-reactive-ir/src/pending_accounting.rs`, the walk's cut/`walk_cut` in `local_access.rs`, and the per-rule held-row filters there and in `reactive_analysis.rs`. ADR text draft: `$S/adr-0838-draft.md` (numbers are MEASURE placeholders). Design and reason table, with review D2 applied: `$S/design-0838.md`. Fixture `fixtures/reactive-ir/pending-read-accounted` (with .gitignore lines); its snapshot is not generated yet. Fuzz contexts: `settled-chain-placed`, `settled-member-placed`, `apply-placed-twin`, legal `handler-chain-placed`.
+
+**Measured.** Old build `rmg2` (= 3aa2b4e3f's checker): R1/R6 shapes 70 of 1,316 false clean, legal 0 false positives. `rpa2` (before R17/R18): 0 false clean (all recall-gap), legal 0 false positives. Fixture outputs: `$S/fx-pra-pa2.txt` and `$S/fx-pra-mg2.txt`. Async id sets on mg2: ao4, deep and fp have 0 false cleans.
+
+**Running.** `$S/batch1.sh pa2` (log `$S/batch1-pa2.log`; grid outputs `$S/g/<tag>-<name>`, one per run, for `mg2` and `pa2` × ao4/deep/fp/lgfp/lgflow/ca). `ca` is R3's 4,232 handed-flush ids, `/Users/thomas/dev/sc-scratch.noindex/flip-r3c/ids/mx-ca.json`, run from r3c's generator via `$S/one3.sh`. Counts: `node $S/tools/outc.mjs <dirs>`. The build `pa3` (with R17/R18) may be in `$S/rpa3`. Run `$S/batch2.sh pa3` next.
+
+**Next.** (1) batch2 on pa3; corpus sweep (`sw.sh mg2 none` for the baseline, then `sw.sh pa3 $S/sweep-mg2.json`), reading every new U by exit; `cov.sh`, read, update; `count.mjs` ledger key `async-read-unaccounted`; rediscovery entries (R1/R6 ids from `$S/g/mg2-r1r6`); ADR 0838 plus an amendment to 0835 in decisions.md; open-work item for the after_await row-less ends (named in the draft); verify-delta; commit. (2) `<Ui.C />` imported-holder proof (R2e's plan). (3) Window-realm proof (R2d step 5).
+
+**Traps.** Cheap work (cargo check, one-crate clippy, test-focused) runs outside sc-heavy with `CARGO_BUILD_JOBS=4` and the sccache env. Before taking sc-heavy, wait while `/Users/thomas/dev/sc-scratch.noindex/integrator-waiting` exists; never wait while holding it. Any new reason or exemption goes to the reviewer as a design first. A role is a reason only with a source (D2): Unreported, DirectiveApply, UntrackedCallback and DeferredCallback without `fresh_stack_callback_call` are cuts. A release build that runs while you edit may compile a mixed tree: rebuild.
+
 ## R3d handoff (stopped at context limit)
 
 Branch claude/flip-r3c, worktree /Users/thomas/dev/sc-worktrees.noindex/r3c, scratch /Users/thomas/dev/sc-scratch.noindex/flip-r3c

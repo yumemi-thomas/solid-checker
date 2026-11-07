@@ -327,7 +327,7 @@
 "rule": "SC1002",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 7, "blocker": "value-in-carrier" },
+"closedAt": { "file": "App.tsx", "line": 7, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createSignal(1); const mp = new Map([[\"s\", s]]); export function App() { const m = createMemo(async () => { await wait(1); return mp.get(\"s\")!(); }); return <Loading fallback={<u />}><i>{m()}</i></Loading>; } export async function after() { await wait(20); }\n",
 "runtime": {
 "diagnostics": [
@@ -491,7 +491,7 @@
 "rule": "SC1003",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 6, "blocker": "value-root-in-helper" },
+"closedAt": { "file": "App.tsx", "line": 6, "blocker": "value-root-in-helper" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst use = (p: { a: number }) => { const { a } = p; return a; }; function C(props: { a: number }) { const a = use(props); return <i>{a}</i>; } export function App() { const [s] = createSignal(1); return <C a={s()} />; }\n",
 "runtime": {
 "diagnostics": [
@@ -1340,7 +1340,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 7, "blocker": "value-root-in-helper" },
+"closedAt": { "file": "App.tsx", "line": 7, "blocker": "value-root-in-helper" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); const w = (x: { a: number }) => { x.a = 2; }; export function App() { return <button id=\"b\" onClick={() => { w(s); }}>{s.a}</button>; } export async function after() { click(\"b\"); log(\"a\", s.a); }\n",
 "runtime": {
 "diagnostics": [
@@ -1360,7 +1360,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 7, "blocker": "value-in-carrier" },
+"closedAt": { "file": "App.tsx", "line": 7, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); const m = new Map([[\"s\", s]]); export function App() { return <button id=\"b\" onClick={() => { m.get(\"s\")!.a = 2; }}>x</button>; } export async function after() { click(\"b\"); }\n",
 "runtime": {
 "diagnostics": [
@@ -1378,7 +1378,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 7, "blocker": "value-in-class-field" },
+"closedAt": { "file": "App.tsx", "line": 7, "blocker": "value-in-class-field" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); class H { t = s; go() { this.t.a = 2; } } const h = new H(); export function App() { return <button id=\"b\" onClick={() => { h.go(); }}>x</button>; } export async function after() { click(\"b\"); }\n",
 "runtime": {
 "diagnostics": [
@@ -1487,7 +1487,7 @@
 "rule": "SC2003",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 7, "blocker": "value-in-carrier" },
+"closedAt": { "file": "App.tsx", "line": 7, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst [s] = createStore({ a: 1 }); const k = {}; const w = new WeakMap([[k, s]]); export function App() { return <button id=\"b\" onClick={() => { w.get(k)!.a = 2; }}>x</button>; } export async function after() { click(\"b\"); await wait(5); }\n",
 "runtime": {
 "diagnostics": [
@@ -2021,7 +2021,7 @@
 "rule": "SC2009",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 5, "blocker": "value-through-new" },
+"closedAt": { "file": "App.tsx", "line": 5, "blocker": "value-through-new" },
 "source": "import { createSignal, createMemo, createEffect, createTrackedEffect, onCleanup, onFlush, Loading, createStore, untrack, flush, action, createOptimistic, createContext, useContext } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nclass H { constructor(public f: (v: number) => void) {} go() { this.f(2); } } export function App() { const [o, setO] = createOptimistic<number>(async () => { await wait(400); return 1; }); const h = new H(setO as (v: number) => void); return <button id=\"b\" onClick={() => { h.go(); }}>x</button>; } export async function after() { click(\"b\"); await wait(5); }\n",
 "runtime": {
 "diagnostics": [
@@ -2041,7 +2041,7 @@
 "rule": "SC2009",
 "kind": "clean",
 "closedBy": "SC9012",
-"closedAt": { "line": 5, "blocker": "value-in-carrier" },
+"closedAt": { "file": "App.tsx", "line": 5, "blocker": "value-in-carrier" },
 "source": "import { createSignal, createMemo, createEffect, createTrackedEffect, onCleanup, onFlush, Loading, createStore, untrack, flush, action, createOptimistic, createContext, useContext } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nexport function App() { const [o, setO] = createOptimistic<number>(async () => { await wait(400); return 1; }); const m = new Map([[\"s\", setO]]); return <button id=\"b\" onClick={() => { (m.get(\"s\") as (v: number) => void)(2); }}>x</button>; } export async function after() { click(\"b\"); await wait(5); }\n",
 "runtime": {
 "diagnostics": [
@@ -2119,6 +2119,7 @@
 "SC3001/c03-memo-alias": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 4, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createContext, useContext, createProjection, createReaction, refresh, latest, isPending } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst cm = createMemo; export function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); try { cm(() => 1); } catch (e: any) { log(\"t\", e.message.slice(0,40)); } }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2142,6 +2143,7 @@
 "SC3001/c04-cleanup-obj": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 4, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createContext, useContext, createProjection, createReaction, refresh, latest, isPending } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst o = { c: onCleanup }; export function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); try { o.c(() => {}); } catch (e: any) { log(\"t\", e.message.slice(0,40)); } }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2165,6 +2167,7 @@
 "SC3001/c05-cleanup-hof": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 4, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createContext, useContext, createProjection, createReaction, refresh, latest, isPending } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst run = (g: (f: () => void) => void) => g(() => {}); export function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); try { run(onCleanup); } catch (e: any) { log(\"t\", e.message.slice(0,40)); } }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2232,6 +2235,7 @@
 "SC3001/d02-map-fn": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 7, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst mp = new Map([[\"g\", () => { createMemo(() => 1); }]]); export function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); try { mp.get('g')!(); } catch (e: any) { log(\"t\", String(e.message).slice(0,50)); } }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2274,6 +2278,7 @@
 "SC3001/d04-then-sync": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 7, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nexport function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); new (class { constructor() { try { onCleanup(() => {}); } catch (e: any) { log(\"t\", String(e.message).slice(0,50)); } } })(); }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2295,6 +2300,7 @@
 "SC3001/d05-getter": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 7, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst o = { get g() { onCleanup(() => {}); return 1; } }; export function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); try { o.g; } catch (e: any) { log(\"t\", String(e.message).slice(0,50)); } }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2316,6 +2322,7 @@
 "SC3001/d06-proxy": {
 "rule": "SC3001",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 7, "blocker": "leaf-callback-opaque"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createOptimisticStore, createContext, useContext, createProjection, createReaction, refresh, latest, isPending, merge, omit, dynamicComponent, mapArray } from \"solid-js\";\nimport { Dynamic, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst dom = () => log(\"dom\", document.getElementById(\"root\")!.innerHTML);\nconst click = (id: string) => (document.getElementById(id) as HTMLElement).click();\nconst p = new Proxy({}, { get() { onCleanup(() => {}); return 1; } }) as any; export function App() { const [s] = createSignal(0); createTrackedEffect(() => { s(); try { p.x; } catch (e: any) { log(\"t\", String(e.message).slice(0,50)); } }); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2380,6 +2387,7 @@
 "SC3002/e02-alias": {
 "rule": "SC3002",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 4, "blocker": "primitive-value"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createContext, useContext, createProjection, createReaction, refresh, latest, isPending } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst f = onFlush; export function App() { f(() => {}); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2398,6 +2406,7 @@
 "SC3002/e03-obj": {
 "rule": "SC3002",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 4, "blocker": "primitive-value"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createContext, useContext, createProjection, createReaction, refresh, latest, isPending } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst o = { f: onFlush }; export function App() { o.f(() => {}); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -2435,6 +2444,7 @@
 "SC3002/e05-hof": {
 "rule": "SC3002",
 "kind": "regress",
+"closedAt": {"file": "App.tsx", "line": 4, "blocker": "primitive-value"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, createTrackedEffect, createRenderEffect, getOwner, runWithOwner, onCleanup, onSettled, onFlush, Show, For, Loading, Errored, createStore, untrack, flush, resolve, until, action, createOptimistic, createContext, useContext, createProjection, createReaction, refresh, latest, isPending } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nconst run = (g: (f: () => void) => void) => g(() => {}); export function App() { run(onFlush); return <i />; }\n",
 "runtime": {
 "diagnostics": [
@@ -4024,7 +4034,7 @@
 "SC9012/cases2-v01-store-map-get": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const m = new Map([[\"s\", st]]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = m.get(\"s\")!.x; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4040,7 +4050,7 @@
 "SC9012/cases2-v02-store-nullish": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-through-logical"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-through-logical"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const s2 = (unk() as typeof st | null) ?? st;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = s2.x; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4056,7 +4066,7 @@
 "SC9012/cases2-v03-store-let": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  let s2!: typeof st; s2 = st;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = s2.x; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4072,7 +4082,7 @@
 "SC9012/cases2-v04-store-class-field": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  class K { s = st; }\n  const k = new K();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = k.s.x; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4088,7 +4098,7 @@
 "SC9012/cases2-v05-store-iife": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const s2 = (() => st)();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = s2.x; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4104,7 +4114,7 @@
 "SC9012/cases2-v06-store-weakref": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const r = new WeakRef(st);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = r.deref()!.x; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4120,7 +4130,7 @@
 "SC9012/cases2-v08-store-write-map": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const m = new Map([[\"s\", st]]);\n  log(\"body\"); m.get(\"s\")!.x = 5; log(\"body-end\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4136,7 +4146,7 @@
 "SC9012/cases2-v09-store-write-nullish": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "id": "SC2003"},
+"closedAt": {"file": "App.tsx", "line": 11, "id": "SC2003"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const s2 = (unk() as typeof st | null) ?? st;\n  log(\"body\"); s2.x = 5; log(\"body-end\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4152,7 +4162,7 @@
 "SC9012/cases2-v10-store-write-let": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  let s2!: typeof st; s2 = st;\n  log(\"body\"); s2.x = 5; log(\"body-end\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4168,7 +4178,7 @@
 "SC9012/cases2-v11-store-write-class": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  class K { s = st; }\n  const k = new K();\n  log(\"body\"); k.s.x = 5; log(\"body-end\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4184,7 +4194,7 @@
 "SC9012/cases2-v20-props-map-get": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { v: number }) {\n  const m = new Map([[\"p\", props]]);\n  log(\"Ch\", \"v=\" + m.get(\"p\")!.v);\n  return <i />;\n}\nexport function App() {\n\n  return <Ch v={c()} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4200,7 +4210,7 @@
 "SC9012/cases2-v21-props-nullish": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-through-logical"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-through-logical"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { v: number }) {\n  const p2 = (unk() as typeof props | null) ?? props;\n  log(\"Ch\", \"v=\" + p2.v);\n  return <i />;\n}\nexport function App() {\n\n  return <Ch v={c()} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4216,7 +4226,7 @@
 "SC9012/cases2-v22-props-let": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { v: number }) {\n  let p2!: typeof props; p2 = props;\n  log(\"Ch\", \"v=\" + p2.v);\n  return <i />;\n}\nexport function App() {\n\n  return <Ch v={c()} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4232,7 +4242,7 @@
 "SC9012/cases2-v23-props-class-field": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { v: number }) {\n  class K { p = props; }\n  const k = new K();\n  log(\"Ch\", \"v=\" + k.p.v);\n  return <i />;\n}\nexport function App() {\n\n  return <Ch v={c()} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4248,7 +4258,7 @@
 "SC9012/cases2-v24-props-iife": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { v: number }) {\n  const p2 = (() => props)();\n  log(\"Ch\", \"v=\" + p2.v);\n  return <i />;\n}\nexport function App() {\n\n  return <Ch v={c()} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4264,7 +4274,7 @@
 "SC9012/cases2-v31-handed-nullish": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { f: () => number }) {\n  const cc = (unk() as (() => number) | null) ?? props.f;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Ch f={c} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4280,7 +4290,7 @@
 "SC9012/cases2-v32-handed-or": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { f: () => number }) {\n  const cc = (unk() as (() => number) | null) || props.f;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Ch f={c} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4296,7 +4306,7 @@
 "SC9012/cases2-v33-handed-let": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { f: () => number }) {\n  let cc!: () => number; cc = props.f;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Ch f={c} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4312,7 +4322,7 @@
 "SC9012/cases2-v34-handed-map": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { f: () => number }) {\n  const m = new Map([[\"f\", props.f]]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = m.get(\"f\")!(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Ch f={c} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4328,7 +4338,7 @@
 "SC9012/cases2-v35-handed-class": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { f: () => number }) {\n  class K { f = props.f; }\n  const k = new K();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = k.f(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Ch f={c} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4344,7 +4354,7 @@
 "SC9012/cases2-v36-handed-iife": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction Ch(props: { f: () => number }) {\n  const cc = (() => props.f)();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Ch f={c} />;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4360,7 +4370,7 @@
 "SC9012/cases2-v37-context-nullish": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nconst Cx = createContext<{ f: () => number }>({ f: () => 0 });\nfunction Ch() { const x = useContext(Cx);\n  const cc = (unk() as (() => number) | null) ?? x.f;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Cx value={{ f: c }}><Ch /></Cx>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4376,7 +4386,7 @@
 "SC9012/cases2-v38-context-map": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nconst Cx = createContext<{ f: () => number }>({ f: () => 0 });\nfunction Ch() { const x = useContext(Cx);\n  const m = new Map([[\"f\", x.f]]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = m.get(\"f\")!(); log(\"apply\", \"read \" + String(v)); });\n  return <i />;\n}\nexport function App() {\n\n  return <Cx value={{ f: c }}><Ch /></Cx>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4392,7 +4402,7 @@
 "SC9012/cases2-v40-helper-call-of-let": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nlet mod!: () => number;\nconst rd = () => mod();\nexport function App() {\n  mod = c;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = rd(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4408,7 +4418,7 @@
 "SC9012/cases2-v41-helper-map-module": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nconst mm = new Map<string, () => number>();\nconst rd = () => mm.get(\"c\")!();\nexport function App() {\n  mm.set(\"c\", c);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = rd(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4424,7 +4434,7 @@
 "SC9012/cases2-v42-F0-hook-param": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nfunction useT(n: () => number) { return { read: (): number => n() }; }\nexport function App() {\n  const x = useT(c);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = x.read(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4440,7 +4450,7 @@
 "SC9012/cases2-v43-member-class-instance-module": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 13, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 13, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nclass K { c = c; }\nconst k = new K();\nexport function App() {\n\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = k.c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4456,7 +4466,7 @@
 "SC9012/cases2-v49-await-accessor": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, Show, For, lazy, mapArray, repeat, reconcile, createStore, untrack, flush, Loading, omit, merge, NotReadyError, resolve, until, children, useContext, createContext, onSettled } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, o: { y: 2 }, items: [{ id: 1 }] });\nconst unk = (): any => null;\nexport function App() {\n  const a = createMemo(async () => { const f = await Promise.resolve(c); await 0; return f(); });\n  return <Loading fallback={<u />}><i>{a()}</i></Loading>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4473,7 +4483,7 @@
 "rule": "SC9012",
 "kind": "clean",
 "closedBy": "SC5001",
-"closedAt": { "line": 9, "blocker": "invocation-context-unproven" },
+"closedAt": { "file": "App.tsx", "line": 9, "blocker": "invocation-context-unproven" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nconst a = createMemo(async () => { await new Promise((r) => setTimeout(r, 40)); return 7; });\nexport function App() {\n  const go = () => { log(\"ran\", own()); a(); }; setTimeout(go, 0);\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [],
@@ -4489,7 +4499,7 @@
 "SC9012/cases3-r01-values-inline": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n  const o = { c };\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Object.values(o)[0](); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4505,7 +4515,7 @@
 "SC9012/cases3-r03-arrayfrom-inline": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Array.from([c])[0](); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4521,7 +4531,7 @@
 "SC9012/cases3-r05-entries-inline": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Object.entries({ c })[0][1](); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4537,7 +4547,7 @@
 "SC9012/cases3-r06-values-at": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n  const o = { c };\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Object.values(o).at(0)!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4553,7 +4563,7 @@
 "SC9012/cases3-r08-values-member": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n  const o = { c };\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Object.values(o)[0].call(null); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4569,7 +4579,7 @@
 "SC9012/cases3-r09-map-get-held": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n  const m = new Map([[\"c\", c]]); const f = m.get(\"c\")!;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = f(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4585,7 +4595,7 @@
 "SC9012/cases3-r10-project-call-inline": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nconst pick = () => [c];\nexport function App() {\n\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = pick()[0](); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4601,7 +4611,7 @@
 "SC9012/cases3-w07-memo-in-root-body": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 8, "id": "SC1001"},
+"closedAt": {"file": "App.tsx", "line": 8, "id": "SC1001"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n  const v = createRoot(() => createMemo(() => c())()); log(\"v\", v);\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4617,7 +4627,7 @@
 "SC9012/cases3-w08-direct-primitive-call-body": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 8, "id": "SC1001"},
+"closedAt": {"file": "App.tsx", "line": 8, "id": "SC1001"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, runWithOwner, onCleanup, reconcile, createStore, untrack, Loading, flush } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [st, setSt] = createStore({ x: 1, items: [{ id: 1 }] });\nexport function App() {\n  log(\"v\", createMemo(() => c())());\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4633,7 +4643,7 @@
 "SC9012/cases1-h22-private-field": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 14, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 14, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => (window as any).__log?.(...a);\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nconst [xs, setXs] = createSignal([{ id: 1 }, { id: 2 }]);\nconst misuseEffect = (tag: string) => { log(tag, own()); createEffect(() => c(), () => {}); };\nexport function App() {\n  class K { #c = c; read() { return this.#c(); } }\n  const k = new K();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = k.read(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4649,7 +4659,7 @@
 "SC9012/cases1-h26-weakref-deref": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 13, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 13, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => (window as any).__log?.(...a);\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nconst [xs, setXs] = createSignal([{ id: 1 }, { id: 2 }]);\nconst misuseEffect = (tag: string) => { log(tag, own()); createEffect(() => c(), () => {}); };\nexport function App() {\n  const r = new WeakRef(c);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = r.deref()!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4665,7 +4675,7 @@
 "SC9012/cases2-a01-map-get": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const m = new Map<string, () => number>([[\"c\", c]]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = m.get(\"c\")!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4681,7 +4691,7 @@
 "SC9012/cases2-a02-set-values": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const s = new Set<() => number>([c]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = s.values().next().value!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4697,7 +4707,7 @@
 "SC9012/cases2-a03-weakmap-get": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const k = {}; const m = new WeakMap<object, () => number>([[k, c]]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = m.get(k)!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4713,7 +4723,7 @@
 "SC9012/cases2-a05-object-assign": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const o = Object.assign({}, { c });\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = o.c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4729,7 +4739,7 @@
 "SC9012/cases2-a08-array-at": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const a = [c];\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = a.at(0)!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4745,7 +4755,7 @@
 "SC9012/cases2-a12-private-static": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  class K { static #c = c; static read() { return K.#c(); } }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = K.read(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4761,7 +4771,7 @@
 "SC9012/cases2-a18-generator-yield": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  function* g() { yield c; }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = [...g()][0](); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4777,7 +4787,7 @@
 "SC9012/cases2-a19-globalthis": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-held-in-member"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-held-in-member"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  (globalThis as any).__c = c;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = (globalThis as any).__c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4793,7 +4803,7 @@
 "SC9012/cases2-a20-proxy-of-accessor": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const p = new Proxy(c, {});\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = p(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4809,7 +4819,7 @@
 "SC9012/cases2-a21-map-call": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Array.prototype.map.call([c], (f: () => number) => f())[0]; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4825,7 +4835,7 @@
 "SC9012/cases2-a22-object-values": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const o = { c };\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = Object.values(o)[0](); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4841,7 +4851,7 @@
 "SC9012/cases2-a24-static-block": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let got!: () => number; class K { static { got = c; } }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = got(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4857,7 +4867,7 @@
 "SC9012/cases2-a25-label-break-handoff": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let got!: () => number; blk: { got = c; break blk; }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = got(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4873,7 +4883,7 @@
 "SC9012/cases2-a30-iife-return": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const cc = (() => c)();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4889,7 +4899,7 @@
 "SC9012/cases2-a31-promise-sync-no": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; new Promise<void>((r) => { cc = c; r(); });\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4905,7 +4915,7 @@
 "SC9012/cases2-a32-try-finally-handoff": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; try { cc = c; } finally { }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4921,7 +4931,7 @@
 "SC9012/cases2-w01-private-field-setter": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-dispatch"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-dispatch"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  class K { #s = setC; go() { this.#s(5); } }\n  new K().go(); log(\"body\", \"wrote\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4939,7 +4949,7 @@
 "SC9012/cases2-w02-weakref-setter": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-dispatch"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-dispatch"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const r = new WeakRef(setC);\n  r.deref()!(5); log(\"body\", \"wrote\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4957,7 +4967,7 @@
 "SC9012/cases2-w03-map-setter": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-dispatch"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-dispatch"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const m = new Map<string, (v: number) => void>([[\"s\", setC]]);\n  m.get(\"s\")!(5); log(\"body\", \"wrote\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4975,7 +4985,7 @@
 "SC9012/cases3-e01-let-plain-assign": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; cc = c;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -4991,7 +5001,7 @@
 "SC9012/cases3-e03-let-bare-block": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; { cc = c; }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5007,7 +5017,7 @@
 "SC9012/cases3-e04-let-for-block": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; for (let i = 0; i < 1; i += 1) { cc = c; }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5023,7 +5033,7 @@
 "SC9012/cases3-e05-let-try-only": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; try { cc = c; } catch { }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5039,7 +5049,7 @@
 "SC9012/cases3-e06-let-switch": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; switch (1) { default: cc = c; }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5055,7 +5065,7 @@
 "SC9012/cases3-e07-let-arrow-assign-called": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; const set = () => { cc = c; }; set();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5071,7 +5081,7 @@
 "SC9012/cases3-e10-const-nullish-unknown-left": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const maybe = (window as any).__nothing as (() => number) | undefined; const cc = maybe ?? c;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5087,7 +5097,7 @@
 "SC9012/cases3-e20-map-literal-set-get": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const m = new Map<string, () => number>(); m.set(\"c\", c);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = m.get(\"c\")!(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5103,7 +5113,7 @@
 "SC9012/cases3-e23-class-public-field": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 13, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 13, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  class K { c = c; }\n  const k = new K();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = k.c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5119,7 +5129,7 @@
 "SC9012/cases3-e24-class-ctor-assign": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 13, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 13, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  class K { c: () => number; constructor() { this.c = c; } }\n  const k = new K();\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = k.c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5135,7 +5145,7 @@
 "SC9012/cases3-e25-static-public": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  class K { static c = c; }\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = K.c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5151,7 +5161,7 @@
 "SC9012/cases3-e26-promise-executor-assign": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; new Promise<void>((r) => { cc = c; r(); });\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5167,7 +5177,7 @@
 "SC9012/cases3-e27-callback-sync-assign": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let cc!: () => number; [1].forEach(() => { cc = c; });\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5183,7 +5193,7 @@
 "SC9012/cases3-e28-pending-via-map": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 13, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 13, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const a = createMemo(async () => { await new Promise<void>(() => {}); return 1; });\n  const m = new Map<string, () => number | undefined>([[\"a\", a]]);\n  createEffect(() => c2(), () => { log(\"apply\", own()); try { const v = m.get(\"a\")!(); log(\"apply\", \"read \" + v); } catch (e) { log(\"apply\", \"threw \" + (e as Error).name); } });\n  return <Loading fallback=\"f\"><i>x</i></Loading>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5199,7 +5209,7 @@
 "SC9012/cases3-e29-pending-via-private": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 14, "blocker": "handed-member-read"},
+"closedAt": {"file": "App.tsx", "line": 14, "blocker": "handed-member-read"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const a = createMemo(async () => { await new Promise<void>(() => {}); return 1; });\n  class K { #a = a; read() { return this.#a(); } }\n  const k = new K();\n  createEffect(() => c2(), () => { log(\"apply\", own()); try { const v = k.read(); log(\"apply\", \"read \" + v); } catch (e) { log(\"apply\", \"threw \" + (e as Error).name); } });\n  return <Loading fallback=\"f\"><i>x</i></Loading>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5215,7 +5225,7 @@
 "SC9012/cases3-e31-write-via-static-block": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 12, "blocker": "handed-member-dispatch"},
+"closedAt": {"file": "App.tsx", "line": 12, "blocker": "handed-member-dispatch"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  let s!: (v: number) => void; class K { static { s = setC; } }\n  s(5); log(\"body\", \"wrote\");\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5233,7 +5243,7 @@
 "SC9012/cases3-f02-async-generator-read-after-await": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "id": "SC1002"},
+"closedAt": {"file": "App.tsx", "line": 11, "id": "SC1002"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  async function* gen() { await Promise.resolve(); yield c(); }\n  const m = createMemo(async () => { let last = 0; for await (const v of gen()) last = v; return last; });\n  return <Loading fallback=\"f\"><i>{m()}</i></Loading>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5249,7 +5259,7 @@
 "SC9012/cases3-f10-getter-this-chain": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 11, "blocker": "value-in-carrier"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-in-carrier"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  const o = { c, get v() { return this.c(); } };\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = o.v; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5266,7 +5276,7 @@
 "rule": "SC9012",
 "kind": "clean",
 "closedBy": "SC1001",
-"closedAt": { "line": 10, "blocker": "read-backing-unproven" },
+"closedAt": { "file": "App.tsx", "line": 10, "blocker": "read-backing-unproven" },
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading, children } from \"solid-js\";\nimport { Dynamic, clientOnly, dynamic } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nfunction Kid(props: { children: any }) { const k = children(() => props.children); createEffect(() => c2(), () => { log(\"apply\", own()); log(\"apply\", \"kids \" + String(k())); }); return <>{k()}</>; }\nexport function App() {\n\n  return <Kid>{c()}</Kid>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5282,7 +5292,7 @@
 "SC9012/cases4-k10-mapArray-result": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "id": "SC1001"},
+"closedAt": {"file": "App.tsx", "line": 10, "id": "SC1001"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, mapArray, repeat, reconcile, createStore, untrack, runWithOwner, createReaction, children } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [xs, setXs] = createSignal([1, 2]);\nexport function App() {\n  const rows = mapArray(() => xs(), (x) => x * 2);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = rows().length; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5298,7 +5308,7 @@
 "SC9012/cases4-k11-repeat-result": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "id": "SC1001"},
+"closedAt": {"file": "App.tsx", "line": 10, "id": "SC1001"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, mapArray, repeat, reconcile, createStore, untrack, runWithOwner, createReaction, children } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [xs, setXs] = createSignal([1, 2]);\nexport function App() {\n  const rows = repeat(() => 2, (i) => i);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = rows().length; log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5314,7 +5324,7 @@
 "SC9012/cases4-k12-createRoot-returns-accessor": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 10, "blocker": "value-held-in-binding"},
+"closedAt": {"file": "App.tsx", "line": 10, "blocker": "value-held-in-binding"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, mapArray, repeat, reconcile, createStore, untrack, runWithOwner, createReaction, children } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [xs, setXs] = createSignal([1, 2]);\nexport function App() {\n  const cc = createRoot(() => c);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5330,7 +5340,7 @@
 "SC9012/cases4-k13-untrack-returns-accessor": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-from-primitive-callback"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-from-primitive-callback"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, mapArray, repeat, reconcile, createStore, untrack, runWithOwner, createReaction, children } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [xs, setXs] = createSignal([1, 2]);\nexport function App() {\n  const cc = untrack(() => c);\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [
@@ -5346,7 +5356,7 @@
 "SC9012/cases4-k14-runWithOwner-returns-accessor": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"line": 9, "blocker": "value-from-primitive-callback"},
+"closedAt": {"file": "App.tsx", "line": 9, "blocker": "value-from-primitive-callback"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, mapArray, repeat, reconcile, createStore, untrack, runWithOwner, createReaction, children } from \"solid-js\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [xs, setXs] = createSignal([1, 2]);\nexport function App() {\n  const o = getOwner(); const cc = runWithOwner(o, () => c)!;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = cc(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [

@@ -146,6 +146,10 @@ fn catalog_prose_program() -> Program {
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            source_module_unresolved: false,
+            walk_cut: false,
         }],
         static_defects: defect_kinds
             .into_iter()

@@ -27,6 +27,7 @@ test("each raw read kind is counted, comments and test modules are not", () => {
         let _ = facts.typescript.entities_for_path("x");
         let _ = self.symbol_names.values();
         let _ = self.symbol_names.get("x");
+        let _ = lookup.placing_callee_call(file, callee);
     }
     #[cfg(test)]
     mod tests {
@@ -39,6 +40,7 @@ test("each raw read kind is counted, comments and test modules are not", () => {
     file_by_path: 1,
     symbols_by_id: 1,
     "typescript-table": 2,
+    "placing-call": 1,
     "symbol_names-scan": 1,
     "hashmap-iteration": 2
   });

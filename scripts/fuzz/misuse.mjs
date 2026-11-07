@@ -19,8 +19,8 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, flipReadContext, openSignal } from "./flip-read.mjs";
-import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
+import { FLIP_READ_CONTEXTS, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
+import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
 import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
@@ -521,9 +521,10 @@ export const SPEC = {
     call: (node, sigs) => (node.variant === "reaction-track-hook" ? member("", () => "(() => { const useMade = () => createReaction(() => {}); useMade()(() => 1); })()", ["createReaction"]) : node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
       : api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}")),
   },
-  NO_OWNER_BOUNDARY: { recallContexts: ASYNC_CONTROL,
-    variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
-    call: (node) => api(node.variant === "errored" ? "Errored" : "Loading", "{ fallback: 0, children: 1 }"),
+  // ADR 0869: JSX is legal anywhere: rc.21's dev `createComponent` runs a component under its own transparent root, so the boundary sees an owner.
+  NO_OWNER_BOUNDARY: { recallContexts: ASYNC_CONTROL, recallLegalVariants: ["jsx-loading", "jsx-errored"], legalVariantContexts: { "jsx-loading": [...UNOWNED, ...ASYNC_CONTROL], "jsx-errored": [...UNOWNED, ...ASYNC_CONTROL] },
+    variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [], bindingsFor: (variant) => (variant?.startsWith("jsx-") ? ["direct"] : BINDINGS),
+    call: (node) => (node.variant === "jsx-loading" ? member("", () => '<Loading fallback="x"><p /></Loading>', ["Loading"]) : node.variant === "jsx-errored" ? member("", () => '<Errored fallback="x"><p /></Errored>', ["Errored"]) : api(node.variant === "errored" ? "Errored" : "Loading", "{ fallback: 0, children: 1 }")),
   },
   NO_OWNER_CONTEXT: { legal: ["body", "memo", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
   CONTEXT_NOT_FOUND: { recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
@@ -533,7 +534,9 @@ export const SPEC = {
     contextLine: (variant) => (variant === "default-undefined" ? "const Ctx = createContext<number | undefined>(undefined);" : "const Ctx = createContext<number>();"),
     call: () => api("useContext", "Ctx"),
   },
-  SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("onSettled", "() => () => {}") },
+  // ADR 0867: `any-callee` is a call with no resolved fact: it runs, and Chrome reports it.
+  SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], recallVariants: ["any-callee"], variantContexts: { "any-callee": UNOWNED }, bindingsFor: (variant) => (variant === "any-callee" ? ["direct"] : BINDINGS),
+    call: (node) => (node.variant === "any-callee" ? member("", () => "(onSettled as any)(() => () => {})", ["onSettled"]) : api("onSettled", "() => () => {}")) },
   CLEANUP_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], recallContexts: ["tracked-rerun"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `signal-fn`, `projection` (API_VARIANTS, measured 2026-11-03): a writable memo and a projection attach an owner like a memo:
   // reported in a leaf and an effect apply, legal in a body and a root.
@@ -576,6 +579,7 @@ export const SPEC = {
   },
   SYNC_NODE_RECEIVED_ASYNC: {
     variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
+    contextLine: (variant) => SYNC_COMPUTE_LINES[variant],
     call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant]) : node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
@@ -665,7 +669,7 @@ export const SPEC = {
 for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS, FLIP_GEN_CONTEXTS]) {
   for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
 }
-for (const [code, added] of Object.entries(FLIP_READ_LEGAL)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
+for (const legal of [FLIP_READ_LEGAL, FLIP_WRITE_LEGAL]) for (const [code, added] of Object.entries(legal)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
 for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   const spec = SPEC[code];
   const setup = spec.setup;
@@ -673,11 +677,12 @@ for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   // A variant with `text` writes its own site over the source.
   const [call, bindingsFor] = [spec.call, spec.bindingsFor];
   spec.call = (node, sigs, ...rest) => (variants[node.variant]?.text ? member(sigs[0].name, variants[node.variant].text, variants[node.variant].imports, variants[node.variant]) : call(node, sigs, ...rest));
-  spec.bindingsFor = (variant) => (variants[variant]?.text ? ["direct", "alias", "wrapper"] : bindingsFor?.(variant) ?? spec.bindings);
+  spec.bindingsFor = (variant) => (variants[variant]?.text ? variants[variant].bindings ?? ["direct", "alias", "wrapper"] : bindingsFor?.(variant) ?? spec.bindings);
   const legal = Object.entries(variants).filter(([, { legal }]) => legal);
   spec.recallLegalVariants = [...(spec.recallLegalVariants ?? []), ...legal.map(([variant]) => variant)];
   spec.legalVariantContexts = { ...spec.legalVariantContexts, ...Object.fromEntries(legal.map(([variant, { legal }]) => [variant, legal])) };
   spec.recallVariants = [...(spec.recallVariants ?? []), ...Object.keys(variants)];
+  for (const [variant, { only, contexts, legal = [] }] of Object.entries(variants)) if (only) for (const context of [...contexts, ...legal]) (spec.contextOnly ??= {})[context] = [...(spec.contextOnly?.[context] ?? []), variant];
   spec.variantContexts = { ...spec.variantContexts, ...Object.fromEntries(Object.entries(variants).map(([variant, { contexts, legal = [] }]) => [variant, [...contexts, ...legal]])) };
 }
 
@@ -1022,6 +1027,14 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
+// rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
+// `action` is placed, `onFlush` is too, on both sides.
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) {
+  const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
+  if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
+}
+SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
+SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
 for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
@@ -1948,6 +1961,7 @@ function buildOne(kit, plan = {}) {
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
     sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}), ...(placed.top ? { top: placed.top } : {}),
+    ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
     misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
   };

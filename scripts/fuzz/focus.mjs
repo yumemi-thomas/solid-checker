@@ -51,7 +51,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
-import { gridStanding, heldLine, readOpenDefects } from "./open-defects.mjs";
+import { gridStanding, heldLine, ledgerCovers, manifestIds, offLedger, readOpenDefects } from "./open-defects.mjs";
 import { GRIDS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
@@ -83,7 +83,7 @@ export { PROBLEMS } from "./codes.mjs";
  * stopped before writing programs.jsonl gives the rows it judged before (partial.mjs) and `partial: true`; `partial: false` when it
  * left neither.
  */
-export function readGrid(out) {
+export function readGrid(out, { sampleSeed = null } = {}) {
   const programs = join(out, "programs.jsonl");
   const outcomes = {};
   const flagged = [];
@@ -91,15 +91,21 @@ export function readGrid(out) {
   const rows = complete ? readFileSync(programs, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : readPartial(out);
   const list = readOpenDefects();
   const held = [];
+  const unlisted = [];
+  const strict = ledgerCovers(list, sampleSeed);
+  const manifest = manifestIds(basename(out));
   for (const row of rows ?? []) {
     outcomes[row.outcome] = (outcomes[row.outcome] ?? 0) + 1;
     const problem = rowProblem(row);
-    const standing = gridStanding(list, row, problem);
+    const standing = gridStanding(list, row, problem, { grid: basename(out), strict: strict || manifest.has(row.id) });
     if (standing?.kind === "held") held.push(standing.entry);
+    else if (standing?.kind === "unlisted") unlisted.push(row.id);
     else if (standing?.kind === "fixed") flagged.push({ id: row.id, outcome: "open-defect-fixed", detail: { item: standing.entry.item, move: "from open-defects.json to rediscovery.json" } });
+    else if (standing?.kind === "moved" || standing?.kind === "certified") flagged.push({ id: row.id, outcome: `open-defect-${standing.kind}`, detail: { listed: standing.listed, row: row.detail } });
     else if (problem) flagged.push({ id: row.id, outcome: problem, detail: row.detail });
   }
   if (held.length) console.log(`  ${heldLine(basename(out), held)}`);
+  if (unlisted.length) console.log(`  ${basename(out)}: ${unlisted.length} failing rows outside the smoke manifest and off the ledger, not judged: sample seed ${sampleSeed}, ledger seed ${list.rows?.seed}`);
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
   const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind)));
@@ -212,7 +218,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const programs = ordered.reduce((a, u) => a + u.programs, 0);
     return {
       version: 1, out,
-      codes: options.codes, seed: options.seed,
+      codes: options.codes, seed: options.seed, ...(options.smoke ? { sampleSeed: options.sampleSeed } : {}),
       selection: { grids: options.grids, ...(!options.recallFull && options.grids.split(",").some((grid) => grid.endsWith("-recall")) ? { recall: "lean" } : {}), splitCodes: Boolean(options.splitCodes), smoke: Boolean(options.smoke), ...(options.smoke ? { sample: options.sample, sampleSeed: options.sampleSeed } : {}), sampleBig: options.sampleBig ?? null, ...(options.sampleBig ? { sampleCodes: options.sampleCodes ?? null, sampleBigSeed: options.sampleBigSeed ?? "1", sampleBigMin: options.sampleBigMin ?? "1" } : {}), oracle: options.runtimeDiff === "0" ? null : { perStratum: options.runtimeDiff, axes: options.oracleAxes }, extra: options.extra },
       mode: { warmChecker: Boolean(options.warmChecker), roleLog: Boolean(options.roleLog) },
       budget: { ms: Number(options.budgetMs ?? 1000), mb: Number(options.budgetMb ?? 500) },
@@ -337,7 +343,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...unitHost, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
-      const read = readGrid(unit.dir);
+      const read = readGrid(unit.dir, { sampleSeed: options.smoke ? options.sampleSeed : null });
       const { outcomes, flagged, oracle, behaviour, gridSample, gridShard } = read;
       const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
       const summary = oracle ? `oracle ${oracle.compared} compared, ${oracle.behaviour} behaviour, ${oracle.attributionOnly} attribution, ${oracle.inconclusive ?? 0} inconclusive` : "no oracle sample";
@@ -360,6 +366,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
       if (options.smoke && existsSync(manifest) && existsSync(join(unit.dir, "programs.jsonl"))) {
         const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(unit.dir));
+        // A row on the open-defects ledger is judged there, by id: only a move off it is news.
+        moved.worse = offLedger(readOpenDefects(), basename(unit.dir), moved.worse);
         if (moved.worse.length || moved.other.length) console.log(`           moved from the manifest: ${moved.worse.length} worse, ${moved.other.length} better or changed`);
         // A sample holds some of a manifest's programs: they are compared, and the others are not expected.
         if (moved.missing.length && !options.cover) attention.push(`${unit.label}: ${moved.missing.length} programs of the manifest gave no row (${moved.missing.slice(0, 3).join(", ")})`);

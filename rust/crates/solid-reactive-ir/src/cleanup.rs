@@ -247,6 +247,39 @@ pub(super) fn leaf_owner_operations_for_file(
             continue;
         };
         let callback_region = leaf_callback.span;
+        // A call in IIFE layers the callback runs in place is judged at its
+        // own line, as a direct call is: that is where rc.21 raises the
+        // code (the strict judge, Chrome). The IIFE call itself takes no
+        // helper path, so the operation is not claimed at it too. `None`:
+        // past the bound, no answer: an obligation, never a drop.
+        let through_iife = |span: Span| {
+            let ast = &callback_file.ast;
+            let mut at = span;
+            for _ in 0..16 {
+                let Some(function) = crate::owners::owning_function(ast, at) else {
+                    return Some(false);
+                };
+                // A parameter list is the helper path's (argument facts,
+                // defaults): only a layer with none is the leaf's own text.
+                if function.span == leaf_callback.span
+                    || function.r#async
+                    || function.generator
+                    || !function.parameters.is_empty()
+                    || function.rest_parameter
+                    || !function.body.contains(at)
+                {
+                    return Some(false);
+                }
+                let Some(iife) = ast.calls_with_peeled_callee(function.span).next() else {
+                    return Some(false);
+                };
+                if direct_callback_runs(callback_file, leaf_callback.span, iife.span) {
+                    return Some(true);
+                }
+                at = iife.span;
+            }
+            None
+        };
         for call in &callback_file.ast.calls {
             if call.span == owner_call.span || !callback_region.contains(call.span) {
                 continue;
@@ -337,8 +370,38 @@ pub(super) fn leaf_owner_operations_for_file(
                     },
                 )
             };
+            let iife_call = callback_file
+                .ast
+                .function_at(callback_file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|literal| {
+                    !literal.r#async
+                        && !literal.generator
+                        && literal.parameters.is_empty()
+                        && !literal.rest_parameter
+                })
+                && (direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                    || through_iife(call.span) != Some(false));
+            if iife_call {
+                continue;
+            }
+            if through_iife(call.span).is_none() {
+                operations.push(LeafOwnerOperation {
+                    kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+                    owner: owner.to_string(),
+                    location: location(callback_file.path.shared(), call.callee),
+                    fix: None,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: true,
+                    possible: false,
+                    via: None,
+                    identity_unproven: false,
+                    computation_error_unobserved: false,
+                });
+                continue;
+            }
             if !own_list
                 && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                && through_iife(call.span) != Some(true)
                 && !(handed() && in_place())
             {
                 continue;

@@ -53,6 +53,19 @@ pub(crate) struct ProgramDraft {
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
+    /// ADR 0860: obligations no other producer's row may yield to: pushed
+    /// after every producer has run, so a row at the same start keeps its
+    /// place.
+    pub(crate) deferred_defects: Vec<StaticDefect>,
+    /// ADR 0874: the exact spans filed, so an uncertain row at a use nested
+    /// in a withheld call's start (`t.slice(0, i).trim()` in `t.slice`)
+    /// keeps its row.
+    seen_spans: HashSet<(&'static str, Arc<str>, u64, u64)>,
+    /// ADR 0874: where a call the impostor census withholds starts, by path.
+    pub(crate) withheld_starts: HashSet<(Arc<str>, u64)>,
+    /// ADR 0874: each withheld call's callee span, by path. A row there is
+    /// about the call's target, never a Get of the value on its chain.
+    pub(crate) withheld_callees: HashSet<(Arc<str>, u64, u64)>,
 }
 
 impl ProgramDraft {
@@ -83,11 +96,34 @@ impl ProgramDraft {
     }
 
     pub(crate) fn push_defect(&mut self, defect: StaticDefect) {
-        if self.seen_diagnostics.insert((
-            defect.kind.dedup_identity(),
+        // ADR 0874: a withheld call's row (`props.items.map`) shares no slot
+        // with a row at a use it starts at (`props`).
+        let identity = if defect.analysis_context == crate::blockers::STANDARD_MEMBER_IMPOSTOR {
+            crate::blockers::STANDARD_MEMBER_IMPOSTOR
+        } else {
+            defect.kind.dedup_identity()
+        };
+        let first_at_start = self.seen_diagnostics.insert((
+            identity,
             defect.location.path.clone(),
             defect.location.start_byte,
-        )) {
+        ));
+        let first_at_span = self.seen_spans.insert((
+            identity,
+            defect.location.path.clone(),
+            defect.location.start_byte,
+            defect.location.end_byte,
+        ));
+        // A violation keeps one row per start. At a withheld call's start,
+        // an uncertain row names its own use (the call's row stands beside
+        // the use it starts), so only its exact span deduplicates it.
+        if first_at_start
+            || (defect.uncertain
+                && first_at_span
+                && self
+                    .withheld_starts
+                    .contains(&(defect.location.path.clone(), defect.location.start_byte)))
+        {
             self.static_defects.push(defect);
         }
     }
@@ -494,6 +530,35 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             Vec::new()
         },
         static_defects: boundary_defects,
+        withheld_starts: facts
+            .files
+            .iter()
+            .flat_map(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
+                    .map(|call| (file.path.shared(), u64::from(call.span.start)))
+            })
+            .collect(),
+        withheld_callees: facts
+            .files
+            .iter()
+            .flat_map(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
+                    .map(|call| {
+                        let callee = file.ast.peel_ts_sugar_span(call.callee);
+                        (
+                            file.path.shared(),
+                            u64::from(callee.start),
+                            u64::from(callee.end),
+                        )
+                    })
+            })
+            .collect(),
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -678,6 +743,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             semantic_lookup,
         ));
     for defect in dependency_source_call_error_defects(facts) {
+        draft.push_defect(defect);
+    }
+    for defect in std::mem::take(&mut draft.deferred_defects) {
         draft.push_defect(defect);
     }
     draft.discard_deleted_static_diagnostics(facts);

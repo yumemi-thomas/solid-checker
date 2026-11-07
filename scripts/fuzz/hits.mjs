@@ -51,16 +51,32 @@ __scInit();
  * `stripInstrumentation(runText) === text` is a real test of neutrality (a counter placed anywhere else
  * leaves a residue, and a line that moved shows up as a different text).
  */
-export function stripInstrumentation(runText) {
+export const stripInstrumentation = (runText) => stripped(runText).text;
+
+/**
+ * The strip, with where each kept character came from: `text` and, for each of its offsets, that character's offset in `runText`
+ * (ascending). The prelude is cut; every counter is a removal, so `text` is a subsequence of the source.
+ */
+function stripped(runText) {
   const cut = runText.indexOf(PRELUDE_MARK);
   const source = cut < 0 ? runText : runText.slice(0, cut);
-  // Function-entry counters: `{ __h(N); }` (an empty body) and `{ __h(N);` followed by the statements.
-  const entries = source.replace(/\{ __h\(\d+\); \}/g, "{}").replace(/\{ __h\(\d+\);/g, "{")
-    // Statement counters: `__h(N); <statement>` on the statement's own line.
-    .replace(/^( *)__h\(\d+\); /gm, "$1");
+  // Function-entry counters: `{ __h(N); }` (an empty body) and `{ __h(N);` followed by the statements; statement counters:
+  // `__h(N); <statement>` on the statement's own line. A list of removed ranges, so the kept characters keep their offsets.
+  const removed = [];
+  for (const match of source.matchAll(/\{ __h\(\d+\);( \})?/g)) removed.push([match.index + 1, match.index + match[0].length - (match[1] ? 1 : 0)]);
+  for (const match of source.matchAll(/^( *)(__h\(\d+\); )/gm)) removed.push([match.index + match[1].length, match.index + match[0].length]);
+  removed.sort((a, b) => a[0] - b[0]);
+  let entries = "";
+  const origin = [];
+  let from = 0;
+  const keep = (end) => { for (let at = from; at < end; at += 1) origin.push(at); entries += source.slice(from, end); };
+  for (const [start, end] of removed) { keep(start); from = end; }
+  keep(source.length);
   // Expression counters `(__h(N), <expr>)`: drop the prefix and the matching close.
   const prefix = /^\(__h\(\d+\), /;
   let out = "";
+  const kept = [];
+  const copy = (start, end) => { for (let at = start; at < end; at += 1) kept.push(origin[at]); out += entries.slice(start, end); };
   let depth = 0;
   const open = [];
   for (let at = 0; at < entries.length;) {
@@ -68,7 +84,7 @@ export function stripInstrumentation(runText) {
     if (ch === "\"" || ch === "'" || ch === "`") {
       let end = at + 1;
       while (end < entries.length && entries[end] !== ch) end += entries[end] === "\\" ? 2 : 1;
-      out += entries.slice(at, end + 1);
+      copy(at, Math.min(end + 1, entries.length));
       at = end + 1;
       continue;
     }
@@ -80,10 +96,36 @@ export function stripInstrumentation(runText) {
       if (open.at(-1) === depth) { open.pop(); depth -= 1; at += 1; continue; }
       depth -= 1;
     }
-    out += ch;
+    copy(at, at + 1);
     at += 1;
   }
-  return out;
+  return { text: out, origin: kept, end: source.length };
+}
+
+/**
+ * A function from a position in `runText` to the same place in `cleanText` (both `{ line, column }`, 1-based), or null when `runText`
+ * does not strip to `cleanText` (a non-neutral program, which classifies as inconclusive; a window probe, whose positions nothing reads).
+ * The counters keep lines, not columns, so a stack frame on the twin names a column the clean text does not have (ADR 0815). A position
+ * on a counter takes the first kept character at or after it, the code the counter sits in front of; one in the prelude has no place in
+ * `cleanText`: null.
+ */
+export function cleanPositions(runText, cleanText) {
+  const { text, origin, end } = stripped(runText);
+  if (text !== cleanText) return null;
+  const lineStarts = (value) => { const starts = [0]; for (let at = value.indexOf("\n"); at >= 0; at = value.indexOf("\n", at + 1)) starts.push(at + 1); return starts; };
+  const runLines = lineStarts(runText);
+  const cleanLines = lineStarts(cleanText);
+  return ({ line, column }) => {
+    const offset = (runLines[line - 1] ?? Infinity) + column - 1;
+    if (offset >= end) return null;
+    let low = 0;
+    let high = origin.length;
+    while (low < high) { const middle = (low + high) >> 1; if (origin[middle] < offset) low = middle + 1; else high = middle; }
+    if (low >= origin.length) return null;
+    let cleanLine = line;
+    while (cleanLine < cleanLines.length && cleanLines[cleanLine] <= low) cleanLine += 1;
+    return { line: cleanLine, column: low - cleanLines[cleanLine - 1] + 1 };
+  };
 }
 
 /** The ids that appear in an instrumented text, in order. */

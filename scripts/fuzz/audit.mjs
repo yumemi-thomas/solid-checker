@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { GRIDS, hostArgs, parse as parseFocus } from "./focus.mjs";
 import { rowProblem } from "./codes.mjs";
-import { gridStanding, heldLine, readOpenDefects } from "./open-defects.mjs";
+import { gridStanding, heldLine, manifestIds, readOpenDefects } from "./open-defects.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
@@ -255,14 +255,16 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       if (report.gridShard.of !== planned) attention.push(`${shard.name}/${grid}: a grid of ${report.gridShard.of} programs, the other shards' of ${planned}`);
       const shardRows = readJsonl(join(dir, "programs.jsonl"));
       if (shardRows.length !== report.gridShard.kept) attention.push(`${shard.name}/${grid}: ${shardRows.length} rows for ${report.gridShard.kept} programs`);
+      const manifest = manifestIds(grid);
       for (const row of shardRows) {
         if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
         outcomes.set(row.id, row.outcome);
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
         const problem = rowProblem(row);
-        const standing = gridStanding(knownOpen, row, problem);
-        if (standing?.kind === "held") held.push(standing.entry);
+        const standing = gridStanding(knownOpen, row, problem, { grid, strict: knownOpen.rows?.complete === true || manifest.has(row.id) });
+        if (standing?.kind === "held" || standing?.kind === "unlisted") held.push(standing.entry);
         else if (standing?.kind === "fixed") attention.push(`${grid}: open-defect-fixed ${row.id}: move ${standing.entry.item} from open-defects.json to rediscovery.json`);
+        else if (standing?.kind === "moved" || standing?.kind === "certified") attention.push(`${grid}: open-defect-${standing.kind} ${row.id}`);
         else if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       }
     }

@@ -1,0 +1,3 @@
+# source-module-unresolved
+
+Claim (ADR 0891): a pending claim no producer accounts for, on a source whose first argument comes from an import nothing resolves, is named after that: blocker `source-module-unresolved`, not `async-read-unaccounted`. `createSignal(fn)` makes a compute, and a value from an absent module may be a function, so the source is not proved synchronous (ai-memory-ui's generated `~/paraglide/runtime`, absent from the frozen corpus). Positive: the `translate(...)` call in a prop of `Page`. Rows at the read and at the import keep their own blockers. Stubs as in `sync-memo-read`.

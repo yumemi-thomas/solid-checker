@@ -368,6 +368,24 @@ pub(crate) fn discover_owner_file(
                     kind,
                 });
             }
+            // ADR 0874: a withheld carrier's callback may run here, later with
+            // no owner, or never. As for a carrier that may run zero times
+            // (ADR 0563), the possible unowned bit alone: nothing proves a run,
+            // so what the callback does stays an obligation, never a violation.
+            for index in withheld_carrier_arguments(file, call, lookup) {
+                let argument = call.arguments[index].span;
+                if crate::owners::argument_may_be_generator(file, argument, lookup) {
+                    continue;
+                }
+                let Some(target) = callback_target(argument, false) else {
+                    continue;
+                };
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
+                });
+            }
         }
         // ADR 0516: a generator called in place whose iterator is stepped at
         // the call runs its body there, up to a `yield`, under the owner of
@@ -613,7 +631,7 @@ pub(crate) fn discover_owner_file(
             // ADR 0462: `Loading(props)`/`Errored(props)` called as a function
             // creates its boundary in the call, with the caller's owner. Its
             // own operation name, so the call is placed after an `await` as
-            // an effect is, and a JSX boundary keeps its placement.
+            // an effect is (ADR 0869: a JSX boundary is no site).
             (Some(OwnerRequirementRole::Boundary), _) => Some((
                 "boundary-call",
                 OWNER_CONTEXT_UNOWNED,
@@ -638,7 +656,6 @@ pub(crate) fn discover_owner_file(
                 operation_span: call.callee,
                 owner,
                 report_mask: OWNER_CONTEXT_UNOWNED,
-                allow_uncertain: true,
                 runtime_uncertain: true,
                 settled_target: None,
                 settled_gate: None,
@@ -675,7 +692,6 @@ pub(crate) fn discover_owner_file(
                     operation_span: call.callee,
                     owner,
                     report_mask: OWNER_CONTEXT_UNOWNED,
-                    allow_uncertain: true,
                     // A `let` on the walk may hold another function by the
                     // time it is called: an obligation, never a proof.
                     runtime_uncertain: !answer.exact,
@@ -706,7 +722,6 @@ pub(crate) fn discover_owner_file(
                 operation_span,
                 owner,
                 report_mask,
-                allow_uncertain: true,
                 runtime_uncertain,
                 settled_target,
                 settled_gate,
@@ -872,35 +887,9 @@ pub(crate) fn discover_owner_file(
             }),
         }
     }
-    for element in &file.ast.jsx_elements {
-        let boundary = crate::jsx_primitive_name_cached(
-            lookup,
-            file,
-            element,
-            entities,
-            symbol_names,
-            dialect,
-        );
-        if boundary
-            .as_deref()
-            .is_some_and(|tag| dialect.is_async_boundary(tag))
-        {
-            requirements.push(OwnerRequirementCandidate {
-                operation: "boundary",
-                operation_span: Span::new(element.span.start, element.name.span.end),
-                owner: owner_at(element.span),
-                report_mask: OWNER_CONTEXT_UNOWNED,
-                allow_uncertain: false,
-                runtime_uncertain: false,
-                settled_target: None,
-                settled_gate: None,
-                providing_region_chain: region_chain(element.span),
-                providing_region: region_of(element.span),
-                context_argument: None,
-                in_parameter_list: list_site(element.span),
-            });
-        }
-    }
+    // ADR 0869: a JSX `<Loading>` or `<Errored>` is no owner site. rc.21's dev
+    // `createComponent` runs every component under its own transparent root,
+    // so NO_OWNER_BOUNDARY comes only from the call form (`boundary-call`).
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
         proof: crate::base::reads::ReadProof::default(),

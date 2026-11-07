@@ -79,6 +79,94 @@
       "fixes": 0
     },
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2b.tsx",
+      "start": 199,
+      "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2b.tsx",
+      "start": 199,
+      "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2d-empty.tsx",
+      "start": 121,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2d-empty.tsx",
+      "start": 121,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2d-handler.tsx",
+      "start": 121,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2d-handler.tsx",
+      "start": 121,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net-guards/g4b.tsx",
+      "start": 285,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g4b.tsx",
+      "start": 285,
+      "end": 289,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

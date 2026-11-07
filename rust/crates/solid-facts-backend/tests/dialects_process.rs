@@ -137,7 +137,6 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
     // ADR 0221: the head Get `props.items` of a reactive caller's prop.
     assert!(starts.contains(&marker("props.items.map")));
     assert!(!starts.contains(&marker("props.staticReady &&")));
-    assert!(!starts.contains(&marker("customCollection().map")));
     let async_map = marker("items().map(async");
     assert!(starts.contains(&async_map));
     assert!(defaults.iter().any(|finding| {
@@ -181,6 +180,44 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
     assert!(
         v2_disabled.is_empty(),
         "explicit v2 disables must win over catalog defaults: {v2_disabled:#?}"
+    );
+
+    // ADR 0840: a class with its own `map` is a census site of its program, so
+    // a standard `map` on an unproven receiver there is withheld: its
+    // prefer-for is uncertifiable beside the impostor row. The class's own
+    // `map` is another `map`: no prefer-for row.
+    let custom = project_snapshot_findings_with(
+        fixture_root.join("preferences-v2-custom-collection/tsconfig.json"),
+        Some("solid-v2"),
+        &[],
+    );
+    let custom_source =
+        std::fs::read_to_string(fixture_root.join("preferences-v2-custom-collection/App.tsx"))
+            .expect("read custom collection fixture");
+    let custom_at = |source: &str| {
+        u64::try_from(custom_source.find(source).expect("fixture marker")).expect("offset fits u64")
+    };
+    let at = |finding: &serde_json::Value| finding["primaryLocation"]["startByte"].as_u64();
+    let custom_prefer = custom
+        .iter()
+        .filter(|finding| finding["id"] == "SC8014")
+        .collect::<Vec<_>>();
+    assert_eq!(custom_prefer.len(), 1, "{custom:#?}");
+    assert_eq!(at(custom_prefer[0]), Some(custom_at("items().map")));
+    assert_eq!(custom_prefer[0]["kind"], "uncertifiable", "{custom:#?}");
+    assert!(
+        custom.iter().any(|finding| {
+            finding["analysisContext"] == "standard-member-impostor"
+                && at(finding) == Some(custom_at("items().map"))
+        }),
+        "{custom:#?}"
+    );
+    assert!(
+        custom.iter().all(
+            |finding| at(finding) != Some(custom_at("customCollection().map"))
+                || finding["id"] != "SC8014"
+        ),
+        "{custom:#?}"
     );
 }
 

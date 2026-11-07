@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { judgePattern } from "./patterns.mjs";
 import { judgeTables } from "./judge-tables.mjs";
+import { evaluatedDead, judgeLegal } from "./legal.mjs";
 import { judge } from "./matrix.mjs";
 
 // Frozen false cleans the judge must flag (endstage-report.md 1d, tier 1). See judge-frozen.json's `about`.
@@ -19,11 +20,18 @@ describe("judge-frozen", () => {
     const verdict = judge(row.input);
     expect({ outcome: verdict.outcome, ...(row.expected.secondary ? { secondary: verdict.detail?.secondary } : {}) }).toEqual(row.expected);
   });
-  test("site rows are present", () => {
-    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["harness", "not-fired", "unexecuted"]);
+  // ADR 0815, R21: a run-claiming violation at a site the text says never runs is wrong; at one only an unknown receiver skipped, unexecuted.
+  test.each(frozen.legalRows.map((row) => [row.id, row]))("%s keeps its legal verdict", (_id, row) => {
+    const evaluated = evaluatedDead(null, { ledger: [], files: { "App.tsx": row.text } }, row.input.site);
+    expect(judgeLegal({ ...row.input, evaluated }).outcome).toBe(row.expected.outcome);
   });
-  test.each(frozen.rows.map((row) => [row.id, row]))("%s stays a certified false clean", (_id, row) => {
-    const verdict = judgePattern({ codes: row.codes }, row.findings);
+  test("site rows are present", () => {
+    // ADR 0887 added five: a halted run's stacked claim (proved), its unproved twin, nothing of the rule, the rule's code elsewhere, a line never
+    // run; then four: a proved repeat, a repeat of another source, an unproved repeat, an unjudged claim; then a repeat whose line never ran; then two: a code beside the V on its own line, and on another.
+    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["agree", "agree", "false-clean", "false-clean", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "harness", "not-fired", "not-fired", "recall-gap", "recall-gap", "stacked-claim", "stacked-claim", "unexecuted", "unjudged-claim"]);
+  });
+  test.each(frozen.rows.map((row) => [row.id, row]))("%s keeps its frozen verdict", (_id, row) => {
+    const verdict = judgePattern({ codes: row.codes, stacks: row.stacks, positions: row.stacks !== undefined }, row.findings);
     expect({ outcome: verdict.outcome, certified: verdict.certified }).toEqual(row.expected);
   });
 });

@@ -15,17 +15,19 @@ const settings = { eventPasses: 2, pauseMs: Number(params.get('pause') ?? 60), f
 let clock: ReturnType<typeof installVirtualClock> | null = null;
 const pause = (ms: number) => (clock ? clock.advance(ms) : new Promise<void>(resolve => setTimeout(resolve, ms)));
 const describeError = (e: any) => ({
+  name: String(e?.constructor?.name ?? ''),
   message: String(e?.message ?? e),
   stack: String(e?.stack ?? ''),
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,
 });
 
-/** The App.tsx frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
+/** The case's frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
 function servedFrames(stack: string) {
   const rows: { file: string, line: number, column: number }[] = [];
   for (const text of String(stack ?? '').split('\n')) {
-    const match = new RegExp(`/cases/${id}/App\\.tsx(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
-    if (match) rows.push({ file: 'App.tsx', line: Number(match[1]), column: Number(match[2]) });
+    const match = new RegExp(`/cases/${id}/([^/:?\\s)]+\\.tsx?)(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
+    // Another of the case's modules: no position (only App.tsx is mapped), but the frame counts for depth (R20).
+    if (match) rows.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
   }
   return rows;
 }
@@ -77,9 +79,34 @@ async function runCase() {
   Error.stackTraceLimit = 41;
   const onError = (event: ErrorEvent) => {
     // Chrome's ErrorEvent.message reads "Uncaught Error: <message>"; the error's own message is what Happy DOM and the oracle record.
-    errors.push({ phase, kind: 'window-error', message: String(event.error?.message ?? event.message), stack: String(event.error?.stack ?? '') });
+    // Its `cause` too (Part 16, B1): rc.21 wraps a compute's throw in a StatusError made at the read, and the throw's own frame (the
+    // `resolve` line) is only in `cause.stack`.
+    errors.push({ phase, kind: 'window-error', ...describeError(event.error ?? { message: event.message, stack: '' }) });
     event.preventDefault();
   };
+  // A throw inside a window `error` listener is never dispatched to the error listeners (Part 16, B2: the program's own report-error
+  // listener called dynamic(), which threw; only Playwright's pageerror saw it). The program's listeners are wrapped: what one throws is
+  // recorded, then rethrown, so the page sees what it would have.
+  const wrapped = new WeakMap<object, EventListener>();
+  const addListener = window.addEventListener, removeListener = window.removeEventListener;
+  const wrapFor = (listener: any): any => {
+    if (!listener || listener === onError) return listener;
+    let wrap = wrapped.get(listener);
+    if (!wrap) {
+      wrap = function (this: any, event: Event) {
+        try { return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event); }
+        catch (e) { errors.push({ phase, kind: 'error-listener', ...describeError(e) }); throw e; }
+      };
+      wrapped.set(listener, wrap);
+    }
+    return wrap;
+  };
+  window.addEventListener = function (this: any, type: string, listener: any, options?: any) {
+    return addListener.call(this, type, type === 'error' ? wrapFor(listener) : listener, options);
+  } as typeof window.addEventListener;
+  window.removeEventListener = function (this: any, type: string, listener: any, options?: any) {
+    return removeListener.call(this, type, type === 'error' && listener ? (wrapped.get(listener) ?? listener) : listener, options);
+  } as typeof window.removeEventListener;
   const onRejection = (event: PromiseRejectionEvent) => {
     errors.push({ phase, kind: 'unhandledrejection', ...describeError(event.reason) });
     event.preventDefault();
@@ -167,6 +194,7 @@ async function runCase() {
     for (const dispose of disposers) try { dispose(); } catch (e) { errors.push({ phase: 'dispose', kind: 'dispose', ...describeError(e) }); }
     window.removeEventListener('error', onError);
     window.removeEventListener('unhandledrejection', onRejection);
+    window.addEventListener = addListener; window.removeEventListener = removeListener;
     console.error = oldError; console.warn = oldWarn;
     (window as any).__scResolve({
       id, wallMs: Math.round(performance.now() - started), failure, witnesses, hits, order, hitsDom, quiescent,
