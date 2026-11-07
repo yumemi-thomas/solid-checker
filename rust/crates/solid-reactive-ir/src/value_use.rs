@@ -1175,7 +1175,7 @@ impl<'l, 'a> Census<'l, 'a> {
                 Some(function) => Some((file, function)),
                 None => crate::owners::exact_function_argument(file, value, self.lookup).and_then(
                     |(path, span)| {
-                        let target = self.lookup.file_by_path(&path)?;
+                        let (target, span) = self.place(&span.location(&path))?;
                         Some((target, target.ast.function_at(span)?))
                     },
                 ),
@@ -1347,8 +1347,10 @@ impl<'l, 'a> Census<'l, 'a> {
     /// ADR 0860: every Get of `key` on a global object, and every reference of
     /// the global of that name. `None`: a key no text names, so every Get.
     fn global_slot_uses(&mut self, key: Option<&'a str>, mode: Mode) {
-        let files = self.lookup.files();
-        for holder in files {
+        let slots = self.lookup.slot_entries(self.lookup.base_members());
+        for (holder, _) in slots {
+            // Both member keys and unresolved identifier text affect the census.
+            self.lookup.note_source_read(holder);
             let ast = &holder.ast;
             for member in &ast.members {
                 if !global_object(holder, ast.peel_ts_sugar_span(member.object)) {

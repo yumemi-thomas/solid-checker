@@ -125,3 +125,6 @@ Ownership gate: passes (96 cases), with the case [86] edit. Each program was con
 - The Next steps above predate the update and VM sections: sites, sweep, snapshots, ownership and VM t1 were already measured, as recorded there. Do not redo those without a changed semantic build.
 
 - Count ledger preflight found the snapshot rise had not been recorded. `node scripts/guard/count.mjs --update` records the measured +175 SC9012 rows (11 existing keys); no drops or renames changed. The gate now exits 0: 8,108 U rows / 189 keys. This records Job 1 results; the Job 2 gate implementation is unchanged.
+
+- Isolated retries under lock/guard: router module exit 0 (4 passed), executor exit 0 (4 passed), rewrite exit 0 (26 passed, typed profile sample 82 seconds), rediscovery exit 0 (2 passed).
+- `BASE=b40d5d6a7 make verify-delta` exited 2 at ir-read-lint, before build/test checks: new callback file lookup, global file scan, and a `files` variable falsely recognized as the census HashMap. No allowlist changed. Callback lookup now uses the existing recorded `place` helper; global scanning replays `slot_entries(base_members())` with a SourceTexts memo read for every file. Lint and rustfmt pass; a new verify-delta is running. Previous semantic measurements precede this recorded-read-only edit.
