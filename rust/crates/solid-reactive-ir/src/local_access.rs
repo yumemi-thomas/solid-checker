@@ -5577,8 +5577,14 @@ impl LocalAccessContext<'_, '_> {
                     // it may run there, past no boundary.
                     // ADR 0836: so may one in a child function's closure, which
                     // nothing places in a tracked insert (`async_execution_role`).
+                    // ADR 0837: and any position nothing places (an anonymous
+                    // closure handed on in a tracked insert): no binding climbs
+                    // out of it, so the walk would end with no row.
                     let unplaced_child = lexical == ExecutionRole::Unknown
-                        && semantic == ExecutionRole::DeferredCallback;
+                        && matches!(
+                            semantic,
+                            ExecutionRole::DeferredCallback | ExecutionRole::Unknown
+                        );
                     if (unplaced_child
                         || (lexical == ExecutionRole::TrackedJsx
                             && read_loading_cover(self.lookup, file, position, self.symbol_names)
@@ -5634,7 +5640,7 @@ impl LocalAccessContext<'_, '_> {
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
                     provenance_open: options.provenance_open,
-                    caught: false,
+                    caught: module_evaluation_may_catch(file, execution),
                     component_prop: false,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
@@ -6636,7 +6642,8 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
                 provenance_open: async_options.provenance_open,
-                caught: caught_in_try(file, timing_at),
+                caught: caught_in_try(file, timing_at)
+                    || module_evaluation_may_catch(file, async_execution),
                 component_prop: self.read_in_component_prop(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
                 server_rendering_unresolved: async_options.server_rendering_unresolved,
@@ -7260,7 +7267,8 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
                 provenance_open: member_options.provenance_open,
-                caught: caught_in_try(file, member),
+                caught: caught_in_try(file, member)
+                    || module_evaluation_may_catch(file, async_execution),
                 component_prop: self.read_in_component_prop(file, member),
                 ssr_client_hole: member_options.ssr_client_bare,
                 server_rendering_unresolved: member_options.server_rendering_unresolved,
@@ -10011,6 +10019,16 @@ enum MergeGet {
     /// A plain literal source serves it.
     Plain,
     Unproven,
+}
+
+/// ADR 0855: no strict-read window is open while a module evaluates, so a
+/// pending read there throws a plain `NotReadyError` and emits nothing: a
+/// `catch` anywhere on the evaluating stack swallows it (rc.21, probed). A
+/// module-evaluation role is lexical or reached through this file's own calls
+/// and mounts (`named_mount_root_role`, the call-attributed walk), so only a
+/// handler in this file may be on that stack.
+fn module_evaluation_may_catch(file: &solid_facts::FileFacts, execution: ExecutionRole) -> bool {
+    execution == ExecutionRole::ModuleInitialization && !file.ast.try_catches.is_empty()
 }
 
 /// ADR 0637: a `catch` around the read swallows the throw that would report it,

@@ -1379,6 +1379,9 @@ impl<'f, 'a> Reach<'f, 'a> {
                 let mut past = target.clone();
                 past.body = Span::new(boundary, target.body.end);
                 self.report_region(draft, walk, target_file, &past, 0);
+                // ADR 0850: a function the body hands on (a member's value, a
+                // slot, a forwarded callback) may run past the `yield` too.
+                self.report_unplaced_functions(draft, walk, target_file, target);
                 mark_uncertain(draft, mark, &AfterAwaitObligation::GeneratorStepped);
             }
         }
@@ -1888,15 +1891,22 @@ impl<'f, 'a> Reach<'f, 'a> {
             .filter(|suspension| written_directly_in(ast, function, **suspension))
             .copied()
             .collect::<Vec<_>>();
-        if suspensions.is_empty() && loop_start.is_none() {
+        // ADR 0850: a generator gives up the stack at its first `yield`, and
+        // its body past it runs on whoever steps the iterator next, as an
+        // `async` function's tail runs past an `await`.
+        let yield_end = first_yield_end(file, function);
+        if suspensions.is_empty() && loop_start.is_none() && yield_end.is_none() {
             return;
         }
         let suspended_before = |at: u32| {
             loop_start.is_some_and(|start| at >= start)
+                || yield_end.is_some_and(|end| end <= at)
                 || suspensions.iter().any(|suspension| suspension.end <= at)
         };
         let suspends_after = |at: u32| {
-            loop_start.is_some() || suspensions.iter().any(|suspension| suspension.end > at)
+            loop_start.is_some()
+                || yield_end.is_some_and(|end| end > at)
+                || suspensions.iter().any(|suspension| suspension.end > at)
         };
         // A binding the member returns (`return later`) resolves the
         // computation: it runs, if ever, after the continuation has ended.

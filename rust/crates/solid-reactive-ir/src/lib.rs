@@ -1449,8 +1449,10 @@ pub struct AsyncRead {
     /// ADR 0665: `options_opaque`, because no fact says the source is async.
     #[serde(default)]
     pub provenance_open: bool,
-    /// The read sits in a `try`. rc.21 emits the untracked-read diagnostic before
-    /// it throws, so SC5001 stands (ADR 0640); a boundary warning needs the throw
+    /// The read sits in a `try`, or (ADR 0855) runs while a module with a
+    /// handler evaluates. In a strict-read window rc.21 emits the untracked-read
+    /// diagnostic before it throws, so SC5001 stands; while a module evaluates
+    /// it emits nothing, so SC5001 is open. A boundary warning needs the throw
     /// to reach it, which a `catch` may stop.
     #[serde(default)]
     pub caught: bool,

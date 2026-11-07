@@ -32,12 +32,13 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCode } from "./codes.mjs";
+import { withholdingRules, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
+import { callStarts, frameStarts } from "./call-starts.mjs";
 import { registrationLines } from "./registration.mjs";
 import { STATUS as UNEXECUTED_STATUS, unexecutedCandidate } from "./unexecuted.mjs";
 
-export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"];
+export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-misplaced", "candidate-wrong-rule", "known-open", "unplaced", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"];
 const rank = (verdict) => VERDICTS.indexOf(verdict);
 
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
@@ -227,7 +228,7 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
     }
   }
 
-  items.push(...diagnosticItems(events, findings, evidence.registrationLines));
+  items.push(...diagnosticItems(events, findings, evidence.registrationLines, evidence.source, evidence.registrationPositions));
 
   // A disturbed run (a throw, a halt, a runner failure) with nothing to compare proves nothing: the part that never ran could hold a
   // diagnostic. It is inconclusive, never agreement (README, "What a finding means").
@@ -257,7 +258,10 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
  * is in: a callback that runs later has no registering call on its stack, and the checker answers there (`onSettled(cb1)`). A finding
  * of a claiming rule on such a line covers the diagnostic like one on a stack line.
  */
-export function diagnosticItems(events, findings, registrationLines = () => []) {
+export function diagnosticItems(events, findings, registrationLines = () => [], source, registrationPositions = () => []) {
+  // A deeper frame places a finding only on a line that mounts nothing; with no program text, none does (review 4c).
+  const lines = source === undefined ? null : String(source).split("\n");
+  const mount = lines ? (frame) => callStarts(source).mount(frame.line, frame.column) : () => true;
   const items = [];
   // Certified: the checker has no uncertifiable finding in the file, so it claims it proved the whole file; a false clean there is a
   // fail-closed break (invariant 2), not a recall gap.
@@ -269,34 +273,58 @@ export function diagnosticItems(events, findings, registrationLines = () => []) 
     const placeless = isPlacelessCode(event.code);
     // A placeless code has no line of its own whatever frames the fast path attaches: it is judged by file.
     const attributed = placeless ? [] : event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
-    const claims = (finding) => coversCode(event.code, finding);
+    // Depth is the whole stack's (R20): another file's frames stay, blank.
+    const stack = withStarts(placeless ? [] : appStack(event.positions), lines ? frameStarts(source) : null);
+    // Review 4c, R5, R8: a claiming or withholding finding covers a code with a place only at a recorded position; a placeless code by
+    // a claiming finding anywhere, never a withholding.
+    const claims = (finding, atSite) => coversCodeAt(event.code, finding, atSite);
+    const unplacedDiagnostic = { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] };
     if (!attributed.length) {
-      if (!placeless && event.positions.length) continue;
-      const claiming = findings.filter(claims);
-      const unplaced = { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] };
+      if (!placeless && event.positions.some((position) => Number.isInteger(position.line))) continue;
+      if (!placeless) {
+        // Chrome gave a code with a place no position: the judge cannot place it. Unjudged, never a pass or a false clean (`unplaced`).
+        items.push({ kind: "unplaced", reason: `${event.code}: Chrome gave no position, so no finding can be judged against it`, diagnostic: unplacedDiagnostic });
+        continue;
+      }
+      const claiming = findings.filter((finding) => claims(finding, false));
       if (!claiming.length) {
-        items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`, diagnostic: unplaced, certified });
-      } else if (placeless && !claiming.some((finding) => finding.kind === "violation")) {
+        items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`, diagnostic: unplacedDiagnostic, certified });
+      } else if (!claiming.some((finding) => finding.kind === "violation")) {
         // Every claiming finding in the file declines: the checker was asked and withheld, the same recall gap as at a line.
-        items.push({ kind: "recall-gap", reason: `${event.code} (no line could be given): the checker declines (uncertifiable ${claiming[0].rule})`, diagnostic: { ...unplaced, rule: claiming[0].rule } });
+        items.push({ kind: "recall-gap", reason: `${event.code} (no line could be given): the checker declines (uncertifiable ${claiming[0].rule})`, diagnostic: { ...unplacedDiagnostic, rule: claiming[0].rule } });
       }
       continue;
     }
-    const registered = attributed.flatMap((position) => registrationLines(position.line));
-    const onStack = (finding) => attributed.some((position) => inSpan(finding, position.line));
-    const covering = findings.filter((finding) => (onStack(finding) || registered.some((line) => inSpan(finding, line))) && claims(finding));
+    // `frames`: the App lines of the diagnostic's stack, innermost first (the dynamic stack shape of the coarse key reads them).
+    const diagnostic = { code: event.code, line: attributed[0].line, message: event.message, severity, source: event.source, frames: attributed.map((position) => position.line) };
+    // Positions with no column (the oracle path) place nothing: unjudged.
+    if (!attributed.some((position) => Number.isInteger(position.column))) {
+      items.push({ kind: "unplaced", reason: `${event.code} at line ${diagnostic.line}: its positions carry no column, so no finding can be judged against them`, diagnostic });
+      continue;
+    }
+    // The registering argument of the callback the top frame is in (`cb1` in `onSettled(cb1)`): an exact position from the program text.
+    const registered = registrationPositions(attributed[0].line);
+    const atPosition = (finding) => withheldAtStack(finding, stack, mount, event.code) || (!withholdingRules.includes(finding.rule) && registered.some((position) => finding.line === position.line && finding.column === position.column));
+    const covering = findings.filter((finding) => atPosition(finding) && claims(finding, true));
     if (covering.some((finding) => finding.kind === "violation")) {
-      // A violation on a stack line is already an agree through the finding; one on a registration line is not met by that pass.
-      const viaRegistration = covering.find((finding) => finding.kind === "violation" && !onStack(finding));
-      if (viaRegistration && !covering.some((finding) => finding.kind === "violation" && onStack(finding))) {
+      // A violation at a stack line is already an agree through the finding; one at a registering argument is not met by that pass.
+      const viaRegistration = covering.find((finding) => finding.kind === "violation" && !withheldAtStack(finding, stack, mount, event.code));
+      if (viaRegistration && !covering.some((finding) => finding.kind === "violation" && withheldAtStack(finding, stack, mount, event.code))) {
         items.push({ kind: "agree", reason: `${event.code} at line ${attributed[0].line}: the checker's violation ${viaRegistration.rule} (${viaRegistration.id ?? "?"}) is at line ${viaRegistration.line}, where the callback is registered`, diagnostic: { code: event.code, line: attributed[0].line } });
       }
       continue;
     }
+    // The claiming rule's own violation elsewhere: the user sees the warning in the wrong place, which is both wrong and missing
+    // (`candidate-misplaced`, a defect of its own; R8).
+    const misplaced = findings.find((finding) => finding.kind === "violation" && rules.includes(finding.rule));
+    if (misplaced) {
+      items.push({ kind: "candidate-misplaced", reason: `${event.code} at line ${diagnostic.line}:${attributed[0].column}: the checker's violation ${misplaced.rule} is at ${misplaced.line}:${misplaced.column}, not at the diagnostic`, diagnostic: { ...diagnostic, rule: misplaced.rule, at: `${misplaced.line}:${misplaced.column}` } });
+      continue;
+    }
     // A violation of the same defect family at the diagnostic is a wrong-rule item from the finding, not a missing finding.
-    if (!covering.length && findings.some((finding) => finding.kind === "violation" && (onStack(finding) || registered.some((line) => inSpan(finding, line))) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
-    // `frames`: the App lines of the diagnostic's stack, innermost first (the dynamic stack shape of the coarse key reads them).
-    const diagnostic = { code: event.code, line: attributed[0].line, message: event.message, severity, source: event.source, frames: attributed.map((position) => position.line) };
+    const onStack = (finding) => attributed.some((position) => inSpan(finding, position.line));
+    const registeredLines = attributed.flatMap((position) => registrationLines(position.line));
+    if (!covering.length && findings.some((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && (onStack(finding) || registeredLines.some((line) => inSpan(finding, line))) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
     if (covering.length) {
       items.push({ kind: "recall-gap", reason: `${event.code}: the checker declines (uncertifiable ${covering[0].rule}) at line ${diagnostic.line}`, diagnostic: { ...diagnostic, rule: covering[0].rule } });
       continue;

@@ -2259,6 +2259,20 @@ impl Dialect for Solid2 {
         argument == 1 && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
     }
 
+    /// ADR 0857, probed on rc.21 (Chrome, dev build): `resolve` and `until` in
+    /// `flush(fn)`'s callback throw "Cannot call … inside a reactive scope" in
+    /// a tracked JSX expression and in a memo compute, and are silent from a
+    /// handler and in `untrack`: `flush` runs `fn` before it drains, leaving
+    /// the observer as the call had it. `dispatchAsInteraction`'s `fn` sees the
+    /// caller's observer (probed, `callback_executions`). `render`'s code runs
+    /// under the root it creates and was silent in tracked JSX.
+    fn inline_callback_keeps_observer(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::Flush, 0) | (Primitive::DispatchAsInteraction, 1)
+        )
+    }
+
     /// ADR 0443. `runWithOwner(owner, fn)` sets `tracking = false` around
     /// `fn()` and leaves `strictRead` as the call had it (`dist/dev-shared.js:5776-5785`
     /// at rc.17, `runWithOwner` and `getObserver`), so `fn` runs in the

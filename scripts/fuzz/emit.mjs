@@ -58,7 +58,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
   const description = note ?? `differential fuzzer, generator ${GENERATOR_VERSION}, seed ${program.seed}`;
   // ADR 0501: the exported components, which the entry renders by name (the oracle's `mount`).
   const mount = [...text.matchAll(/^export function ([A-Z][A-Za-z0-9_]*)\b/gm)].map((match) => match[1]);
-  return {
+  // `program` is not enumerable: the judge reads it for registering positions, nothing serialises it.
+  return Object.defineProperty({
     id, text, runText, sites, glue, ledger, lineTable, plan, neutral, packages,
     files: {
       ...packageFiles,
@@ -71,7 +72,7 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
       "program.json": `${JSON.stringify(program)}\n`,
       "sites.json": `${JSON.stringify({ id, generator: GENERATOR_VERSION, seed: program.seed, plan, sites, glue, ledger }, null, 2)}\n`,
     },
-  };
+  }, "program", { value: program, enumerable: false });
 }
 
 export function writeCase(directory, built) {

@@ -53,6 +53,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 497,
+      "end": 504,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

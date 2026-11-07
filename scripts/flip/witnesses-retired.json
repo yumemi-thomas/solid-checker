@@ -776,5 +776,85 @@
   "fields": [
    "closedAt"
   ]
+ },
+ {
+  "id": "SC3001/c03-memo-alias",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3001/c04-cleanup-obj",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3001/c05-cleanup-hof",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3001/d02-map-fn",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3001/d04-then-sync",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3001/d05-getter",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3001/d06-proxy",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3002/e02-alias",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3002/e03-obj",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
+ },
+ {
+  "id": "SC3002/e05-hof",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ]
  }
 ]

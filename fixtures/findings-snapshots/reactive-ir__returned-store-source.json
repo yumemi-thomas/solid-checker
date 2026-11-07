@@ -146,6 +146,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2483,
+      "end": 2495,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-source/App.tsx",

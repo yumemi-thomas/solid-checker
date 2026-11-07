@@ -96,6 +96,17 @@
       "blocker": "value-held-in-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
+      "start": 691,
+      "end": 695,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 716,
       "end": 721,
       "fixes": 0

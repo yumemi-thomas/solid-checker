@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { clone } from "./model.mjs";
-import { registrationLines } from "./registration.mjs";
+import { registrationLines, registrationPositions } from "./registration.mjs";
 
 // Seed 5 of the containers profile prints a callback declared by name and registered on a later line:
 //   const cb1 = () => { setTimeout(() => { const f1 = () => { return onCleanup(() => {}); }; ... }, 0); };
@@ -36,5 +36,14 @@ describe("registrationLines", () => {
     twice.components[0].body.splice(0, 0, clone(decl));
     const of = registrationLines(twice, built(twice).lineTable);
     expect(text.map((_, index) => of(index + 1)).flat()).toEqual([]);
+  });
+});
+
+describe("registrationPositions (review 4c)", () => {
+  it("gives the registering argument's exact position, read from the program text", () => {
+    const of = registrationPositions(program, built(program).lineTable, built(program).text);
+    const column = text[registerOn - 1].indexOf("onSettled(cb1)") + "onSettled(".length + 1;
+    expect(of(innerOn)).toEqual([{ line: registerOn, column }]);
+    expect(of(registerOn)).toEqual([]);
   });
 });

@@ -40,3 +40,40 @@ export function registrationLines(program, lineTable) {
     return [...lines];
   };
 }
+
+/**
+ * Review 4c: the exact positions (`{ line, column }`, 1-based) of the registering arguments of a function a stack line is inside of: the
+ * callback's name where a registering call takes it (`cb1` in `onSettled(cb1)`), read from the program text on the registering call's
+ * line as a name right after `(` or `,`. A claiming or declining finding starting there covers the diagnostic, as one at a stack frame; a withholding does not (R25).
+ * @returns {(line: number) => { line: number, column: number }[]}
+ */
+export function registrationPositions(program, lineTable, source) {
+  const text = String(source ?? "").split("\n");
+  const declared = new Map();
+  const registered = new Map();
+  for (const { node, path } of walk(program)) {
+    if (node.k === "decl" && node.e?.k === "fn") declared.set(node.name, (declared.get(node.name) ?? 0) + 1);
+    if (!REGISTERING.has(node.k)) continue;
+    for (const slot of CALLBACK_SLOTS) if (node[slot]?.k === "ref") registered.set(node[slot].name, [...(registered.get(node[slot].name) ?? []), path]);
+  }
+  const escape = (name) => name.replace(/[$]/g, "\\$");
+  return (line) => {
+    const out = new Map();
+    for (const row of nodesAtLine(lineTable, line)) {
+      let node = program;
+      for (const key of row.path) {
+        node = node?.[key];
+        if (node?.k !== "decl" || node.e?.k !== "fn" || declared.get(node.name) !== 1) continue;
+        for (const path of registered.get(node.name) ?? []) {
+          const at = lineTable.find((candidate) => same(candidate.path, path));
+          if (!at) continue;
+          for (const match of (text[at.line - 1] ?? "").matchAll(new RegExp(`([(,]\\s*)(${escape(node.name)})(?![\\w$])`, "g"))) {
+            const column = match.index + match[1].length + 1;
+            out.set(`${at.line}:${column}`, { line: at.line, column });
+          }
+        }
+      }
+    }
+    return [...out.values()];
+  };
+}

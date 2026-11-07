@@ -1380,8 +1380,10 @@ impl<'l, 'a> Census<'l, 'a> {
             .call_at(object)
             .filter(|call| !call.construct)
             .and_then(|call| {
-                self.lookup
-                    .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+                self.lookup.function_called_at(
+                    file.path.as_str(),
+                    file.ast.peel_ts_sugar_span(call.callee),
+                )
             });
         let Some((callee_file, function)) = callee else {
             self.uses
@@ -1417,26 +1419,30 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some(function) = crate::owners::containing_ast_function(ast, span) else {
             return false;
         };
-        ast.arguments_containing(function.span).any(|(call, index)| {
-            ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
-                && self
-                    .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .filter(|resolved| {
-                        resolved
-                            .declaration
-                            .as_ref()
-                            .is_some_and(|declaration| declaration.standard_library)
-                    })
-                    .is_some_and(|resolved| {
-                        let callability = self
-                            .lookup
-                            .entity_at(file.path.as_str(), call.arguments[index].span)
-                            .and_then(|entity| entity.callability);
-                        crate::runtime_semantics::argument_behavior(resolved, callability, index)
-                            == Some(RuntimeArgumentBehavior::FreshStackCallback)
-                    })
-        })
+        ast.arguments_containing(function.span)
+            .any(|(call, index)| {
+                ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && self
+                        .lookup
+                        .resolved_callee_call(file, call.callee)
+                        .filter(|resolved| {
+                            resolved
+                                .declaration
+                                .as_ref()
+                                .is_some_and(|declaration| declaration.standard_library)
+                        })
+                        .is_some_and(|resolved| {
+                            let callability = self
+                                .lookup
+                                .entity_at(file.path.as_str(), call.arguments[index].span)
+                                .and_then(|entity| entity.callability);
+                            crate::runtime_semantics::argument_behavior(
+                                resolved,
+                                callability,
+                                index,
+                            ) == Some(RuntimeArgumentBehavior::FreshStackCallback)
+                        })
+            })
     }
 
     /// ADR 0860: every Get of `key` on a global object, and every reference of
