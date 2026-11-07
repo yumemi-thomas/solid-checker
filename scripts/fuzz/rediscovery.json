@@ -5915,5 +5915,51 @@
     "mx-untracked-read-after-await-aw-inplace-late-x-direct-none"
    ],
    "rediscovered": "matrix --recall by id, Chrome confirming (48 ids): f1a8da6a4 32 false-clean (return, await) and 16 recall-gap (late); this commit 48 uncertifiable; legal twin aw-inplace-stmt 0 false positives"
+  },
+  {
+   "finding": "A call past a suspension whose callee names no symbol (`fns[0]()`, `get()()`, `(c ? a : b)()`) had no after-await row",
+   "found": "scout-bind-afterawait B5; review D14",
+   "fixed": "ADR 0879; uncertifiable (callee-inexact)",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-memo-async-x-elem-callee-none",
+    "mx-untracked-read-after-await-memo-async-x-result-callee-none",
+    "mx-untracked-read-after-await-memo-async-x-cond-callee-closure"
+   ],
+   "rediscovered": "not rediscovered: on f1a8da6a4 and 0140ec6fb every one of the 24 ids already had an uncertifiable at the site (reactive-dispatch-unresolved, the dispatch census), so no build fails them; the shapes stay as recall ids"
+  },
+  {
+   "finding": "A promise handler on the flight given as a member (`then(api.fmt)`) was skipped: certified, Chrome warns",
+   "found": "scout-bind-afterawait B6",
+   "fixed": "ADR 0880; uncertifiable",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-then-member-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable; twin aw-catch-member 0 false positives"
+  },
+  {
+   "finding": "An async handler on the flight was skipped: certified, Chrome warns",
+   "found": "scout-bind-afterawait B7",
+   "fixed": "ADR 0881; uncertifiable",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-then-async-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable"
+  },
+  {
+   "finding": "`.then` on an `any` receiver (no exact standard declaration) returned with its handlers unread: certified, Chrome warns",
+   "found": "scout-bind-afterawait B8",
+   "fixed": "ADR 0882; uncertifiable",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-then-any-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable; aw-then-cast 16 agree on both"
   }
 ]

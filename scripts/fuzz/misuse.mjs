@@ -288,6 +288,9 @@ export const RECALL_VALUE_BINDINGS = ["let-alias", "var-alias", "cond-alias", "i
 const callTypeArguments = (name, args) => (name === "flush" ? "<null, [], void>" : name === "useContext" ? `<null, [typeof ${args}], unknown>` : "");
 
 export const CALLEE_FORMS = ["bind", "call", "extracted", "assign-callee", "or-assign"];
+// ADR 0879 (B5): a callee that names no symbol at the call, past a suspension: an element (`fns[0]()`), a call's result (`getIt()()`),
+// a conditional (`(c ? a : b)()`). UNTRACKED_READ_AFTER_AWAIT only: what the after-await walk reads by callee.
+export const AFTER_AWAIT_CALLEE_BINDINGS = ["elem-callee", "result-callee", "cond-callee"];
 
 /** An API call: `name` from `module`; `args` is the argument text; `locals` when the arguments name component-scope variables. */
 const api = (name, args = "", { module = "solid-js", locals = false } = {}) => ({ kind: "api", module, name, args, locals });
@@ -1073,7 +1076,8 @@ export function gridBindingsOf(code, variant) {
 /** The recall bindings a (code, variant) takes: by its call's kind; a statement on a store (`member`) has no callee to rewrite. */
 export function recallBindingsOf(code, variant) {
   const kind = SPEC[code].call({ code, variant }, SAMPLE_SIGS).kind;
-  return kind === "api" ? [...RECALL_API_BINDINGS, ...CALLEE_FORMS] : kind === "local" ? [...RECALL_VALUE_BINDINGS, ...HOOK_SLOT_BINDINGS, ...CALLEE_FORMS] : RECALL_VALUE_BINDINGS;
+  const extra = code === "UNTRACKED_READ_AFTER_AWAIT" && kind === "local" ? AFTER_AWAIT_CALLEE_BINDINGS : [];
+  return kind === "api" ? [...RECALL_API_BINDINGS, ...CALLEE_FORMS] : kind === "local" ? [...RECALL_VALUE_BINDINGS, ...HOOK_SLOT_BINDINGS, ...CALLEE_FORMS, ...extra] : RECALL_VALUE_BINDINGS;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1201,6 +1205,9 @@ function valueBinding(bind, name) {
     case "default-slot": return { prelude: [`const { useIt = ${name} } = {} as { useIt?: typeof ${name} };`], callee: "useIt" };
     case "nested": return { prelude: [`const { a: { useIt } } = { a: { useIt: ${name} } };`], callee: "useIt" };
     case "array-slot": return { prelude: [`const [useIt] = [${name}];`], callee: "useIt" };
+    case "elem-callee": return { prelude: [`const fns = [${name}];`], callee: "fns[0]" };
+    case "result-callee": return { prelude: [`const getIt = () => ${name};`], callee: "getIt()" };
+    case "cond-callee": return { prelude: [], callee: `(Math.random() < 2 ? ${name} : ${name})` };
     default: return null;
   }
 }

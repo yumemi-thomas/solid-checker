@@ -31,7 +31,13 @@ window (ADR 0872). An async function handed to a tracked primitive through a
 project wrapper's parameter (`(f) => createMemo(f)`) is walked as that
 primitive's compute; a hand-off the walk cannot follow is **uncertifiable**,
 `function-run-unplaced`, except `f();` as a statement in a synchronous
-wrapper, which runs in place (ADR 0873).
+wrapper, which runs in place (ADR 0873). A call past a suspension whose
+callee names no symbol and resolves to no declaration (`fns[0]()`,
+`(c ? a : b)()`) is **uncertifiable** (ADR 0879). On the flight, a handler the
+walk cannot read (`then(api.fmt)`), an `async` or generator handler, an async
+function a handler calls, and the handlers of a `.then` with no exact
+standard declaration (an `any` receiver) are **uncertifiable** (ADRs
+0880-0882).
 A call after the await to a project function whose body reads an accessor
 only on some paths (`await load(); return byUser(posts)`) is
 **uncertifiable**: the read is past the await, but whether the callee reads on

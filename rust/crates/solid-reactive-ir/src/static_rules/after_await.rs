@@ -288,6 +288,45 @@ pub(super) fn run<'a>(
     unlisted_async_computations(ctx, &reach, draft);
 }
 
+/// ADR 0879 (B5): a callee that names no exact symbol (`fns[0]()`,
+/// `get()()`, `(c ? a : b)()`, a member of an untyped value) and resolves to
+/// no declaration and no project function: nothing proves the value called
+/// is not an accessor. An exact standard or package declaration
+/// (`res.json()`) and a `new` are not this.
+fn inexact_callee(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
+    let lookup = ctx.semantic_lookup;
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    !call.construct
+        && !crate::owners::is_identifier_span(file, callee)
+        // A function literal called in place is exact: the layer walk reads it.
+        && file.ast.function_at(callee).is_none()
+        && file
+            .source_text(callee)
+            .is_some_and(|text| !matches!(text, "super" | "import"))
+        && lookup.resolved_callee_call(file, call.callee).is_none()
+        && lookup
+            .function_called_at(file.path.as_str(), callee)
+            .is_none()
+}
+
+fn inexact_callee_obligation(file: &FileFacts, call: &CallFact, context: &str) -> StaticDefect {
+    StaticDefect {
+        kind: StaticDefectKind::ReactiveReadAfterAwait {
+            accessor: file
+                .source_text(file.ast.peel_ts_sugar_span(call.callee))
+                .unwrap_or("this callee")
+                .chars()
+                .take(60)
+                .collect(),
+            obligation: Some(AfterAwaitObligation::CalleeInexact),
+        },
+        location: location(file.path.shared(), call.callee),
+        analysis_context: context.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    }
+}
+
 /// A parameter of a callback a primitive runs (`createRoot((dispose) => …)`): the
 /// primitive supplies it, so no caller hands it an accessor.
 fn primitive_parameter(ctx: &AnalysisContext<'_>, file: &FileFacts, declaration: Span) -> bool {
@@ -1076,6 +1115,14 @@ impl<'f, 'a> Reach<'f, 'a> {
                         fixes: vec![],
                         uncertain: true,
                     });
+                } else if let Some((file, candidate)) = ast_call
+                    && symbol.is_none()
+                    && inexact_callee(ctx, file, candidate)
+                    && walk
+                        .reported
+                        .insert((call.path.to_string(), call.start_byte, call.end_byte))
+                {
+                    draft.push_defect(inexact_callee_obligation(file, candidate, &member.context));
                 }
                 continue;
             };
@@ -2414,6 +2461,9 @@ impl<'f, 'a> Reach<'f, 'a> {
         };
         let Some(symbol) = symbol else {
             handed(walk, draft);
+            if inexact_callee(ctx, file, call) && walk.reported.insert(key) {
+                draft.push_defect(inexact_callee_obligation(file, call, &walk.member.context));
+            }
             return;
         };
         let Some((name, _)) = ctx.accessors.get(symbol) else {
@@ -2558,10 +2608,12 @@ impl<'f, 'a> Reach<'f, 'a> {
             }
             return;
         }
-        let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
-            return;
-        };
-        let Some(name) = standard_call_name(resolved) else {
+        let Some(name) = ctx
+            .semantic_lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(standard_call_name)
+        else {
+            self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
             return;
         };
         let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -2652,11 +2704,45 @@ impl<'f, 'a> Reach<'f, 'a> {
                                     .flatten()
                             })
                     else {
+                        // ADR 0880: a handler the walk cannot read (a member,
+                        // a call's result, a parameter) may read on the
+                        // flight. A plain value is no function: no handler.
+                        if !plain_value(file, argument.span) {
+                            self.push_unfollowed(draft, walk, file, call, argument.span);
+                        }
                         continue;
                     };
+                    // ADR 0881: an `async` handler's body runs on the flight
+                    // too, its prefix in the handler's microtask; a generator
+                    // handler's iterator is the chain's value, and a later
+                    // handler may step it on the flight (review D14). Each is
+                    // an obligation until that run is placed.
                     if callback.r#async || callback.generator {
+                        self.report_conditional_region(
+                            draft,
+                            walk,
+                            handler_file,
+                            callback,
+                            depth,
+                            &AfterAwaitObligation::HandOffNotFollowed {
+                                via: Some(
+                                    if callback.generator {
+                                        "a generator handler"
+                                    } else {
+                                        "an async handler"
+                                    }
+                                    .to_owned(),
+                                ),
+                            },
+                        );
                         continue;
                     }
+                    // Review (D-R3d-2): an async function the handler calls
+                    // returns a promise the handler's joins, so its body past
+                    // its own await runs on the flight; its prefix runs in
+                    // the handler's microtask. No queue placed it: walk it as
+                    // an obligation, with no window of its own.
+                    self.enqueue_handler_calls(walk, queue, handler_file, callback);
                     // A rejection handler runs only if the receiver rejects;
                     // a fulfillment handler only if it fulfills. `finally`
                     // runs either way.
@@ -2693,6 +2779,94 @@ impl<'f, 'a> Reach<'f, 'a> {
                 self.expand_aggregate(draft, walk, queue, file, call, depth);
             }
             _ => {}
+        }
+    }
+
+    /// ADR 0882: `.then`/`.catch`/`.finally` on the flight with no exact
+    /// standard declaration (a cast, an `any` receiver, a thenable): the
+    /// handlers may run on the flight, inline, or never. A function the walk
+    /// can read is an obligation region; any other handler is unresolved.
+    fn unresolved_chain_handlers(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        call: &CallFact,
+        depth: usize,
+    ) {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if file.ast.computed_members.contains(&callee) {
+            return;
+        }
+        let Some(member) = file.ast.member_at(callee) else {
+            return;
+        };
+        let handlers = match file.source_text(member.property) {
+            Some("then") => 2,
+            Some("catch" | "finally") => 1,
+            _ => return,
+        };
+        for argument in call.arguments.iter().take(handlers) {
+            let readable = (!argument.spread)
+                .then(|| {
+                    callback_argument_literal(file, argument.span)
+                        .map(|callback| (file, callback))
+                        .or_else(|| {
+                            (argument.value == ArgumentValueKind::Identifier)
+                                .then(|| self.named_function(file, argument.span))
+                                .flatten()
+                        })
+                })
+                .flatten();
+            match readable {
+                Some((handler_file, callback)) => {
+                    self.enqueue_handler_calls(walk, queue, handler_file, callback);
+                    self.report_conditional_region(
+                        draft,
+                        walk,
+                        handler_file,
+                        callback,
+                        depth,
+                        &AfterAwaitObligation::HandlerMayNotRun,
+                    );
+                }
+                None if !argument.spread && plain_value(file, argument.span) => {}
+                None => self.push_unfollowed(draft, walk, file, call, argument.span),
+            }
+        }
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        if let Some(inner) = file.ast.call_at(receiver) {
+            self.expand(draft, walk, queue, file, inner, depth + 1);
+        }
+    }
+
+    /// Review (D-R3d-2): each async project function a handler calls, walked
+    /// as an obligation with no window of its own (the handler runs off the
+    /// computation's stack).
+    fn enqueue_handler_calls(
+        &self,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &FileFacts,
+        callback: &FunctionFact,
+    ) {
+        for inner in file.ast.calls_within(callback.body) {
+            let Some((helper_file, helper)) = async_helper(self.ctx, file, inner) else {
+                continue;
+            };
+            let past = walk.past_suspension;
+            walk.past_suspension = true;
+            self.enqueue(
+                walk,
+                queue,
+                helper_file,
+                helper,
+                Some(AfterAwaitObligation::HandOffNotFollowed {
+                    via: Some("a promise handler's call".to_owned()),
+                }),
+            );
+            walk.past_suspension = past;
         }
     }
 

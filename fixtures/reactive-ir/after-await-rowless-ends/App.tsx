@@ -113,8 +113,23 @@ export function Ends() {
     return n();
   });
 
+  // B5, positive: a callee that names no symbol, past the await.
+  const fns = [n];
+  const fifth = createMemo(async () => {
+    await p;
+    return fns[0]();
+  });
+
+  // B6-B8: a handler on the memo's flight the walk cannot place.
+  const api = { fmt: (v: number) => v + n() };
+  const viaMember = createMemo(() => p.then(api.fmt));
+  const viaAsync = createMemo(() => p.then(async (v) => v + n()));
+  const viaAny = createMemo(() => (p as any).then(() => n()) as Promise<number>);
+  // B6, negative: no handler at all.
+  const viaNull = createMemo(() => p.then(null));
+
   createEffect(
-    () => [first(), second(), third(), fourth(), query()],
+    () => [first(), second(), third(), fourth(), query(), fifth(), viaMember(), viaAsync(), viaAny(), viaNull()],
     () => {}
   );
   return <p />;
