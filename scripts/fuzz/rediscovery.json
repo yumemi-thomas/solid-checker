@@ -6253,5 +6253,53 @@
    "mx-on-flush-in-owned-scope-gen-sync-each-x-direct-none"
   ],
   "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 8 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "A secondary NO_OWNER_CLEANUP certified false clean in a CLEANUP_IN_FORBIDDEN_SCOPE census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_CLEANUP",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-cleanup-in-forbidden-scope-gen-yield-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-gen-sync-loop-x-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_CLEANUP false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+ {
+  "finding": "A secondary NO_OWNER_EFFECT certified false clean in a PRIMITIVE_IN_EFFECT_CALLBACK census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_EFFECT",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-gen-yield-effect-direct-none",
+   "mx-primitive-in-effect-callback-gen-sync-loop-effect-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_EFFECT false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+ {
+  "finding": "A secondary NO_OWNER_EFFECT certified false clean in a PRIMITIVE_IN_FORBIDDEN_SCOPE census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_EFFECT",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-gen-yield-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-gen-sync-loop-effect-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_EFFECT false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+ {
+  "finding": "A secondary NO_OWNER_EFFECT certified false clean in a SYNC_NODE_RECEIVED_ASYNC census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_EFFECT",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-gen-yield-effect-direct-none",
+   "mx-sync-node-received-async-gen-sync-loop-effect-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_EFFECT false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
  }
 ]

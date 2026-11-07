@@ -77,149 +77,6 @@
    "note": "ADR 0668 gave this advisory code its first cells: 690 of 3,990 are certified, each a read in tracked JSX with no row, through a module hook, a barrel, a wrapper or a hand-off. The census owns them: a transported read in a render position has no async row today"
   },
   {
-   "idPrefix": "mx-reactive-write-in-owned-scope-",
-   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-positive",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14, smoke-baseline.tsv): the call after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs after the generator suspends, outside the owned scope; Chrome reports nothing, the checker reports V at the call. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-context-not-found-",
-   "code": "CONTEXT_NOT_FOUND",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-positive",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14, smoke-baseline.tsv): the call after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs after the generator suspends, outside the owned scope; Chrome reports nothing, the checker reports V at the call. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-action-called-in-owned-scope-",
-   "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-positive",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14, smoke-baseline.tsv): the call after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs after the generator suspends, outside the owned scope; Chrome reports nothing, the checker reports V at the call. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-on-flush-in-owned-scope-",
-   "code": "ON_FLUSH_IN_OWNED_SCOPE",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-positive",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14, smoke-baseline.tsv): the call after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs after the generator suspends, outside the owned scope; Chrome reports nothing, the checker reports V at the call. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-no-owner-cleanup-",
-   "code": "NO_OWNER_CLEANUP",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): certified, no finding in the file; the primitive after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs with no owner, and Chrome reports the code. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-no-owner-effect-",
-   "code": "NO_OWNER_EFFECT",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): certified, no finding in the file; the primitive after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs with no owner, and Chrome reports the code. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-no-owner-boundary-",
-   "code": "NO_OWNER_BOUNDARY",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): certified, no finding in the file; the primitive after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs with no owner, and Chrome reports the code. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-no-owner-context-",
-   "code": "NO_OWNER_CONTEXT",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): certified, no finding in the file; the primitive after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs with no owner, and Chrome reports the code. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-settled-cleanup-unowned-",
-   "code": "SETTLED_CLEANUP_UNOWNED",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): certified, no finding in the file; the primitive after `yield 1` in an `async function*` stepped by `for await` in `createMemo(async ...)` runs with no owner, and Chrome reports the code. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-cleanup-in-forbidden-scope-",
-   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "secondary-false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): a second code Chrome reports on the site's lines in a generator context, missed in a certified file. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-primitive-in-forbidden-scope-",
-   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "secondary-false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): a second code Chrome reports on the site's lines in a generator context, missed in a certified file. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-sync-node-received-async-",
-   "code": "SYNC_NODE_RECEIVED_ASYNC",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "secondary-false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): a second code Chrome reports on the site's lines in a generator context, missed in a certified file. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
-   "idPrefix": "mx-primitive-in-effect-callback-",
-   "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
-   "contexts": [
-    "gen-yield",
-    "gen-sync-loop"
-   ],
-   "outcome": "secondary-false-clean",
-   "item": "census generator contexts: past a yield",
-   "note": "Smoke at b40d5d6a7 (mg6, Part 14): a second code Chrome reports on the site's lines in a generator context, missed in a certified file. Routed to W's gen-await agent (ADRs 0851-0854)"
-  },
-  {
    "idPrefix": "mx-action-called-in-owned-scope-",
    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
    "contexts": [
@@ -1435,25 +1292,36 @@
    "note": "3 programs no runner accepts: a decorator, a removed `on:` attribute, a compile refusal; listed with their reason"
   }
  ],
+ "owners": {
+  "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-direct-handoff-reflect": "R5",
+  "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-namespace-handoff-tagged": "R5",
+  "mx-census/mx-context-not-found-aw-helper-late-x-direct-none": "R3d",
+  "mx-census/mx-resolve-in-reactive-scope-flush-read-stored-x-direct-none": "R3d",
+  "mx-census/mx-until-in-reactive-scope-flush-read-stored-x-direct-none": "R3d",
+  "mx-census/mx-dynamic-static-promise-flush-read-stored-x-direct-none": "R3d"
+ },
  "ratchet": {
-  "certified": 21,
-  "falsePositive": 12,
+  "certified": 14,
+  "certifiedF2": 290,
+  "falsePositive": 4,
   "causes": {
-   "R-not-legal": 657,
+   "R-not-legal": 663,
    "createRoot inside onCleanup inside createRoot": 2,
-   "census generator contexts: past a yield": 32,
-   "census": 98,
-   "R-placeless": 89,
-   "g2d named hand-off": 124,
-   "R-unplaced": 38,
-   "R-neighbour-U": 29,
-   "R-other": 47,
-   "R-misplaced": 11,
-   "R-carrier": 180,
-   "R-alias-call": 194,
-   "R-stop-named-U": 1043,
+   "census": 99,
+   "R-placeless": 96,
+   "g2d named hand-off": 129,
+   "R-F2-open": 370,
+   "R-unplaced": 94,
+   "false-positive": 4,
+   "R-neighbour-U": 31,
+   "R-other": 55,
+   "R-misplaced": 42,
+   "R-carrier": 224,
+   "R-alias-call": 236,
+   "R-F1-open": 7,
+   "R-stop-named-U": 1052,
    "R-call-arg": 81,
-   "R-near": 8
+   "R-near": 9
   }
  }
 }
