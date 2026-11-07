@@ -325,7 +325,6 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) operation_span: Span,
     pub(crate) owner: Option<Span>,
     pub(crate) report_mask: u8,
-    pub(crate) allow_uncertain: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
     /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's

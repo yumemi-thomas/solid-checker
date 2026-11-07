@@ -1135,3 +1135,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/resolve-inline-entries/node_modules/**
 !fixtures/reactive-ir/read-flush-layer-placed/node_modules/
 !fixtures/reactive-ir/read-flush-layer-placed/node_modules/**
+!fixtures/reactive-ir/owner-probe-suspension/node_modules/
+!fixtures/reactive-ir/owner-probe-suspension/node_modules/**
+!fixtures/reactive-ir/settled-unresolved-call/node_modules/
+!fixtures/reactive-ir/settled-unresolved-call/node_modules/**

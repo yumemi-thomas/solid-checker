@@ -5853,5 +5853,48 @@
    "lg-strict-read-untracked-flush-read-each-signal-direct-helper"
   ],
   "rediscovered": "legal --recall by id, Chrome confirming (136 ids): 183cff9c0 build 54 false positives (stopped), this commit 0 (68 clean, 68 uncertifiable)"
+ },
+ {
+  "finding": "SC7002 answered every generator Sync: a named async generator, one in a const, and a closed return of AsyncGenerator (`() => o.g()`) threw SYNC_NODE_RECEIVED_ASYNC in Chrome, certified (ADR 0865)",
+  "found": "the owner/scope scout (F7), widened by R5's probes",
+  "fixed": "ADR 0865",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-body-cmp-async-gen-named-direct-none",
+   "mx-sync-node-received-async-body-cmp-async-gen-member-direct-none",
+   "mx-sync-node-received-async-body-cmp-async-iter-class-direct-none"
+  ],
+  "rediscovered": "cmp-async-gen* ids (76, Chrome confirmed): build rmg7 (b2e910572) 57 false cleans; r2: 0 (57 agree, 19 uncertifiable)"
+ },
+ {
+  "finding": "guarded_by_owner_probe looked only at `await` before the operation: a `for await` or a later loop iteration in the guarded block raised NO_OWNER_* in Chrome, with the requirement dropped and the file certified (ADR 0866)",
+  "found": "the owner/scope scout (F5)",
+  "fixed": "ADR 0866",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-guard-for-await-x-direct-none",
+   "mx-no-owner-cleanup-flw-guard-loop-x-direct-none"
+  ],
+  "rediscovered": "flw-guard-* direct ids over the five owner codes (105, Chrome confirmed): build rmg7 (b2e910572) 70 false cleans; r2: 0 (76 uncertifiable, 29 agree); legal twins 80 clean on both"
+ },
+ {
+  "finding": "the `cleanup-unresolved-call` arm dropped an `onSettled` whose callback has no proof and whose call has no Valid fact, also where the call simply has no resolved fact (ADR 0867)",
+  "found": "the owner/scope scout (F8)",
+  "fixed": "ADR 0867",
+  "outside": "no tsc-accepted program reached the arm silently: `(onSettled as any)(cb)` and every variant probed are already V or a named U on rmg7; `any-callee` in SETTLED_CLEANUP_UNOWNED holds the shape, 36 of 36 agree on both builds"
+ },
+ {
+  "finding": "a JSX `<Loading>`/`<Errored>` at an unowned site was SC4001: rc.21's dev `createComponent` runs the component under its own transparent root, so Chrome is quiet and NO_OWNER_BOUNDARY cannot fire through JSX (ADR 0869)",
+  "found": "R5's probes of the scout's F3, which expected the opposite",
+  "fixed": "ADR 0869",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "lg-no-owner-boundary-timer-jsx-loading-direct-none",
+   "lg-no-owner-boundary-handler-jsx-loading-direct-none"
+  ],
+  "rediscovered": "jsx-loading and jsx-errored direct ids (28): build rmg7 (b2e910572) 5 Chrome-confirmed false positives; r2: 0, 28 clean"
  }
 ]
