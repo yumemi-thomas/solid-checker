@@ -4638,6 +4638,14 @@ impl LocalAccessContext<'_, '_> {
                                     || !self.span_may_make_computation(file, hook.span, 4)
                             })
                         && !self.value_reaches_async_source(file, call.callee).may()
+                        // A helper's read of an accessor that may throw into
+                        // this pass: the direct call's question, one call down.
+                        && !self
+                            .value_reaches(file, call.callee, &|symbol| {
+                                self.accessors.contains_key(symbol)
+                                    && !self.caught_read_silent(symbol)
+                            })
+                            .may()
                         // ADR 0658: a value a caller handed over may read.
                         && !self.handed_member_callee(file, call.callee))
                 {
