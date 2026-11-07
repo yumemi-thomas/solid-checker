@@ -65,6 +65,14 @@ const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-po
 // Judging one program at its site
 
 const inLines = (finding, lines) => lines.some((line) => finding.line <= line && line <= finding.endLine);
+/**
+ * A rule that stands beside a code (codes.mjs `besideCode`, ADR 0483) makes a claim that code's throw hides, whichever code the row was generated
+ * for: the row's own, or any code the run recorded on the finding's lines (ADR 0887 amended: `createEffect(..., { sync: true })` in an apply over an
+ * async source records SYNC_NODE_RECEIVED_ASYNC and PRIMITIVE_IN_EFFECT_CALLBACK at one line, and the row's code is only the first).
+ */
+const standsBeside = (code, finding, runtime) => Boolean(besideCode[code]?.includes(finding.rule))
+  || runtimeEvents(runtime).some((event) => besideCode[event.code]?.includes(finding.rule)
+    && event.positions.some((position) => (position.file === "App.tsx" || position.file === undefined) && inLines(finding, [position.line])));
 
 /** The lines that belong to the site: where the misuse call is written, and the line of a wrapper's inner call. */
 export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line) => Number.isInteger(line));
@@ -86,7 +94,7 @@ export function judge(input) {
   // false positive looks like, not a generator problem.
   const claiming = codeRules[input.code] ?? [];
   // A rule that stands beside the row's code (codes.mjs `besideCode`, ADR 0483) makes a claim the code's throw hides: the runtime stops first.
-  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || besideCode[input.code]?.includes(finding.rule));
+  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || standsBeside(input.code, finding, runtime));
   const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
   const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   if (!judged.length) return verdict;
@@ -232,7 +240,7 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // there: `offSiteVerdicts` reads it as no-counterpart, and it names no rule wrongly here. It excuses nothing else: with no claiming rule the
   // row falls through to a recall gap or a false clean.
   // A claiming rule's own violation off the recorded positions names no rule wrongly (R8): it falls through to a false clean.
-  const wrong = violations.filter((finding) => !rules.includes(finding.rule) && !corroborated(finding) && !finding.runtimeSilent && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
+  const wrong = violations.filter((finding) => !rules.includes(finding.rule) && !corroborated(finding) && !finding.runtimeSilent && !standsBeside(code, finding, runtime) && !partlySilentRules.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
   if (violations.some((finding) => corroborated(finding) && holeOnly(finding))) detail.holeCorroborated = true;
   // A claiming violation does not excuse another rule's on these lines: on the `agree` path the second finding is judged the same way
