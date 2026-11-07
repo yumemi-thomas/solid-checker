@@ -58,7 +58,7 @@ import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "unexecuted", "pending-uncaught", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "stacked-claim", "false-positive", "tsc-overlap"];
+export const OUTCOMES = ["typed-away", "harness", "unexecuted", "pending-uncaught", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "unjudged-claim", "stacked-claim", "false-positive", "tsc-overlap"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -100,6 +100,9 @@ export function judge(input) {
   const primary = verdict.detail?.beside ? "agree" : verdict.outcome;
   if (wrong.length && scored) return { outcome: "false-positive", detail: { ...detail, primary, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
   if (stacked.length && scored) return { outcome: "stacked-claim", detail: { ...detail, primary, pairs: [...new Set(stacked.map(pairOf))].sort(), at: stacked.map((row) => Number(row.finding.split("@")[1])) } };
+  // A violation the rule's code may confirm but Chrome gave it no line (`unplaced`): unjudged, listed by id, never cleared (Part 16).
+  const unplaced = judged.filter((row) => row.verdict === "unjudged" && /(?:^|-)unplaced$/.test(row.why ?? ""));
+  if (unplaced.length && scored) return { outcome: "unjudged-claim", detail: { ...detail, primary, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => Number(row.finding.split("@")[1])) } };
   return { outcome: verdict.outcome, detail };
 }
 

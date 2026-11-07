@@ -7,10 +7,10 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
-import { F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
+import { F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
 
 /** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
-const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "stacked-claim", "secondary-false-clean", "not-legal"];
+const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "stacked-claim", "unjudged-claim", "secondary-false-clean", "not-legal"];
 /** Rows the ledger may not hold: certified CONTEXT_NOT_FOUND, a real hole R5 is closing. They fail the smoke until that lands. */
 export const NOT_LISTED = (row) => /^flw-guard-(?:early|probe-loop)$/.test(String(row.context ?? ""));
 const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted"];
@@ -25,6 +25,7 @@ export function causeOf(row, problem, entry) {
   if (problem === "misplaced") return "R-misplaced";
   if (problem === "not-legal") return "R-not-legal";
   if (problem === "stacked-claim") return STACKED;
+  if (problem === "unjudged-claim") return UNJUDGED;
   if (problem !== "false-clean") return problem;
   const variant = String(row.variant ?? "");
   if (/^(?:store-)?proto-|^installed-|^use-|^net-|^cast-|^store-dstr-/.test(variant)) return "R-carrier";
@@ -76,7 +77,7 @@ export function ledger(dir, seed, list) {
       if (inStopGroup(row)) { (entry && !entry.item.startsWith("R-") ? stopCheck.family : named ? stopCheck.listed : stopCheck.rejected).push(row.id); }
       const stops = named && !(entry && !entry.item.startsWith("R-"));
       const owner = list.owners?.[`${grid}/${row.id}`];
-      rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}), ...(problem === "stacked-claim" ? { pairs: row.detail?.pairs ?? [] } : {}), ...(owner ? { owner } : {}) };
+      rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}), ...(problem === "stacked-claim" ? { pairs: row.detail?.pairs ?? [] } : {}), ...(problem === "unjudged-claim" ? { rules: row.detail?.rules ?? [] } : {}), ...(owner ? { owner } : {}) };
     }
     if (Object.keys(rows).length) grids[grid] = Object.fromEntries(Object.entries(rows).sort(([a], [b]) => (a < b ? -1 : 1)));
   }

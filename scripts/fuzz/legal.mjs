@@ -52,7 +52,7 @@ import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { gridShardOptions, shardEntries, shardLine, shardOf } from "./shard.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
-export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "stacked-claim", "false-positive", "unexecuted", "uncertifiable", "clean", "tsc-overlap"];
+export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "unjudged-claim", "stacked-claim", "false-positive", "unexecuted", "uncertifiable", "clean", "tsc-overlap"];
 
 const inLines = (finding, lines) => lines.some((line) => finding.line <= line && line <= finding.endLine);
 
@@ -113,7 +113,7 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
 }
 
 /** Outcomes from worst to best: a combination program takes its worst site's. */
-const WORST_FIRST = ["false-positive", "tsc-overlap", "stacked-claim", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
+const WORST_FIRST = ["false-positive", "tsc-overlap", "stacked-claim", "unjudged-claim", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
 
 const LITERAL_DEAD = /(?:\[\]|new (?:Set|Map)\(\))(?:\s+as [^)]*)?\)?\s*\.\s*(?:forEach|map|filter|flatMap|some|every|find|findLast|reduce)\(|\bof \[\]|(?:\b(?:false|0|null|undefined)|""|\'\'|!1)\s*&&|\bif \((?:false|0|null|undefined|""|!1)\)|\bwhen=\{(?:false|0|null|undefined)\}/;
 /** A receiver or value nothing in the text fixes: the branch counts as reachable (owner's ruling), however closed the rest is. */
@@ -164,6 +164,8 @@ function withOffSite(verdict, uses, { built, program, checker, runtime, plan }) 
   const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.first ? `<${row.first}` : ""}${row.why ? `(${row.why})` : ""}`) };
   // A stacked violation (classify.mjs, stacked.mjs): a false positive unless its pair is proved, then a `stacked-claim`.
   const { wrong, stacked } = stackedSplit(judged);
+  const unplaced = judged.filter((row) => row.verdict === "unjudged" && /(?:^|-)unplaced$/.test(row.why ?? ""));
+  if (!wrong.length && !stacked.length && unplaced.length && verdict.outcome !== "false-positive") return { outcome: "unjudged-claim", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => Number(row.finding.split("@")[1])) } };
   if (!wrong.length && stacked.length && verdict.outcome !== "false-positive") return { outcome: "stacked-claim", detail: { ...detail, primary: verdict.outcome, pairs: [...new Set(stacked.map(pairOf))].sort(), at: stacked.map((row) => Number(row.finding.split("@")[1])) } };
   if (!wrong.length || verdict.outcome === "false-positive") return { outcome: verdict.outcome, detail };
   return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };

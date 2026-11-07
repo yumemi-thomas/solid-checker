@@ -280,7 +280,7 @@ export const besideCode = {
  */
 export const partlySilentRules = ["primitive-in-directive-application"];
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
-export const PROBLEMS = ["false-clean", "misplaced", "unplaced", "wrong-rule", "harness", "stacked-claim", "false-positive", "not-legal", "tsc-overlap"];
+export const PROBLEMS = ["false-clean", "misplaced", "unplaced", "wrong-rule", "harness", "unjudged-claim", "stacked-claim", "false-positive", "not-legal", "tsc-overlap"];
 /**
  * What a grid row needs a look for, or null: its outcome, or a second code on the site's lines missed in a file with no uncertifiable
  * finding (matrix.mjs `judge`, `secondary`), a false clean of that code whatever the row's own outcome. The one test of focus, the audit and smoke.

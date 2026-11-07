@@ -12,7 +12,8 @@ describe("stacked claims (ADR 0887)", () => {
       const [first, rule] = pair.split("|");
       expect(codeRules[first], pair).toBeDefined();
       expect(codesForRule(rule).length, pair).toBeGreaterThan(0);
-      expect(codesForRule(rule), `${pair}: the first code is the rule's own, so nothing is stacked`).not.toContain(first);
+      // A repeat is the rule's own code reported once elsewhere; a stacked pair's first code is another rule's.
+      expect(codesForRule(rule).includes(first), `${pair}: kind ${STACKED_PAIRS[pair].kind ?? "stacked"}`).toBe(STACKED_PAIRS[pair].kind === "repeat");
       expect(why, pair).toBeTruthy();
       for (const id of patterns) expect(existsSync(`${here}patterns/${id}/App.tsx`), `${pair}: ${id}`).toBe(true);
     }

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { offSiteVerdicts } from "./classify.mjs";
+import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { rowProblem } from "./codes.mjs";
 import { readGrid } from "./focus.mjs";
 import { judgeLegalProgram, legalCells } from "./legal.mjs";
@@ -30,8 +30,15 @@ describe("offSiteVerdicts", () => {
   it("lines that ran where the runtime reported no code of the rule anywhere are a false positive", () => {
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("FLUSH_IN_EFFECT_CALLBACK", 10)]))).toEqual(["false-positive"]);
   });
-  it("a code of the rule reported elsewhere is unconnected, never a false positive", () => {
-    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)]))).toEqual(["unconnected"]);
+  it("two reports of one read through two calls stay two: each call's warning is confirmed (Part 16: `f1(); f1();` merged by its read line)", () => {
+    const twice = { diagnostics: [event("STRICT_READ_UNTRACKED", 10, 20), event("STRICT_READ_UNTRACKED", 10, 30)], errors: [], witnesses: [], hits: { h1: 1, h2: 1, h3: 1 } };
+    expect(runtimeEvents(twice).map((row) => row.positions.map((position) => position.line))).toEqual([[10, 20], [10, 30]]);
+    expect(verdictsOf([finding("strict-read-untracked", 20), finding("strict-read-untracked", 30)], twice)).toEqual(["substantiated", "substantiated"]);
+    // An exact repeat still merges.
+    expect(runtimeEvents({ diagnostics: [event("STRICT_READ_UNTRACKED", 10, 20), event("STRICT_READ_UNTRACKED", 10, 20)] })).toHaveLength(1);
+  });
+  it("a code of the rule reported only elsewhere does not confirm the finding: a repeat, scored by its pair's twin (coordinator, Part 16; was unconnected)", () => {
+    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan })).toEqual([{ finding: "strict-read-untracked@20", verdict: "stacked", first: "STRICT_READ_UNTRACKED", why: "repeat" }]);
     // Unplaced (no line at all): a diagnostic nobody can place disturbs the whole run (classify.mjs `disturbances`), and may be this one.
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")]))).toEqual(["unjudged(disturbed-unplaced)"]);
   });
@@ -51,7 +58,7 @@ describe("offSiteVerdicts", () => {
     expect(verdictsOf([finding("missing-owner", 20)], run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed)"]);
   });
   it("a disturbed run: the rule's code placed only off the lines is a false positive, unplaced it judges nothing, lines that never ran stay unexecuted", () => {
-    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed-unconnected)"]);
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)], undefined, threw(null)))).toEqual(["stacked(disturbed-repeat)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")], undefined, threw(null)))).toEqual(["unjudged(disturbed-unplaced)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], { h1: 1, h2: 0, h3: 1 }, threw(null)))).toEqual(["unexecuted"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], null, threw(null)))).toEqual(["unjudged(disturbed-no-hit-ledger)"]);
@@ -78,10 +85,18 @@ describe("the misuse grid's judge, off the site", () => {
     // Without the printed program (an old caller) the site is judged alone.
     expect(judge({ code: "FLUSH_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker, runtime }).outcome).toBe("agree");
   });
-  it("a remote violation of the site's own rule stays its agreement: the code fired", () => {
+  // Was "stays its agreement: the code fired" (coordinator, Part 16): the code at the site does not confirm the warning at 20. Chrome reports a
+  // strict read per call, so no twin proves a strict-read repeat, and it is a false positive; a proved repeat pair is a stacked claim.
+  it("a remote violation of the site's own rule is a repeat: a false positive unless its pair's twin proves it", () => {
     const verdict = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: strictAtSite, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), built });
-    expect(verdict.outcome).toBe("agree");
-    expect(verdict.detail.offSite).toEqual(["strict-read-untracked@20:unconnected"]);
+    expect(verdict.outcome).toBe("false-positive");
+    expect(verdict.detail).toMatchObject({ primary: "agree", offSite: ["strict-read-untracked@20:stacked<STRICT_READ_UNTRACKED(repeat)"], rules: ["strict-read-untracked"] });
+    const store = { ok: true, findings: [finding("no-store-mutation-outside-setter", 10), finding("no-store-mutation-outside-setter", 20)] };
+    expect(judge({ code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true }, checker: store, runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]), built })).toMatchObject({ outcome: "stacked-claim", detail: { pairs: ["STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter"] } });
+  });
+  it("a violation whose rule's code Chrome reported with no line is an unjudged claim, listed", () => {
+    const verdict = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: strictAtSite, runtime: run([event("STRICT_READ_UNTRACKED", 10)], undefined, { unattributed: ["STRICT_READ_UNTRACKED"] }), built });
+    expect(verdict).toMatchObject({ outcome: "unjudged-claim", detail: { rules: ["strict-read-untracked"], at: [20] } });
   });
   it("a false clean at the site stays a false clean, with the off-site row beside it", () => {
     const verdict = judge({ code: "FLUSH_IN_EFFECT_CALLBACK", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("strict-read-untracked", 20)] }, runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 10)]), built });

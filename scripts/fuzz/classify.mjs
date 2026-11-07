@@ -44,7 +44,7 @@ const rank = (verdict) => VERDICTS.indexOf(verdict);
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
 const lines = (positions) => (positions ?? []).map((position) => position.line);
 
-/** Diagnostics and coded thrown errors, one row per (code, innermost App position), repeats merged. */
+/** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
 export function runtimeEvents(runtime) {
   const rows = [];
   for (const diagnostic of runtime.diagnostics ?? []) {
@@ -58,7 +58,9 @@ export function runtimeEvents(runtime) {
   }
   const seen = new Set();
   return rows.filter((row) => {
-    const key = `${row.code}|${row.source}|${row.positions[0]?.line ?? "-"}`;
+    // The whole authored stack, not its innermost line: one read two calls run reports twice, with the calls as outer frames (Part 16:
+    // `f1(); f1();` merged to its first stack, and the checker's warning at the second call looked unconnected).
+    const key = `${row.code}|${row.source}|${row.positions.map((position) => `${position.file ?? ""}:${position.line}:${position.column ?? ""}`).join(">") || "-"}`;
     return !seen.has(key) && seen.add(key);
   });
 }
@@ -95,8 +97,6 @@ export function disturbances(runtime, plan) {
  *                   is in: registration.mjs);
  *   false-positive  the finding's lines ran (a site or glue counter above zero), the run was not disturbed, and the runtime reported no
  *                   code of the rule anywhere, placed or not: the same contradiction the legal grid's judge reads at its site;
- *   unconnected     a code of the rule is reported, but not on the finding's lines: the misuse's diagnostic may be the one the finding
- *                   means (a call the frames do not show). Counted, never a failure;
  *   unexecuted      the ledger shows the finding's lines never ran;
  *   unjudged        no runtime counterpart, no site or glue on its lines, or no hit ledger.
  * A disturbed run (a throw, a halt) is judged the same way (coordinator, Part 16: 185 violations hid as `unjudged(disturbed)`), except:
@@ -104,8 +104,9 @@ export function disturbances(runtime, plan) {
  *                   second claim behind Solid's first throw. A violation means "wrong if it runs", so it is no false positive by itself;
  *                   matrix.mjs `judge` scores it `stacked-claim` only for a (first code, rule) pair a Chrome twin proves (stacked-pairs.json),
  *                   a false positive otherwise;
- *   false-positive  also where the rule's code was reported only off the finding's lines (`unconnected` in an undisturbed run): the halt
- *                   leaves no call the frames could hide.
+ *   stacked         (why `repeat`) the rule's code was reported, only off the finding's lines (once `unconnected`): that does not confirm
+ *                   this finding, but Solid reports some codes once, so it scores like a stacked claim, with the code reported as
+ *                   `first`. A report of the rule's code with no authored line may be this finding's: unjudged (`unplaced`), listed.
  * @returns {{ finding: string, verdict: string, why?: string }[]}
  */
 export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
@@ -139,11 +140,18 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     // A disturbed run: the verdict an undisturbed one would get, then what the disturbance changes (see above).
     const atSpan = events.filter((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
     const first = (atSpan.find((event) => event.source === "thrown") ?? atSpan[0])?.code ?? null;
+    // The rule's code reported only off these lines (`unconnected`) does not confirm this finding (coordinator, Part 16): a `repeat`, unless a
+    // report of it has no authored line, which may be this finding's (`unplaced`, unjudged).
+    const unplacedRuleCode = reported.some((event) => !appLines(event).length) || unattributedCodes(runtime).some((code) => codes.includes(code));
+    // Solid reports some codes once (a second untracked read after an await, a second store write): the code elsewhere may be this finding's
+    // too. A `repeat` (first = the code reported) scores like a stacked claim: proved only by a pair's twin (stacked.mjs), else false.
+    const elsewhere = reported.find((event) => appLines(event).length)?.code ?? null;
+    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" });
     const halted = (verdict) => {
       if (!disturbed.length) return verdict;
+      // A repeat stays one in a halted run (its pair needs the same twin); a stacked claim needs nothing of the rule reported anywhere.
+      if (verdict.verdict === "stacked") return { ...verdict, why: `disturbed-${verdict.why}` };
       if (verdict.verdict === "false-positive") return first ? { finding: label, verdict: "stacked", first, why: "disturbed" } : { ...verdict, why: "disturbed" };
-      // Only where every report of the rule's codes is placed off these lines: one Chrome gave no authored line may be this finding's.
-      if (verdict.verdict === "unconnected") return reported.some((event) => !appLines(event).length) || unattributedCodes(runtime).some((code) => codes.includes(code)) ? { finding: label, verdict: "unjudged", why: "disturbed-unplaced" } : { finding: label, verdict: "false-positive", why: "disturbed-unconnected" };
       if (verdict.verdict === "unjudged") return { finding: label, verdict: "unjudged", why: `disturbed-${verdict.why}` };
       return verdict;
     };
@@ -156,13 +164,13 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
       const entered = hitCount(hits, host.hit);
       if (entered === null) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
       if (entered === 0) return halted({ finding: label, verdict: "unexecuted", why: "host" });
-      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted({ finding: label, verdict: "unconnected" });
+      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected());
       return halted({ finding: label, verdict: "false-positive", why: "host-ran" });
     }
     const counts = covered.map((site) => hitCount(hits, site.hit));
     if (counts.some((count) => count === null)) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
     if (counts.every((count) => count === 0)) return halted({ finding: label, verdict: "unexecuted" });
-    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted({ finding: label, verdict: "unconnected" });
+    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected());
     return halted({ finding: label, verdict: "false-positive" });
   });
 }

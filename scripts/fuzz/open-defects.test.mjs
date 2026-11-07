@@ -176,6 +176,9 @@ describe("the row ledger (ADR 0815, R23)", () => {
     expect(ratchetDifferences({ rows, ratchet: { ...base, stackedClaim: 2, stackedPairs: { "A|r": 2 } } })).toEqual([{ key: "stacked B|s", rows: 1, ratchet: null }]);
     expect(ratchetDifferences({ rows, ratchet: base }).map((row) => row.key)).toEqual(["stackedClaim", "stacked A|r", "stacked B|s"]);
     expect(finalBlockers({ rows })).toEqual([]);
+    const unjudged = { grids: { g: { c: { outcome: "unjudged-claim", cause: "R-unjudged-unplaced", rules: ["r"] } } } };
+    expect(ledgerCounts(unjudged)).toMatchObject({ unjudgedClaim: 1 });
+    expect(ratchetDifferences({ rows: unjudged, ratchet: { certified: 0, certifiedF2: 0, falsePositive: 0, causes: { "R-unjudged-unplaced": 1 } } }).map((row) => row.key)).toEqual(["unjudgedClaim"]);
   });
   it("the ratchet is exact both ways, certified and false-positive rows on their own", () => {
     const rows = { grids: { g: { a: { outcome: "false-clean", certified: true, cause: "R" }, b: { outcome: "false-positive", cause: "R" } } } };
