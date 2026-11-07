@@ -69,6 +69,9 @@ export function manifestIds(grid) {
   return new Set(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")).ids : []);
 }
 
+/** Manifest moves the ledger does not account for: a listed row is judged by the ledger, its move from the manifest says nothing new. */
+export const offLedger = (list, grid, moves) => moves.filter((move) => !list.rows?.grids?.[grid]?.[move.id]);
+
 /** The ledger's counts: per cause, and its certified and false-positive rows, which a cause's count could hide. */
 export function ledgerCounts(rows) {
   const counts = { causes: {}, certified: 0, falsePositive: 0 };

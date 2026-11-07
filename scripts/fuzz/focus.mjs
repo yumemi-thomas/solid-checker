@@ -51,7 +51,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
-import { gridStanding, heldLine, ledgerCovers, manifestIds, readOpenDefects } from "./open-defects.mjs";
+import { gridStanding, heldLine, ledgerCovers, manifestIds, offLedger, readOpenDefects } from "./open-defects.mjs";
 import { GRIDS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
@@ -366,6 +366,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
       if (options.smoke && existsSync(manifest) && existsSync(join(unit.dir, "programs.jsonl"))) {
         const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(unit.dir));
+        // A row on the open-defects ledger is judged there, by id: only a move off it is news.
+        moved.worse = offLedger(readOpenDefects(), basename(unit.dir), moved.worse);
         if (moved.worse.length || moved.other.length) console.log(`           moved from the manifest: ${moved.worse.length} worse, ${moved.other.length} better or changed`);
         // A sample holds some of a manifest's programs: they are compared, and the others are not expected.
         if (moved.missing.length && !options.cover) attention.push(`${unit.label}: ${moved.missing.length} programs of the manifest gave no row (${moved.missing.slice(0, 3).join(", ")})`);

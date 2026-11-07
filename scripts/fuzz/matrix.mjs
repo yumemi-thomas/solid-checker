@@ -241,13 +241,13 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
   const near = relevant.find(nearOnly);
-  // The named uncertifiables on the site's own line, starting in the statement Chrome placed the code in (a placeless code has no such
-  // place: the line), `atRead` when one starts exactly at the position Chrome reported: what open-rows.mjs checks for a row the owner's
-  // stop rule covers (ADR 0815).
-  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column))?.[0];
-  const statement = top && top.line === site.line ? statementAt(text, top.line, top.column) : null;
-  const namedU = relevant.filter((finding) => finding.kind === "uncertifiable" && finding.blocker && finding.file === "App.tsx" && finding.line === site.line
-    && (!statement || statement.contains(finding.line, finding.column))).map((finding) => ({ rule: finding.rule, id: finding.id, line: finding.line, column: finding.column, blocker: finding.blocker, ...(stacks.some((stack) => withheldAtStack(finding, stack.slice(0, 1), mount, code)) ? { atRead: true } : {}) }));
+  // The named uncertifiables starting in the statement that holds the read: Chrome's top frame on the site's lines (a `wrapper` site's read is
+  // on its aux line, the site's line is the call). A code with a place and no such frame has none; a placeless code has the site's line.
+  // `atRead` when one starts exactly at the position Chrome reported. What open-rows.mjs checks for a row the owner's stop rule covers (ADR 0815).
+  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column) && region.includes(stack[0].line))?.[0];
+  const statement = top ? statementAt(text, top.line, top.column) : null;
+  const namedU = relevant.filter((finding) => finding.kind === "uncertifiable" && finding.blocker && finding.file === "App.tsx"
+    && (statement ? statement.contains(finding.line, finding.column) : isPlacelessCode(code) && finding.line === site.line)).map((finding) => ({ rule: finding.rule, id: finding.id, line: finding.line, column: finding.column, blocker: finding.blocker, ...(stacks.some((stack) => withheldAtStack(finding, stack.slice(0, 1), mount, code)) ? { atRead: true } : {}) }));
   return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified, ...(near ? { withheldNear: `${near.rule}@${near.line}:${near.column}` } : {}), ...(namedU.length ? { namedU } : {}) } };
 }
 

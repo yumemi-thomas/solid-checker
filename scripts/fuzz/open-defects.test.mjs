@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { gridStanding, heldGridEntry, ledgerCovers, namedKey, ratchetDifferences, readOpenDefects } from "./open-defects.mjs";
+import { gridStanding, heldGridEntry, ledgerCovers, namedKey, offLedger, ratchetDifferences, readOpenDefects } from "./open-defects.mjs";
 import { inStopGroup, ledgerChange, runSeed, stopFinding } from "./open-rows.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { PATTERNS, comparePatterns, expectedSilent, judgePattern, patternCases } from "./patterns.mjs";
@@ -124,6 +124,9 @@ describe("the row ledger (ADR 0815, R23)", () => {
     for (const variant of ["installed-get", "installed-set", "proto-create", "proto-receiver", "store-proto-setprototypeof"]) expect(inStopGroup({ ...false_clean, variant }), variant).toBe(false);
     expect(inStopGroup({ outcome: "false-clean", code: "CAUGHT_REACTIVE_READ", context: "evt-memo-fire-focus" })).toBe(true);
     expect(inStopGroup({ outcome: "false-clean", code: "CAUGHT_REACTIVE_READ", context: "handed-flush" })).toBe(false);
+  });
+  it("leaves only manifest moves the ledger does not hold", () => {
+    expect(offLedger(list, "g", [{ id: "mx-a-1" }, { id: "mx-a-2" }])).toEqual([{ id: "mx-a-2" }]);
   });
   it("finds a family by outcome: a later entry of the same key is reachable", () => {
     expect(heldGridEntry(list, row, "misplaced").item).toBe("other");

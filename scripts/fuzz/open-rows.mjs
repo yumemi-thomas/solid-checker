@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
 import { OPEN_DEFECTS, OPEN_ROWS, STOP_NAMED_U, heldGridEntry, ledgerCounts, namedKey } from "./open-defects.mjs";
 
-/** What the list may hold. Any other problem (not-legal, wrong-rule, harness, tsc-overlap) stays a failure. */
-const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "secondary-false-clean"];
+/** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
+const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "secondary-false-clean", "not-legal"];
 const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted"];
 const PLACELESS = ["CAUGHT_REACTIVE_READ", "SETTLED_CLEANUP_UNOWNED", "ASYNC_OUTSIDE_LOADING_BOUNDARY"];
 
@@ -19,6 +19,7 @@ export function causeOf(row, problem, entry) {
   if (entry && !entry.item.startsWith("R-")) return entry.item;
   if (problem === "unplaced") return "R-unplaced";
   if (problem === "misplaced") return "R-misplaced";
+  if (problem === "not-legal") return "R-not-legal";
   if (problem !== "false-clean") return problem;
   const variant = String(row.variant ?? "");
   if (/^(?:store-)?proto-|^installed-|^use-|^net-|^cast-|^store-dstr-/.test(variant)) return "R-carrier";
@@ -32,7 +33,7 @@ export function causeOf(row, problem, entry) {
 
 /**
  * Owner's ruling on the triage (ADR 0815): a false clean of a generator-only shape (the 10 variants measured; CAUGHT in an `evt-*` or
- * `flw-*` context) with a named uncertifiable in the site's statement stops there. The row keeps its outcome and is listed
+ * `flw-*` context) with a named uncertifiable in the statement holding the read (Chrome's frame on the site's lines) stops there. The row keeps its outcome and is listed
  * by id under this cause, with the blocker. Nothing else enters: not a shape real code has, not any other group, and not a row with no
  * such finding, which keeps its own cause and is returned as rejected.
  */
