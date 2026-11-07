@@ -12,3 +12,6 @@ A function every reference of which is a direct call or an inline run in the bod
 
 R29: a whole argument of a primitive is placed only where the dialect gives that
 argument an owner. `action(q)` keeps `q`, and the click steps it with no owner.
+
+A closed layer is entered as its callers are: `viaHelper`, called once from a function
+that escapes, is uncertifiable. `inRoot`, called under a root that function creates, is silent.

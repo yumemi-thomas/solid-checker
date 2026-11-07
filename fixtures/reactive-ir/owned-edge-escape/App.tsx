@@ -1,4 +1,4 @@
-import { action, onCleanup } from "solid-js";
+import { action, createRoot, onCleanup } from "solid-js";
 
 const done = () => {};
 const items: (() => void)[] = [];
@@ -75,4 +75,28 @@ export function ActionKept() {
   q();
   const act = action(q as any);
   return <button onClick={() => act()} />;
+}
+// A closed layer is entered as its callers are: `viaHelper` has one call, from a
+// function that escapes. Under a root it creates, the caller's entries change nothing.
+function viaHelper() {
+  onCleanup(done);
+}
+export function CalledFromEscaped() {
+  const r = () => viaHelper();
+  r();
+  const el = document.createElement("button");
+  el.onclick = r;
+  return <i />;
+}
+function inRoot() {
+  onCleanup(done);
+}
+export function CalledUnderRoot() {
+  const r = () => {
+    createRoot(() => inRoot());
+  };
+  r();
+  const el = document.createElement("button");
+  el.onclick = r;
+  return <i />;
 }

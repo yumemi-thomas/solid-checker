@@ -5815,5 +5815,27 @@
    "mx-no-owner-cleanup-flw-owned-action-x-direct-none"
   ],
   "rediscovered": "flw-owned-action direct ids (35, Chrome confirmed): build r8 (a1e37776f plus the SC3001 fix) 35 false cleans; r9: 0, 35 uncertifiable"
+ },
+ {
+  "finding": "ADR 0868's walk stopped at a closed named layer: `wrapUse` called from an `f` that escapes stayed certified, and the click raises the site's NO_OWNER_* code (every wrapper binding of the flw-owned contexts)",
+  "found": "Part 16's smoke on the merged build",
+  "fixed": "ADR 0868, callers amendment",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-flw-owned-assigned-errored-wrapper-handoff-call"
+  ],
+  "rediscovered": "every flw-owned wrapper id (7,152, Chrome confirmed): build r9 2,737 false cleans; r13: 0, 6,816 uncertifiable, 336 agree; legal twins 1,431: 0 false positives, 406 clean, 1,025 uncertifiable"
+ },
+ {
+  "finding": "SC3001's IIFE placement ended at its bound with `false`, and the IIFE call took no helper path, so a forbidden call past 16 nested IIFEs lost the walk's obligation and was certified",
+  "found": "Part 16's q5 smoke",
+  "fixed": "the IIFE placement's bound leaves an obligation",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-tracked-root-alias-depth-17"
+  ],
+  "rediscovered": "depth-15/16/17 ids of the three forbidden-scope codes in settled, tracked and their contexts (450, Chrome confirmed): build r9 75 false cleans; r13: 0, 330 uncertifiable, 120 agree"
  }
 ]
