@@ -7,6 +7,10 @@ Solid 2.0 leaf owner. The rule covers `onCleanup`, owner-attaching reactive
 primitives, and `flush()` inside `createTrackedEffect` or an owner-backed
 `onSettled` callback.
 
+Written JSX counts as a creating call (ADR 0883): an intrinsic's dynamic child, attribute
+or spread, a fragment's dynamic child and a component element, in the callback, its
+parameterless IIFEs or a helper it calls.
+
 ## What it does
 
 Leaf owners manage work through their callback's return value and cannot own

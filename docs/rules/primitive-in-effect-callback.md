@@ -41,6 +41,10 @@ owner (a handler, a timer, past an await, module scope, `runWithOwner(null,
 to `flush` that is not a call, makes it uncertifiable program-wide. A flush in
 dependency code is outside the facts (premise, docs/open-work.md).
 
+Written JSX creates too (ADR 0883): an intrinsic's dynamic child, attribute or spread, a
+fragment's dynamic child and a component element, on an apply's stack with no owner set.
+Static JSX creates nothing.
+
 ## When it is uncertifiable
 
 A walk past its bound (13 helpers, ADR 0750) is uncertifiable, `search-depth-limit`.

@@ -464,6 +464,17 @@
       "start": 1376,
       "end": 1379,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
+      "start": 1396,
+      "end": 1401,
+      "fixes": 0
     }
   ]
 }

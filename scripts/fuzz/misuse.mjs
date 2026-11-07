@@ -406,6 +406,26 @@ const INSTALLED_SETS = {
 /** A pending read in another reader: `latest(() => a1())`, `isPending(() => a1())`, or a plain read of a `createDeferred` source. */
 const pendingRead = (node, [sig]) => (node.variant === "latest" ? api("latest", `() => ${sig.name}()`, { locals: true }) : node.variant === "is-pending" ? api("isPending", `() => ${sig.name}()`, { locals: true }) : local(sig.name));
 /** The owner-attaching constructors a leaf or an effect apply refuses, besides memo, root and effect: a writable memo, a projection. */
+/**
+ * F4: JSX creation sites, measured on rc.21 in Chrome (flip-r5 p5 probes, 2026-11-07). A dynamic insert or attribute is a render
+ * effect: unowned it reports NO_OWNER_EFFECT, in an effect apply PRIMITIVE_IN_EFFECT_CALLBACK, in a leaf PRIMITIVE_IN_FORBIDDEN_SCOPE.
+ * A component element runs under dev `createComponent`'s own root: legal unowned, a primitive in an apply or a leaf. A static
+ * element creates nothing.
+ */
+const JSX_SITES = {
+  "jsx-insert": () => "<p>{String(Math.random())}</p>",
+  "jsx-attr": () => "<p class={String(Math.random())} />",
+  "jsx-component": () => "<JsxComp1 />",
+  "jsx-static": () => "<p>static</p>",
+  // D17: a spread is an effect whatever it holds; a static child holding a function is one too; a fragment's child is a memo, quiet with no owner.
+  "jsx-spread": () => "<div {...jsxRest1} />",
+  "jsx-array": () => "<p>{[() => 1]}</p>",
+  "jsx-fragment": () => "<>{String(Math.random())}</>",
+  "jsx-and": () => "<p>{1 && jsxFn1}</p>",
+};
+const jsxSite = (variant) => (JSX_SITES[variant] ? member("", JSX_SITES[variant]) : undefined);
+const jsxLine = (variant) => (variant === "jsx-component" ? "function JsxComp1() { return <i />; }" : variant === "jsx-spread" ? 'const jsxRest1 = { class: "x" };' : variant === "jsx-and" ? "const jsxFn1: any = () => 1;" : undefined);
+const jsxBindings = (variant, bindings) => (variant?.startsWith("jsx-") ? ["direct"] : bindings);
 const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }"), render: api("render", '() => null, document.createElement("div")', { module: "@solidjs/web" }) };
 
 export const SPEC = {
@@ -511,14 +531,17 @@ export const SPEC = {
   // there, so every `track1()` warns, wherever it is called. `reaction-track-owned` (legal only): the tracker the component (or its
   // parent, or a hook the body calls) creates, owned there, so a call anywhere is legal.
   NO_OWNER_EFFECT: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL,
-    variants: ["effect", "render"], gridVariants: ["reaction-track"], recallVariants: ["reaction-track-hook"], legalVariants: ["effect", "render", "reaction-track-owned"],
-    variantContexts: { "reaction-track-hook": UNOWNED },
+    variants: ["effect", "render"], gridVariants: ["reaction-track"], recallVariants: ["reaction-track-hook", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array", "jsx-and"], legalVariants: ["effect", "render", "reaction-track-owned"],
+    recallLegalVariants: ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-component", "jsx-static", "jsx-fragment"],
+    legalVariantContexts: { "jsx-component": [...UNOWNED, ...ASYNC_CONTROL], "jsx-static": [...UNOWNED, ...ASYNC_CONTROL], "jsx-fragment": [...UNOWNED, ...ASYNC_CONTROL] },
+    variantContexts: { "reaction-track-hook": UNOWNED, "jsx-insert": [...UNOWNED, ...ASYNC_CONTROL, "body", "root", "flw-apply-and-timer", "flw-named-apply-and-timer"], "jsx-attr": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-spread": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-array": [...UNOWNED, ...ASYNC_CONTROL], "jsx-and": [...UNOWNED, ...ASYNC_CONTROL] },
+    contextLine: jsxLine,
     variantSources: { "reaction-track": ["module", "module-barrel"],
       "reaction-track-owned": ["local", ...SOURCE_AXES.props.filter((source) => source !== "prop-value"), ...SOURCE_AXES.context, "module-hook", "module-hook-member"] },
-    contexts: UNOWNED, bindings: BINDINGS, bindingsFor: (variant) => (variant === "reaction-track-hook" ? ["direct"] : variant?.startsWith("reaction-track") ? ["direct", "alias", "destructured", "wrapper"] : BINDINGS),
+    contexts: UNOWNED, bindings: BINDINGS, bindingsFor: (variant) => (variant === "reaction-track-hook" || variant?.startsWith("jsx-") ? ["direct"] : variant?.startsWith("reaction-track") ? ["direct", "alias", "destructured", "wrapper"] : BINDINGS),
     setup: (variant, name) => (variant !== "reaction-track-hook" && variant?.startsWith("reaction-track") ? [reactionSignal(name("track"))] : []),
     // ADR 0551: a tracker a hook makes, in a call with no owner.
-    call: (node, sigs) => (node.variant === "reaction-track-hook" ? member("", () => "(() => { const useMade = () => createReaction(() => {}); useMade()(() => 1); })()", ["createReaction"]) : node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
+    call: (node, sigs) => jsxSite(node.variant) ?? (node.variant === "reaction-track-hook" ? member("", () => "(() => { const useMade = () => createReaction(() => {}); useMade()(() => 1); })()", ["createReaction"]) : node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
       : api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}")),
   },
   // ADR 0869: JSX is legal anywhere: rc.21's dev `createComponent` runs a component under its own transparent root, so the boundary sees an owner.
@@ -541,9 +564,10 @@ export const SPEC = {
   // `signal-fn`, `projection` (API_VARIANTS, measured 2026-11-03): a writable memo and a projection attach an owner like a memo:
   // reported in a leaf and an effect apply, legal in a body and a root.
   PRIMITIVE_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], recallContexts: ["tracked-rerun"],
-    recallVariants: ["signal-fn", "projection", "render"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": [...LEAF, "body", "root"], projection: [...LEAF, "body", "root"], render: LEAF },
+    recallVariants: ["signal-fn", "projection", "render", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"], recallLegalVariants: ["signal-fn", "projection", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component", "jsx-static"],
+    legalVariantContexts: { "jsx-static": [...LEAF] }, contextLine: jsxLine, bindingsFor: (variant) => jsxBindings(variant, BINDINGS), variantContexts: { "signal-fn": [...LEAF, "body", "root"], projection: [...LEAF, "body", "root"], render: LEAF, "jsx-insert": [...LEAF, "body", "root"], "jsx-spread": [...LEAF, "body", "root"], "jsx-fragment": [...LEAF, "body", "root"], "jsx-attr": [...LEAF, "body", "root"], "jsx-component": [...LEAF, "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
-    call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+    call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for"],
     contexts: [], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
@@ -591,9 +615,10 @@ export const SPEC = {
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
   PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun", "effect-apply-guard-open"],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
-    recallVariants: ["signal-fn", "projection", "render"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"], render: ["effect-apply"] },
+    recallVariants: ["signal-fn", "projection", "render", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"], recallLegalVariants: ["signal-fn", "projection", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component", "jsx-static"],
+    legalVariantContexts: { "jsx-static": ["effect-apply"] }, contextLine: jsxLine, bindingsFor: (variant) => jsxBindings(variant, BINDINGS), variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"], render: ["effect-apply"], "jsx-insert": ["effect-apply", "body", "root"], "jsx-spread": ["effect-apply", "body", "root"], "jsx-fragment": ["effect-apply", "body", "root"], "jsx-attr": ["effect-apply", "body", "root"], "jsx-component": ["effect-apply", "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
-    call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+    call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
   // rc.17 signals dev.js: a `<Loading on>` re-armed by a write while a source it waits on is also read outside it (the fallback can
   // never show). SC5006 claims it as an obligation only (ADR 0517). The site is the outside read; the diagnostic is raised from the
@@ -1042,6 +1067,15 @@ for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACE
   SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...legal.filter((context) => !hasLegal.has(context))];
 }
 
+// F4: a dynamic JSX insert or attribute is a render effect. Where an unowned effect is NO_OWNER_EFFECT, it reports that code, not
+// the primitive codes: neither cell there.
+for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE"]) {
+  const spec = SPEC[code];
+  spec.recallVariantsNotIn ??= {};
+  for (const context of new Set([...SPEC.NO_OWNER_EFFECT.contexts, ...SPEC.NO_OWNER_EFFECT.recallContexts])) {
+    spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array", "jsx-and"])];
+  }
+}
 // A legal variant whose legal places include contexts where the code's other variants are misuses (`legalVariantContexts`): those
 // contexts become legal cells (`recallLegal`) that take only such variants (`variantOnlyLegal`, matrix.mjs `recallAxes`).
 for (const [code, spec] of Object.entries(SPEC)) for (const [variant, contexts] of Object.entries(spec.legalVariantContexts ?? {})) for (const context of contexts) {

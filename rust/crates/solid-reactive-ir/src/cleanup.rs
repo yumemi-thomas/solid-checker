@@ -280,6 +280,31 @@ pub(super) fn leaf_owner_operations_for_file(
             }
             None
         };
+        // ADR 0883: JSX in the leaf's own text creates a computation or a root
+        // with no call to name it. A creating call elsewhere is the helper
+        // paths'; JSX there is the owner rule's (`jsx-effect`).
+        for site in crate::owners::jsx_sites(callback_file, lookup) {
+            if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect
+                || site.in_getter
+                || !callback_region.contains(site.span)
+                || !(direct_callback_runs(callback_file, leaf_callback.span, site.span)
+                    || through_iife(site.span) != Some(false))
+            {
+                continue;
+            }
+            operations.push(LeafOwnerOperation {
+                kind: crate::LeafOwnerOperationKind::Primitive("JSX".into()),
+                owner: owner.to_string(),
+                location: location(callback_file.path.shared(), site.span),
+                fix: None,
+                call_site_gate: call_site_gate.clone(),
+                uncertain: false,
+                possible: false,
+                via: None,
+                identity_unproven: false,
+                computation_error_unobserved: false,
+            });
+        }
         for call in &callback_file.ast.calls {
             if call.span == owner_call.span || !callback_region.contains(call.span) {
                 continue;
@@ -1825,6 +1850,39 @@ fn function_forbidden_operations(
         }
         _ => None,
     };
+    // ADR 0883: JSX written in the helper's body creates on this stack too. Past
+    // an await every run reaches first it has left the leaf (`jsx-effect`'s).
+    if helper_file
+        .ast
+        .jsx_elements
+        .iter()
+        .map(|element| &element.span)
+        .chain(&helper_file.ast.jsx_fragments)
+        .any(|jsx| helper.body.contains(*jsx))
+    {
+        for site in crate::owners::jsx_sites(helper_file, lookup) {
+            if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect
+                || site.in_getter
+                || !helper.body.contains(site.span)
+                || !crate::owners::written_directly_in(&helper_file.ast, helper, site.span)
+                || helper_file
+                    .ast
+                    .unconditional_awaits
+                    .iter()
+                    .any(|await_span| await_span.end <= site.span.start)
+            {
+                continue;
+            }
+            let guaranteed =
+                reached_on_every_call(resolution, helper_file, helper, site.span, entry);
+            record(
+                kinds,
+                crate::LeafOwnerOperationKind::Primitive("JSX".into()),
+                guaranteed,
+                false,
+            );
+        }
+    }
     for inner in helper_file.ast.calls_within(helper.body) {
         // A call inside a nested function -- its body or its parameter list
         // (ADR 0204) -- is not executed by calling the helper; it belongs to

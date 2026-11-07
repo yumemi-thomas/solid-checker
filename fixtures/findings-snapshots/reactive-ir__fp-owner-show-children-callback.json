@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-show-children-callback/App.tsx",
+      "start": 569,
+      "end": 583,
+      "fixes": 0
+    },
+    {
       "rule": "uncalled-accessor",
       "code": "SC1005",
       "kind": "violation",

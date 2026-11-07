@@ -2,6 +2,26 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-jsx-in-callbacks/App.tsx",
+      "start": 2089,
+      "end": 2092,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-jsx-in-callbacks/App.tsx",
+      "start": 2269,
+      "end": 2272,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

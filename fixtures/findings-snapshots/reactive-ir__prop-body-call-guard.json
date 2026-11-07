@@ -78,6 +78,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 799,
+      "end": 800,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -133,6 +144,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 1179,
+      "end": 1180,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -141,6 +163,17 @@
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
       "start": 1659,
       "end": 1666,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 1690,
+      "end": 1691,
       "fixes": 0
     },
     {
@@ -199,6 +232,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 2099,
+      "end": 2100,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -243,6 +287,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 2451,
+      "end": 2452,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -273,6 +328,17 @@
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
       "start": 2804,
       "end": 2811,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 2835,
+      "end": 2836,
       "fixes": 0
     },
     {

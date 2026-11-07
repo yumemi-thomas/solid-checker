@@ -47,6 +47,20 @@ callback, a microtask, module scope, code after an `await`, or a
 component in its own transparent root, so `NO_OWNER_BOUNDARY` cannot fire
 through JSX (ADR 0869).
 
+Written JSX creates computations with no call to name them (ADR 0883). An intrinsic's
+dynamic child, attribute or spread is a render effect: proven unowned, it is
+`NO_OWNER_EFFECT` here, at module scope too; in a function nothing places, it is
+uncertifiable (`function-run-unplaced`). A static child that may hold a function
+(`{[fn]}`, an `any`), and JSX under a component element's getter, which runs where the
+component reads it, are uncertifiable with no owner. A component element and a fragment
+child are quiet with no owner. Static JSX creates nothing.
+
+A function child of Solid's own control-flow tags runs under an owner the tag provides
+(ADR 0883): `For` and `Repeat` at any arity, `Show` and a direct `Match` of `Switch` with
+a first parameter that has no default. Exact primitive identity decides, so a local `For`
+is a plain component. A child of length 0 is handed back as a value and stays
+uncertifiable, as does a function child of any other component.
+
 ## What it does
 
 The checker reports an operation when no component, computation, or root owner

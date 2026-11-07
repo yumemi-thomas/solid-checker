@@ -890,6 +890,55 @@ pub(crate) fn discover_owner_file(
     // ADR 0869: a JSX `<Loading>` or `<Errored>` is no owner site. rc.21's dev
     // `createComponent` runs every component under its own transparent root,
     // so NO_OWNER_BOUNDARY comes only from the call form (`boundary-call`).
+    // ADR 0883: a control-flow tag runs its function child under an owner of its
+    // own, whoever owns the tag: For's and Repeat's row, Show's and Match's memo.
+    for element in &file.ast.jsx_elements {
+        let Some((expression, run)) = control_flow_child(file, element, lookup) else {
+            continue;
+        };
+        let Some(target) = callback_target(expression, false) else {
+            continue;
+        };
+        // Only a function written in place (ADR 0883): 33 written names in the
+        // corpus at most, and a name keeps its other entries.
+        let function = match &target {
+            OwnerTarget::LocalSpan(span) if *span == file.ast.peel_ts_sugar_span(expression) => {
+                file.ast.function_at(*span)
+            }
+            _ => None,
+        };
+        if function.is_some_and(|function| runs_as_child(function, run)) {
+            edges.push(SymbolicOwnerEdge {
+                source: None,
+                target,
+                kind: OwnerEdgeKind::Owned,
+            });
+        }
+    }
+    // ADR 0883: JSX creates a render effect with no call to name it.
+    for site in jsx_sites(file, lookup) {
+        if !matches!(
+            site.kind,
+            JsxSiteKind::RenderEffect | JsxSiteKind::MaybeRenderEffect
+        ) {
+            continue;
+        }
+        requirements.push(OwnerRequirementCandidate {
+            operation: "jsx-effect",
+            operation_span: site.span,
+            owner: owner_at(site.anchor),
+            report_mask: OWNER_CONTEXT_UNOWNED,
+            // A value that may hold no function, and a getter read wherever
+            // the component reads it, prove no effect at this owner.
+            runtime_uncertain: site.in_getter || site.kind == JsxSiteKind::MaybeRenderEffect,
+            settled_target: None,
+            settled_gate: None,
+            providing_region_chain: region_chain(site.anchor),
+            providing_region: region_of(site.anchor),
+            context_argument: None,
+            in_parameter_list: list_site(site.anchor),
+        });
+    }
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
         proof: crate::base::reads::ReadProof::default(),

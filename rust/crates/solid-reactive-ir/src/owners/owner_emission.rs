@@ -245,7 +245,7 @@ pub(super) fn emit_file(
         // `Loading(props)` call (ADR 0462).
         let continuation_placed = matches!(
             candidate.operation,
-            "effect" | "cleanup" | "context-read" | "boundary-call"
+            "effect" | "jsx-effect" | "cleanup" | "context-read" | "boundary-call"
         );
         // ADR 0488: a settled cleanup's operation span is its callback; the
         // `onSettled` call that takes it runs after the await when its callee
@@ -904,7 +904,9 @@ fn layer_entry_open(
             return false;
         }
         // Reached through a caller, no candidate names the region.
-        if creates_owner_for(file, function.span, lookup) {
+        if creates_owner_for(file, function.span, lookup)
+            || is_control_flow_child(file, function, lookup)
+        {
             return false;
         }
         if lookup.program_has_eval() || function.method_name.is_some() {

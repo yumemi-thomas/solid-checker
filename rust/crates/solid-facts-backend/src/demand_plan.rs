@@ -91,6 +91,11 @@ fn plan_file(
         )
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
+    // ADR 0883: a child the compiler leaves static is an effect only if it
+    // may hold a function.
+    spans
+        .callability_only_spans
+        .extend(file.ast.jsx_child_expressions.iter().copied());
     let (import_bindings, import_references) = collect_symbol_spans(file, &mut spans);
     collect_call_result_binding_spans(dialect, file, &mut spans);
     collect_jsx_spans(dialect, file, &mut spans);

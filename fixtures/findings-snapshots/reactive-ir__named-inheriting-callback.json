@@ -150,6 +150,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
+      "start": 1751,
+      "end": 1754,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -169,6 +180,17 @@
       "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
       "start": 2129,
       "end": 2132,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
+      "start": 2513,
+      "end": 2516,
       "fixes": 0
     },
     {

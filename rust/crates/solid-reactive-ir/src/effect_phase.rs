@@ -55,6 +55,8 @@ const MAX_LAYERS: usize = 12;
 /// How many function declarations one question may expand before it gives up:
 /// a project with thousands of call sites of one helper stays bounded.
 const BUDGET: usize = 400;
+/// The nesting of one walk's layers, helper calls or not.
+const MAX_WALK_DEPTH: usize = 64;
 
 /// How far an export chain gets.
 enum Chain {
@@ -135,6 +137,53 @@ pub(crate) fn ownerless_effect_phase_origin(
     walk_to_effect_phase(file, span, package_root, instances, lookup, true)
 }
 
+/// ADR 0883: [`ownerless_effect_phase_origin`] for written JSX, which has no
+/// call to name its package: the program's one `solid-js` copy, as for
+/// `render` (ADR 0644). With none or two, which is rendered to is not attested:
+/// the walk still places the site, and its origin is an obligation.
+pub(crate) fn ownerless_jsx_effect_phase_origin(
+    file: &FileFacts,
+    span: Span,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+) -> Option<EffectPhaseOrigin> {
+    let mut copies = instances.solid_js_by_file.values().map(String::as_str);
+    let first = copies.next().unwrap_or_default();
+    let attested = !first.is_empty() && copies.all(|copy| copy == first);
+    let mut walk = Walk {
+        owner_preserving: true,
+        lookup,
+        package_root: "",
+        // Every copy the program holds, so no effect call is ruled out here.
+        flush_instance: "",
+        instances,
+        files: std::cell::OnceCell::new(),
+        visiting: HashSet::default(),
+        budget: BUDGET,
+        limited: std::cell::Cell::new(None),
+        depth: 0,
+        earlier: false,
+        from: None,
+        stepped: false,
+    };
+    walk.layer(file, span, 0)
+        .map(|origin| EffectPhaseOrigin {
+            mixed: origin.mixed || !attested,
+            ..origin
+        })
+        .or_else(|| {
+            walk.limited.get().map(|blocker| EffectPhaseOrigin {
+                path: file.path.to_string(),
+                helper_calls: 0,
+                apply: span,
+                earlier_call: true,
+                mixed: true,
+                primitive: solid_dialect::Primitive::CreateEffect,
+                undecided: Some(blocker),
+            })
+        })
+}
+
 fn walk_to_effect_phase(
     file: &FileFacts,
     span: Span,
@@ -153,6 +202,7 @@ fn walk_to_effect_phase(
         visiting: HashSet::default(),
         budget: BUDGET,
         limited: std::cell::Cell::new(None),
+        depth: 0,
         earlier: false,
         from: None,
         stepped: false,
@@ -196,6 +246,8 @@ struct Walk<'l, 'a> {
     budget: usize,
     /// ADR 0750: a bound stopped some branch of the walk.
     limited: std::cell::Cell<Option<&'static str>>,
+    /// How deep [`Self::layer`] is.
+    depth: usize,
     /// A call that may run before the path ([`EffectPhaseOrigin::earlier_call`]).
     earlier: bool,
     /// The layer the walk just left, whose own calls are the path's.
@@ -206,7 +258,25 @@ struct Walk<'l, 'a> {
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
+    /// [`Self::layer_at`] under a bound on the whole walk's depth: not every
+    /// step counts as a helper call, and call cycles reach JSX sites (ADR 0883).
     fn layer(
+        &mut self,
+        file: &FileFacts,
+        span: Span,
+        helper_calls: usize,
+    ) -> Option<EffectPhaseOrigin> {
+        if self.depth >= MAX_WALK_DEPTH {
+            self.limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+            return None;
+        }
+        self.depth += 1;
+        let origin = self.layer_at(file, span, helper_calls);
+        self.depth -= 1;
+        origin
+    }
+
+    fn layer_at(
         &mut self,
         file: &FileFacts,
         span: Span,
@@ -490,7 +560,8 @@ impl<'l, 'a> Walk<'l, 'a> {
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
-        self.instance_of(file, call.callee) == Some(self.flush_instance)
+        self.flush_instance.is_empty()
+            || self.instance_of(file, call.callee) == Some(self.flush_instance)
             // ADR 0483: in the owner-preserving walk the creating call and the
             // effect may be declared in different files of one installation
             // (rc.17's `createMemo` is `solid-js`'s own overload object, its

@@ -48,6 +48,9 @@ pub(crate) struct ProgramDraft {
     pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) event_dispatch_sites: Vec<crate::EventDispatchSite>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    /// ADR 0883: JSX SC6002 places on an apply's stack, and whether its proof
+    /// answers for every run of the site.
+    pub(crate) jsx_phase_sites: Vec<(Location, bool)>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
     /// One static diagnostic per (rule, file, offset) identity, across the
@@ -737,6 +740,27 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut build_timings,
     );
     crate::stored_throw::mark_owner_requirements(&analysis, &mut draft);
+    // ADR 0883: where SC6002 proves the throw on every run of a JSX site, rc.21
+    // never reaches NO_OWNER_EFFECT there, as for a creating call (ADR 0483).
+    // Anywhere else that code may still fire, and which run does is not proved.
+    let jsx_phase_sites = std::mem::take(&mut draft.jsx_phase_sites);
+    draft.missing_owners.retain_mut(|requirement| {
+        if requirement.operation != crate::OwnerRequirementOperation::Effect {
+            return true;
+        }
+        match jsx_phase_sites
+            .iter()
+            .find(|(location, _)| *location == requirement.location)
+        {
+            Some((_, true)) => false,
+            Some((_, false)) => {
+                requirement.uncertain = true;
+                requirement.runtime_uncertain = true;
+                true
+            }
+            None => true,
+        }
+    });
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
