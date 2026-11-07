@@ -363,9 +363,8 @@ pub(super) fn argument_behavior(
 }
 
 /// ADR 0893: a scheduler whose callback's throw nothing in the program can
-/// take: a task or microtask with no value handed back, so the throw reaches
-/// the global handler. A promise's handler is not one: its throw rejects a
-/// promise a later `catch` or an `await` in a `try` may hold.
+/// take: the call hands no promise back, so the throw reaches the global
+/// handler.
 pub(super) fn scheduler_throw_reaches_host(call: &ResolvedCall) -> bool {
     runtime_declaration(call).is_some_and(|declaration| {
         declaration.standard_library
@@ -374,9 +373,30 @@ pub(super) fn scheduler_throw_reaches_host(call: &ResolvedCall) -> bool {
                 "queueMicrotask"
                     | "setTimeout"
                     | "setInterval"
+                    | "requestAnimationFrame"
+                    | "requestIdleCallback"
                     | "WindowOrWorkerGlobalScope.queueMicrotask"
                     | "WindowOrWorkerGlobalScope.setTimeout"
                     | "WindowOrWorkerGlobalScope.setInterval"
+                    | "AnimationFrameProvider.requestAnimationFrame"
+                    | "Window.requestIdleCallback"
+                    | "IntersectionObserver.construct"
+                    | "ResizeObserver.construct"
+                    | "MutationObserver.construct"
+                    | "PerformanceObserver.construct"
+                    | "ReportingObserver.construct"
+            )
+    })
+}
+
+/// ADR 0893: a standard `Promise` `then`, `catch` or `finally`: its callback's
+/// throw rejects the promise the call returns.
+pub(super) fn promise_handler_call(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && matches!(
+                declaration.qualified_name.as_ref(),
+                "Promise.then" | "Promise.catch" | "Promise.finally"
             )
     })
 }
