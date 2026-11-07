@@ -44,6 +44,28 @@ const rank = (verdict) => VERDICTS.indexOf(verdict);
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
 const lines = (positions) => (positions ?? []).map((position) => position.line);
 
+/**
+ * The identifier chain (`r1`, `s1.v`, `props.items`) through the 1-based (line, column) of a program's `lines`, or null: the source a report
+ * or a finding at that position reads or writes (a repeat's same-source test, offSiteVerdicts).
+ */
+export function sourceAt(lines, line, column) {
+  const row = Number.isInteger(line) && Number.isInteger(column) ? lines[line - 1] : undefined;
+  if (row === undefined || column < 1 || column > row.length) return null;
+  const part = /[\w$.]/;
+  let start = column - 1;
+  let end = column - 1;
+  if (!part.test(row[start])) return null;
+  while (start > 0 && part.test(row[start - 1])) start -= 1;
+  while (end + 1 < row.length && part.test(row[end + 1])) end += 1;
+  const chain = row.slice(start, end + 1).replace(/^\.+|\.+$/g, "");
+  // An operator keyword is not the source: `delete s1.v` starts at `delete`, Chrome's frame points into `s1.v`.
+  if (["delete", "void", "typeof", "await", "new"].includes(chain)) {
+    const next = row.slice(end + 1).search(/\S/);
+    return next < 0 ? null : sourceAt(lines, line, end + 2 + next);
+  }
+  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(chain) ? chain : null;
+}
+
 /** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
 export function runtimeEvents(runtime) {
   const rows = [];
@@ -145,12 +167,21 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     const unplacedRuleCode = reported.some((event) => !appLines(event).length) || unattributedCodes(runtime).some((code) => codes.includes(code));
     // Solid reports some codes once (a second untracked read after an await, a second store write): the code elsewhere may be this finding's
     // too. A `repeat` (first = the code reported) scores like a stacked claim: proved only by a pair's twin (stacked.mjs), else false.
-    const elsewhere = reported.find((event) => appLines(event).length)?.code ?? null;
-    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" });
+    // Review of 1d6abdb80: a twin proves a code reports once per source, not that this finding reads the same one (`await x; a(); b();`
+    // warns per source). A repeat needs the first report to name the finding's accessor or store key: the identifier chain at Chrome's
+    // innermost authored frame equals the one at the finding's start (`r1`, `s1.v`). No text to read, or another source: a false positive.
+    const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
+    const sameSource = (event) => {
+      const at = event.positions.find((position) => position.file === "App.tsx" || position.file === undefined);
+      const one = sourceAt(text, at?.line, at?.column);
+      return Boolean(one) && one === sourceAt(text, finding.line, finding.column);
+    };
+    const elsewhere = reported.find((event) => appLines(event).length && sameSource(event))?.code ?? null;
+    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });
     const halted = (verdict) => {
       if (!disturbed.length) return verdict;
       // A repeat stays one in a halted run (its pair needs the same twin); a stacked claim needs nothing of the rule reported anywhere.
-      if (verdict.verdict === "stacked") return { ...verdict, why: `disturbed-${verdict.why}` };
+      if (verdict.verdict === "stacked" || verdict.why === "repeat-other-source") return { ...verdict, why: `disturbed-${verdict.why}` };
       if (verdict.verdict === "false-positive") return first ? { finding: label, verdict: "stacked", first, why: "disturbed" } : { ...verdict, why: "disturbed" };
       if (verdict.verdict === "unjudged") return { finding: label, verdict: "unjudged", why: `disturbed-${verdict.why}` };
       return verdict;

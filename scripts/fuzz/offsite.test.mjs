@@ -16,6 +16,9 @@ const built = {
   plan: { clicks: [] },
 };
 const site = { line: 10 };
+// The same program with its text: a repeat compares the source at Chrome's frame with the finding's (column 1 here).
+const textOf = (rows) => Array.from({ length: 40 }, (_, index) => rows[index + 1] ?? "x;").join("\n");
+const withText = (rows) => ({ ...built, files: { "App.tsx": textOf(rows) } });
 const finding = (rule, line, kind = "violation") => ({ rule, kind, line, column: 1, endLine: line, id: "SC", file: "App.tsx" });
 const event = (code, ...lines) => ({ code, message: "m", positions: lines.map((line) => ({ file: "App.tsx", line, column: 1 })) });
 const run = (diagnostics, hits = { h1: 1, h2: 1, h3: 1 }, extra = {}) => ({ diagnostics, errors: [], witnesses: [], hits, ...extra });
@@ -38,7 +41,14 @@ describe("offSiteVerdicts", () => {
     expect(runtimeEvents({ diagnostics: [event("STRICT_READ_UNTRACKED", 10, 20), event("STRICT_READ_UNTRACKED", 10, 20)] })).toHaveLength(1);
   });
   it("a code of the rule reported only elsewhere does not confirm the finding: a repeat, scored by its pair's twin (coordinator, Part 16; was unconnected)", () => {
-    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan })).toEqual([{ finding: "strict-read-untracked@20", verdict: "stacked", first: "STRICT_READ_UNTRACKED", why: "repeat" }]);
+    const same = withText({ 10: "r1();", 20: "r1();" });
+    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: same, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan })).toEqual([{ finding: "strict-read-untracked@20", verdict: "stacked", first: "STRICT_READ_UNTRACKED", why: "repeat" }]);
+    // Review of 1d6abdb80: `await x; a(); b();` warns per source, so a report at `a` is no repeat of a finding at `b`; nor is one with no text.
+    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: withText({ 10: "a();", 20: "b();" }), runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan }).map((row) => `${row.verdict}(${row.why})`)).toEqual(["false-positive(repeat-other-source)"]);
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)]))).toEqual(["false-positive(repeat-other-source)"]);
+    // An operator keyword is not the source: `delete s1.v` at 20 repeats the write at `s1.v` (column 8) at 10.
+    expect(offSiteVerdicts({ findings: [finding("no-store-mutation-outside-setter", 20)], built: withText({ 10: "delete s1.v;", 20: "delete s1.v;" }), runtime: run([{ code: "STORE_WRITE_OUTSIDE_SETTER", message: "m", positions: [{ file: "App.tsx", line: 10, column: 8 }] }]), plan: built.plan })[0].verdict).toBe("stacked");
+    expect(offSiteVerdicts({ findings: [finding("no-store-mutation-outside-setter", 20)], built: withText({ 10: "s1.v = 7;", 20: "s1.w = 7;" }), runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]), plan: built.plan })[0].verdict).toBe("false-positive");
     // Unplaced (no line at all): a diagnostic nobody can place disturbs the whole run (classify.mjs `disturbances`), and may be this one.
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")]))).toEqual(["unjudged(disturbed-unplaced)"]);
   });
@@ -58,7 +68,8 @@ describe("offSiteVerdicts", () => {
     expect(verdictsOf([finding("missing-owner", 20)], run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed)"]);
   });
   it("a disturbed run: the rule's code placed only off the lines is a false positive, unplaced it judges nothing, lines that never ran stay unexecuted", () => {
-    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)], undefined, threw(null)))).toEqual(["stacked(disturbed-repeat)"]);
+    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: withText({ 10: "r1();", 20: "r1();" }), runtime: run([event("STRICT_READ_UNTRACKED", 10)], undefined, threw(null)), plan: built.plan }).map((row) => `${row.verdict}(${row.why})`)).toEqual(["stacked(disturbed-repeat)"]);
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10), event("PRIMITIVE_IN_EFFECT_CALLBACK", 20)], undefined, threw(null)))).toEqual(["false-positive(disturbed-repeat-other-source)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")], undefined, threw(null)))).toEqual(["unjudged(disturbed-unplaced)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], { h1: 1, h2: 0, h3: 1 }, threw(null)))).toEqual(["unexecuted"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], null, threw(null)))).toEqual(["unjudged(disturbed-no-hit-ledger)"]);
@@ -88,11 +99,11 @@ describe("the misuse grid's judge, off the site", () => {
   // Was "stays its agreement: the code fired" (coordinator, Part 16): the code at the site does not confirm the warning at 20. Chrome reports a
   // strict read per call, so no twin proves a strict-read repeat, and it is a false positive; a proved repeat pair is a stacked claim.
   it("a remote violation of the site's own rule is a repeat: a false positive unless its pair's twin proves it", () => {
-    const verdict = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: strictAtSite, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), built });
+    const verdict = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: strictAtSite, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), built: withText({ 10: "r1();", 20: "r1();" }) });
     expect(verdict.outcome).toBe("false-positive");
     expect(verdict.detail).toMatchObject({ primary: "agree", offSite: ["strict-read-untracked@20:stacked<STRICT_READ_UNTRACKED(repeat)"], rules: ["strict-read-untracked"] });
     const store = { ok: true, findings: [finding("no-store-mutation-outside-setter", 10), finding("no-store-mutation-outside-setter", 20)] };
-    expect(judge({ code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true }, checker: store, runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]), built })).toMatchObject({ outcome: "stacked-claim", detail: { pairs: ["STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter"] } });
+    expect(judge({ code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true }, checker: store, runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]), built: withText({ 10: "s1.v = 7;", 20: "s1.v = 7;" }) })).toMatchObject({ outcome: "stacked-claim", detail: { pairs: ["STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter"] } });
   });
   it("a violation whose rule's code Chrome reported with no line is an unjudged claim, listed", () => {
     const verdict = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: strictAtSite, runtime: run([event("STRICT_READ_UNTRACKED", 10)], undefined, { unattributed: ["STRICT_READ_UNTRACKED"] }), built });

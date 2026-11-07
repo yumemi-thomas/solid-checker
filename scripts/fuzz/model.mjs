@@ -120,7 +120,7 @@ export const GENERATOR_FORMS = ["gen-await", "gen-yield", "gen-iife", "gen-wrap"
 export const GENERATOR_STEP_FORMS = ["gstep"];
 /** ADR 0866: the site under `if (getOwner())` in an async function, with a suspension in the guarded block. `guard-early` and `guard-probe-loop` are legal: the site runs on the probed stack, or the probe runs again. */
 export const GUARD_FORMS = ["guard-await", "guard-for-await", "guard-loop", "guard-early", "guard-probe-loop"];
-export const CTL_FORMS = [...GUARD_FORMS, "guard-yield", ...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", "aw-else", "aw-else-flip", "run-kept", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GENERATOR_FORMS, ...GENERATOR_STEP_FORMS];
+export const CTL_FORMS = [...GUARD_FORMS, "guard-yield", ...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", "aw-else", "aw-else-flip", "dead-random", "run-kept", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GENERATOR_FORMS, ...GENERATOR_STEP_FORMS];
 export const CTL_ASYNC_FORMS = new Set([...GUARD_FORMS, "loop-await", "for-await", "finally-await", ...GENERATOR_FORMS]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 

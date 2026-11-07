@@ -90,8 +90,9 @@ const MIXED_OWNERS = {
   "flw-mixed-dead": (stmts, kit) => {
     const h = kit.name("h");
     return {
-      // Raw text: the validator reads names declared in the component, and `h` is not one.
-      hoisted: [decl(h, fn(stmts)), expr(domExpr(`if (Math.random() > 2) ${h}();`))],
+      // Raw text: the validator reads names declared in the component, and `h` is not one. The dead call is a call node in a block
+      // (`dead-random`), so the run counts it: the judge reads its 0, not the module's entry (Part 16, 4 false positives).
+      hoisted: [decl(h, fn(stmts)), ctl("dead-random", [expr(call(domExpr(h)))])],
       body: [expr(domExpr(`${h}()`))],
       view: [],
     };

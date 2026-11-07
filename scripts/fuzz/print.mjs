@@ -394,6 +394,8 @@ function render(program, instrument) {
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
       // ADR 0820: the site in a generator's body, the iterator stepped here.
       case "run-kept": return `hkTwice(() => ${block(c.body, depth)});`;
+      // A branch no run takes and the checker cannot evaluate (flw-mixed-dead): its body is a block, so its calls are counted (Part 16).
+      case "dead-random": return `if (Math.random() > 2) ${block(c.body, depth)}`;
       case "aw-else": return `if (Math.random() >= 0) ${block(c.body, depth)} else { await Promise.resolve(); }`;
       case "aw-else-flip": return `if (Math.random() < 0) { await Promise.resolve(); } else ${block(c.body, depth)}`;
       // ADR 0866: an `if (getOwner())` the suspension is inside of. `guard-loop` runs the site twice, the second time past the `await`.
