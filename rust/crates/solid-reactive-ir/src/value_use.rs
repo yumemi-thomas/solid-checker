@@ -939,8 +939,14 @@ impl<'l, 'a> Census<'l, 'a> {
             self.symbol_names,
             self.lookup,
         );
+        // W3: a deferred callback clears a read only where it is proved to
+        // run on a fresh stack: a literal a standard function takes at such a
+        // slot (`setTimeout`, `.then`). Any other may run on the caller's.
+        let deferred_unproven = role == crate::ExecutionRole::DeferredCallback
+            && !self.fresh_stack_callback(file, span);
         let reads = !self.async_walk
             && role != crate::ExecutionRole::Unknown
+            && !deferred_unproven
             && !role.reports_untracked_read();
         let writes = role != crate::ExecutionRole::Unknown && !role.reports_disallowed_write();
         let clear = match (site, self.carried) {
@@ -1304,11 +1310,18 @@ impl<'l, 'a> Census<'l, 'a> {
         mode: Mode,
         depth: usize,
     ) {
-        if depth > MAX_ALIASES {
-            return;
-        }
         let ast = &file.ast;
         let object = ast.peel_ts_sugar_span(object);
+        // W3: an object the walk cannot follow further is a use, never a
+        // silent end.
+        let Mode::Escaped { blocker, .. } = mode else {
+            return;
+        };
+        if depth > MAX_ALIASES {
+            self.uses
+                .push((object.location(file.path.as_str()), blocker));
+            return;
+        }
         if global_object(file, object) {
             self.global_slot_uses(key, mode);
             return;
@@ -1318,6 +1331,12 @@ impl<'l, 'a> Census<'l, 'a> {
             return;
         }
         let Some(declaration) = ast.reference_declaration(object) else {
+            // A write's target that is no name (`box().v = c`): what the
+            // project function it calls returns, or else the use itself. An
+            // argument that is no name hands nothing on past the call's result.
+            if written_target(file, object) {
+                self.escaped_returned_object(file, object, mode, depth);
+            }
             return;
         };
         self.name_uses(file, declaration, mode);
@@ -1342,6 +1361,82 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             None => self.escaped_object(file, initializer, None, mode, depth + 1),
         }
+    }
+
+    /// W3: the object of a member write that is no name: a call of a project
+    /// function stands for each value it returns; anything else is a use.
+    fn escaped_returned_object(
+        &mut self,
+        file: &'a FileFacts,
+        object: Span,
+        mode: Mode,
+        depth: usize,
+    ) {
+        let Mode::Escaped { blocker, .. } = mode else {
+            return;
+        };
+        let callee = file
+            .ast
+            .call_at(object)
+            .filter(|call| !call.construct)
+            .and_then(|call| {
+                self.lookup
+                    .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+            });
+        let Some((callee_file, function)) = callee else {
+            self.uses
+                .push((object.location(file.path.as_str()), blocker));
+            return;
+        };
+        let mut returned = callee_file
+            .ast
+            .returns
+            .iter()
+            .filter(|returned| {
+                crate::owners::containing_ast_function(&callee_file.ast, returned.span)
+                    .is_some_and(|holder| holder.span == function.span)
+            })
+            .filter_map(|returned| returned.argument)
+            .collect::<Vec<_>>();
+        if function.expression_body {
+            returned.push(function.body);
+        }
+        if returned.is_empty() {
+            self.uses
+                .push((object.location(file.path.as_str()), blocker));
+        }
+        for value in returned {
+            self.escaped_object(callee_file, value, None, mode, depth + 1);
+        }
+    }
+
+    /// W3: whether the function holding `span` is a literal a standard
+    /// function takes at a fresh-stack slot.
+    fn fresh_stack_callback(&self, file: &FileFacts, span: Span) -> bool {
+        let ast = &file.ast;
+        let Some(function) = crate::owners::containing_ast_function(ast, span) else {
+            return false;
+        };
+        ast.arguments_containing(function.span).any(|(call, index)| {
+            ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                && self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .filter(|resolved| {
+                        resolved
+                            .declaration
+                            .as_ref()
+                            .is_some_and(|declaration| declaration.standard_library)
+                    })
+                    .is_some_and(|resolved| {
+                        let callability = self
+                            .lookup
+                            .entity_at(file.path.as_str(), call.arguments[index].span)
+                            .and_then(|entity| entity.callability);
+                        crate::runtime_semantics::argument_behavior(resolved, callability, index)
+                            == Some(RuntimeArgumentBehavior::FreshStackCallback)
+                    })
+        })
     }
 
     /// ADR 0860: every Get of `key` on a global object, and every reference of
@@ -2329,6 +2424,15 @@ fn member_key<'f>(file: &'f FileFacts, member: &solid_facts::ast::MemberFact) ->
         None if ast.computed_members.contains(&member.span) => None,
         None => file.source_text(member.property),
     }
+}
+
+/// Whether `object` is the object of a member write's target.
+fn written_target(file: &FileFacts, object: Span) -> bool {
+    file.ast.assignments.iter().any(|assignment| {
+        file.ast
+            .member_at(file.ast.peel_ts_sugar_span(assignment.target))
+            .is_some_and(|member| file.ast.peel_ts_sugar_span(member.object) == object)
+    })
 }
 
 /// An unshadowed global object: `globalThis`, `window`, `self`, `global`.
