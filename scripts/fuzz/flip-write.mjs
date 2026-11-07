@@ -2,7 +2,7 @@
 // commit adds its shapes here, so neither track edits misuse.mjs or the other's file.
 //   FLIP_WRITE_CONTEXTS  { [code]: [context, ...] }, appended to that code's recallContexts
 //   flipWriteContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
-import { button, call, ctl, decl, domExpr, expr, fn, iife, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
+import { button, call, ctl, decl, domExpr, expr, flowEl, fn, iife, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
 
 /**
  * ADR 0705, the DOM dispatch list: a member that dispatches on its caller's stack, fired from `onSettled` (a leaf owner), with a
@@ -228,6 +228,28 @@ const ESCAPES_LEGAL = {
     return { body: [decl(f, fn(stmts)), expr(call(ref(f))), expr(domExpr(`document.body.removeEventListener("click", ${f})`))], view: [] };
   },
 };
+/**
+ * ADR 0883: the function children a control-flow tag does not run under its owner (Chrome, rc.21: the site's NO_OWNER_* code). A `Show` child
+ * of length 0 is handed back as a value, and a click calls it; a local `For` runs its child on a timer.
+ */
+const FLOW_VALUES = {
+  "flw-flow-show-value": (stmts, kit) => {
+    const [g, el] = [kit.name("g"), kit.name("el")];
+    return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{${g} as any}</Show>) as any`, undefined, ["Show"]))], view: [button(kit.name("b"), [expr(domExpr(`${el}()()`))])] };
+  },
+  // Reviewer's R48: `Kid`'s function child is Kid's to run, here on a timer: the flow tag around it says nothing.
+  "flw-flow-show-kid": (stmts, kit) => ({
+    hoisted: [decl("Kid1", domExpr("(props: { children: (v: number) => unknown }) => { setTimeout(() => props.children(1), 0); return <i />; }"))],
+    body: [],
+    view: [flowEl(kit.name("v"), "show", stmts, { kid: "Kid1" })],
+  }),
+  // Past an `await` of the child, the tag's owner is gone.
+  "flw-flow-for-async": (stmts, kit) => ({ body: [], view: [flowEl(kit.name("v"), "for", stmts, { awaits: true })] }),
+  "flw-flow-shadow-for": (stmts, kit) => {
+    const g = kit.name("g");
+    return { body: [decl(g, fn(stmts)), decl("For", domExpr("(props: { children: () => void }) => { setTimeout(props.children, 0); return <i />; }")), decl(kit.name("el"), domExpr(`<For>{${g}}</For>`))], view: [] };
+  },
+};
 const OWNER_CODES = ["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED"];
 /** Legal recall contexts per runtime code, appended to that code's recallLegal. */
 export const FLIP_WRITE_LEGAL = Object.fromEntries(OWNER_CODES.map((code) => [code, [...Object.keys(GUARDED_LEGAL), ...Object.keys(ESCAPES_LEGAL)]]));
@@ -246,10 +268,10 @@ export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
 };
 
-for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES)];
+for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES), ...Object.keys(FLOW_VALUES)];
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
+  return (FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }

@@ -1400,7 +1400,7 @@ impl OwnerRequirementOperation {
     #[must_use]
     pub(crate) fn from_internal(operation: &str) -> Self {
         match operation {
-            "effect" => Self::Effect,
+            "effect" | "jsx-effect" => Self::Effect,
             "cleanup" => Self::Cleanup,
             // ADR 0462: a boundary component called as a function.
             "boundary" | "boundary-call" => Self::Boundary,

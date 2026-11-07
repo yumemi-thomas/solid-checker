@@ -23,6 +23,8 @@ pub(super) struct StaticDirectiveFileResult {
     pub(super) violations: Vec<StaticViolation>,
     pub(super) writes: Vec<ReactiveWrite>,
     pub(super) write_action_obligations: Vec<(&'static str, String, u64, u64)>,
+    /// ADR 0883: JSX SC6002 places on an apply's stack.
+    pub(super) jsx_phase_sites: Vec<Location>,
 }
 
 /// Runs the project-level static API stage and merges its independent file
@@ -48,6 +50,7 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         draft
             .write_action_obligations
             .extend(result.write_action_obligations);
+        draft.jsx_phase_sites.extend(result.jsx_phase_sites);
     }
 }
 
@@ -130,6 +133,7 @@ impl StaticApiContext<'_> {
             violations: Vec::new(),
             writes: Vec::new(),
             write_action_obligations: Vec::new(),
+            jsx_phase_sites: Vec::new(),
         };
         crate::installed_members::check_file(file, &mut result.defects);
         crate::listener_reach::check_file(file, self.lookup, &mut result.defects);
@@ -1057,7 +1061,54 @@ impl StaticApiContext<'_> {
             };
             result.writes.push(write);
         }
+        self.check_jsx_in_effect_phase(file, &mut result);
         result
+    }
+
+    /// ADR 0883: JSX creating a computation or a root on an apply's stack, as
+    /// a creating call does (SC6002): rc.21 reaches `createRenderEffect`,
+    /// `createMemo` or `createRoot` with no owner set. Placed by the same walk.
+    fn check_jsx_in_effect_phase(&self, file: &FileFacts, result: &mut StaticDirectiveFileResult) {
+        for site in crate::owners::jsx_sites(file, self.lookup) {
+            if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect || site.in_getter {
+                continue;
+            }
+            let Some(origin) = crate::effect_phase::ownerless_jsx_effect_phase_origin(
+                file,
+                site.span,
+                self.package_instances,
+                self.lookup,
+            ) else {
+                continue;
+            };
+            let earlier_call = origin.earlier_call
+                || (origin.helper_calls == 0
+                    && file.ast.calls.iter().any(|other| {
+                        origin.apply.contains(other.span)
+                            && other.span.end <= site.span.start
+                            && !other.span.contains(site.span)
+                    }));
+            result
+                .jsx_phase_sites
+                .push(location(file.path.shared(), site.span));
+            result.violations.push(StaticViolation {
+                id: "SC6002".into(),
+                rule: "primitive-in-effect-callback".into(),
+                message: format!(
+                    "JSX here creates a computation in {}, with no owner set in between; the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK",
+                    origin.callback_label()
+                ),
+                hint: "Build the JSX in the effect's compute function or the component body, where an owner is set; an apply should only touch what already exists.".into(),
+                location: location(file.path.shared(), site.span),
+                analysis_context: origin.undecided.unwrap_or_default().into(),
+                fixes: vec![],
+                // No client root in sight: which build runs the apply is open.
+                uncertain: earlier_call
+                    || origin.mixed
+                    || !self.client_build
+                    || self.lookup.flush_drains_under_owner(),
+            });
+        }
     }
 }
 

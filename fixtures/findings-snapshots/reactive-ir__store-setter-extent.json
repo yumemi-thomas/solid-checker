@@ -117,6 +117,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 4721,
+      "end": 4757,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -147,6 +158,17 @@
       "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
       "start": 5050,
       "end": 5061,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 5329,
+      "end": 5365,
       "fixes": 0
     },
     {

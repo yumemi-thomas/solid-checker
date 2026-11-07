@@ -1309,6 +1309,19 @@ impl Dialect for Solid2 {
 
     /// Source: `solid-reactive-ir/src/lib.rs` `read_is_under_loading` and
     /// `jsx_element_is_loading`. 2.0's error boundary is `Errored`.
+    /// ADR 0883, read on rc.21: `For` and `Repeat` run the mapper as
+    /// `runWithOwner(createOwner(), mapper)` (`@solidjs/signals` `dist/dev.js`
+    /// `updateKeyedMap`, `updateRepeat`), at any arity. `Show`, and `Match` in
+    /// `Switch`, call the child in their memo only when `child.length > 0`
+    /// (`solid-js` `dist/solid.dev.js` `Show`, `Switch`); else it is a value.
+    fn control_flow_child_run(&self, primitive: Primitive) -> Option<crate::FunctionChildRun> {
+        match primitive {
+            Primitive::For | Primitive::Repeat => Some(crate::FunctionChildRun::Always),
+            Primitive::Show | Primitive::Match => Some(crate::FunctionChildRun::WithParameter),
+            _ => None,
+        }
+    }
+
     fn boundary_kind(&self, tag: &str) -> Option<Boundary> {
         match tag {
             "Loading" => Some(Boundary::Async),

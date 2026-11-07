@@ -179,6 +179,16 @@ pub enum Primitive {
     RepeatMap,
 }
 
+/// When a control-flow tag runs its function child under an owner of its own
+/// (ADR 0883), rather than handing the function back as a value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FunctionChildRun {
+    /// Whatever the function declares.
+    Always,
+    /// Only with `function.length > 0`.
+    WithParameter,
+}
+
 /// Owner-requirement category carried by an exact primitive call. Kept in the
 /// dialect vocabulary so proof adapters never reconstruct Solid behavior from
 /// a function name in shared infrastructure.

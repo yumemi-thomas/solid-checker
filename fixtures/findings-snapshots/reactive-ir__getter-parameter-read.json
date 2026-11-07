@@ -685,6 +685,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "component-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/getter-parameter-read/helpers.tsx",
+      "start": 1735,
+      "end": 1738,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",

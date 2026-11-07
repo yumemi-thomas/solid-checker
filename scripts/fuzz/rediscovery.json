@@ -5843,5 +5843,34 @@
   "found": "the rolling review of 08805ab01",
   "fixed": "ADR 0868, callers amendment",
   "outside": "the grids run open-world programs, where an export's seed already leaves this U, and parseFindings keeps App.tsx rows only, so a site in a second file reads as a false clean on every build. Pinned by fixture closed-two-file-caller: build r13 no SC4001 row, r15 U at the helper's site"
+ },
+ {
+  "finding": "JSX creates computations with no call node, so no owner rule saw it: a dynamic child, attribute or spread on an intrinsic raised NO_OWNER_EFFECT with no owner, and JSX in an effect apply or a leaf raised PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE, all certified (ADR 0883)",
+  "found": "the owner/scope scout (F4), with reviewer's D17",
+  "fixed": "ADR 0883",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-timer-jsx-insert-direct-none",
+   "mx-no-owner-effect-handler-jsx-spread-direct-none"
+  ],
+  "rediscovered": "F4 ids (306, Chrome confirmed): build r9 276 false cleans; r22 0, 140 agree, 166 uncertifiable; legal 996: 0 false positives on both"
+ },
+ {
+  "finding": "a plain `<For>` or `<Show>` function child was uncertifiable: no owner edge reached it, so every JSX site and owner call there was `function-run-unplaced` where Chrome is quiet and an exact tag identity decides",
+  "found": "F4's repro-causes gate: 9 clean cases",
+  "fixed": "ADR 0883, control-flow children",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "lg-no-owner-effect-flow-for-effect-direct-none"
+  ],
+  "rediscovered": "flow-* legal ids (Chrome confirmed): build r20 150 uncertifiable; r22 0, all clean. Twins flw-flow-show-value, flw-flow-shadow-for (70): uncertifiable on both, 0 false cleans"
+ },
+ {
+  "finding": "the control-flow edge took the first expression inside the tag's only child, so `<Show><Kid>{f}</Kid></Show>` gave an owned edge to Kid's child, whoever runs it (reviewer's R48)",
+  "found": "the review of the F4 design, D25",
+  "fixed": "ADR 0883, control-flow children",
+  "outside": "the false edge landed uncertifiable, not silent: flw-flow-show-kid is 35 uncertifiable on r21 and r22, so no build fails it. The shape stays in the generator, and fixture jsx-creation-sites pins it"
  }
 ]

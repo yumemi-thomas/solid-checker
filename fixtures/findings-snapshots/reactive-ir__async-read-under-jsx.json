@@ -2,17 +2,6 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/async-read-under-jsx/App.tsx",
-      "start": 357,
-      "end": 369,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",

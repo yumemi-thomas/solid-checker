@@ -302,7 +302,8 @@ describe("the effect windows (recall only)", () => {
   });
   it("an unowned effect out of the window is not a legal PRIMITIVE_IN_EFFECT_CALLBACK program", () => {
     const variants = new Set(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-error-arm").map((shape) => shape.variant));
-    expect([...variants].sort()).toEqual(["memo", "root"]);
+    // ADR 0883: JSX creates here with no window: legal as a memo or a root is.
+    expect([...variants].sort()).toEqual(["jsx-static", "memo", "root"]);
     expect(recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-cleanup-rerun").some((shape) => shape.variant === "effect")).toBe(true);
   });
   it("prints each window", () => {

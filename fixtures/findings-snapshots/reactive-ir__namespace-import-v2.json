@@ -34,6 +34,17 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
+      "start": 1679,
+      "end": 1686,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
@@ -59,6 +70,17 @@
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
       "start": 481,
       "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
+      "start": 762,
+      "end": 769,
       "fixes": 0
     }
   ]

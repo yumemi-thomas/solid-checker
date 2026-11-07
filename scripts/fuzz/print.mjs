@@ -553,7 +553,8 @@ function render(program, instrument) {
       case "flow": {
         // The function child's body: the statements, then one element (a selector must match exactly one).
         const element = item.flow.startsWith("for") ? "li" : "p";
-        const body = block(item.body, depth + 1, entryFor(item, "flow"), [], [`return <${element} data-view="${item.id}">x</${element}>;`]);
+        // `awaits`: the statements past an `await` of an async child; `kid`: the child handed to that component, not to the flow tag (ADR 0883).
+        const body = block(item.body, depth + 1, entryFor(item, "flow"), item.awaits ? ["await Promise.resolve();"] : [], [`return <${element} data-view="${item.id}">x</${element}>;`]);
         // `on` (model.mjs flowEl): the condition reads a signal a button sets to 0, which disposes the row or the branch.
         const open = item.on !== undefined ? { for: `<For each={${item.on}() ? [1] : []}>`, show: `<Show when={${item.on}()}>` }[item.flow]
           : { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
@@ -561,7 +562,8 @@ function render(program, instrument) {
         for (const name of { for: ["For"], "for-unkeyed": ["For"], show: ["Show"], "show-keyed": ["Show"], match: ["Switch", "Match"], repeat: ["Repeat"] }[item.flow]) used.add(name);
         // A `Show`/`Match` child takes its parameter: rc.17 runs a function child only when `child.length > 0` (`solid.dev.js:1587`,
         // `:1634`, untracked under `"<Show>"`/`"<Match>"`), and the typings reject a zero-arity `Show` child (`NonZeroParams`).
-        const child = `{(${item.flow.startsWith("for") || item.flow === "repeat" ? "" : "_u"}) => ${body}}`;
+        const bare = `{${item.awaits ? "async " : ""}(${item.flow.startsWith("for") || item.flow === "repeat" ? "" : "_u"}) => ${body}}`;
+        const child = item.kid ? `<${item.kid}>${bare}</${item.kid}>` : bare;
         if (item.flow === "match") return [`${ind(depth)}${open}`, `${ind(depth + 1)}<Match when={1}>${child}</Match>`, `${ind(depth)}${close}`];
         return [`${ind(depth)}${open}`, `${ind(depth + 1)}${child}`, `${ind(depth)}${close}`];
       }

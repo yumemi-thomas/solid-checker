@@ -320,6 +320,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
+      "start": 261,
+      "end": 265,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -367,6 +378,28 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
       "start": 1051,
       "end": 1058,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
+      "start": 1303,
+      "end": 1310,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
+      "start": 224,
+      "end": 234,
       "fixes": 0
     },
     {
@@ -1111,6 +1144,17 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
       "start": 498,
       "end": 508,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
+      "start": 528,
+      "end": 532,
       "fixes": 0
     },
     {

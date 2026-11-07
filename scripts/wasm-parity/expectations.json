@@ -494,7 +494,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 3,
+        "proofObligations": 4,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },
@@ -613,7 +613,7 @@
       "metrics": {
         "filesAnalyzed": 1,
         "functionsAnalyzed": 1,
-        "proofObligations": 1,
+        "proofObligations": 2,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
@@ -690,7 +690,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 7,
-        "proofObligations": 5,
+        "proofObligations": 9,
         "cachedSummaries": 0,
         "unresolvedObligations": 2
       },
@@ -768,7 +768,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 7,
+        "proofObligations": 8,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
@@ -837,7 +837,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 4,
-        "proofObligations": 3,
+        "proofObligations": 4,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },
@@ -909,7 +909,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 2,
+        "proofObligations": 3,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
@@ -973,7 +973,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 2,
+        "proofObligations": 3,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },

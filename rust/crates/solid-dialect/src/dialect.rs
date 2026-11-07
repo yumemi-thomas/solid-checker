@@ -1890,6 +1890,13 @@ pub trait Dialect: Sync {
         self.modules().contains(&module)
     }
 
+    /// ADR 0883: whether `primitive` is a control-flow tag that runs its
+    /// function child under an owner it provides, and on what condition.
+    fn control_flow_child_run(&self, primitive: Primitive) -> Option<crate::FunctionChildRun> {
+        let _ = primitive;
+        None
+    }
+
     /// Whether a tag opens the async boundary specifically.
     fn is_async_boundary(&self, tag: &str) -> bool {
         self.boundary_kind(tag) == Some(Boundary::Async)

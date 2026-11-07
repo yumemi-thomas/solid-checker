@@ -2,6 +2,19 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 363,
+      "end": 367,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; available runtime facts do not prove whether this effect reaches owner registration; its callers differ, so solid-checker cannot prove every execution has an owner",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Resolve the effective runtime entry and argument shape before treating this as a violation."
+    },
+    {
       "rule": "prefer-for",
       "code": "SC8014",
       "kind": "violation",
