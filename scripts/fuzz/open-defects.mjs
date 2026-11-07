@@ -54,7 +54,7 @@ export const CASTS_STAGE2 = "R-casts-stage2";
  * Corpus sites a merge left with no row at their exact span and no attribution yet (coordinator, Part 16: C2's tier-A merge 3bbd1cb70 lost
  * 22): each named, with an owner, a final-gate blocker until it is attributed (a proof, or the row back).
  */
-export const corpusBlockerIds = (list) => (list.corpusBlockers ?? []).map((row) => `corpus/${row.path}:${row.line}:${row.start}-${row.end}`);
+export const corpusBlockerIds = (list) => (list.corpusBlockers ?? []).map((row) => `corpus/${row.code}/${row.path}:${row.line}:${row.start}-${row.end}`);
 export const finalBlockers = (list) => [...corpusBlockerIds(list), ...(list.rows?.stopUnchecked ?? []).map((id) => `unchecked-stop/${id}`), ...Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN, ALIAS_OWNER, CASTS_STAGE2].includes(row.cause) || row.certified === true || row.outcome === "false-positive").map(([id]) => `${grid}/${id}`)), ...(list.patterns ?? []).filter((row) => row.outcome === "false-positive" || row.certified === true).map((row) => `patterns/${row.id}`)];
 
 /**

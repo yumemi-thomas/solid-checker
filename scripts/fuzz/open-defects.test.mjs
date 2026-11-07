@@ -173,7 +173,7 @@ describe("the row ledger (ADR 0815, R23)", () => {
   });
   it("an unattributed corpus site blocks the final gate by name, with an owner and a cause (Part 16)", () => {
     const row = { code: "SC9012", blocker: "b", app: "a", path: "a/x.ts", line: 3, start: 10, end: 12, owner: "C2", cause: "c" };
-    expect(finalBlockers({ rows: { grids: {} }, corpusBlockers: [row] })).toEqual(["corpus/a/x.ts:3:10-12"]);
+    expect(finalBlockers({ rows: { grids: {} }, corpusBlockers: [row] })).toEqual(["corpus/SC9012/a/x.ts:3:10-12"]);
     for (const entry of readOpenDefects().corpusBlockers ?? []) for (const key of ["code", "blocker", "path", "line", "start", "end", "owner", "cause"]) expect(entry[key], `${entry.path}:${entry.line} ${key}`).toBeDefined();
   });
   it("stacked claims count exactly, in all and per pair, and do not block #173 (ADR 0887)", () => {
