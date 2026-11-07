@@ -1,0 +1,3 @@
+# generator-hand-off
+
+**Claim (ADR 0850).** Past a generator's first `yield`, a function the body hands on and then runs (an object slot `{ m: hf }`, an assigned member `ho.m = …`, a member a helper assigns through its parameter, a callback forwarded through two helpers) may run on whoever steps the iterator next, as past an `await`. Its reads are `generator-stepped` obligations (SC1002 uncertifiable), for an async generator under `for await` and for a sync generator a loop steps across its `await`. A sync generator the loop drains before the only `await`, and twins whose hand-off reads only a plain value, stay clean.
