@@ -1175,7 +1175,7 @@ impl<'l, 'a> Census<'l, 'a> {
                 Some(function) => Some((file, function)),
                 None => crate::owners::exact_function_argument(file, value, self.lookup).and_then(
                     |(path, span)| {
-                        let (target, span) = self.place(&span.location(&path))?;
+                        let (target, span) = self.place(&span.location(path.as_str()))?;
                         Some((target, target.ast.function_at(span)?))
                     },
                 ),

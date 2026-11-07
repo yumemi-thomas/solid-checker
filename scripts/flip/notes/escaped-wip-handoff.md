@@ -128,3 +128,5 @@ Ownership gate: passes (96 cases), with the case [86] edit. Each program was con
 
 - Isolated retries under lock/guard: router module exit 0 (4 passed), executor exit 0 (4 passed), rewrite exit 0 (26 passed, typed profile sample 82 seconds), rediscovery exit 0 (2 passed).
 - `BASE=b40d5d6a7 make verify-delta` exited 2 at ir-read-lint, before build/test checks: new callback file lookup, global file scan, and a `files` variable falsely recognized as the census HashMap. No allowlist changed. Callback lookup now uses the existing recorded `place` helper; global scanning replays `slot_entries(base_members())` with a SourceTexts memo read for every file. Lint and rustfmt pass; a new verify-delta is running. Previous semantic measurements precede this recorded-read-only edit.
+
+- Delta4 reached clippy and found a compile error in the recorded lookup refactor (`Span::location` needs `&str`, not `&String`). Corrected to `path.as_str()`; delta5 is running. No allowlist, judge, assertion or limit changes.
