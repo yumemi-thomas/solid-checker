@@ -141,3 +141,5 @@ Ownership gate: passes (96 cases), with the case [86] edit. Each program was con
 - Job 2 clarification approved by user: fixtures.proved must contain the key at baseline and have a lower current count; fixtures.open must contain it currently. No Job 2 implementation yet.
 
 - User approved the proposed Job 1 assertion update ("Do what is correct and recommended"). Applied it and rustfmt; no original per-read or violation assertion removed. The diagnostics suite is queued/running under lock and guard. Full verification must be rerun on this approved tree.
+
+- verify5 (12:24) failed at gates: wasm-parity w3-dependency-source-program metrics 5/2 -> 6/3 proof/unresolved obligations, finding rows and native/WASM agreement unchanged; and the CLI development-feedback timeout test (time only). Disposition (inferred, not run separately): the added obligation is ADR 0860's escaped-value row inside dep-hooks, whose package-located findings the project report drops (diagnostics.rs:412). Recorded 6/3 in expectations.json under the user's approval of count-expectation updates. Next: rerun make verify once; the timeout test alone if it fails again.
