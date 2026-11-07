@@ -1,0 +1,62 @@
+old 172 {
+  'not-fired/same': 134,
+  'false-clean/same': 12,
+  'false-clean/not-fired-in-chrome': 2,
+  'false-positive/same': 12,
+  'agree/same': 8,
+  'recall-gap/same': 2,
+  'agree/differs': 2
+}
+new 172 {
+  'not-fired/same': 144,
+  'agree/same': 20,
+  'agree/differs': 4,
+  'not-fired/differs': 2,
+  'recall-gap/same': 2
+}
+moved no-owner-cleanup-gstep-exported-it-x-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved no-owner-cleanup-gen-yield-each-x-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-cleanup-gen-sync-each-x-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-effect-gstep-exported-it-effect-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved no-owner-effect-gstep-exported-it-render-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved no-owner-effect-gen-yield-each-effect-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-effect-gen-yield-each-render-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-effect-gen-sync-each-effect-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-effect-gen-sync-each-render-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-boundary-gstep-exported-it-loading-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved no-owner-boundary-gstep-exported-it-errored-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved no-owner-boundary-gen-yield-each-loading-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-boundary-gen-yield-each-errored-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-boundary-gen-sync-each-loading-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-boundary-gen-sync-each-errored-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved no-owner-context-gstep-exported-it-x-direct-none not-fired/same -> not-fired/same ["missing-owner@7:unexecuted"] -> []
+moved no-owner-context-gen-yield-each-x-direct-none false-clean/not-fired-in-chrome -> agree/differs [] -> ["missing-owner/violation@10"]
+moved no-owner-context-gen-sync-each-x-direct-none false-clean/not-fired-in-chrome -> agree/differs [] -> ["missing-owner/violation@10"]
+moved context-not-found-gstep-exported-it-x-direct-none not-fired/same -> not-fired/same ["missing-owner@7:unexecuted"] -> []
+moved context-not-found-gen-yield-each-x-direct-none false-positive/same -> not-fired/differs ["missing-context-provider@10:false-positive"] -> ["missing-owner@10:unconnected"]
+moved context-not-found-gen-sync-each-x-direct-none false-positive/same -> not-fired/differs ["missing-context-provider@10:false-positive"] -> ["missing-owner@10:unconnected"]
+moved settled-cleanup-unowned-gstep-exported-it-x-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved settled-cleanup-unowned-gen-yield-each-x-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved settled-cleanup-unowned-gen-sync-each-x-direct-none false-clean/same -> agree/same [] -> ["missing-owner/violation@8"]
+moved reactive-write-in-owned-scope-gen-yield-each-signal-direct-none false-positive/same -> not-fired/same ["no-write-in-pure-computation@9:false-positive"] -> []
+moved reactive-write-in-owned-scope-gen-yield-each-store-direct-none false-positive/same -> not-fired/same ["no-write-in-pure-computation@9:false-positive"] -> []
+moved reactive-write-in-owned-scope-gen-yield-each-refresh-direct-none false-positive/same -> not-fired/same ["no-write-in-pure-computation@9:false-positive"] -> []
+moved reactive-write-in-owned-scope-gen-sync-each-signal-direct-none false-positive/same -> not-fired/same ["no-write-in-pure-computation@9:false-positive"] -> []
+moved reactive-write-in-owned-scope-gen-sync-each-store-direct-none false-positive/same -> not-fired/same ["no-write-in-pure-computation@9:false-positive"] -> []
+moved reactive-write-in-owned-scope-gen-sync-each-refresh-direct-none false-positive/same -> not-fired/same ["no-write-in-pure-computation@9:false-positive"] -> []
+moved cleanup-in-forbidden-scope-gstep-exported-it-x-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved primitive-in-forbidden-scope-gstep-exported-it-effect-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved sync-node-received-async-gstep-exported-it-effect-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted","sync-computation-received-async@5:unexecuted"] -> ["sync-computation-received-async@5:unexecuted"]
+moved sync-node-received-async-gen-yield-each-effect-direct-none agree/same -> agree/same ["sync-computation-received-async/violation@8"] -> ["missing-owner/violation@8","sync-computation-received-async/violation@8"]
+moved sync-node-received-async-gen-sync-each-effect-direct-none agree/same -> agree/same ["sync-computation-received-async/violation@8"] -> ["missing-owner/violation@8","sync-computation-received-async/violation@8"]
+moved action-called-in-owned-scope-gen-yield-each-x-direct-none false-positive/same -> not-fired/same ["action-called-in-owned-scope@10:false-positive"] -> []
+moved action-called-in-owned-scope-gen-sync-each-x-direct-none false-positive/same -> not-fired/same ["action-called-in-owned-scope@10:false-positive"] -> []
+moved primitive-in-effect-callback-gstep-exported-it-effect-direct-none not-fired/same -> not-fired/same ["missing-owner@5:unexecuted"] -> []
+moved on-flush-in-owned-scope-gen-yield-each-x-direct-none false-positive/same -> not-fired/same ["on-flush-in-owned-scope@8:false-positive"] -> []
+moved on-flush-in-owned-scope-gen-sync-each-x-direct-none false-positive/same -> not-fired/same ["on-flush-in-owned-scope@8:false-positive"] -> []
+problem agree/differs no-owner-context-gen-yield-each-x-direct-none ["missing-owner/violation@10"]
+problem agree/differs no-owner-context-gen-sync-each-x-direct-none ["missing-owner/violation@10"]
+problem not-fired/differs context-not-found-gen-yield-each-x-direct-none ["missing-owner@10:unconnected"]
+problem not-fired/differs context-not-found-gen-sync-each-x-direct-none ["missing-owner@10:unconnected"]
+problem agree/differs dynamic-static-promise-gen-yield-each-x-direct-none ["static-dynamic-async-source/violation@9"]
+problem agree/differs dynamic-static-promise-gen-sync-each-x-direct-none ["static-dynamic-async-source/violation@9"]

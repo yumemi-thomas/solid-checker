@@ -232,6 +232,16 @@ pub(crate) enum IteratorSteps {
 
 const STEP_METHODS: &[&str] = &["next", "return", "throw"];
 
+/// Review W1: whether `generator`'s binding is exported, so its iterators may
+/// be created and stepped by code no reference here shows.
+pub(crate) fn generator_exported(
+    file: &solid_facts::FileFacts,
+    generator: &solid_facts::ast::FunctionFact,
+) -> bool {
+    function_binding_name(file, generator)
+        .is_some_and(|name| crate::indexes::binding_exported(file, name.span))
+}
+
 /// ADR 0851: every call that creates `generator`'s iterator, when every
 /// reference to its binding is such a call (none in another file); `None`
 /// for a method, a generator with no binding, or one handed on as a value
@@ -327,6 +337,9 @@ pub(crate) fn iterator_steps(
     let [name] = binding.names.as_slice() else {
         return IteratorSteps::Unplaced;
     };
+    if crate::indexes::binding_exported(file, name.span) {
+        return IteratorSteps::Unplaced;
+    }
     let Some(symbol) = lookup
         .entities()
         .exact(&crate::location(file.path.shared(), name.span))

@@ -110,7 +110,9 @@ export const CHAIN_FORMS = ["chain-5", "chain-13", "forward-2", "forward-13"];
 /** A carrier that runs its callback zero times, or for a length nothing states (ADRs 0563, 0566, 0580): a program's site there runs nothing. */
 export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
 /** ADR 0820: the site in a generator's body, the iterator stepped from an async function. `gen-prefix` and `gen-drain` are legal: the site runs on the first stack. */
-export const GENERATOR_FORMS = ["gen-await", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", "gen-prefix", "gen-drain"];
+export const GENERATOR_FORMS = ["gen-await", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", "gen-prefix", "gen-drain",
+  // Review W2 (ADR 0851): the site in a `forEach` callback past the `yield`, run in place on the step's stack.
+  "gen-yield-each", "gen-sync-each"];
 /**
  * ADR 0851: a named generator holding the site (flip-gen.mjs `gstep-*` contexts): `gstep` writes `function* name() { yield 1; … }`,
  * `mode: "first"` puts the site before the `yield`, and `holder` makes it a generator method of a `const` literal. The context steps it.

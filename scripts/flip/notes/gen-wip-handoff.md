@@ -1,5 +1,52 @@
 # gen-wip handoff (2026-11-07; NOT green)
 
+## STOP before smoke manifest change (2026-11-07 continuation)
+
+The brief requires a stop before changing a smoke manifest. No manifest, judge,
+assertion, limit, allowlist, parity expectation, tsc-oracle case or count-ledger
+change was made. Exact proposed manifest diff (NOT applied):
+`/Users/thomas.guehenneux/EDF/tmp/flip-gen-await/smoke-w1w2-proposed.patch`.
+Readable additions: `smoke-w1w2-additions.json` beside it. It appends 20 generated
+W1/W2 ids (SC2001, owner cleanup, action scope, all four new contexts), their
+expected behaviour indexes and missing behaviour strings to mx-census.json.
+Reason: rediscovery.test.mjs requires every ledger id in the smoke manifest;
+none of these contexts is currently held. Rediscovery entries cannot be added
+and remain green without that change. The original brief says to stop here.
+The later owner instruction authorizes saving measured WIP on flip-gen-wip.
+
+### W1/W2 code and evidence
+- W2 climbs in-place callbacks before asking the enclosing generator's step
+  resumption. W1 checks exports both for generator bindings and held iterators;
+  uses existing indexes::binding_exported (exact declaration/reference links),
+  replacing the draft's name-only export-specifier comparison.
+- VM release d7 SHA256: 400e3e3d5a0ec1954a492f547862653323bd62c65f42f13c8462a8f52e1ded5a.
+  Build exit 0; semantic tree be69b79c1 + working diff (VM snapshot 967e96d82).
+  Final host-only formatting wraps one expression; no semantic change.
+- Four new contexts, 172 programs, every row uncached Chrome-confirmed on old
+  v0850 (97c1bb966) and d7. Both matrix commands exit 0 (matrix reports rows;
+  this is NOT a passing fuzz-focus claim). Guards: no memory trips.
+  Old: 12 false-positive/same, 12 false-clean/same, 2 false-clean/not-fired-in-Chrome,
+  8 agree/same, 2 agree/differs, 2 recall-gap/same, 134 not-fired/same.
+  New: 0 judged FP/FC; 20 agree/same, 4 agree/differs, 2 not-fired/differs,
+  2 recall-gap/same, 144 not-fired/same. See d7-w1w2-comparison.txt: every
+  moved row was read. Confirmed: W2 writes/action/onFlush no longer V; 12
+  Chrome-confirmed owner FC become missing-owner V. The 6 Chrome differences
+  are NOT verified fixes: useContext/no-provider and dynamic-static throws in
+  the async compute's flight (known issue already recorded below).
+- W1 exported contexts are not executed by the runtime; their not-fired outcome
+  alone proves no clean/U distinction. Historical local d6 output showed U for
+  exported generator and exported iterator (cleanup, SC2001, action), vs old
+  exported iterator's clean/V. A d7 raw-census run was queued for exact U/blocker
+  evidence, then cancelled before acquiring the lock; another agent held it.
+- make fuzz-test ARGS='scripts/fuzz/generate.test.mjs scripts/fuzz/rediscovery.test.mjs':
+  exit 0, 16 passed, 0 failed/skipped. This validates the EXISTING ledger only;
+  W1/W2 have no new ledger entry because of the stop above. git diff --check: 0.
+- Deferred on d7: fuzz-focus/fuzz-smoke, fixtures/snapshot, coverage,
+  ownership-gate, corpus, verify-delta, make verify, final ADR 0851. Existing
+  base/final gate results below apply only to their named builds. NOT green.
+- No own background or queued work remains. Original green branch still
+  claude/flip-gen-await at 97c1bb966; continuation is WIP on flip-gen-wip.
+
 ## Blocking review findings on a84e8af61 (fix before any green commit; fuzz shape first, old fails, new passes, W2 in Chrome)
 - W2 (plausible FP): `generator_step_resumption` asks only sites directly in the generator: `yield 1; [1].forEach(() => set(1));` under `for await` in a compute climbs to the compute's role: SC2001 V where Chrome is silent; owner rules go quiet the same way. Fix: climb in-place layers first (as `climbed_after_await` does).
 - W1 (plausible silent clean): `generator-never-stepped` (Unreported) also answers for `export function* g()` / `export const it = g()` with no project reference. Exported or handed-out generator/iterator must be Unknown.

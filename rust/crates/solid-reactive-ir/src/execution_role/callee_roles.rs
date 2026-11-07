@@ -214,7 +214,7 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.generator-steps-cycle", ExecutionRole::Unknown);
         }
         let mut sites = Vec::new();
-        let mut unplaced = false;
+        let mut unplaced = crate::owners::generator_exported(file, generator);
         for call in calls {
             match crate::owners::iterator_steps(file, call, lookup) {
                 crate::owners::IteratorSteps::InPlace => sites.push(call.span),

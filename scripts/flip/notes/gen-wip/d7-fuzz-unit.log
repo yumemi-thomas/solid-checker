@@ -1,0 +1,19 @@
+bun scripts/fuzz/test-lane.mjs --provision scripts/fuzz/generate.test.mjs scripts/fuzz/rediscovery.test.mjs
+provisioned already: fuzz fast-path install
+provisioned already: runtime oracle install
+provisioned already: pinned Playwright headless shell
+
+ RUN  v4.1.11 /Users/thomas.guehenneux/EDF/tmp/flip-gen-await/wt
+
+ ✓ scripts/fuzz/generate.test.mjs (14 tests) 284ms
+ ✓ scripts/fuzz/rediscovery.test.mjs (2 tests) 1002ms
+     ✓ lists programs the grids still generate, and the smoke set holds them  997ms
+
+ Test Files  2 passed (2)
+      Tests  16 passed (16)
+   Start at  11:30:24
+   Duration  1.53s (transform 387ms, setup 0ms, import 521ms, tests 1.29s, environment 0ms)
+
+JSON report written to /Users/thomas.guehenneux/EDF/tmp/system/fuzz-test-lane-cbioMl/report.json
+
+fuzz tests: 16 passed, 0 failed, 0 skipped

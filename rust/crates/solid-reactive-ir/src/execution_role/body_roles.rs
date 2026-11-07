@@ -843,6 +843,19 @@ pub(crate) fn generator_step_resumption(
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
     let ast = &file.ast;
+    // Review W2: a layer run in place inside the generator (an IIFE, a
+    // `forEach` callback) runs on the stack of its outermost call there.
+    let span = if containing_ast_function(ast, span).is_some_and(|function| function.generator) {
+        span
+    } else {
+        let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
+        if climb.exhausted || climb.in_list {
+            return containing_ast_function(ast, climb.at)
+                .is_some_and(|function| function.generator)
+                .then_some(false);
+        }
+        climb.at
+    };
     let generator = containing_ast_function(ast, span)
         .filter(|function| function.generator && function.body.contains(span))?;
     if crate::owners::own_method_name(file, generator).is_some() {
