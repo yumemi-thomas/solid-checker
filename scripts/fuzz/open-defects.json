@@ -1056,7 +1056,7 @@
    "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`": 13,
    "false-positive": 4,
    "createRoot inside onCleanup inside createRoot": 2,
-   "R-casts-stage2": 292,
+   "R-casts-stage2": 307,
    "R-unplaced": 157,
    "R-unjudged-unplaced": 3,
    "R-stacked": 162,
@@ -1069,7 +1069,7 @@
    "R-alias-call": 238,
    "R-F1-open": 7,
    "R-alias-owner": 81,
-   "R-stop-named-U": 496,
+   "R-stop-named-U": 481,
    "R-call-arg": 76,
    "R-placeless": 46,
    "R-near": 9

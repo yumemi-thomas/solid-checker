@@ -80,7 +80,7 @@ export function ledger(dir, seed, list) {
       const named = inStopGroup(row) ? stopFinding(row) : null;
       const entry = heldGridEntry(list, row, problem);
       if (inStopGroup(row)) { (entry && !entry.item.startsWith("R-") ? stopCheck.family : named ? stopCheck.listed : stopCheck.rejected).push(row.id); }
-      const stops = named && !(entry && !entry.item.startsWith("R-"));
+      const stops = named && !(entry && !entry.item.startsWith("R-")) && !CASTS_STAGE2_CONTEXTS.includes(row.context);
       const owner = list.owners?.[`${grid}/${row.id}`];
       rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}), ...(problem === "stacked-claim" ? { pairs: row.detail?.pairs ?? [] } : {}), ...(problem === "unjudged-claim" ? { rules: row.detail?.rules ?? [] } : {}), ...(owner ? { owner } : {}) };
     }
