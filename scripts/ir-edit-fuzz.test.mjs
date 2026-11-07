@@ -39,6 +39,8 @@ test("every edit kind changes a representative file", () => {
   for (const [kind, edit] of Object.entries(EDIT_KINDS)) {
     // Needs a calling file on disk; tested below.
     if (kind === "retype-return") continue;
+    // Each edits only the census fixture's wire.ts; tested below.
+    if (kind === "add-dunder-definer" || kind === "add-classic-declaration") continue;
     const next = edit({
       text: SAMPLE,
       path: "/p/Widget.tsx",
@@ -49,6 +51,17 @@ test("every edit kind changes a representative file", () => {
     assert.notEqual(next, null, kind);
     assert.notEqual(next, SAMPLE, kind);
   }
+});
+
+test("the census family edits wire.ts only, and its classic edit drops the module marker", () => {
+  const text = "const a = 1;\nexport {};\n";
+  const edit = (kind, path) => EDIT_KINDS[kind]({ text, path, others: [], rand: seededRandom(3), serial: 4 });
+  for (const kind of ["add-dunder-definer", "add-classic-declaration"]) {
+    assert.equal(edit(kind, "/p/main.tsx"), null, kind);
+    assert.notEqual(edit(kind, "/p/wire.ts"), null, kind);
+  }
+  assert.ok(edit("add-dunder-definer", "/p/wire.ts").includes('"__log"'));
+  assert.ok(!edit("add-classic-declaration", "/p/wire.ts").includes("export"));
 });
 
 test("body keeps every byte offset; prefix shifts them; an import-free file has nothing to remove", () => {

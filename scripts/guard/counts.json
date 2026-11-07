@@ -165,7 +165,7 @@
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
   "SC9012 store-key-undecided": 12,
-  "SC9012 tuple-iteration-written": 1273,
+  "SC9012 tuple-iteration-written": 1300,
   "SC9012 type-only-source": 80,
   "SC9012 value-as-parameter-default": 8,
   "SC9012 value-bound-held": 5,
@@ -175,7 +175,7 @@
   "SC9012 value-from-primitive-callback": 19,
   "SC9012 value-held-in-binding": 78,
   "SC9012 value-held-in-member": 10,
-  "SC9012 value-in-carrier": 164,
+  "SC9012 value-in-carrier": 163,
   "SC9012 value-in-class-field": 5,
   "SC9012 value-read-under-untrack": 1,
   "SC9012 value-root-in-helper": 13,
@@ -377,7 +377,7 @@
   {
    "key": "SC9012 value-in-carrier",
    "from": 176,
-   "to": 164,
+   "to": 163,
    "adr": "ADR 0803",
    "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
    "fixtures": {
