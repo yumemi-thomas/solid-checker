@@ -42,17 +42,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 727,
-      "end": 732,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -190,17 +179,6 @@
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
       "start": 1759,
       "end": 1768,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 2075,
-      "end": 2080,
       "fixes": 0
     },
     {

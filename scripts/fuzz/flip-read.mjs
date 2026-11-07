@@ -216,6 +216,7 @@ const ITER_PATCHES = {
   // Review R19d: a platform caller by a bare alias.
   "iter-listener-alias": `const itOn = addEventListener; itOn("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); dispatchEvent(new Event("itx"));`,
   // Review R19e: `composedPath()` of a bubbling event holds the window on any target.
+  "iter-path-find-patched": `Array.prototype.find = function (this: any[]) { return this[this.length - 1]; } as any; document.body.addEventListener("itx", (e) => { const g: any = e.composedPath().find(el => el instanceof Node && true); const itAP = g.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR} }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-path": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath().at(-1); itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-index": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath()[3]; itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-forof": `document.body.addEventListener("itx", (e) => { for (const itT of e.composedPath() as any[]) { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); } }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
@@ -225,6 +226,15 @@ const ITER_PATCHES = {
   "iter-object-proto-member": `const itKn: PropertyKey[] = ["__itp"]; (Object.prototype as any)[itKn[0]] = function (this: any) { const g = this; delete (Object.prototype as any)[itKn[0]]; ${ITER_G} }; (window as any).__itp?.();`,
   // Review of 37ce9020a: a subclass's constructor keeps the event, whose `target` stays the window after dispatch.
   "iter-event-subclass": `let itKept: any; class ItE extends Event { constructor() { super("itx"); itKept = this; } } window.dispatchEvent(new ItE()); { const g = itKept.target; ${ITER_G} }`,
+  // The listener is read at the call that hands the window on: one that reaches it through a helper's parameter, by its event.
+  "iter-bind-reads-window": `const itBind = (t: EventTarget, type: string, h: (e: any) => void) => { t.addEventListener(type, h); }; itBind(window, "itx", (e) => { const g = e.currentTarget; ${ITER_G} }); window.dispatchEvent(new Event("itx"));`,
+  "iter-listener-reads-target": `const itOn = (e: any) => { const g = e.target; ${ITER_G} }; window.addEventListener("itx", itOn); window.dispatchEvent(new Event("itx"));`,
+  // Reviews R51, R52: an arrow's expression body is its return; a named function expression is entered by its own name.
+  "iter-returned-expression-body": `const itMk = () => (e: any) => { const g = e.currentTarget; ${ITER_G} }; window.addEventListener("itx", itMk()); window.dispatchEvent(new Event("itx"));`,
+  "iter-named-expression-param": `const itE = (e: any) => { const g = e.currentTarget; ${ITER_G} }; const itF = function itG(cb: any) { if (cb !== itE) itG(itE); window.addEventListener("itx", cb); }; itF(() => {}); window.dispatchEvent(new Event("itx"));`,
+  // Review R53: a listed event value, called, runs with the event as `this`.
+  "iter-event-value-called": `window.addEventListener("itx", (e: any) => e.data()); window.dispatchEvent(new MessageEvent("itx", { data() { const g = (this as any).currentTarget; ${ITER_G} } } as any));`,
+  "iter-event-value-tagged": `window.addEventListener("itx", (e: any) => e.data\`x\`); window.dispatchEvent(new MessageEvent("itx", { data() { const g = (this as any).currentTarget; ${ITER_G} } } as any));`,
   "iter-event-target": `const itEv = new Event("itx"); window.dispatchEvent(itEv); (itEv.target as any).Function(${JSON.stringify(ITER_CODE)})();`,
   "iter-window-computed": `const itK = ["con", "firm"].join(""); const itC = window.confirm; (window as any)[itK] = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); (window as any)[itK] = itC; return true; }; window.confirm("y");`,
   // Review D8: `Object.hasOwn`'s key is coerced through code the program wrote; a value compared on one side and called on the other.

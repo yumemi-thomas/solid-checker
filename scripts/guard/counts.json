@@ -13,14 +13,14 @@
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
-  "SC1001 read-backing-unproven": 368,
+  "SC1001 read-backing-unproven": 357,
   "SC1001 summary-read-unplaced": 91,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
   "SC1002 generator-stepped": 11,
   "SC1002 handed-read-after-await": 167,
   "SC1002 search-depth-limit": 1,
-  "SC1002 tuple-iteration-written": 86,
+  "SC1002 tuple-iteration-written": 82,
   "SC1003 destructure-root-unproven": 29,
   "SC1003 props-callers-unenumerated": 14,
   "SC1004 component-identity-unproven": 1,
@@ -157,7 +157,7 @@
   "SC9012 forwarded-to-undescribed-callee": 28,
   "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 1,
-  "SC9012 handed-member-dispatch": 401,
+  "SC9012 handed-member-dispatch": 404,
   "SC9012 handed-member-read": 64,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 37,
@@ -182,7 +182,7 @@
   "SC9012 solid-call-rejected-unchecked": 3,
   "SC9012 standard-member-impostor": 110,
   "SC9012 store-key-undecided": 12,
-  "SC9012 tuple-iteration-written": 1378,
+  "SC9012 tuple-iteration-written": 1357,
   "SC9012 type-only-source": 85,
   "SC9012 value-as-parameter-default": 8,
   "SC9012 value-bound-held": 5,
@@ -192,7 +192,7 @@
   "SC9012 value-from-primitive-callback": 23,
   "SC9012 value-held-in-binding": 108,
   "SC9012 value-held-in-member": 17,
-  "SC9012 value-in-carrier": 318,
+  "SC9012 value-in-carrier": 319,
   "SC9012 value-in-class-field": 12,
   "SC9012 value-pending-in-jsx": 1,
   "SC9012 value-read-under-untrack": 1,
@@ -1060,6 +1060,149 @@
     "open": "reactive-ir/after-await-handoff"
    },
    "note": "Proved, U to V: Member, `const ho = { m: hf }; ho.m()` past the await: the slot names the function, the literal is closed, and rc.21 warns on the fuzzer's handoff-member programs (49 agree, Chrome-confirmed). The open twin in the same fixture is MemberWrapper."
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 tuple-iteration-written",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/read-after-await-purity"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again; all 4 spans are SC1002 violations now (proved, U to V)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 22,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC1001 read-backing-unproven",
+   "from": 10,
+   "to": 1,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/callback-props-reads",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again; 9 spans are SC1001 violations now (proved, U to V), 1 keeps its U"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 26,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/callback-props-reads",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-owner",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-owner",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-read-role",
+   "key": "SC1001 read-backing-unproven",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-read-role",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again; both spans are SC1001 violations now (proved, U to V)"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-read-role",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 16,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-read-role",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-default-view-optional",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-default-view-optional",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-listener-param",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-listener-param",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/owner-region-no-edge",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/owner-region-no-edge",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/rc21-listener-shared",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-listener-shared",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes at 2 spans; the third span keeps an SC9012 U under value-in-carrier (a relabel there, not a proof of that use)"
   }
  ],
  "renames": []
