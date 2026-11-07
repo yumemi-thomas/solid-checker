@@ -1272,6 +1272,13 @@ fn call_accessor_symbol<'s>(
     call: &solid_facts::ast::CallFact,
 ) -> Option<&'s SymbolId> {
     let callee = file.ast.peel_ts_sugar_span(call.callee);
+    // ADR 0898 (review D32): a comma, conditional, logical or assignment callee
+    // names no symbol. The entity at its span is its first token's
+    // (`(n.length > 5 ? n : plain)()` calls `plain`); a caller that credits a
+    // read reads its operands (`read_accessor_symbol`, ADR 0897's arm).
+    if !file.ast.composite_callee_operands(call.callee).is_empty() {
+        return None;
+    }
     // ADR 0481: a member read that is exactly a `const` names that `const`.
     if let Some(alias) = file.ast.local_alias_member(callee) {
         return ctx.entities.at(file.path.as_str(), alias.source);
@@ -1332,8 +1339,31 @@ fn tracked_before_first_suspension(
             && file
                 .ast
                 .call_at(*span)
-                .is_some_and(|call| same_source(ctx, call_accessor_symbol(ctx, file, call), symbol))
+                .is_some_and(|call| same_source(ctx, read_accessor_symbol(ctx, file, call), symbol))
     })
+}
+
+/// ADR 0898: the accessor a call proves it reads, where a read is credited as
+/// a dependency. A composite callee (ADR 0468) proves one only when total and
+/// every operand is a reference to that accessor (ADR 0517's exact rule); any
+/// other proves no read, and what it may read is the possible-read scan's.
+fn read_accessor_symbol<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'s SymbolId> {
+    let operands = file.ast.composite_callee_operands(call.callee);
+    if operands.is_empty() {
+        return call_accessor_symbol(ctx, file, call);
+    }
+    let references = file.ast.composite_callee_references(call.callee);
+    let first = ctx.entities.at(file.path.as_str(), *references.first()?)?;
+    (references.len() == operands.len()
+        && file.ast.composite_callee_total(call.callee)
+        && references
+            .iter()
+            .all(|reference| ctx.entities.at(file.path.as_str(), *reference) == Some(first)))
+    .then_some(first)
 }
 
 /// The store paths a function reads in its own straight-line flow before its
