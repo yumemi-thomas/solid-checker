@@ -1314,11 +1314,6 @@
   "mx-base/mx-primitive-in-forbidden-scope-settled-root-alias-iife": "R5",
   "mx-base/mx-primitive-in-forbidden-scope-settled-root-direct-iife-m-for": "R5",
   "mx-base/mx-primitive-in-forbidden-scope-tracked-effect-wrapper-iife-m-show": "R5",
-  "mx-census/mx-context-not-found-memo-lazy-read-handler-x-direct-none": "R3e",
-  "mx-census/mx-dynamic-static-promise-flw-settled-report-error-x-direct-none": "R3e",
-  "mx-census/mx-dynamic-static-promise-memo-lazy-read-handler-x-direct-none": "R3e",
-  "mx-census/mx-resolve-in-reactive-scope-memo-lazy-read-handler-x-direct-none": "R3e",
-  "mx-census/mx-until-in-reactive-scope-memo-lazy-read-handler-x-direct-none": "R3e",
   "mx-combo/mx-cleanup-in-forbidden-scope-settled-x-direct-iife-m-for-c": "R5",
   "mx-combo/mx-flush-in-tracked-queue-callback-tracked-x-namespace-iife-c": "R5",
   "mx-combo/mx-primitive-in-forbidden-scope-tracked-root-namespace-iife-m-show-c": "R5",
@@ -1332,7 +1327,7 @@
  "ratchet": {
   "certified": 14,
   "certifiedF2": 290,
-  "falsePositive": 22,
+  "falsePositive": 17,
   "stackedClaim": 162,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -1348,7 +1343,7 @@
   "unjudgedClaim": 14,
   "causes": {
    "R-not-legal": 663,
-   "false-positive": 22,
+   "false-positive": 17,
    "createRoot inside onCleanup inside createRoot": 2,
    "census": 99,
    "R-placeless": 96,
