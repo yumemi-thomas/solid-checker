@@ -18,7 +18,7 @@
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 168,
+  "SC1002 handed-read-after-await": 167,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 86,
   "SC1003 destructure-root-unproven": 29,
@@ -188,7 +188,7 @@
   "SC9012 value-bound-held": 5,
   "SC9012 value-escaped-from-untrack": 3,
   "SC9012 value-exported-unnamed": 5,
-  "SC9012 value-forwarded": 235,
+  "SC9012 value-forwarded": 236,
   "SC9012 value-from-primitive-callback": 23,
   "SC9012 value-held-in-binding": 108,
   "SC9012 value-held-in-member": 17,
@@ -201,7 +201,7 @@
   "SC9012 value-through-generator": 5,
   "SC9012 value-through-logical": 36,
   "SC9012 value-through-new": 29,
-  "SC9012 value-to-unresolved-callee": 261,
+  "SC9012 value-to-unresolved-callee": 260,
   "SC9012 value-use-unclassified": 63,
   "SC9012 withheld-object-member": 51,
   "SC9014 dialect-detection": 139,
@@ -1047,6 +1047,19 @@
    "adr": "ADR 0803",
    "kind": "relabel",
    "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 handed-read-after-await",
+   "from": 12,
+   "to": 11,
+   "adr": "ADR 0895",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs::closed_member",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/after-await-handoff"
+   },
+   "note": "Proved, U to V: Member, `const ho = { m: hf }; ho.m()` past the await: the slot names the function, the literal is closed, and rc.21 warns on the fuzzer's handoff-member programs (49 agree, Chrome-confirmed). The open twin in the same fixture is MemberWrapper."
   }
  ],
  "renames": []

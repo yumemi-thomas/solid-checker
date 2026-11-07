@@ -358,6 +358,7 @@ export function recallAxes(code, context, base, variants, options = {}) {
   // ADR 0893: `st-unread` takes every layer around the site, on the direct binding: a layer the walk cannot follow is its question.
   if (context === "st-unread") return shapes.filter((shape) => shape.binding === "direct");
   // The question of a computed chain key is the key, not the spelling of the read: the direct binding's closure and helper layers, and an alias.
+  if (context.startsWith("aw-forward-")) return shapes.filter((shape) => shape.binding === "direct" && shape.layer === "none");
   if (context.startsWith("aw-then-computed")) return shapes.filter((shape) => (shape.binding === "direct" && /^(none|closure.*|helper.*)$/.test(shape.layer ?? "none")) || (shape.binding === "alias" && shape.layer === "none"));
   return shapes;
 }

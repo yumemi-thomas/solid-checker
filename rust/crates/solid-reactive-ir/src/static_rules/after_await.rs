@@ -497,6 +497,9 @@ fn ast_function<'f>(
         .then_some((file, found))
 }
 
+/// Whole-argument hand-ons followed from a call: past it, an obligation.
+const MAX_FORWARDS: usize = 32;
+
 /// Text a method's producer span may hold before its parameter list and no
 /// other function: `async`, `*`, a key name, whitespace; and (ADR 0517) an
 /// object literal property's `key:` before the function it holds
@@ -1795,6 +1798,32 @@ impl<'f, 'a> Reach<'f, 'a> {
             {
                 self.report_prefix(draft, walk, file, callback, depth);
                 in_place = true;
+                continue;
+            }
+            // A literal handed on through wrappers (`hc1(() => read())` over
+            // `const hc1 = (g) => { hc0(g); }`): an exact chain that ends in a
+            // direct call of the parameter runs it here. Anything else may run
+            // it: an obligation, at its reads, never silence and never a name.
+            if self.handed_to_project_code(file, call) {
+                if self.forward_runs(
+                    file,
+                    call,
+                    argument.span,
+                    MAX_FORWARDS,
+                    &mut HashSet::default(),
+                ) {
+                    self.report_prefix(draft, walk, file, callback, depth);
+                } else {
+                    self.report_conditional_region(
+                        draft,
+                        walk,
+                        file,
+                        callback,
+                        depth,
+                        &AfterAwaitObligation::HandOffNotFollowed { via: None },
+                    );
+                }
+                in_place = true;
             }
         }
         // ADR 0565: a function named whole at an argument that an exact
@@ -1828,14 +1857,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .is_some_and(|(callee_file, callee, exact)| {
                     exact && callee_file.path == file.path && callee.method_name.is_none()
                 });
-                if same_file_wrapper
-                    && crate::execution_role::helper_argument_run(
-                        file,
-                        call,
-                        index,
-                        ctx.semantic_lookup,
-                    )
-                    .is_some_and(|run| run.every_completion)
+                let forwarded = self.forward_runs(
+                    file,
+                    call,
+                    argument.span,
+                    MAX_FORWARDS,
+                    &mut HashSet::default(),
+                );
+                if forwarded
+                    || (same_file_wrapper
+                        && crate::execution_role::helper_argument_run(
+                            file,
+                            call,
+                            index,
+                            ctx.semantic_lookup,
+                        )
+                        .is_some_and(|run| run.every_completion))
                 {
                     self.report_prefix(draft, walk, function_file, function, depth);
                     in_place = true;
@@ -2012,9 +2049,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             if file.ast.computed_members.contains(&member.span) {
                 return;
             }
-            let Some((helper_file, helper)) =
-                ctx.semantic_lookup.closed_member_function(file, member)
-            else {
+            let Some((helper_file, helper)) = self.closed_member(file, member) else {
                 return;
             };
             (helper_file, helper, true)
@@ -2324,6 +2359,100 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// ADR 0537: the exact, current project function the identifier at
     /// `span` names (a carrier's argument, a `call`/`apply` receiver, a
     /// template's tag), through the exact reference resolution.
+    /// A call whose callee is no primitive and no standard declaration: what
+    /// it does with a function is the project's, or a dependency's.
+    fn handed_to_project_code(&self, file: &FileFacts, call: &CallFact) -> bool {
+        let lookup = self.ctx.semantic_lookup;
+        lookup.primitive_at_call(file, call.span).is_none()
+            && crate::indexes::standard_library_declaration_of(
+                lookup.resolved_callee_call(file, call.callee),
+                typefacts::CallKind::Call,
+            )
+            .is_none()
+    }
+
+    /// The whole argument at `argument` of an exact project function ends, at
+    /// the end of a chain of whole-argument hand-ons each on every completion,
+    /// in a direct call of the parameter holding it, on every completion too. A wrapper's parameter is asked once: a chain that
+    /// fans out or recurses (`hop(g); hop(g);`) would otherwise double per hop.
+    fn forward_runs(
+        &self,
+        file: &FileFacts,
+        call: &CallFact,
+        argument: Span,
+        depth: usize,
+        seen: &mut HashSet<(String, Span, usize)>,
+    ) -> bool {
+        let lookup = self.ctx.semantic_lookup;
+        let Some(depth) = depth.checked_sub(1) else {
+            return false;
+        };
+        let Some(index) = call.arguments.iter().position(|candidate| {
+            !candidate.spread
+                && file.ast.peel_ts_sugar_span(candidate.span)
+                    == file.ast.peel_ts_sugar_span(argument)
+        }) else {
+            return false;
+        };
+        let Some((wrapper_file, wrapper, true)) =
+            crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
+        else {
+            return false;
+        };
+        if !seen.insert((wrapper_file.path.to_string(), wrapper.span, index)) {
+            return false;
+        }
+        let Some(parameter) = wrapper.parameters.get(index) else {
+            return false;
+        };
+        let (solid_facts::ast::BindingShape::Identifier, Some(name)) =
+            (parameter.shape, parameter.names.first())
+        else {
+            return false;
+        };
+        if crate::indexes::binding_written(wrapper_file, name.span) {
+            return false;
+        }
+        // On the wrapper's own stack: not in a function written in it (a timer's,
+        // a handler's, one it returns), not past a suspension of its own.
+        let prefix = synchronous_prefix(wrapper_file, wrapper);
+        wrapper_file
+            .ast
+            .reference_identifiers_to(name.span)
+            .any(|reference| {
+                let at = reference.span;
+                if !prefix.contains(at) || !written_directly_in(&wrapper_file.ast, wrapper, at) {
+                    return false;
+                }
+                // On every completion of the wrapper: `if (on) g()` under
+                // `run(hf, false)` is a call no run reaches.
+                let always = |next: &CallFact| {
+                    crate::interproc::site_on_every_completion(
+                        lookup,
+                        wrapper_file,
+                        wrapper.span,
+                        next.span,
+                    )
+                };
+                wrapper_file.ast.calls.iter().any(|next| {
+                    !next.construct
+                        && wrapper_file.ast.peel_ts_sugar_span(next.callee) == at
+                        && always(next)
+                }) || wrapper_file
+                    .ast
+                    .arguments_containing(at)
+                    .find(|(next, index)| {
+                        wrapper_file
+                            .ast
+                            .peel_ts_sugar_span(next.arguments[*index].span)
+                            == at
+                    })
+                    .is_some_and(|(next, _)| {
+                        always(next) && self.forward_runs(wrapper_file, next, at, depth, seen)
+                    })
+            })
+    }
+
     /// The function a closed literal's member holds: written there, or named.
     fn closed_member(
         &self,
