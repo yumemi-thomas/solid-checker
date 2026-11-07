@@ -4,133 +4,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 226,
       "end": 233,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 226,
-      "end": 231,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 462,
-      "end": 467,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 562,
-      "end": 567,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 666,
-      "end": 671,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 766,
-      "end": 771,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 986,
-      "end": 991,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 1165,
-      "end": 1170,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 1190,
-      "end": 1196,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 1402,
-      "end": 1410,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 1418,
-      "end": 1423,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 1448,
-      "end": 1453,
       "fixes": 0
     },
     {
@@ -177,17 +55,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 2214,
-      "end": 2219,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -196,17 +63,6 @@
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 2309,
       "end": 2316,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 2309,
-      "end": 2314,
       "fixes": 0
     },
     {
@@ -221,36 +77,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 2449,
-      "end": 2454,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 2737,
       "end": 2744,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 2737,
-      "end": 2742,
       "fixes": 0
     },
     {
@@ -262,17 +95,6 @@
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 3046,
       "end": 3053,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 3046,
-      "end": 3051,
       "fixes": 0
     }
   ]

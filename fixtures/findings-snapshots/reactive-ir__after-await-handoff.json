@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "strict-read-untracked",
@@ -15,20 +15,8 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "kind": "violation",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 602,
-      "end": 603,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 602,
       "end": 603,
@@ -59,20 +47,8 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "kind": "violation",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 888,
-      "end": 889,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 888,
       "end": 889,
@@ -95,17 +71,6 @@
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 1239,
-      "end": 1240,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 1239,
       "end": 1240,
@@ -145,17 +110,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 1553,
-      "end": 1554,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -183,17 +137,6 @@
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 1889,
-      "end": 1890,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 1889,
       "end": 1890,
@@ -233,17 +176,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 2250,
-      "end": 2251,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -271,17 +203,6 @@
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 2558,
-      "end": 2559,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 2558,
       "end": 2559,
@@ -321,17 +242,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 2786,
-      "end": 2787,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -365,17 +275,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3072,
-      "end": 3073,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -403,17 +302,6 @@
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3372,
-      "end": 3373,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 3372,
       "end": 3373,
@@ -464,17 +352,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3640,
-      "end": 3641,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -502,17 +379,6 @@
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 3898,
-      "end": 3899,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 3898,
       "end": 3899,
@@ -552,17 +418,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4219,
-      "end": 4220,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -587,20 +442,8 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "kind": "violation",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4476,
-      "end": 4477,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 4476,
       "end": 4477,
@@ -631,20 +474,8 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "kind": "violation",
       "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 4814,
-      "end": 4815,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 4814,
       "end": 4815,
@@ -684,17 +515,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5094,
-      "end": 5095,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -714,17 +534,6 @@
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 5429,
       "end": 5432,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5429,
-      "end": 5430,
       "fixes": 0
     },
     {
@@ -750,17 +559,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5668,
-      "end": 5669,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -783,17 +581,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 5855,
-      "end": 5856,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -805,17 +592,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 6058,
-      "end": 6059,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -824,17 +600,6 @@
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 6121,
       "end": 6124,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 6121,
-      "end": 6122,
       "fixes": 0
     },
     {
@@ -857,17 +622,6 @@
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 6350,
       "end": 6353,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
-      "start": 6350,
-      "end": 6351,
       "fixes": 0
     },
     {

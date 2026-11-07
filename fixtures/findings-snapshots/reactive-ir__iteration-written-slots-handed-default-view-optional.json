@@ -1,26 +1,14 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-default-view-optional/body-write.tsx",
       "start": 109,
-      "end": 112,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-default-view-optional/body-write.tsx",
-      "start": 133,
-      "end": 134,
+      "end": 115,
       "fixes": 0
     }
   ]

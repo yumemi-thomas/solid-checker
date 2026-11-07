@@ -13,13 +13,13 @@
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
-  "SC1001 read-backing-unproven": 364,
+  "SC1001 read-backing-unproven": 353,
   "SC1001 summary-read-unplaced": 90,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 generator-stepped": 5,
   "SC1002 handed-read-after-await": 158,
   "SC1002 search-depth-limit": 1,
-  "SC1002 tuple-iteration-written": 85,
+  "SC1002 tuple-iteration-written": 81,
   "SC1003 destructure-root-unproven": 29,
   "SC1003 props-callers-unenumerated": 14,
   "SC1004 component-identity-unproven": 1,
@@ -141,7 +141,7 @@
   "SC9012 forwarded-to-undescribed-callee": 28,
   "SC9012 function-call-target-unresolved": 9,
   "SC9012 function-prototype-callee-unresolved": 1,
-  "SC9012 handed-member-dispatch": 367,
+  "SC9012 handed-member-dispatch": 368,
   "SC9012 handed-member-read": 63,
   "SC9012 handed-read-after-await": 9,
   "SC9012 import-unresolved": 36,
@@ -165,7 +165,7 @@
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
   "SC9012 store-key-undecided": 12,
-  "SC9012 tuple-iteration-written": 1300,
+  "SC9012 tuple-iteration-written": 1275,
   "SC9012 type-only-source": 80,
   "SC9012 value-as-parameter-default": 8,
   "SC9012 value-bound-held": 5,
@@ -175,7 +175,7 @@
   "SC9012 value-from-primitive-callback": 19,
   "SC9012 value-held-in-binding": 78,
   "SC9012 value-held-in-member": 10,
-  "SC9012 value-in-carrier": 163,
+  "SC9012 value-in-carrier": 164,
   "SC9012 value-in-class-field": 5,
   "SC9012 value-read-under-untrack": 1,
   "SC9012 value-root-in-helper": 13,
@@ -445,6 +445,42 @@
     "open": "reactive-ir/accessor-provenance"
    },
    "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC1001 read-backing-unproven",
+   "from": 364,
+   "to": 353,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-read-role",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "ADR 0803 step 2 follow-up: proved: the callback or listener is read at the call that hands the window on, so the slots are exact again and these rows close or return to their own violation"
+  },
+  {
+   "key": "SC1002 tuple-iteration-written",
+   "from": 85,
+   "to": 81,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/read-after-await-purity"
+   },
+   "note": "ADR 0803 step 2 follow-up: proved: the callback or listener is read at the call that hands the window on, so the slots are exact again and these rows close or return to their own violation"
+  },
+  {
+   "key": "SC9012 tuple-iteration-written",
+   "from": 1300,
+   "to": 1275,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "ADR 0803 step 2 follow-up: callback/listener proofs restore exact slots and remove withdrawal-only obligations. rc21-listener-shared retains value-in-carrier and listener-reach; this relabel is not a proof of that use."
   }
  ],
  "renames": []
