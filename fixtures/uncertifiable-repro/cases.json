@@ -2232,6 +2232,11 @@
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
+      "context": "listener-reach"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
       "context": "tuple-iteration-written"
      },
      {
