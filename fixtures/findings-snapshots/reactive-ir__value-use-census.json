@@ -544,6 +544,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "installed-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1658,
+      "end": 1659,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
@@ -2869,6 +2880,17 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1779,
+      "end": 1782,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "installed-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1781,
       "end": 1782,
       "fixes": 0
     },

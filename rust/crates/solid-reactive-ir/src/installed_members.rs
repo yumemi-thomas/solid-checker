@@ -253,6 +253,9 @@ fn push(file: &FileFacts, site: Span, defects: &mut Vec<StaticDefect>) {
 /// ADR 0643's obligations of one file.
 pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
     let ast = &file.ast;
+    // The objects a store prototype was put on, for the Gets and writes of
+    // them this file names (`installed_object_accesses`).
+    let mut installed = Vec::new();
     for property in &ast.object_properties {
         let key = file
             .source_text(property.key)
@@ -263,6 +266,15 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
             && !prototype_is_plain(file, property.value, DEPTH)
         {
             push(file, property.span, defects);
+            if let Some(object) = ast
+                .object_get_shapes
+                .iter()
+                .map(|shape| shape.span)
+                .filter(|object| object.contains(property.span))
+                .min_by_key(|object| object.end - object.start)
+            {
+                installed.push((object, Some(property.span)));
+            }
         }
     }
     for assignment in &ast.assignments {
@@ -273,10 +285,12 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
             && !prototype_is_plain(file, assignment.value_span, DEPTH)
         {
             push(file, member.span, defects);
+            installed.push((ast.peel_ts_sugar_span(member.object), Some(member.span)));
         }
     }
     // The key handed on: `set("__proto__", store)` reaches `o[k] = v` in a
     // body this does not follow.
+    let mut key_handed = false;
     for call in &ast.calls {
         for argument in &call.arguments {
             if matches!(
@@ -284,6 +298,24 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
                 Some("\"__proto__\"" | "'__proto__'" | "`__proto__`")
             ) {
                 push(file, argument.span, defects);
+                key_handed = true;
+            }
+        }
+    }
+    // Where the key is handed on, any object written through a key no
+    // literal names may be the one it lands on.
+    if key_handed {
+        for assignment in &ast.assignments {
+            let target = ast.peel_ts_sugar_span(assignment.target);
+            let Some(member) = ast.member_at(target) else {
+                continue;
+            };
+            let literal_key = ast
+                .literal_computed_members
+                .iter()
+                .any(|literal| literal.span == member.span);
+            if ast.computed_members.binary_search(&member.span).is_ok() && !literal_key {
+                installed.push((ast.peel_ts_sugar_span(member.object), Some(member.span)));
             }
         }
     }
@@ -325,6 +357,72 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
             Some(call) if call_is_clear(file, receiver, name, call) => {}
             Some(call) => push(file, call.span, defects),
             None => push(file, member.span, defects),
+        }
+    }
+    installed_object_accesses(file, &installed, defects);
+}
+
+/// ADR 0643 amendment: each Get or write this file writes of an object a
+/// store prototype was put on, at the member's property (where V8 places the
+/// access, and so Chrome's frame): the object itself, a binding it was
+/// declared or assigned in (the install's own object binding), or a call
+/// handed it whole (`merge(o, …).v`, whose result reads through it, placed
+/// at that call). Where the `__proto__` key is handed on, every object a
+/// non-literal key writes is such an object. The
+/// install's obligation does not say which access runs where; each access
+/// is its own, so a rule's site is never left with no row.
+fn installed_object_accesses(
+    file: &FileFacts,
+    installed: &[(Span, Option<Span>)],
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    // The declaration a span names: an identifier's, or the binding a value
+    // initializes.
+    let declaration_of = |span: Span| {
+        let span = ast.peel_ts_sugar_span(span);
+        ast.reference_declaration(span).or_else(|| {
+            ast.bindings_initializer_containing(span)
+                .find(|binding| {
+                    binding
+                        .initializer
+                        .is_some_and(|value| ast.peel_ts_sugar_span(value) == span)
+                })
+                .and_then(|binding| binding.names.first())
+                .map(|name| name.span)
+        })
+    };
+    let targets = installed
+        .iter()
+        .map(|&(object, _)| (object, declaration_of(object)))
+        .collect::<Vec<_>>();
+    let is_object = |span: Span| {
+        let span = ast.peel_ts_sugar_span(span);
+        targets.iter().any(|&(object, declaration)| {
+            span == object
+                || declaration.is_some_and(|declaration| {
+                    span == declaration || ast.reference_declaration(span) == Some(declaration)
+                })
+        })
+    };
+    for member in &ast.members {
+        if installed.iter().any(|&(_, site)| site == Some(member.span)) {
+            continue;
+        }
+        let receiver = ast.peel_ts_sugar_span(member.object);
+        let through_call = ast.calls.iter().any(|call| {
+            call.span == receiver
+                && call
+                    .arguments
+                    .iter()
+                    .any(|argument| !argument.spread && is_object(argument.span))
+        });
+        // A call handed the object reads through it in its own body (a
+        // package's proxy): Chrome's frame is the call's.
+        if through_call {
+            push(file, receiver, defects);
+        } else if is_object(receiver) {
+            push(file, member.property, defects);
         }
     }
 }

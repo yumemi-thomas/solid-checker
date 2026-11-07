@@ -1150,3 +1150,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/show-named-child-length/node_modules/**
 !fixtures/reactive-ir/owner-generator-step/node_modules/
 !fixtures/reactive-ir/owner-generator-step/node_modules/**
+!fixtures/reactive-ir/installed-object-accesses/node_modules/
+!fixtures/reactive-ir/installed-object-accesses/node_modules/**

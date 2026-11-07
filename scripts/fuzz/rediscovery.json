@@ -5934,6 +5934,18 @@
   "rediscovered": "census ids flw-flow-show-inline-body (2, Chrome confirmed): fp40 2 certified false cleans; r57 0 (2 uncertifiable); flw-flow-show-value unchanged (2 not fired)"
  },
  {
+  "finding": "A Get or write of an object a store prototype was put on had no row at its own position: the install's SC9012 sat at `__proto__`, and origin's judge reads a withholding row only at Chrome's frame (42 ids in flow children, Chrome confirmed)",
+  "found": "R5's re-judge of the flow misuse ids on origin 72e9b2ff6",
+  "fixed": "ADR 0643 amendment: each access of an installed object is its own obligation",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-flow-for-store-proto-literal-direct-none",
+   "mx-strict-read-untracked-flow-for-store-proto-merge-direct-none"
+  ],
+  "rediscovered": "the 42 flow store-proto ids (reads and writes), origin's judge: fp40 42 false cleans; rsp 0 (42 uncertifiable)"
+ },
+ {
   "finding": "A site past a `yield` of a generator around it (`if (getOwner()) { yield 1; onCleanup(f) }`, stepped again from a timer) kept the owned context of the generator's call, though it runs on a later `.next()` the graph does not follow: Chrome raises NO_OWNER_* there, no row (ADR 0866 amendment)",
   "found": "the owner/scope scout (F5's yield half), re-judged on origin 72e9b2ff6",
   "fixed": "ADR 0866 amendment: a later generator step is unplaced",
