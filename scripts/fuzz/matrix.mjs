@@ -244,6 +244,11 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
  * code a table never placed, is measured against every other as soon as it exists. The same judge reads them: the runtime says whether the
  * pair is a misuse, so a census pair needs no cell to fail on what rowProblem flags. A pair that earns a table entry leaves the census by getting one.
  */
+// ADR 0893: a stored-error context asks about its reader, with the site's code fixed: the census would cross it with every code.
+// `aw-shared-*`: the helper's site past its own await has no owner, so a CONTEXT_NOT_FOUND site there throws NO_OWNER_CONTEXT, and the
+// row's cell is not the code at its line. Both of its violations are true (SC4001 at the helper, SC4002 at the memo's read before the
+// await); `no-owner-context-aw-shared-*` keeps the shape.
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -252,7 +257,7 @@ export function censusCells({ codes, contexts } = {}) {
     const listed = new Set(cellsOf(SPEC[code]));
     // `handler-mixed` runs the site in the body too, and a pending read there halts the mount before the driven button exists: no measure.
     const swallowed = new Set([...(THROWN.has(code) ? PROMISE_SWALLOWS : []), ...(ASYNC_READ_CODES.includes(code) ? ["handler-mixed"] : [])]);
-    return all.filter((context) => !listed.has(context) && !swallowed.has(context) && (!contexts || contexts.includes(context))).map((context) => ({ code, context }));
+    return all.filter((context) => !listed.has(context) && !swallowed.has(context) && !CENSUS_SKIPS(code).has(context) && (!contexts || contexts.includes(context))).map((context) => ({ code, context }));
   });
 }
 /** A census pair's shapes: each base variant the code's local setup takes, written directly in the context. */

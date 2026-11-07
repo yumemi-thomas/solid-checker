@@ -1,0 +1,27 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-through-helper/App.tsx",
+      "start": 328,
+      "end": 334,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-through-helper/App.tsx",
+      "start": 586,
+      "end": 593,
+      "fixes": 0
+    }
+  ]
+}

@@ -113,7 +113,7 @@
   "SC5006 function-run-unplaced": 3,
   "SC5006 loading-hold-unproven": 4,
   "SC5007 loading-on-value-unproven": 8,
-  "SC5008 caught-read-unproven": 14,
+  "SC5008 caught-read-unproven": 17,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
   "SC6002 effect-owner-unproven": 21,

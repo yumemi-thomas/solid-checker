@@ -169,6 +169,17 @@
       "fixes": 0
     },
     {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-observation/App.tsx",
+      "start": 3221,
+      "end": 3227,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",

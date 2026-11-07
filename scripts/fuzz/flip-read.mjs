@@ -433,6 +433,10 @@ const CAUGHT = { kind: "async", contexts: ["memo", "effect-compute"] };
 export const CAUGHT_CHAINS = {
   "caught-chain-5": { ...CAUGHT, text: chain(5) },
   "caught-chain-9": { ...CAUGHT, text: chain(9) },
+  // SC5008 through a helper: a memo's stored error, caught above the read; the build before had no row.
+  "caught-throw-direct": { ...CAUGHT, kind: "plain", imports: ["createMemo"], text: () => `const t = createMemo(() => { throw new Error("x"); }); try { t(); } catch { }` },
+  "caught-throw-helper": { ...CAUGHT, kind: "plain", imports: ["createMemo"], text: () => `const t = createMemo(() => { throw new Error("x"); }); const f1 = () => t(); try { f1(); } catch { }` },
+  "caught-throw-helper-2": { ...CAUGHT, kind: "plain", imports: ["createMemo"], text: () => `const t = createMemo(() => { throw new Error("x"); }); const f1 = () => t(); const f2 = () => f1(); try { f2(); } catch { }` },
 };
 const STORE_CALL = { kind: "store-array", contexts: ["body", "handler"] };
 export const NET_STORE_CALLS = {

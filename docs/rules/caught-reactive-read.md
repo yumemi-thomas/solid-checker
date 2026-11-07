@@ -31,3 +31,5 @@ suspend. Handle errors with `<Errored>` or `createEffect`'s `error` option.
 A `try` around code no call shows reading is uncertifiable too, blocker
 `caught-read-unproven` (ADR 0658): a call of a value a caller or a hook handed over, a Get of
 a prop or of such a value, and a local literal's accessor.
+
+A call in the `try` of a helper that reaches an accessor which may throw into the pass is the same obligation, at the call; a plain signal cannot.
