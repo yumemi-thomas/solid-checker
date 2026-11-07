@@ -1564,6 +1564,11 @@ pub struct AsyncRead {
     /// producer accounted for (`async-read-unaccounted`): never a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub unaccounted: bool,
+    /// ADR 0891: the unaccounted read's source is created from an import that
+    /// resolves to nothing (`source-module-unresolved`): the blocker names the
+    /// missing module's value, not the read.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub source_module_unresolved: bool,
     /// ADR 0835, review R1/R6: an unplaced row a call-attributed walk left at
     /// its read because it cut a path; the rows it placed at calls then
     /// account for no path but their own.

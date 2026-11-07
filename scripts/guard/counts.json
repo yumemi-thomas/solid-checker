@@ -13,7 +13,7 @@
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
-  "SC1001 read-backing-unproven": 342,
+  "SC1001 read-backing-unproven": 341,
   "SC1001 summary-read-unplaced": 90,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
@@ -94,14 +94,15 @@
   "SC5001 carrier-run-unproven": 4,
   "SC5001 component-identity-unproven": 1,
   "SC5001 creation-pass-unproven": 18,
-  "SC5001 declared-loading-value": 5,
+  "SC5001 declared-loading-value": 4,
   "SC5001 host-callback-timing": 1,
   "SC5001 invocation-context-unproven": 86,
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
-  "SC5001 source-pending-unproven": 342,
+  "SC5001 source-module-unresolved": 1,
+  "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 29,
-  "SC5003 async-provenance-unproven": 110,
+  "SC5003 async-provenance-unproven": 111,
   "SC5003 async-read-caught": 3,
   "SC5003 async-read-unaccounted": 336,
   "SC5003 call-attributed-read": 82,
@@ -110,6 +111,7 @@
   "SC5003 mount-unresolved": 340,
   "SC5003 root-mount-pass-unproven": 39,
   "SC5003 server-rendering-unresolved": 1,
+  "SC5003 source-module-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
   "SC5006 function-run-unplaced": 3,
   "SC5006 loading-hold-unproven": 4,
@@ -391,6 +393,39 @@
    "fixtures": {
     "proved": "reactive-ir/sync-memo-read",
     "open": "reactive-ir/unplaced-site-obligations"
+   }
+  },
+  {
+   "key": "SC1001 read-backing-unproven",
+   "from": 342,
+   "to": 341,
+   "adr": "ADR 0890",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs::served_in_creating_pass",
+   "fixtures": {
+    "proved": "reactive-ir/declared-served-closure",
+    "open": "reactive-ir/rc21-declared-first-pass"
+   }
+  },
+  {
+   "key": "SC5001 declared-loading-value",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 0890",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs::served_in_creating_pass",
+   "fixtures": {
+    "proved": "reactive-ir/declared-served-closure",
+    "open": "reactive-ir/rc21-declared-first-pass"
+   }
+  },
+  {
+   "key": "SC5001 source-pending-unproven",
+   "from": 342,
+   "to": 341,
+   "adr": "ADR 0890",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs::served_in_creating_pass",
+   "fixtures": {
+    "proved": "reactive-ir/declared-served-closure",
+    "open": "reactive-ir/rc21-declared-first-pass"
    }
   }
  ],

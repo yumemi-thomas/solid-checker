@@ -1008,6 +1008,7 @@ pub fn suppress_findings_owned_by_enabled_rules(
         .filter(|finding| {
             finding.id == "SC5001"
                 && finding.analysis_context != crate::blockers::ASYNC_READ_UNACCOUNTED
+                && finding.analysis_context != crate::blockers::SOURCE_MODULE_UNRESOLVED
         })
         .map(|finding| {
             (

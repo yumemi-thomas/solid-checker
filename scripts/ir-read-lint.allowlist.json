@@ -280,7 +280,7 @@
     "typescript-table": 1
   },
   "rust/crates/solid-reactive-ir/src/pending_accounting.rs": {
-    "file_by_path": 5,
+    "file_by_path": 6,
     "pending-review": [
       "file_by_path x5 (ADR 0838, review R28): unrecorded (note_slot_read returns outside a recording frame); safe because account_pending_reads runs inline in collect_project, which every build recomputes (pipeline.rs), never reused; a debug_assert at the pass's top fails if it is ever memoized"
     ]
