@@ -105,3 +105,5 @@ and read it under a `<Loading>` boundary.
 
 - [no-write-in-pure-computation](no-write-in-pure-computation.md) — the same constraint for setters
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — reactive data loading
+
+A generator is placed at its steps, never at iterator creation (ADR 0851). Exported iterators, mixed step contexts, and a named generator also handed on as a value retain `function-run-unplaced` obligations; the creation call cannot restore a rejecting compute role (ADR 0853). Some synchronous consumption/first-segment write positions also remain obligations where the write-role proof does not preserve the step context.

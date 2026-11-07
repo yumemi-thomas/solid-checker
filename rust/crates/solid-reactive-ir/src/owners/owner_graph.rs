@@ -498,6 +498,7 @@ pub(super) fn apply_settled_requirement_gates(
 
 #[derive(Clone, Copy)]
 pub(crate) struct OwnerRequirementStatus {
+    pub(crate) flight_error_unobserved: bool,
     pub(crate) uncertain: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,

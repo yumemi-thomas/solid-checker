@@ -7,7 +7,7 @@ import { button, ctl, decl, domExpr, expr } from "./model.mjs";
 
 export const FLIP_GEN_CONTEXTS = {
   MISSING_EFFECT_FN: ["gstep-handler", "gstep-timer", "gstep-kept", "gstep-returned", "gstep-spread", "gstep-from", "gstep-destructure", "gstep-delegate",
-    "gstep-method", "gstep-unstepped-handler", "gstep-exported", "gstep-exported-it", "gen-yield-each", "gen-sync-each"],
+    "gstep-method", "gstep-unstepped-handler", "gstep-exported", "gstep-exported-it", "gen-yield-each", "gen-sync-each", "gen-yield-alias"],
 };
 
 const gen = (name, stmts, extra = {}) => ({ ...ctl("gstep", stmts), name, ...extra });

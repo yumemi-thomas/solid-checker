@@ -412,3 +412,5 @@ using it on application state reintroduces the feedback loops this rule prevents
 A write in a layer of a callback named by its binding is judged at that callback's positions (ADR 0517); several `untrack` positions with no rejecting one are an obligation.
 
 A write in a handler is proven ownerless only while no call can deliver the handler under an owner. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the write uncertifiable.
+
+A generator is placed at its steps, never at iterator creation (ADR 0851). Exported iterators, mixed step contexts, and a named generator also handed on as a value retain `function-run-unplaced` obligations; the creation call cannot restore a rejecting compute role (ADR 0853). Some synchronous consumption/first-segment write positions also remain obligations where the write-role proof does not preserve the step context.

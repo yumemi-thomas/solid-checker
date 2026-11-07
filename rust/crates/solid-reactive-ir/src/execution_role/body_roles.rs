@@ -862,10 +862,13 @@ pub(crate) fn generator_step_resumption(
         return None;
     }
     let references = crate::local_access::function_reference_hand_offs(file, generator, lookup)?;
-    if references.is_empty()
-        || !crate::local_access::foreign_reference_hand_offs(file, generator, lookup).is_empty()
-    {
+    if references.is_empty() {
         return None;
+    }
+    // ADR 0853: an escaping reference may step on another stack. Absence of
+    // an exact placement is no proof that the creation call's owner persists.
+    if !crate::local_access::foreign_reference_hand_offs(file, generator, lookup).is_empty() {
+        return Some(false);
     }
     let own = |function: &solid_facts::ast::FunctionFact, point: Span| {
         function.body.contains(point)
@@ -878,7 +881,7 @@ pub(crate) fn generator_step_resumption(
     let mut first_may = false;
     for (reference, hand_off) in references {
         if hand_off != crate::local_access::HandOff::Call {
-            return None;
+            return Some(false);
         }
         let call = ast.calls.iter().find(|call| {
             !call.construct

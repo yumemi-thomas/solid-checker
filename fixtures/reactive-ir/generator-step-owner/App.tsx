@@ -69,8 +69,8 @@ const first = createMemo(async () => {
   return 1;
 });
 
-// Negative: the generator has another use, so this stepping is not the only
-// one that runs it.
+// The generator has another value use: steps through that use are not placed,
+// so the compute context cannot prove a write violation.
 const shared = createMemo(async () => {
   async function* gen() {
     yield 1;
@@ -84,3 +84,32 @@ const shared = createMemo(async () => {
 export const App = () => (
   <p title={String(awaited() + looped() + later() + drained() + first() + shared())} />
 );
+
+// W2: a standard in-place callback and an IIFE inherit the resumed step's
+// owner/observer. The shadowed forEach below carries no such proof.
+export const each = createMemo(async () => {
+  async function* gen() {
+    yield 1;
+    [1].forEach(() => { setA(2); onCleanup(() => {}); });
+    (() => { setB(2); onCleanup(() => {}); })();
+  }
+  for await (const _y of gen()) void _y;
+  return 1;
+});
+export const syncEach = createMemo(async () => {
+  function* gen() {
+    yield 1;
+    [1].forEach(() => { setC(2); onCleanup(() => {}); });
+  }
+  for (const _y of gen()) await Promise.resolve();
+  return 1;
+});
+export const shadowedEach = createMemo(async () => {
+  const box = { forEach(cb: () => void) { setTimeout(cb, 0); } };
+  async function* gen() {
+    yield 1;
+    box.forEach(() => { setD(2); onCleanup(() => {}); });
+  }
+  for await (const _y of gen()) void _y;
+  return 1;
+});

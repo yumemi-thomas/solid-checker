@@ -401,6 +401,7 @@ function render(program, instrument) {
       case "gen-next": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}await gen().next();`;
       case "gen-sync-loop": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
       case "gen-prefix": return `async function* gen() ${block(c.body, depth, null, [], ["await Promise.resolve();", "yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
+      case "gen-yield-alias": return `async function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}const again = gen;\n${ind(depth)}for await (const _y of gen()) void _y;\n${ind(depth)}void again;`;
       case "gen-yield-each": return `async function* gen() {\n${ind(depth + 1)}yield 1;\n${ind(depth + 1)}[1].forEach(() => ${block(c.body, depth + 1)});\n${ind(depth)}}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-sync-each": return `function* gen() {\n${ind(depth + 1)}yield 1;\n${ind(depth + 1)}[1].forEach(() => ${block(c.body, depth + 1)});\n${ind(depth)}}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
       case "gstep": {

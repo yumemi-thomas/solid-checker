@@ -36,7 +36,7 @@ operand is an obligation. A generator an async computation steps across one of i
 suspensions (`for await` over it, or a `for…of` whose body starts with an
 `await`) runs past its first `yield` on that computation's continuation: an
 operation there is unowned, and an obligation where the step only may follow
-the suspension (ADR 0851).
+the suspension (ADR 0851). A standard in-place callback past the yield inherits the step context. Exported generators and exported iterators cannot prove no future steps; escaped or mixed steps retain named obligations. A context-read throw there rejects the async stepper's flight; without a proof of error observation it is `async-flight-error-unobserved`, not a violation (ADR 0852).
 
 `Loading(props)` or `Errored(props)` called as a function creates its boundary
 in the call, and rc.17 warns `NO_OWNER_BOUNDARY` when no owner is current. The

@@ -1,10 +1,14 @@
 declare namespace JSX {
-  interface IntrinsicElements { button: { onClick?: unknown; children?: unknown }; p: { children?: unknown; title?: unknown } }
+  interface IntrinsicElements { div: { children?: unknown }; span: { children?: unknown }; button: { onClick?: unknown; children?: unknown }; p: { children?: unknown; title?: unknown } }
   interface Element {}
 }
 
 declare module "solid-js" {
   export type Accessor<T> = () => T;
+  export type Component<P extends Record<string, any> = {}> = (props: P) => JSX.Element;
+  export interface Context<T> { id: symbol; defaultValue: T | undefined; }
+  export function createContext<T>(defaultValue?: T, options?: {}): Context<T>;
+  export function useContext<T>(context: Context<T>): T;
   export type Store<T> = T;
   export type StoreSetter<T> = (fn: (draft: T) => T | void) => void;
   export function createStore<T extends object>(value: T, options?: { shallow?: boolean }): [Store<T>, StoreSetter<T>];
@@ -31,4 +35,12 @@ declare module "solid-js" {
 
 declare module "@solidjs/signals" {
   export function markRaw<T extends object>(value: T): T;
+}
+
+// Source parameter/option copied from @solidjs/web rc.21 types/index.d.ts:157.
+declare module "@solidjs/web" {
+  import { Component } from "solid-js";
+  export type ValidComponent = string | Component<any>;
+  export interface DynamicOptions { deferStream?: boolean; static?: boolean; }
+  export function dynamic<T extends ValidComponent>(source: () => T | Promise<T> | AsyncIterable<T> | null | undefined | false, options?: DynamicOptions): Component<any>;
 }

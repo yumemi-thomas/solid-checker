@@ -2479,6 +2479,22 @@ pub(super) fn write_role_walk<'f>(
     if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
     }
+    // ADR 0853: a named generator handed on as a value has unplaced steps.
+    // Its creation calls are not body entries, even if the lexical compute
+    // would reject a write. Primitive-stepped and inline generators keep
+    // their existing dedicated paths.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && crate::owners::function_binding_name(file, generator).is_some()
+        && crate::owners::generator_creations(file, generator, lookup).is_none()
+        && crate::owners::stepped_action_generator(file, generator, lookup).is_none()
+        && !allowed
+            .iter()
+            .any(|region| file.ast.peel_ts_sugar_span(*region) == generator.span)
+    {
+        *decided = true;
+        return role_arm!("write_roles.generator-steps-handed", ExecutionRole::Unknown);
+    }
     // ADR 0851: a generator's entries are its steps, which the role at the
     // site already took (`callee_roles.generator-steps`); a call of it runs
     // none of its body, so the walk over its callers below does not apply.

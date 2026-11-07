@@ -1305,6 +1305,10 @@ pub struct OwnerRequirement {
     pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
+    /// ADR 0852: the throw rejects an async generator stepper's flight; no
+    /// proof follows the rejection to an observed read or error boundary.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub flight_error_unobserved: bool,
     /// Allocation itself depends on a runtime fact not available to the
     /// analyzer (for example server-entry selection or spread arity).
     #[serde(default, skip_serializing_if = "is_false")]
