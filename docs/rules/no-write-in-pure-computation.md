@@ -192,7 +192,10 @@ none it is **uncertifiable**. One proof makes it legal (ADR 0333): it runs
 after an await that dominates it (later in the await's block, a `try` block
 included; its `catch` or `finally` only when the block starts by awaiting a
 call of an async function with inert arguments; not in a generator, JSX or
-an instance field). A write that only may follow an await in its own function
+an instance field), or it is past a `yield` of a generator its async caller
+steps across one of its own suspensions (ADR 0851: `for await` over it, or a
+`for…of` whose body starts with an `await`; a later `await` in the body leaves
+it uncertifiable). A write that only may follow an await in its own function
 (a `catch` or `finally` past another `try` head, code after an await in a
 branch) runs on the stack its function was entered on or on a later task with
 no owner: it takes its function's entries' role when that role is permissive
@@ -409,3 +412,5 @@ using it on application state reintroduces the feedback loops this rule prevents
 A write in a layer of a callback named by its binding is judged at that callback's positions (ADR 0517); several `untrack` positions with no rejecting one are an obligation.
 
 A write in a handler is proven ownerless only while no call can deliver the handler under an owner. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the write uncertifiable.
+
+A generator is placed at its steps, never at iterator creation (ADR 0851). Exported iterators, mixed step contexts, and a named generator also handed on as a value retain `function-run-unplaced` obligations; the creation call cannot restore a rejecting compute role (ADR 0853). Some synchronous consumption/first-segment write positions also remain obligations where the write-role proof does not preserve the step context.

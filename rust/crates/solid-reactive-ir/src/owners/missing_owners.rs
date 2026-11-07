@@ -407,8 +407,9 @@ pub(crate) fn attribute_dependency_requirements(
             file,
             span,
             OwnerRequirementStatus {
-                uncertain: !proven,
+                uncertain: !proven || requirement.flight_error_unobserved,
                 runtime_uncertain: requirement.runtime_uncertain,
+                flight_error_unobserved: requirement.flight_error_unobserved,
                 caller_uncertain: requirement.caller_uncertain,
                 conditional_owner: requirement.conditional_owner,
                 owner_varies_by_caller: requirement.owner_varies_by_caller,
