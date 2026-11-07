@@ -1,0 +1,28 @@
+import { getOwner, onCleanup } from "solid-js";
+
+const f = () => {};
+
+// Past a `yield`, the body runs on the next `.next()`: here a timer's, with no
+// owner. rc.21 raises NO_OWNER_CLEANUP (Chrome); no edge follows the step.
+export function LaterStep() {
+  function* gen() {
+    if (getOwner()) {
+      yield 1;
+      onCleanup(f);
+    }
+  }
+  const it = gen();
+  it.next();
+  setTimeout(() => it.next(), 0);
+  return <i />;
+}
+
+// Before the first `yield`, stepped in the body: on the body's stack, owned.
+export function FirstStep() {
+  function* gen() {
+    onCleanup(f);
+    yield 1;
+  }
+  gen().next();
+  return <i />;
+}

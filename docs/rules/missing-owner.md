@@ -360,3 +360,5 @@ A package function whose same-operation creation calls cover every exit between 
   hand-on to `createRoot(fn)` runs under the root (`getOwner() ? fn() :
   createRoot(fn)` is clean); `!getOwner() ? fn() : …` runs it with no owner,
   a violation in a timer.
+
+A generator's body runs where its iterator is stepped. An owner operation after a `yield` of the generator around it runs on a later step, which the owner walk does not follow: uncertifiable, whatever owner the generator's call had (ADR 0866).
