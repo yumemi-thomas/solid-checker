@@ -1382,7 +1382,9 @@ pub(crate) fn read_in_flow_prop(
     // Review R40: a call the read is an argument of may run it elsewhere:
     // `untrack(p, "x")` sets a strict window inside the computation.
     if file.ast.arguments_containing(span).any(|(call, _)| {
-        attribute.expression.is_some_and(|value| value.contains(call.span))
+        attribute
+            .expression
+            .is_some_and(|value| value.contains(call.span))
     }) {
         return false;
     }

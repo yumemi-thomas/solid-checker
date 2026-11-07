@@ -2315,15 +2315,16 @@ impl LocalAccessContext<'_, '_> {
         if !crate::carrier_runs::carrier_provably_runs(file, call.span, self.lookup) {
             return None;
         }
-        if self.lookup.primitive_at_call(file, call.span)
-            == Some(solid_dialect::Primitive::Untrack)
+        if self.lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack)
         {
             let label = call.arguments.get(1).filter(|argument| !argument.spread)?;
             return (self.accessors.contains_key(symbol)
                 && file
                     .source_text(ast.peel_ts_sugar_span(label.span))
                     .is_some_and(|text| {
-                        text.len() > 2 && text.starts_with(['"', '\'']) && text.ends_with(['"', '\''])
+                        text.len() > 2
+                            && text.starts_with(['"', '\''])
+                            && text.ends_with(['"', '\''])
                     }))
             .then_some(value);
         }
