@@ -4109,7 +4109,10 @@ fn write_window_standing(
                 return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::FreshStack if inside => return WriteStanding::Dropped,
-            _ => break,
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+            | crate::execution_role::LayerRun::FreshStack
+            | crate::execution_role::LayerRun::Elsewhere
+            | crate::execution_role::LayerRun::Withheld(_) => break,
         }
     }
     let Some(owner) = owner else {

@@ -1101,6 +1101,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-receivers/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/**
+!fixtures/reactive-ir/impostor-symbol-key/node_modules/
+!fixtures/reactive-ir/impostor-symbol-key/node_modules/**
+!fixtures/reactive-ir/impostor-symbol-key-lie/node_modules/
+!fixtures/reactive-ir/impostor-symbol-key-lie/node_modules/**
+!fixtures/reactive-ir/impostor-symbol-key-patched/node_modules/
+!fixtures/reactive-ir/impostor-symbol-key-patched/node_modules/**
 !fixtures/reactive-ir/impostor-host-proto/node_modules/
 !fixtures/reactive-ir/impostor-host-proto/node_modules/**
 !fixtures/reactive-ir/impostor-host-intact/node_modules/

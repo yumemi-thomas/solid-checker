@@ -207,7 +207,10 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
     assert_eq!(custom_prefer[0]["kind"], "uncertifiable", "{custom:#?}");
     assert!(
         custom.iter().any(|finding| {
-            finding["analysisContext"] == "standard-member-impostor"
+            finding["analysisContext"]
+                .as_str()
+                .and_then(|context| context.split(':').next())
+                == Some("standard-member-impostor")
                 && at(finding) == Some(custom_at("items().map"))
         }),
         "{custom:#?}"

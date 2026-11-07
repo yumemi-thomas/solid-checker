@@ -328,11 +328,19 @@ impl<'l, 'a> Walk<'l, 'a> {
                 // ADR 0695: a callback a project or unknown callee may run here,
                 // on this stack, among whatever else it does with it (a
                 // forwarded callback): any origin is an obligation.
-                _ if self.lookup.primitive_at_call(file, call.span).is_none() => {
+                crate::execution_role::LayerRun::InPlace(_)
+                | crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+                | crate::execution_role::LayerRun::Elsewhere
+                | crate::execution_role::LayerRun::Withheld(_)
+                    if self.lookup.primitive_at_call(file, call.span).is_none() =>
+                {
                     self.stepped = true;
                     self.layer(file, call.span, helper_calls + 1)
                 }
-                _ => None,
+                crate::execution_role::LayerRun::InPlace(_)
+                | crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+                | crate::execution_role::LayerRun::Elsewhere
+                | crate::execution_role::LayerRun::Withheld(_) => None,
             };
         }
         if let Some(call) = iife_call(file, literal) {

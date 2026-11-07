@@ -164,7 +164,7 @@
   "SC9012 leaf-callback-opaque": 122,
   "SC9012 listener-reach": 28,
   "SC9012 package-callee": 14,
-  "SC9012 parameter-call-argument-unproven": 45,
+  "SC9012 parameter-call-argument-unproven": 47,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 20,
   "SC9012 parameter-member-target-unresolved": 139,

@@ -821,7 +821,10 @@ fn in_extent_of(
         }
         match super::write_roles::layer_run(file, function, lookup) {
             super::write_roles::LayerRun::InPlace(call) => at = call,
-            _ => return false,
+            super::write_roles::LayerRun::InPlaceAmongOthers(_)
+            | super::write_roles::LayerRun::FreshStack
+            | super::write_roles::LayerRun::Elsewhere
+            | super::write_roles::LayerRun::Withheld(_) => return false,
         }
     }
     false

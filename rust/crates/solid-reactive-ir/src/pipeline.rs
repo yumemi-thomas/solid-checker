@@ -98,7 +98,12 @@ impl ProgramDraft {
     pub(crate) fn push_defect(&mut self, defect: StaticDefect) {
         // ADR 0874: a withheld call's row (`props.items.map`) shares no slot
         // with a row at a use it starts at (`props`).
-        let identity = if defect.analysis_context == crate::blockers::STANDARD_MEMBER_IMPOSTOR {
+        let identity = if defect
+            .analysis_context
+            .split(':')
+            .next()
+            .is_some_and(|head| head == crate::blockers::STANDARD_MEMBER_IMPOSTOR)
+        {
             crate::blockers::STANDARD_MEMBER_IMPOSTOR
         } else {
             defect.kind.dedup_identity()
