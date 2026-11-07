@@ -133,6 +133,17 @@ const COND_AWAITS = {
 // await of its own: the compute's flight carries the read. `aw-inplace-stmt` discards the result in a synchronous memo: the read is on the
 // function's own flight.
 const IN_PLACE_USED = ["aw-inplace-return", "aw-inplace-await", "aw-inplace-late"];
+// B6-B8 (ADRs 0879-0882): a promise handler on the compute's flight the walk did not read: a member (`then(api.fmt)`), an `async` function, a
+// receiver cast away from or to `any`. `aw-catch-member` is a rejection handler on a fulfilled promise: it never runs.
+const THEN_HANDLERS = {
+  "aw-then-member": (h, o) => `Promise.resolve(1).then(${o}.fmt)`,
+  "aw-then-async": (h) => `Promise.resolve(1).then(${h})`,
+  "aw-then-cast": (h) => `(Promise.resolve(1) as unknown as Promise<number>).then(${h})`,
+  "aw-then-any": (h) => `(Promise.resolve(1) as any).then(${h})`,
+  // Legal (review, D-R3d-2): a sync handler that calls an async function and drops nothing it awaits; Chrome (rc.21) is silent at the
+  // read past that function's own await, on 16 of 16 ids.
+  "aw-then-calls-async": (h) => `Promise.resolve(1).then(() => ${h}())`,
+};
 // The await's arm cannot precede the site (the other arm of an `if`), or leaves before it runs: the site runs with no await before it.
 const COND_AWAITS_LEGAL = ["aw-else", "aw-else-flip", "aw-early"];
 const HELPER_AWAITS = ["aw-shared-after", "aw-shared-before", "aw-helper-late", "aw-wrapper", "aw-wrapper-2", ...IN_PLACE_USED];
@@ -147,7 +158,7 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS],
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
@@ -158,7 +169,7 @@ export const FLIP_READ_CONTEXTS = {
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt"],
+  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
@@ -570,6 +581,15 @@ export function flipReadContext(context, stmts, kit) {
     const read = expr(domExpr(`createEffect(() => ${m}(), () => {});`, undefined, ["createEffect"]));
     if (context === "aw-wrapper") return { body: [compute, inner, decl(m, domExpr(`${h}(${c})`)), read], view: [] };
     return { body: [compute, inner, decl(wrap, domExpr(`${type} => ${h}(f)`)), decl(m, domExpr(`${wrap}(${c})`)), read], view: [] };
+  }
+  if (THEN_HANDLERS[context] || context === "aw-catch-member") {
+    const [h, o, m] = [kit.name("f"), kit.name("o"), kit.name("m")];
+    const late = context === "aw-then-calls-async";
+    const handler = decl(h, fn([...(late ? [expr(domExpr(`${P_AWAIT};`))] : []), ...stmts, ret(num(1))], { async: context === "aw-then-async" || late }));
+    const holder = decl(o, domExpr(`{ fmt: ${h} }`));
+    const flight = context === "aw-catch-member" ? `Promise.resolve(1).catch(${o}.fmt)` : THEN_HANDLERS[context](h, o);
+    const watch = expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
+    return { body: [handler, holder, decl(m, prim("memo", fn([ret(domExpr(flight))]))), watch], view: [] };
   }
   if (ENTRY_CHAINS[context] || context === "entry-chain-handler") {
     const [n, calls] = ENTRY_CHAINS[context] ?? [5, 2];
