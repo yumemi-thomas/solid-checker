@@ -542,8 +542,10 @@ pub(super) fn callback_call_owner_edge(
 /// audited 2.0.0-rc.9, dev and prod, an exported helper written this way and
 /// called at module scope skips `onCleanup` (no `NO_OWNER_CLEANUP`), while the
 /// unguarded helper beside it warns. The guard and the operation must share
-/// one function body with no `await` between them -- an owner seen before an
-/// `await` is not current after it -- and nothing else is read as a guard:
+/// one function body with no suspension between them -- an owner seen before
+/// an `await`, a `for await` or a `yield` is not current after it, and a loop
+/// in the guarded region runs the operation again after one -- and nothing
+/// else is read as a guard:
 /// `owner && …` over a binding, `!getOwner() || …`, and early returns keep
 /// their requirement.
 pub(crate) fn guarded_by_owner_probe(
@@ -582,11 +584,26 @@ pub(crate) fn guarded_by_owner_probe(
             };
             current = crate::owners::owning_function(&file.ast, invocation.span).map(|f| f.span);
         }
+        // ADR 0866: a suspension in the guarded region leaves the stack the
+        // probe saw an owner on, written before the operation or in a loop
+        // that repeats the operation inside the region. A loop around the
+        // probe tests it again.
+        let yields = file.ast.yields.iter().map(|fact| &fact.span);
         !file
             .ast
             .awaits
             .iter()
-            .any(|awaited| region.contains(*awaited) && awaited.start < span.start)
+            .chain(&file.ast.implicit_suspensions)
+            .chain(yields)
+            .any(|&suspension| {
+                region.contains(suspension)
+                    && (suspension.start < span.start
+                        || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                            repeated.contains(span)
+                                && looped.contains(suspension)
+                                && region.contains(looped)
+                        }))
+            })
     };
     file.ast.logical_expressions.iter().any(|logical| {
         logical.operator == solid_facts::ast::LogicalOperatorKind::And

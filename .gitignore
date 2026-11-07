@@ -1127,3 +1127,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/show-child-pending-read/node_modules/**
 !fixtures/reactive-ir/handed-closure-pending-read/node_modules/
 !fixtures/reactive-ir/handed-closure-pending-read/node_modules/**
+!fixtures/reactive-ir/owner-probe-suspension/node_modules/
+!fixtures/reactive-ir/owner-probe-suspension/node_modules/**
+!fixtures/reactive-ir/settled-unresolved-call/node_modules/
+!fixtures/reactive-ir/settled-unresolved-call/node_modules/**

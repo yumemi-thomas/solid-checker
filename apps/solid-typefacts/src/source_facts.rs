@@ -294,6 +294,15 @@ fn async_return_type(checker: &mut Checker, return_type: P<Type>) -> bool {
     {
         return true;
     }
+    // ADR 0865: `handleAsync` probes the member, so the member decides:
+    // `AsyncGenerator`, whose bases a reference does not list, or a class.
+    let async_iterator = checker.get_property_name_for_known_symbol_name("asyncIterator");
+    if checker
+        .get_property_of_type_exported(return_type, &async_iterator)
+        .is_some()
+    {
+        return true;
+    }
     for base in checker.get_base_types_exported(return_type) {
         if base.addr() != return_type.addr() && async_return_type(checker, *base) {
             return true;

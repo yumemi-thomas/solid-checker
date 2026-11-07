@@ -21,6 +21,17 @@ export const SYNC_COMPUTES = {
   "cmp-unknown": '((() => Promise.resolve(1)) as () => unknown), { sync: true }',
   "cmp-cond": '() => (Math.random() >= 0 ? Promise.resolve(1) : 1), { sync: true }',
   "cmp-options": 'async () => 1, ({ sync: true }) as { sync: boolean }',
+  // ADR 0865: an async generator's iterator is an AsyncIterable: the name reaches the checker as a declaration, not an async literal.
+  "cmp-async-gen": 'async function* () { yield 1; }, { sync: true }',
+  "cmp-async-gen-named": "cmpGen, { sync: true }",
+  "cmp-async-gen-member": "() => cmpHolder.g(), { sync: true }",
+  "cmp-async-iter-class": "() => new CmpIter(), { sync: true }",
+};
+
+export const SYNC_COMPUTE_LINES = {
+  "cmp-async-gen-named": "async function* cmpGen() { yield 1; }",
+  "cmp-async-gen-member": "const cmpHolder = { async *g() { yield 1; } };",
+  "cmp-async-iter-class": "class CmpIter { async *[Symbol.asyncIterator]() { yield 1; } }",
 };
 
 // ADR 0657: a destructure no exact root reaches. Each is a Get of the store at setup.

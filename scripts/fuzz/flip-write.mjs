@@ -2,7 +2,7 @@
 // commit adds its shapes here, so neither track edits misuse.mjs or the other's file.
 //   FLIP_WRITE_CONTEXTS  { [code]: [context, ...] }, appended to that code's recallContexts
 //   flipWriteContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
-import { button, call, decl, domExpr, expr, fn, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
+import { button, call, ctl, decl, domExpr, expr, fn, iife, listenExpr, member, num, obj, prim, ref, ret } from "./model.mjs";
 
 /**
  * ADR 0705, the DOM dispatch list: a member that dispatches on its caller's stack, fired from `onSettled` (a leaf owner), with a
@@ -123,6 +123,64 @@ const UNREACHED_WRITES = {
   },
 };
 
+/**
+ * ADR 0866, every owner rule: the site under `if (getOwner())` in an async function the component body calls. A suspension in the guarded
+ * block leaves the stack the probe saw (Chrome, rc.21: the site's NO_OWNER_* code), so the guard is no proof; the build before dropped
+ * the requirement. `flw-guard-early` and `flw-guard-probe-loop` are their legal twins.
+ */
+const guardedAsync = (form) => (stmts) => ({ body: [expr(iife(fn([ctl(form, stmts)], { async: true })))], view: [] });
+const GUARDED = { "flw-guard-for-await": guardedAsync("guard-for-await"), "flw-guard-loop": guardedAsync("guard-loop"), "flw-guard-await": guardedAsync("guard-await"), "flw-guard-yield": (stmts) => ({ body: [ctl("guard-yield", stmts)], view: [] }) };
+const GUARDED_LEGAL = { "flw-guard-early": guardedAsync("guard-early"), "flw-guard-probe-loop": guardedAsync("guard-probe-loop") };
+/**
+ * F2 (scout's owner-context map): the site's function is called in the component body, so an owned edge reaches it, and it is also handed
+ * somewhere a later click runs it with no owner. Chrome (rc.21): the site's NO_OWNER_* code on the click. The build before read the owned
+ * edge as every entry. `flw-owned-twice` and `flw-owned-removed` are legal: every run is on the body's stack.
+ */
+const ownedAnd = (place) => (stmts, kit) => {
+  const f = kit.name("f");
+  const { before = [], after, fires } = place(f, kit);
+  return { body: [decl(f, fn(stmts)), expr(call(ref(f))), ...before, ...(after ?? [])], view: [button(kit.name("b"), [expr(domExpr(fires))])] };
+};
+const ESCAPES = {
+  "flw-owned-assigned": ownedAnd((f, kit) => {
+    const el = kit.name("el");
+    return { before: [decl(el, domExpr('document.createElement("button")')), expr(domExpr(`${el}.onclick = ${f}`))], fires: `${el}.click()` };
+  }),
+  "flw-owned-stored": ownedAnd((f, kit) => {
+    const items = kit.name("items");
+    return { before: [decl(items, domExpr("[] as (() => void)[]")), expr(domExpr(`${items}.push(${f})`))], fires: `${items}[0]()` };
+  }),
+  "flw-owned-member": ownedAnd((f, kit) => {
+    const slot = kit.name("slot");
+    return { before: [decl(slot, domExpr("{ run: () => {} }")), expr(domExpr(`${slot}.run = ${f}`))], fires: `${slot}.run()` };
+  }),
+  "flw-owned-map": ownedAnd((f, kit) => {
+    const map = kit.name("map");
+    return { before: [decl(map, domExpr("new Map<string, () => void>()")), expr(domExpr(`${map}.set("k", ${f})`))], fires: `${map}.get("k")!()` };
+  }),
+  "flw-owned-lib": ownedAnd((f, kit) => {
+    const [reg, on] = [kit.name("reg"), kit.name("on")];
+    return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(on, domExpr(`(cb: () => void) => { ${reg}.push(cb); }`)), expr(domExpr(`${on}(${f})`))], fires: `${reg}[0]()` };
+  }),
+  "flw-owned-returned": (stmts, kit) => {
+    const [f, u, g] = [kit.name("f"), kit.name("u"), kit.name("g")];
+    return { body: [decl(u, fn([decl(f, fn(stmts)), expr(call(ref(f))), ret(ref(f))])), decl(g, call(ref(u)))], view: [button(kit.name("b"), [expr(call(ref(g)))])] };
+  },
+};
+const ESCAPES_LEGAL = {
+  "flw-owned-twice": (stmts, kit) => {
+    const f = kit.name("f");
+    return { body: [decl(f, fn(stmts)), expr(call(ref(f))), expr(call(ref(f)))], view: [] };
+  },
+  "flw-owned-removed": (stmts, kit) => {
+    const f = kit.name("f");
+    return { body: [decl(f, fn(stmts)), expr(call(ref(f))), expr(domExpr(`document.body.removeEventListener("click", ${f})`))], view: [] };
+  },
+};
+const OWNER_CODES = ["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED"];
+/** Legal recall contexts per runtime code, appended to that code's recallLegal. */
+export const FLIP_WRITE_LEGAL = Object.fromEntries(OWNER_CODES.map((code) => [code, [...Object.keys(GUARDED_LEGAL), ...Object.keys(ESCAPES_LEGAL)]]));
+
 export const FLIP_WRITE_CONTEXTS = {
   ACTION_CALLED_IN_OWNED_SCOPE: Object.keys(UNREACHED_WRITES),
   // ADR 0721: the same layers for a setter or refresh (SC2001).
@@ -137,8 +195,10 @@ export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
 };
 
+for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES)];
+
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
+  return (GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }

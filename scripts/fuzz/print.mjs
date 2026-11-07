@@ -393,6 +393,14 @@ function render(program, instrument) {
       case "for-await": return `for await (const _x of [1]) ${body()}`;
       case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
       // ADR 0820: the site in a generator's body, the iterator stepped here.
+      // ADR 0866: an `if (getOwner())` the suspension is inside of. `guard-loop` runs the site twice, the second time past the `await`.
+      case "guard-await": used.add("getOwner"); return `if (getOwner()) ${block(c.body, depth, null, ["await Promise.resolve();"])}`;
+      case "guard-for-await": used.add("getOwner"); return `if (getOwner()) { for await (const _x of [1]) ${block(c.body, depth + 1)} }`;
+      case "guard-loop": used.add("getOwner"); return `if (getOwner()) { for (let i = 0; i < 2; i += 1) ${block(c.body, depth + 1, null, [], ["await Promise.resolve();"])} }`;
+      case "guard-early": used.add("getOwner"); return `if (getOwner()) ${block(c.body, depth, null, [], ["await Promise.resolve();"])}`;
+      case "guard-probe-loop": used.add("getOwner"); return `for (let i = 0; i < 2; i += 1) { if (getOwner()) ${block(c.body, depth + 1, null, [], ["await Promise.resolve();"])} }`;
+      // The iterator stepped past the `yield` on a timer's stack.
+      case "guard-yield": used.add("getOwner"); return `function* gen() { if (getOwner()) ${block(c.body, depth + 1, null, ["yield 1;"])} }\n${ind(depth)}const it = gen();\n${ind(depth)}it.next();\n${ind(depth)}setTimeout(() => it.next(), 0);`;
       case "gen-await": return `async function* gen() ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-yield": return `async function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for await (const _y of gen()) void _y;`;
       case "gen-iife": return `for await (const _y of (async function* () ${block(c.body, depth, null, ["await Promise.resolve();"], ["yield 1;"])})()) void _y;`;

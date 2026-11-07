@@ -256,7 +256,12 @@ impl StaticApiContext<'_> {
                         StaticSource::Promise("")
                     });
                 }
-                Some(static_source_state(file, argument, self))
+                // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
+                // as `then`, unlike the static `dynamic()` check.
+                Some(match static_source_state(file, argument, self) {
+                    StaticSource::AsyncIterable => StaticSource::Promise(""),
+                    state => state,
+                })
             };
             // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
             // a non-literal `sync:` value) may assert `sync: true`: with a
@@ -413,7 +418,8 @@ impl StaticApiContext<'_> {
                 let state = static_source_state(file, source, self);
                 let unknown_form = kind == Some(Primitive::DynamicUnknownForm);
                 let reported = match state {
-                    StaticSource::Sync => None,
+                    // ADR 0865: `staticDynamic` throws on a thenable only.
+                    StaticSource::Sync | StaticSource::AsyncIterable => None,
                     StaticSource::Promise(proof) if !unknown_form => Some((proof, false)),
                     StaticSource::Promise(proof) => Some((proof, true)),
                     StaticSource::Open => Some(("is not proven to return synchronously", true)),
@@ -1321,9 +1327,14 @@ fn static_source_state(
     let Some(function) = static_source_function(file, source, context) else {
         return StaticSource::Open;
     };
-    // A generator's iterator has no `then`.
+    // A generator's iterator has no `then`; an async generator's has
+    // `Symbol.asyncIterator` (ADR 0865).
     if function.generator {
-        return StaticSource::Sync;
+        return if function.r#async {
+            StaticSource::AsyncIterable
+        } else {
+            StaticSource::Sync
+        };
     }
     if let Some(proof) = static_source_promise(file, function, context) {
         return StaticSource::Promise(proof);
@@ -1357,6 +1368,8 @@ fn static_source_state(
 /// What a static `dynamic()` source does on its one call (ADR 0654).
 enum StaticSource {
     Promise(&'static str),
+    /// An async generator's iterator: no `then`, an async iterator (ADR 0865).
+    AsyncIterable,
     Sync,
     Open,
 }
