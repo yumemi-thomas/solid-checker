@@ -366,7 +366,8 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
+    // backend-process: diagnostics_process pins fixture finding counts, so an analysis change can fail it.
+    checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
@@ -392,7 +393,7 @@ export const ROWS = [
   {
     prefix: "fixtures/",
     owner: "fixtures or expected findings",
-    checks: ["coverage", "ownership-gate", "guard-count"],
+    checks: ["coverage", "ownership-gate", "guard-count", "backend-process"],
   },
   // The cases the two oracle gates read.
   ...["fixtures/tsc-oracle/", "fixtures/obligation-cases/"].map((prefix) => ({
