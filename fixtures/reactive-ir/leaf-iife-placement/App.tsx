@@ -20,3 +20,14 @@ export function Nested() {
   });
   return <i />;
 }
+// Past the placement's bound there is no answer: an obligation, never a drop.
+export function Deep() {
+  onSettled(() => {
+    (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => {
+      (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => {
+        createRoot(() => 1);
+      })(); })(); })(); })(); })(); })(); })(); })(); })();
+    })(); })(); })(); })(); })(); })(); })(); })();
+  });
+  return <i />;
+}

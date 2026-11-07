@@ -832,6 +832,55 @@ fn named_layer_entry_open(
     lookup: &SemanticLookup<'_>,
     caller_unplaced: impl Fn(Span) -> bool,
 ) -> bool {
+    let mut walked = HashSet::default();
+    layer_entry_open(
+        file,
+        span,
+        region,
+        lookup,
+        &caller_unplaced,
+        &mut walked,
+        LAYER_CALLER_DEPTH,
+    )
+}
+
+/// How many calls [`layer_entry_open`] follows out through a closed layer's
+/// callers. Past it the entries are unread: open.
+const LAYER_CALLER_DEPTH: usize = 8;
+
+/// Whether `function` is the whole argument the dialect gives an owner it
+/// creates (`CallbackOwner::Creates`): who enters what is around that call
+/// changes nothing inside.
+fn creates_owner_for(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            !call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_owner_at(primitive, index, call.arguments.len())
+                            == Some(solid_dialect::CallbackOwner::Creates)
+                    })
+        })
+}
+
+fn layer_entry_open(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    region: Option<Span>,
+    lookup: &SemanticLookup<'_>,
+    caller_unplaced: &dyn Fn(Span) -> bool,
+    walked: &mut HashSet<(String, Span)>,
+    depth: usize,
+) -> bool {
     use crate::local_access::HandOff;
     let escapes = |hand_off: &HandOff| !matches!(hand_off, HandOff::Call | HandOff::Inline(_));
     // Innermost first: the span index yields its owners in span order.
@@ -846,6 +895,10 @@ fn named_layer_entry_open(
             return false;
         }
         if lookup.function_proven_component(file, function) {
+            return false;
+        }
+        // Reached through a caller, no candidate names the region.
+        if creates_owner_for(file, function.span, lookup) {
             return false;
         }
         if lookup.program_has_eval() || function.method_name.is_some() {
@@ -918,6 +971,30 @@ fn named_layer_entry_open(
             .collect::<Vec<_>>();
         if !crate::execution_role::entry_census_complete_except(file, function, lookup, &inline) {
             return true;
+        }
+        // A closed layer is entered only by its callers, and each is entered
+        // as it is: `wrapUse` called from an `f` that escapes runs with no
+        // owner on `f`'s other entries too.
+        if !walked.insert((file.path.as_str().to_owned(), function.span)) {
+            continue;
+        }
+        if depth == 0 {
+            return true;
+        }
+        for reference in &local {
+            let run = run_at(reference);
+            if layer_entry_open(file, run, None, lookup, caller_unplaced, walked, depth - 1) {
+                return true;
+            }
+        }
+        for (caller, callee) in
+            lookup.function_call_site_references(file.path.as_str(), function.span)
+        {
+            if caller.path != file.path
+                && layer_entry_open(caller, callee, None, lookup, &|_| false, walked, depth - 1)
+            {
+                return true;
+            }
         }
     }
     false
