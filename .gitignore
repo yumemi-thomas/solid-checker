@@ -1137,3 +1137,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owned-edge-escape/node_modules/**
 !fixtures/reactive-ir/leaf-iife-placement/node_modules/
 !fixtures/reactive-ir/leaf-iife-placement/node_modules/**
+!fixtures/reactive-ir/closed-two-file-caller/node_modules/
+!fixtures/reactive-ir/closed-two-file-caller/node_modules/**

@@ -5837,5 +5837,11 @@
    "mx-primitive-in-forbidden-scope-tracked-root-alias-depth-17"
   ],
   "rediscovered": "depth-15/16/17 ids of the three forbidden-scope codes in settled, tracked and their contexts (450, Chrome confirmed): build r9 75 false cleans; r13: 0, 330 uncertifiable, 120 agree"
+ },
+ {
+  "finding": "ADR 0868's caller walk did not ask whether a caller in another file holds an owner edge: in a closed program `wrapUse(); hold(() => wrapUse());` left the helper file's site certified (reviewer's R38)",
+  "found": "the rolling review of 08805ab01",
+  "fixed": "ADR 0868, callers amendment",
+  "outside": "the grids run open-world programs, where an export's seed already leaves this U, and parseFindings keeps App.tsx rows only, so a site in a second file reads as a false clean on every build. Pinned by fixture closed-two-file-caller: build r13 no SC4001 row, r15 U at the helper's site"
  }
 ]

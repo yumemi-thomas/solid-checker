@@ -2147,7 +2147,7 @@ W's recall grids at 4c81fcc00: ASYNC_OUTSIDE_LOADING_BOUNDARY `jsx`, `show`, `po
 
 R29: a primitive's whole argument closes a layer only where the dialect gives that argument an owner (`callback_owner_at`). `action(q as any)` keeps `q` and `createContext(q)` holds it, so neither is a placement. `flw-owned-action` (35 ids, Chrome confirmed): 35 false cleans on the build before, 0 after, now uncertifiable.
 
-Callers: a closed named layer is entered only by its callers, and each is entered as it is. `wrapUse` called once from an `f` that escapes stayed certified: the walk ended at `wrapUse`. It now follows each call and inline run out, through other files too, up to 8 calls, and past that the layer is open. It stops at a callback whose primitive creates the owner. Every `flw-owned` wrapper id (7,152, Chrome confirmed): 2,737 false cleans before, 0 after, uncertifiable.
+Callers: a closed named layer is entered only by its callers, and each is entered as it is. `wrapUse` called once from an `f` that escapes stayed certified: the walk ended at `wrapUse`. It now follows each call and inline run out, through other files too, up to 8 calls, and past that the layer is open. It stops at a callback whose primitive creates the owner. Every `flw-owned` wrapper id (7,152, Chrome confirmed): 2,737 false cleans before, 0 after, uncertifiable. A caller in another file is asked the same question, by that file's graph path (R38).
 
 <a id="adr-0869"></a>
 ## ADR 0869 — A JSX boundary is no owner site
