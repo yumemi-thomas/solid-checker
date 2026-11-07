@@ -7,7 +7,7 @@ import { judgeWitness, recordedCodes, vanishedRows } from "./flip/judge.mjs";
 const fired = { diagnostics: ["STRICT_READ_UNTRACKED"], errors: [], logs: [] };
 const quiet = { diagnostics: [], errors: [], logs: [] };
 const certified = { status: "certified", findings: [] };
-const finding = (id, rule, kind, line = 5, analysisContext) => ({ id, rule, kind, primaryLocation: { line }, analysisContext });
+const finding = (id, rule, kind, line = 5, analysisContext, file = "App.tsx") => ({ id, rule, kind, primaryLocation: { path: `/w/x/${file}`, line, column: 3 }, analysisContext });
 
 test("a row where Chrome fired fails when nothing covers the code, whatever its kind", () => {
   for (const kind of ["clean", "keep", "regress"]) {
@@ -26,12 +26,26 @@ test("an SC9012 clean row passes only at its closedAt: an SC9012 at another line
   const row = { rule: "SC9012", kind: "clean", runtime: fired };
   const at = (line) => ({ status: "uncertifiable", findings: [finding("SC9012", "reactive-dispatch-unresolved", "uncertifiable", line, "value-in-carrier")] });
   assert.equal(judgeWitness(row, at(9)).ok, false);
-  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-in-carrier" } }, at(9)).ok, true);
-  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-in-carrier" } }, at(4)).ok, false);
-  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-forwarded" } }, at(9)).ok, false);
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "App.tsx", line: 9, blocker: "value-in-carrier" } }, at(9)).ok, true);
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "App.tsx", line: 9, blocker: "value-in-carrier" } }, at(4)).ok, false);
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "App.tsx", line: 9, blocker: "value-forwarded" } }, at(9)).ok, false);
   const proved = { status: "violations", findings: [finding("SC1001", "strict-read-untracked", "violation", 8)] };
-  assert.equal(judgeWitness({ ...row, closedAt: { line: 8, id: "SC1001" } }, proved).ok, true);
-  assert.equal(judgeWitness({ ...row, closedAt: { line: 7, id: "SC1001" } }, proved).ok, false);
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "App.tsx", line: 8, id: "SC1001" } }, proved).ok, true);
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "App.tsx", line: 7, id: "SC1001" } }, proved).ok, false);
+  // Review R4: the line is the site only in its file.
+  const inHelper = { status: "uncertifiable", findings: [finding("SC9012", "reactive-dispatch-unresolved", "uncertifiable", 9, "value-in-carrier", "h.ts")] };
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "App.tsx", line: 9, blocker: "value-in-carrier" } }, inHelper).ok, false);
+  assert.equal(judgeWitness({ ...row, closedAt: { file: "h.ts", line: 9, blocker: "value-in-carrier" } }, inHelper).ok, true);
+  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-in-carrier" } }, at(9)).ok, false);
+});
+
+test("an SC9012 covers a fired code only at the row's closedAt (review 4c): elsewhere, or on a row with none, it covers nothing", () => {
+  const withheld = (line) => ({ status: "uncertifiable", findings: [finding("SC9012", "reactive-dispatch-unresolved", "uncertifiable", line, "value-forwarded")] });
+  for (const kind of ["keep", "regress"]) {
+    assert.match(judgeWitness({ rule: "SC1001", kind, runtime: fired, before: { findings: [] } }, withheld(4)).why, /no finding covers it/, kind);
+    assert.match(judgeWitness({ rule: "SC1001", kind, runtime: fired, before: { findings: [] }, closedAt: { file: "App.tsx", line: 9, blocker: "value-forwarded" } }, withheld(4)).why, /no finding covers it/, kind);
+  }
+  assert.equal(judgeWitness({ rule: "SC9012", kind: "clean", runtime: fired, closedAt: { file: "App.tsx", line: 4, blocker: "value-forwarded" } }, withheld(4)).ok, true);
 });
 
 test("a covering finding keeps the row", () => {
@@ -75,7 +89,7 @@ test("a base row removed or changed needs a retired row naming an existing ADR",
 test("every field of a row is compared, both ways, and a retired row of a row still there names the fields it excuses", () => {
   const row = { rule: "SC1001", kind: "clean", source: "a", runtime: fired };
   const decisions = '<a id="adr-0801"></a>\n## ADR 0801';
-  const closed = { ...row, closedBy: "SC9012", closedAt: { line: 3, blocker: "value-in-carrier" } };
+  const closed = { ...row, closedBy: "SC9012", closedAt: { file: "App.tsx", line: 3, blocker: "value-in-carrier" } };
   assert.equal(vanishedRows({ x: row }, { x: closed }, [], decisions).length, 1);
   assert.equal(vanishedRows({ x: closed }, { x: row }, [], decisions).length, 1);
   assert.equal(vanishedRows({ x: row }, { x: { ...row, rule: "SC1003" } }, [], decisions).length, 1);

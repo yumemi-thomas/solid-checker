@@ -26,7 +26,8 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { partlySilentRules, besideCode, codeOfThrown, codeOfUncaught, codeRules, codesForRule, coversCode, declinesCode, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { callStarts, frameStarts } from "./call-starts.mjs";
+import { partlySilentRules, besideCode, codeOfThrown, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { hitCount } from "./hits.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
@@ -55,7 +56,7 @@ import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
-export const OUTCOMES = ["typed-away", "harness", "unexecuted", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "false-positive", "tsc-overlap"];
+export const OUTCOMES = ["typed-away", "harness", "unexecuted", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "false-positive", "tsc-overlap"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -170,12 +171,30 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   }
   const placed = atSite.length ? "placed" : "unplaced";
   const rules = codeRules[code] ?? [];
-  const claims = (finding) => coversCode(code, finding);
+  // A withholding covers the code only at a recorded position (review 4c, R5; codes.mjs `withheldAtStack`): the top authored frame of
+  // a stack Chrome recorded for the code (the read, write or throw), or the exact call position of a deeper one that mounts
+  // nothing (call-starts.mjs `mount`). Not the site's lines, not a line range; a frame with no column, an unplaced diagnostic and a placeless code
+  // place nothing. Harness frames never reach `attributed`; without the program's text no deeper frame counts.
+  const source = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
+  const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "");
+  const mount = source.length > 1 ? (frame) => callStarts(text).mount(frame.line, frame.column) : () => true;
+  const startsOf = source.length > 1 ? frameStarts(text) : null;
+  const stacks = events.map((event) => withStarts(appStack(event.positions), startsOf));
+  const recordedAt = (finding) => stacks.some((stack) => withheldAtStack(finding, stack, mount, code));
+  const claims = (finding) => coversCodeAt(code, finding, recordedAt(finding));
+  // Measured, not counted: a withholding whose start line is a frame's line but no recorded position (a column, a mount line).
+  const nearOnly = (finding) => !claims(finding) && withholdingRules.includes(finding.rule) && stacks.some((stack) => stack.some((frame) => frame.line === finding.line));
   const covering = relevant.filter((finding) => inLines(finding, region));
   // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
   // line itself. In a one-site program a claiming finding anywhere is this misuse's: it is an agree (or a gap) with `remote` set.
-  const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && inLines(finding, region))
-    ?? relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule));
+  // Review 4c, R8: for a code with a place, only at a recorded position (`recordedAt`, the call that runs it is a deeper frame's); a
+  // claiming finding at another site of the code no longer covers it. A placeless code keeps the claiming rule's finding anywhere.
+  const placedCode = !SPEC[code].placeless && !isPlacelessCode(code);
+  // Chrome gave this code with a place no position with a column (an unplaced diagnostic, the oracle path's records): the judge cannot
+  // place it. Unjudged, counted and listed (`unplaced`), never a pass or a false clean.
+  if (placedCode && !stacks.some((stack) => stack.some((frame) => Number.isInteger(frame.column)))) return { outcome: "unplaced", detail: { placed, findings: relevant.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } };
+  const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && (placedCode ? recordedAt(finding) : inLines(finding, region)))
+    ?? (placedCode ? undefined : relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)));
   const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
   const violations = covering.filter((finding) => finding.kind === "violation");
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
@@ -191,12 +210,17 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // A violation whose silence the control run measured on its own lines (`runtimeSilent`, pipeline.mjs) has no code that could have fired
   // there: `offSiteVerdicts` reads it as no-counterpart, and it names no rule wrongly here. It excuses nothing else: with no claiming rule the
   // row falls through to a recall gap or a false clean.
-  const wrong = violations.filter((finding) => !corroborated(finding) && !finding.runtimeSilent && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
+  // A claiming rule's own violation off the recorded positions names no rule wrongly (R8): it falls through to a false clean.
+  const wrong = violations.filter((finding) => !rules.includes(finding.rule) && !corroborated(finding) && !finding.runtimeSilent && !besideCode[code]?.includes(finding.rule) && !partlySilentRules.includes(finding.rule));
   if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
   if (violations.some((finding) => corroborated(finding) && holeOnly(finding))) detail.holeCorroborated = true;
   // A claiming violation does not excuse another rule's on these lines: on the `agree` path the second finding is judged the same way
   // (`leaf-owner-forbidden-call` beside `no-await-primitive-in-tracked-scope`, ADR 0641).
   const beside = wrong.filter((finding) => !rules.includes(finding.rule));
+  // The claiming rule's own violation away from Chrome's positions: the user sees the warning in the wrong place, both wrong and
+  // missing (`misplaced`, a defect of its own; R8).
+  const misplaced = placedCode && !claimingViolation ? relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)) : undefined;
+  if (misplaced) return { outcome: "misplaced", detail: { ...detail, at: `${misplaced.rule}@${misplaced.line}:${misplaced.column}`, diagnostic: stacks.map((stack) => stack[0] && `${stack[0].line}:${stack[0].column}`).filter(Boolean) } };
   if (claimingViolation) return beside.length ? { outcome: "wrong-rule", detail: { ...detail, beside: true, rules: [...new Set(beside.map((finding) => finding.rule))] } } : { outcome: "agree", detail };
   if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims or declines it (or a withholding) at the site.
@@ -211,7 +235,8 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
-  return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified } };
+  const near = relevant.find(nearOnly);
+  return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified, ...(near ? { withheldNear: `${near.rule}@${near.line}:${near.column}` } : {}) } };
 }
 
 /** The misuse site of a built case: its only `use` site. */
@@ -579,13 +604,13 @@ export function markdown(matrix, statuses) {
   const lines = [];
   lines.push(`# Misuse recall matrix`, "");
   lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.sampling === "grid" ? "one program per shape (variant, binding, layer)" : `${matrix.perCell} programs per cell`}. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
-  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`T\` tsc-overlap, \`n\` not-fired, \`t\` typed-away, \`h\` harness, \`u\` unexecuted (a coded throw halted the page before the site ran). \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
+  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`M\` misplaced, \`U\` unplaced, \`T\` tsc-overlap, \`n\` not-fired, \`t\` typed-away, \`h\` harness, \`u\` unexecuted (a coded throw halted the page before the site ran). \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
   lines.push(`| code | ${contexts.join(" | ")} |`, `| --- | ${contexts.map(() => "---").join(" | ")} |`);
   for (const code of codes) {
     const cells = contexts.map((context) => {
       const cell = matrix.cells[`${code}|${context}`];
       if (!cell) return "";
-      const extras = [["W", cell["wrong-rule"]], ["P", cell["false-positive"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness], ["u", cell.unexecuted]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
+      const extras = [["W", cell["wrong-rule"]], ["P", cell["false-positive"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["M", cell.misplaced], ["U", cell.unplaced], ["T", cell["tsc-overlap"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness], ["u", cell.unexecuted]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
       // A dagger: Chrome did not reproduce any of the sampled programs of this cell (the fast path's evidence stands alone).
       const unconfirmed = cell.chrome && cell.chrome.checked > 0 && cell.chrome.same === 0 ? " †" : "";
       return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}${unconfirmed}`;

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCode, decliningRules, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules } from "./codes.mjs";
+import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCodeAt, decliningRules, withheldAtStack, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules } from "./codes.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 /** The source text of a top-level `const name = [...]` or `{...}` literal in the oracle. */
@@ -28,9 +28,30 @@ describe("tables copied from scripts/runtime-oracle.mjs", () => {
   });
 
   it("a declining rule's violation is not a recall gap, its uncertifiable finding covers the code", () => {
-    expect(coversCode("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "uncertifiable" })).toBe(true);
-    expect(coversCode("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "violation" })).toBe(false);
-    expect(coversCode("NO_OWNER_CLEANUP", { rule: "missing-context-provider", kind: "uncertifiable" })).toBe(false);
+    expect(coversCodeAt("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "uncertifiable" }, true)).toBe(true);
+    expect(coversCodeAt("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "uncertifiable" }, false)).toBe(false);
+    expect(coversCodeAt("CONTEXT_NOT_FOUND", { rule: "missing-owner", kind: "violation" }, false)).toBe(false);
+    expect(coversCodeAt("NO_OWNER_CLEANUP", { rule: "missing-context-provider", kind: "uncertifiable" }, false)).toBe(false);
+  });
+
+  // Review 4c, R5: an SC9012 withheld the answer at its own position; elsewhere it says nothing about this diagnostic, and a placeless
+  // code has no position.
+  it("a withholding covers a code only at its recorded position, never a placeless code", () => {
+    const withheld = { rule: "reactive-dispatch-unresolved", kind: "uncertifiable" };
+    expect(coversCodeAt("STRICT_READ_UNTRACKED", withheld, true)).toBe(true);
+    expect(coversCodeAt("STRICT_READ_UNTRACKED", withheld, false)).toBe(false);
+    expect(coversCodeAt("ASYNC_OUTSIDE_LOADING_BOUNDARY", withheld, true)).toBe(false);
+  });
+  it("a recorded position is the top frame's, or a deeper call's on a line that mounts nothing; never a range or a bare line", () => {
+    const at = (line, column, endLine = line) => ({ line, column, endLine });
+    const stack = [{ line: 3, column: 7 }, { line: 9, column: 5 }];
+    expect(withheldAtStack(at(3, 7), stack, () => false)).toBe(true);
+    expect(withheldAtStack(at(9, 5), stack, () => false)).toBe(true);
+    expect(withheldAtStack(at(9, 5), stack, (frame) => frame.line === 9)).toBe(false);
+    expect(withheldAtStack(at(9, 6), stack, () => false)).toBe(false);
+    expect(withheldAtStack(at(2, 1, 12), stack, () => false)).toBe(false);
+    expect(withheldAtStack(at(3, 7), [{ line: 3 }], () => false)).toBe(false);
+    expect(withheldAtStack(at(3, 2), [{ line: 3, handRead: true }])).toBe(true);
   });
 
   it("withholdingRules matches the oracle's", () => {

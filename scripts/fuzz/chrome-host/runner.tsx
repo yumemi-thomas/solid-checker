@@ -20,12 +20,13 @@ const describeError = (e: any) => ({
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,
 });
 
-/** The App.tsx frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
+/** The case's frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
 function servedFrames(stack: string) {
   const rows: { file: string, line: number, column: number }[] = [];
   for (const text of String(stack ?? '').split('\n')) {
-    const match = new RegExp(`/cases/${id}/App\\.tsx(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
-    if (match) rows.push({ file: 'App.tsx', line: Number(match[1]), column: Number(match[2]) });
+    const match = new RegExp(`/cases/${id}/([^/:?\\s)]+\\.tsx?)(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
+    // Another of the case's modules: no position (only App.tsx is mapped), but the frame counts for depth (R20).
+    if (match) rows.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
   }
   return rows;
 }

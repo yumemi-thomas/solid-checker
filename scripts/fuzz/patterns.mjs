@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
-import { besideCode, codeOfThrown, codeRules, codesForRule, coversCode, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { besideCode, codeOfThrown, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
+import { callStarts, frameStarts } from "./call-starts.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,24 +30,73 @@ export function patternCases(root = PATTERNS) {
       .map((entry) => ({ id: `${report.name}/${entry.name}`, report: report.name, dir: join(root, report.name, entry.name) })));
 }
 
+// Each diagnostic and thrown error keeps the case-module frames of its stack as served (`frames`: url, line, column), the oracle's depth
+// (41 frames, chrome-host/runner.tsx); runChrome maps them to source lines (`stacks`), so a withholding covers a code only at its site.
 const ENTRY = (clickAll) => `import { OBSERVE, flush } from "solid-js";
 import { render } from "@solidjs/web";
-const rec: any = { diagnostics: [], errors: [] };
+const rec: any = { diagnostics: [], errors: [], sites: [] };
 (globalThis as any).__log = () => {};
-window.addEventListener("error", (e) => rec.errors.push(String((e as any).error?.message ?? e.message)));
-window.addEventListener("unhandledrejection", (e: any) => rec.errors.push(String(e.reason?.message ?? e.reason)));
-OBSERVE!.diagnostics.subscribe((ev: any) => rec.diagnostics.push(ev.code));
+const frames = (stack: unknown) => String(stack ?? "").split("\\n").flatMap((text) => {
+  const match = /(\\/cases\\/[^/]+\\/[^/?:\\s)]+)(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)/.exec(text);
+  return match && !match[1].endsWith("/entry.tsx") ? [{ url: match[1], line: Number(match[2]), column: Number(match[3]) }] : [];
+});
+const stackHere = () => { const limit = Error.stackTraceLimit; Error.stackTraceLimit = 41; try { return new Error("diagnostic").stack; } finally { Error.stackTraceLimit = limit; } };
+const error = (message: unknown, stack: unknown) => { rec.errors.push(String(message)); rec.sites.push({ message: String(message), frames: frames(stack) }); };
+window.addEventListener("error", (e) => error((e as any).error?.message ?? e.message, (e as any).error?.stack));
+window.addEventListener("unhandledrejection", (e: any) => error(e.reason?.message ?? e.reason, e.reason?.stack));
+OBSERVE!.diagnostics.subscribe((ev: any) => { rec.diagnostics.push(ev.code); rec.sites.push({ code: ev.code, frames: frames(stackHere()) }); });
 // Imported after the subscription, so a diagnostic raised while App's module evaluates is recorded too. A module that fails
 // to load fails the entry, as a static import did: the program did not run.
 const mod: any = await import("./App");
-try { render(() => <mod.App />, document.getElementById("root")!); } catch (e: any) { rec.errors.push(e.message); }
-try { flush(); } catch (e: any) { rec.errors.push(e.message); }
+try { render(() => <mod.App />, document.getElementById("root")!); } catch (e: any) { error(e.message, e.stack); }
+try { flush(); } catch (e: any) { error(e.message, e.stack); }
 await new Promise((r) => setTimeout(r, 50));
-if ((mod as any).after) { try { await (mod as any).after(); flush(); } catch (e: any) { rec.errors.push(e.message); } }
-${clickAll ? 'try { for (const b of Array.from(document.querySelectorAll("button"))) (b as any).click(); flush(); } catch (e: any) { rec.errors.push(e.message); }' : ""}
+if ((mod as any).after) { try { await (mod as any).after(); flush(); } catch (e: any) { error(e.message, e.stack); } }
+${clickAll ? 'try { for (const b of Array.from(document.querySelectorAll("button"))) (b as any).click(); flush(); } catch (e: any) { error(e.message, e.stack); }' : ""}
 await new Promise((r) => setTimeout(r, 100));
 (window as any).__rec = rec;
 `;
+
+/**
+ * The stacks of a record's diagnostics and thrown errors, per code: `{ CODE: [[{ file, line, column, mount? }], …] }`, each innermost first, in
+ * source positions through the transform Vite served each case module with (chrome-host.mjs `mapPositions`, the oracle's lookup:
+ * `originalPositionFor` at the frame's column). A frame with no original position, or one past the end of its source line, is
+ * dropped, never passed through; `mount` marks a frame at a mount of the program or a component (call-starts.mjs).
+ */
+async function mapStacks(server, lookup, caseDir, rec) {
+  const maps = new Map();
+  const mapOf = async (url) => {
+    if (!maps.has(url)) {
+      const module = await server.moduleGraph.getModuleByUrl(url);
+      const raw = module?.transformResult?.map ?? (await server.transformRequest(url).catch(() => null))?.map;
+      const file = url.split("/").slice(3).join("/");
+      let source = null;
+      try { source = readFileSync(join(caseDir, file), "utf8").split("\n"); } catch {}
+      maps.set(url, raw?.mappings && source ? { map: new lookup.TraceMap(raw), file, source } : null);
+    }
+    return maps.get(url);
+  };
+  const stacks = {};
+  for (const row of rec.sites ?? []) {
+    const code = row.code ?? codeOfThrown(String(row.message).replace(/^Error: /, "")) ?? /^\[([A-Z][A-Z_]+)\]/.exec(String(row.message))?.[1];
+    if (!code) continue;
+    const stack = [];
+    for (const frame of row.frames ?? []) {
+      const mapped = await mapOf(frame.url);
+      if (!mapped) continue;
+      const at = lookup.originalPositionFor(mapped.map, { line: frame.line, column: Math.max(0, frame.column - 1) });
+      if (!at.line || at.line > mapped.source.length || at.column >= mapped.source[at.line - 1].length) continue;
+      // `starts` (call-starts.mjs): a frame in a call's callee also stands for the call's start and its callee object's (review 4c).
+      const text = mapped.source.join("\n");
+      const place = { line: at.line, column: at.column + 1 };
+      const starts = frameStarts(text, mapped.file)(place, stack.length);
+      stack.push({ file: mapped.file, ...place, ...(starts.length > 1 ? { starts } : {}), ...(callStarts(text, mapped.file).mount(place.line, place.column) ? { mount: true } : {}) });
+    }
+    const key = JSON.stringify(stack);
+    if (!(stacks[code] ??= []).some((known) => JSON.stringify(known) === key)) stacks[code].push(stack);
+  }
+  return stacks;
+}
 
 /** Chrome's record of each case: `{ codes, failure? }`. */
 async function runChrome(cases, root) {
@@ -63,6 +113,8 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
 </script></body></html>`);
   const req = createRequire(join(INSTALL, "package.json"));
   const vite = await import(pathToFileURL(req.resolve("vite")).href);
+  const mapping = await import(pathToFileURL(req.resolve("@jridgewell/trace-mapping")).href);
+  const lookup = { TraceMap: mapping.TraceMap ?? mapping.default?.TraceMap, originalPositionFor: mapping.originalPositionFor ?? mapping.default?.originalPositionFor };
   const pluginModule = await import(pathToFileURL(req.resolve("@solidjs/vite-plugin")).href);
   const solid = pluginModule.default?.default ?? pluginModule.default ?? pluginModule.solid;
   const server = await vite.createServer({ root: realpathSync(root), configFile: false, logLevel: "error", server: { port: 0, strictPort: false, host: "127.0.0.1", fs: { strict: false } }, resolve: { preserveSymlinks: false }, optimizeDeps: { noDiscovery: true }, plugins: [solid({ hot: false, performanceTracks: false, diagnostics: false })] });
@@ -86,7 +138,8 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
         const rec = await page.evaluate(() => window.__rec);
         const thrown = rec.errors.map((message) => codeOfThrown(String(message).replace(/^Error: /, ""))).filter(Boolean);
         const entry = rec.errors.find((message) => String(message).startsWith("entry: "));
-        records.set(id, { codes: [...new Set([...rec.diagnostics, ...thrown])], ...(entry ? { failure: entry.slice(0, 160) } : {}) });
+        const stacks = await mapStacks(server, lookup, join(root, "cases", id.replace("/", "--")), rec);
+        records.set(id, { codes: [...new Set([...rec.diagnostics, ...thrown])], stacks, ...(entry ? { failure: entry.slice(0, 160) } : {}) });
       } catch (error) { records.set(id, { codes: [], failure: String(error.message).slice(0, 160) }); }
       await context.close();
     }
@@ -124,15 +177,46 @@ async function runChecker(cases, root, { checker, typefacts }) {
   return results;
 }
 
-/** One program's verdict: `{ outcome, codes, certified?, rules? }`. */
-export function judgePattern({ codes, failure }, findings) {
+/** A finding's file and start position, from the checker's JSON (`primaryLocation`) or a judge row. */
+const placeOf = (finding) => {
+  const at = finding.primaryLocation ?? finding;
+  return { path: String(at.path ?? "").replaceAll("\\", "/"), line: at.line, column: at.column };
+};
+const inFile = (path, file) => file === undefined || path === file || path.endsWith(`/${file}`);
+
+/**
+ * Whether a withholding `finding` is at a recorded position of a code (review 4c, R5; codes.mjs `withheldAtStack`): its start is a
+ * stack's top frame position (the read, write or throw), or a deeper frame's exact call position on a line that mounts nothing, in
+ * that frame's file. Harness frames never reach a stack (only the case's own modules are kept).
+ */
+export const atRecordedSite = (finding, stacks = [], code = null) => {
+  const place = { ...placeOf(finding), rule: finding.rule };
+  return stacks.some((stack) => withheldAtStack(place, stack.map((frame) => (inFile(place.path, frame.file) ? frame : { ...frame, line: -1 })), (frame) => frame.mount === true, code));
+};
+
+/**
+ * One program's verdict: `{ outcome, codes, certified?, rules? }`. `stacks` (`{ CODE: [[{ file, line, column, mount? }]] }`, innermost
+ * first) are the stacks Chrome recorded for each code: a claiming or withholding finding covers a code with a place only at one of them
+ * (`atRecordedSite`; review 4c, R5, R8), a placeless code by a claiming finding anywhere and never by a withholding. `positions: false`
+ * says the record kept no stacks (the witness rows): a claiming finding then covers anywhere, a withholding only at `stacks`.
+ */
+export function judgePattern({ codes, failure, stacks = {}, positions = true }, findings) {
   if (failure || findings === null) return { outcome: "no-run", why: failure ?? "no checker report" };
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const claimed = codes.filter((code) => (codeRules[code] ?? []).length);
-  const missed = claimed.filter((code) => !relevant.some((finding) => coversCode(code, finding) || (finding.kind === "violation" && besideCode[code]?.includes(finding.rule))));
+  const atSite = (code, finding) => (!positions && (codeRules[code] ?? []).includes(finding.rule)) || atRecordedSite(finding, stacks[code], code);
+  const missed = claimed.filter((code) => !relevant.some((finding) => coversCodeAt(code, finding, atSite(code, finding)) || (finding.kind === "violation" && besideCode[code]?.includes(finding.rule))));
   const contradicted = relevant.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !finding.claimsSilent && !String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) && !codesForRule(finding.rule).some((code) => codes.includes(code)) && !codes.some((code) => besideCode[code]?.includes(finding.rule)));
   if (contradicted.length) return { outcome: "false-positive", codes: claimed, rules: [...new Set(contradicted.map((finding) => finding.rule))] };
-  if (missed.length) return { outcome: "false-clean", codes: missed, certified: !relevant.some((finding) => finding.kind === "uncertifiable") };
+  // R8: a missed code whose claiming rule has a violation elsewhere is `misplaced` (the warning in the wrong place, a defect); one Chrome
+  // gave no position with a column is `unplaced` (unjudged, never a pass). Any other miss is a false clean, and decides the outcome.
+  const placedOf = (code) => (stacks[code] ?? []).some((stack) => stack.some((frame) => frame.handRead || Number.isInteger(frame.column)));
+  const misplaced = positions ? missed.filter((code) => !isPlacelessCode(code) && relevant.some((finding) => finding.kind === "violation" && codeRules[code].includes(finding.rule))) : [];
+  const unplaced = positions ? missed.filter((code) => !isPlacelessCode(code) && !misplaced.includes(code) && !placedOf(code)) : [];
+  const falseClean = missed.filter((code) => !misplaced.includes(code) && !unplaced.includes(code));
+  if (falseClean.length) return { outcome: "false-clean", codes: falseClean, certified: !relevant.some((finding) => finding.kind === "uncertifiable") };
+  if (misplaced.length) return { outcome: "misplaced", codes: misplaced };
+  if (unplaced.length) return { outcome: "unplaced", codes: unplaced };
   return { outcome: "fine", codes: claimed };
 }
 
@@ -171,6 +255,18 @@ async function main() {
   const expected = JSON.parse(readFileSync(join(here, "expected-silent.json"), "utf8")).patterns;
   const rows = cases.map(({ id }) => ({ id, ...expectedSilent(judgePattern(records.get(id) ?? { codes: [], failure: "no record" }, findings.get(id) ?? null), expected[id]) }));
   writeFileSync(join(out, "patterns.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+  // Measured, not counted: the false cleans a withholding would cover through a mount line of their stacks (`mountOnly`), or by a frame's
+  // line at another column (`lineOnly`).
+  const rejudge = (id, frame) => judgePattern({ ...records.get(id), stacks: Object.fromEntries(Object.entries(records.get(id)?.stacks ?? {}).map(([code, list]) => [code, list.map((stack) => stack.map(frame))])) }, findings.get(id) ?? null).outcome === "fine";
+  const falseCleans = cases.map(({ id }) => id).filter((id) => rows.find((row) => row.id === id)?.outcome === "false-clean" && records.get(id)?.stacks);
+  const mountOnly = falseCleans.filter((id) => rejudge(id, ({ mount, ...frame }) => frame));
+  const lineOnly = falseCleans.filter((id) => !mountOnly.includes(id) && rejudge(id, (frame) => ({ ...frame, handRead: true })));
+  // The programs the call-start normalization moved: covered with `starts`, not by the frames' own positions alone.
+  const byStarts = cases.map(({ id }) => id).filter((id) => rows.find((row) => row.id === id)?.outcome === "fine" && records.get(id)?.stacks && !rejudge(id, ({ starts, ...frame }) => frame));
+  writeFileSync(join(out, "deeper.json"), `${JSON.stringify({ mountOnly, lineOnly, byStarts, records: Object.fromEntries(cases.map(({ id }) => [id, records.get(id) ?? null])), findings: Object.fromEntries(cases.map(({ id }) => [id, findings.get(id) ?? null])) }, null, 1)}\n`);
+  for (const id of mountOnly) console.log(`MOUNT ${id}: a withholding would cover it only through a mount line`);
+  for (const id of lineOnly) console.log(`COLUMN ${id}: a withholding starts on a frame's line at another column`);
+  console.log(`call starts: ${byStarts.length} program(s) covered only through a frame's call start (call-starts.mjs)`);
   const list = readOpenDefects();
   if (args.includes("--update")) {
     const before = new Map((list.patterns ?? []).map((entry) => [entry.id, entry]));
@@ -179,8 +275,8 @@ async function main() {
   }
   const { held, unlisted, fixed, absent } = comparePatterns(rows, readOpenDefects());
   const count = (outcome) => held.filter(({ row }) => row.outcome === outcome).length;
-  console.log(`patterns: ${rows.length} programs: ${rows.filter((row) => row.outcome === "fine").length} fine`);
-  console.log(`known open patterns: ${held.length} still fail (${count("false-positive")} false positive, ${count("false-clean")} false clean, ${count("no-run")} no run; scripts/fuzz/open-defects.json)`);
+  console.log(`patterns: ${rows.length} programs: ${rows.filter((row) => row.outcome === "fine").length} fine, ${rows.filter((row) => row.outcome === "false-clean").length} false clean, ${rows.filter((row) => row.outcome === "misplaced").length} misplaced, ${rows.filter((row) => row.outcome === "unplaced").length} unplaced`);
+  console.log(`known open patterns: ${held.length} still fail (${count("false-positive")} false positive, ${count("false-clean")} false clean, ${count("misplaced")} misplaced, ${count("unplaced")} unplaced, ${count("no-run")} no run; scripts/fuzz/open-defects.json)`);
   for (const row of unlisted) console.log(`NEW ${row.outcome} ${row.id} ${JSON.stringify(row.codes ?? row.why ?? "")}`);
   for (const row of fixed) console.log(`FIXED ${row.id}: move its entry from open-defects.json to rediscovery.json`);
   if (!only) for (const id of absent) console.log(`ABSENT ${id}: listed, and no such program`);

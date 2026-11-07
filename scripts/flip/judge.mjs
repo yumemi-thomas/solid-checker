@@ -36,20 +36,25 @@ export function judgeWitness(w, out) {
   // Whatever the kind: where the recorded run fired a code some rule claims, a finding must cover it (the pattern lane's judge).
   // A `keep` or `regress` row has no other check that the program does not go back to clean, and an SC9012 `clean` row passed on any
   // finding at all (endstage-report.md 1a, rule 4).
+  // The recorded run kept codes, not stacks: a row's site is its hand-read `closedAt` line (its blocker checked below), so a withholding
+  // starting on that line covers the code (review 4c), and a row with no `closedAt` has no site a withholding could cover.
   const codes = recordedCodes(w.runtime);
-  const verdict = judgePattern({ codes }, findings);
+  const stacks = w.closedAt ? Object.fromEntries(codes.map((code) => [code, [[{ file: w.closedAt.file, line: w.closedAt.line, handRead: true }]]])) : {};
+  const verdict = judgePattern({ codes, stacks, positions: false }, findings);
   // A contradicted violation decides the pattern judge's outcome first; its missed codes are asked without it.
-  const missed = verdict.outcome === "false-positive" ? judgePattern({ codes }, findings.filter((f) => !verdict.rules.includes(f.rule))) : verdict;
+  const missed = verdict.outcome === "false-positive" ? judgePattern({ codes, stacks, positions: false }, findings.filter((f) => !verdict.rules.includes(f.rule))) : verdict;
   if (codes.length && missed.outcome === "false-clean") return { ok: false, why: `Chrome fired ${codes.join(" ")}, no finding covers it: ${out.status} ${shown}` };
   const own = findings.filter((f) => f.id === w.rule || (w.rule === "SC2004" && f.id === "SC2005"));
   const was = w.before?.findings ?? [];
   let ok;
   // `closedBy`: the census closes the row, under SC9012. A row of its own needs that finding, or a proved violation: an unrelated
   // uncertifiable elsewhere in the program must not pass a witness (`endstage-report.md` 1a).
-  // `closedAt`: the line and blocker of the row that covers the runtime site, read by hand; a `closedBy` or SC9012 row without it fails.
+  // `closedAt`: the file, line and blocker of the row that covers the runtime site, read by hand (review R4: a line in another file is
+  // not the site); a `closedBy` or SC9012 row without it fails.
   // An SC9012 row passes only at its `closedAt` too (review item 4a): an SC9012 elsewhere says nothing about the site. `closedAt.id`
   // names a proved violation at the site instead of an SC9012 row.
-  const closedAt = (id) => Boolean(w.closedAt) && findings.some((f) => f.primaryLocation?.line === w.closedAt.line && (w.closedAt.id ? f.id === w.closedAt.id && f.kind === "violation" : f.id === id && (f.analysisContext ?? "").split(":")[0] === w.closedAt.blocker));
+  const inClosedFile = (f) => Boolean(w.closedAt.file) && String(f.primaryLocation?.path ?? "").replaceAll("\\", "/").split("/").pop() === w.closedAt.file;
+  const closedAt = (id) => Boolean(w.closedAt) && findings.some((f) => inClosedFile(f) && f.primaryLocation?.line === w.closedAt.line && (w.closedAt.id ? f.id === w.closedAt.id && f.kind === "violation" : f.id === id && (f.analysisContext ?? "").split(":")[0] === w.closedAt.blocker));
   if (w.kind === "clean") ok = w.closedBy ? closedAt(w.closedBy) : w.rule === "SC9012" ? closedAt("SC9012") : own.length > 0;
   else if (w.kind === "pref") ok = own.some((f) => f.kind === (w.proved ? "violation" : "uncertifiable"));
   else if (w.kind === "warn") ok = !own.some((f) => f.kind === "violation");

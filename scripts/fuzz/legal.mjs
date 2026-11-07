@@ -31,6 +31,9 @@ import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } fr
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
+import { carrierLines } from "./call-starts.mjs";
+import { closedGrammar } from "./model.mjs";
+import { lexicallyDeadHits } from "./unexecuted.mjs";
 import { fnv, regionOf, runtimeDifferential, siteOf, writeGridPerf, writeOracleCandidates } from "./matrix.mjs";
 import { budgetOf } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
@@ -59,7 +62,7 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * Judges one legal program at its site.
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
-export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false }) {
+export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false, evaluated = false }) {
   // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
@@ -79,7 +82,16 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   if (events.some((event) => event.code === code && onSite(event))) return { outcome: "not-legal", detail: { ...detail, reported: [...new Set(events.map((event) => event.code))] } };
   // A run-claiming violation anywhere (a call attributed the read in a closure) whose codes the runtime never reports (ADR 0504 review).
   const claimedRuns = violations.filter((finding) => RUN_CLAIMING_RULES.includes(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
-  if (claimedRuns.length && !disturbances(runtime, plan ?? { clicks: [] }).length) return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(claimedRuns.map((finding) => finding.rule))], at: claimedRuns.map((finding) => finding.line) } };
+  // Review 4c (coordinator, owner's "a violation means wrong if it runs; a branch the checker cannot evaluate counts as reachable"):
+  // one at the site whose counter is 0 in a run that did not fail never ran (`xs.forEach(hf)` over `JSON.parse("[]")`): `unexecuted`,
+  // never a false positive or a pass. ADR 0504's review had scored it a false positive.
+  // Not where the checker can evaluate that it never runs (`evaluated`: `if (false)`, `[].forEach`): there the violation is wrong (R21).
+  const neverRan = (finding) => !evaluated && inLines(finding, region) && !runtime.failure && hitCount(runtime.hits ?? null, site.hit) === 0;
+  if (claimedRuns.length && !disturbances(runtime, plan ?? { clicks: [] }).length) {
+    const ran = claimedRuns.filter((finding) => !neverRan(finding));
+    if (!ran.length) return { outcome: "unexecuted", detail: { ...detail, why: "a run-claiming violation at a site whose counter is 0" } };
+    return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(ran.map((finding) => finding.rule))], at: ran.map((finding) => finding.line) } };
+  }
   const disturbed = disturbances(runtime, plan ?? { clicks: [] });
   if (!atSite.length) {
     if (relevant.some((finding) => finding.kind === "uncertifiable" && inLines(finding, region))) return { outcome: "uncertifiable", detail };
@@ -94,13 +106,30 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   if (!contradicted.length) return { outcome: "uncertifiable", detail: { ...detail, why: "a violation whose rule no runtime code contradicts, or whose code the runtime reports" } };
   const ran = hitCount(runtime.hits ?? null, site.hit);
   if (ran === null) return { outcome: "disturbed", detail: { ...detail, why: "no hit ledger" } };
-  // A rule whose violation says the site ran (SC5001: "is read in the first run") is wrong where it never ran (ADR 0504 review).
-  if (ran === 0 && !contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule))) return { outcome: "unexecuted", detail };
+  // A site that never ran is unexecuted, a run-claiming rule's violation too (review 4c; ADR 0504's review had scored it a false positive).
+  if (ran === 0 && !(evaluated && contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule)))) return { outcome: "unexecuted", detail };
   return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(contradicted.map((finding) => finding.rule))] } };
 }
 
 /** Outcomes from worst to best: a combination program takes its worst site's. */
 const WORST_FIRST = ["false-positive", "tsc-overlap", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
+
+const LITERAL_DEAD = /(?:\[\]|new (?:Set|Map)\(\))(?:\s+as [^)]*)?\)?\s*\.\s*(?:forEach|map|filter|flatMap|some|every|find|findLast|reduce)\(|\bof \[\]|(?:\b(?:false|0|null|undefined)|""|\'\'|!1)\s*&&|\bif \((?:false|0|null|undefined|""|!1)\)|\bwhen=\{(?:false|0|null|undefined)\}/;
+/** A receiver or value nothing in the text fixes: the branch counts as reachable (owner's ruling), however closed the rest is. */
+const OPAQUE_VALUE = /\bJSON\.parse\(/;
+
+/**
+ * Whether the text alone says the site never runs, so a run-claiming violation there is wrong (R21, R22): a lexically dead container; a
+ * closed program (`closedGrammar`: branch-free, nothing unknown) with no opaque value; or a literal-empty or falsy guard on the lines that
+ * say whether its function runs (call-starts.mjs `carrierLines`).
+ */
+export function evaluatedDead(program, built, site) {
+  if (program && lexicallyDeadHits(program, built.ledger).has(site.hit)) return true;
+  const text = String(built.files?.["App.tsx"] ?? "");
+  if (program && closedGrammar(program).closed && !OPAQUE_VALUE.test(text)) return true;
+  const lines = text.split("\n");
+  return regionOf(site).flatMap((line) => carrierLines(text, line)).some((line) => LITERAL_DEAD.test(lines[line - 1] ?? ""));
+}
 
 /**
  * Judges a legal program: at its site, or, for a combination program (`--combine`, misuse.mjs `buildCombo`), at every use, each with
@@ -109,12 +138,13 @@ const WORST_FIRST = ["false-positive", "tsc-overlap", "not-legal", "disturbed", 
 export function judgeLegalProgram({ built, program, ...input }) {
   const uses = built.sites.filter((site) => site.code);
   const combo = uses.some((site) => site.primary);
-  const verdict = combo ? judgeUses(built, uses, input) : judgeLegal({ ...input, site: siteOf(built) });
+  const site = siteOf(built);
+  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site) });
   return withOffSite(verdict, combo ? uses : [siteOf(built)], { built, program, ...input });
 }
 
 function judgeUses(built, uses, input) {
-  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true }) }));
+  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site) }) }));
   const worst = verdicts.reduce((a, b) => (WORST_FIRST.indexOf(b.outcome) < WORST_FIRST.indexOf(a.outcome) ? b : a));
   return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
 }
@@ -324,6 +354,10 @@ export async function runLegal(options) {
     profile.add("write", performance.now() - writePhase);
     writeGridPerf(out, "legal", rows, values, budget, profile);
     console.error(`legal: ${JSON.stringify(report.total)}${chrome ? `; Chrome ${JSON.stringify(chrome)}` : ""}`);
+    // A site that never ran has no named row: the count per code is what shows a rise (R22).
+    const unexecuted = {};
+    for (const row of rows) if (row.outcome === "unexecuted") unexecuted[row.code] = (unexecuted[row.code] ?? 0) + 1;
+    console.error(`legal: unexecuted ${JSON.stringify(unexecuted)}`);
     for (const d of differs) console.error(`legal: Chrome differs ${d.id}: fast ${d.fast}, Chrome ${d.chrome}`);
     for (const fp of report.falsePositives) console.error(`legal: candidate false positive ${fp.id} [${fp.rules.join(", ")}]${fp.chrome ? ` chrome ${fp.chrome.status}` : ""}`);
     for (const row of report.notLegal.slice(0, 10)) console.error(`legal: not legal ${row.id} (Solid reports ${row.reported.join(", ")})`);

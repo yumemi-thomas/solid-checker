@@ -166,20 +166,69 @@ export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family
  * as the matrix does (`placeless` in misuse.mjs), never by line. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is reported "located at the first
  * pending effect's owner path" once per mount. Every other claimed code is reported at its call with the caller's stack
  * (checked in the pinned `@solidjs/signals` dev dist). `LOADING_ON_OUTSIDE_HOLD` is reported from the boundary's notification in the
- * flush too (ADR 0517).
+ * flush too (ADR 0517). `SETTLED_CLEANUP_UNOWNED` is reported by the one-shot's `fire` after the callback returned: 642 of 642 smoke rows
+ * that fired it had no authored position (ADR 0815).
  */
-export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "CAUGHT_REACTIVE_READ"];
+export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "CAUGHT_REACTIVE_READ", "SETTLED_CLEANUP_UNOWNED"];
 export const isPlacelessCode = (code) => placelessCodes.includes(code);
 
-/** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */
+/**
+ * Findings of these rules cover a runtime diagnostic at its recorded position only (the checker withheld an answer there; review 4c,
+ * R5): `withheldAtStack`. A withholding elsewhere withheld some other answer. A placeless code has no position, so none covers it.
+ */
 export const withholdingRules = ["reactive-dispatch-unresolved"];
+/** Codes about a value a call was handed, which code with no authored frame then read or wrote: a withholding at that argument covers them (R20). */
+export const handedCodes = ["STRICT_READ_UNTRACKED", "UNTRACKED_READ_AFTER_AWAIT", "PENDING_ASYNC_UNTRACKED_READ", "STORE_WRITE_OUTSIDE_SETTER"];
 /** The flat code -> declining rules table (the policy's `declining`), mirrored as `decliningRules` in scripts/runtime-oracle.mjs. */
 export const decliningRules = Object.fromEntries(Object.entries(codePolicy).filter(([, policy]) => policy.declining?.length).map(([code, policy]) => [code, policy.declining]));
 /**
- * Whether `finding` covers a diagnostic of `code`: a finding of a rule that claims it, a withholding, or an uncertifiable finding of a
- * rule that declines it. Only a claiming rule's violation answers the code; this is the "the checker said something" test.
+ * Whether `finding` covers a diagnostic of `code` (review 4c, R5, R8): a finding of a rule that claims it when `atSite` (the caller found
+ * it at the diagnostic's recorded position, `withheldAtStack`), anywhere for a placeless code (it has no position); an uncertifiable
+ * finding of a rule that declines it, on the same terms (R21); or a withholding when `atSite`, never for a placeless code. Only a claiming rule's violation
+ * answers the code; this is the "the checker said something" test.
  */
-export const coversCode = (code, finding) => (codeRules[code] ?? []).includes(finding.rule) || withholdingRules.includes(finding.rule) || declinesCode(code, finding);
+export const coversCodeAt = (code, finding, atSite) => ((codeRules[code] ?? []).includes(finding.rule) ? isPlacelessCode(code) || atSite === true
+  : (declinesCode(code, finding) && (isPlacelessCode(code) || atSite === true)) || (withholdingRules.includes(finding.rule) && atSite === true && !isPlacelessCode(code)));
+
+/**
+ * Whether a withholding `finding` (`line`, `column`, 1-based: its start) is at a position of `stack` (innermost first: `{ line, column }`,
+ * a source-mapped stack frame): the top frame's position (the read, write or throw), or a deeper frame's exact call position (the call
+ * that leads to it) when `mount(frame)` says it mounts nothing (call-starts.mjs `mount`: every read below a mount runs through it, so a withholding there covers nothing deeper). Positions, never line ranges: a multi-line finding covers nothing
+ * inside it. A frame with no column matches nothing, except a hand-read `closedAt` line (`handRead`, matched by line). A frame's
+ * `starts` (`withStarts`) are the starts it stands for, its own position first.
+ */
+/**
+ * Whether `finding` at a handed argument `at` covers `code`: a withholding on a code about a handed value. A store write's target is the
+ * receiver of a member call (`list.push(x)` says nothing about `x`, R22) and a project or standard function's first argument, so no other
+ * argument counts, and no argument of a dependency's function: a judge does not assume what an unread body writes. Known limit: the judge
+ * cannot tell which argument a read went through (`Object.assign(out, st, holder.v)`).
+ */
+const handedCovers = (at, finding, code) => handedCodes.includes(code) && withholdingRules.includes(finding.rule)
+  && (code !== "STORE_WRITE_OUTSIDE_SETTER" || (!at.noTarget && at.index === 0));
+
+export const withheldAtStack = (finding, stack, mount = () => true, code = null) => (stack ?? []).some((frame, depth) =>
+  (frame.handRead ? finding.line === frame.line
+    : Number.isInteger(frame.column) && (frame.starts ?? [frame]).some((at) => finding.line === at.line && finding.column === at.column
+      && (!at.handed || handedCovers(at, finding, code))))
+  && (depth === 0 || !mount(frame)));
+
+/**
+ * The stack of a diagnostic's positions, innermost first, with another file's frames kept but blank: they place nothing, and depth stays
+ * the depth in the whole stack, so the top authored frame is the real one (R20) and a deeper App.tsx frame still takes the mount test.
+ */
+export const appStack = (positions) => (positions ?? []).map((position) => (position.file === "App.tsx" || position.file === undefined ? position : { file: position.file, line: -1 }));
+
+/**
+ * A stack's frames with `starts` (call-starts.mjs `callStarts`): a frame in the callee of a call, `new`, tagged template or JSX tag also
+ * stands for that expression's start and its callee object's (V8 puts a member call's frame at the property). `startsOf(frame)` gives
+ * the starts for a frame (at its depth) of the program's text, or null when the frame's file has none.
+ */
+export const withStarts = (stack, startsOf) => (stack ?? []).map((frame, depth) => {
+  if (!Number.isInteger(frame.column) || !startsOf) return frame;
+  const starts = startsOf(frame, depth);
+  return starts ? { ...frame, starts } : frame;
+});
+
 /** Whether `finding` is an uncertifiable finding of a rule that declines `code` (the policy's `declining`). */
 export const declinesCode = (code, finding) => finding.kind === "uncertifiable" && (decliningRules[code] ?? []).includes(finding.rule);
 /** Violations the oracle never holds against the runtime (style rules with no dev diagnostic). */
@@ -231,7 +280,7 @@ export const besideCode = {
  */
 export const partlySilentRules = ["primitive-in-directive-application"];
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
-export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
+export const PROBLEMS = ["false-clean", "misplaced", "unplaced", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
 /**
  * What a grid row needs a look for, or null: its outcome, or a second code on the site's lines missed in a file with no uncertifiable
  * finding (matrix.mjs `judge`, `secondary`), a false clean of that code whatever the row's own outcome. The one test of focus, the audit and smoke.

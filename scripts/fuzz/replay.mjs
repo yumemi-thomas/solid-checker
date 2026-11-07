@@ -27,7 +27,7 @@ import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { projectModules, siteVerdicts } from "./checker.mjs";
 import { runtimeEvents } from "./classify.mjs";
-import { codeRules, codesForRule, coversCode, ignoredRules, isDefectCode, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { appStack, codeRules, codesForRule, coversCodeAt, withheldAtStack, ignoredRules, isDefectCode, ruleHasRuntimeCounterpart } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { classifyDivergence, compareVariant, judge, judgeDivergence, siteMap, siteSummary } from "./equivalence.mjs";
 import { configFrom, parseArgs } from "./run.mjs";
@@ -225,7 +225,8 @@ export function judgeWithChrome(row, records) {
       const lines = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);
       const rules = codeRules[event.code] ?? [];
       const covering = input.findings.filter((finding) => lines.some((line) => finding.line <= line && line <= finding.endLine));
-      const claims = (finding) => coversCode(event.code, finding);
+      // A withholding covers the code only at the diagnostic's top position (review 4c, codes.mjs `withheldAtStack`).
+      const claims = (finding) => coversCodeAt(event.code, finding, withheldAtStack(finding, appStack(event.positions)));
       // A code no rule claims (defect-unclaimed): a rule the checker does not have, neither agreement nor a false clean.
       const status = !rules.length ? "unclaimed"
         : covering.some((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ? "agree"

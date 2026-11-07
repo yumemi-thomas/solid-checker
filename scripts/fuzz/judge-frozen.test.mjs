@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { judgePattern } from "./patterns.mjs";
 import { judgeTables } from "./judge-tables.mjs";
+import { evaluatedDead, judgeLegal } from "./legal.mjs";
 import { judge } from "./matrix.mjs";
 
 // Frozen false cleans the judge must flag (endstage-report.md 1d, tier 1). See judge-frozen.json's `about`.
@@ -19,11 +20,16 @@ describe("judge-frozen", () => {
     const verdict = judge(row.input);
     expect({ outcome: verdict.outcome, ...(row.expected.secondary ? { secondary: verdict.detail?.secondary } : {}) }).toEqual(row.expected);
   });
-  test("site rows are present", () => {
-    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["harness", "not-fired", "unexecuted"]);
+  // ADR 0815, R21: a run-claiming violation at a site the text says never runs is wrong; at one only an unknown receiver skipped, unexecuted.
+  test.each(frozen.legalRows.map((row) => [row.id, row]))("%s keeps its legal verdict", (_id, row) => {
+    const evaluated = evaluatedDead(null, { ledger: [], files: { "App.tsx": row.text } }, row.input.site);
+    expect(judgeLegal({ ...row.input, evaluated }).outcome).toBe(row.expected.outcome);
   });
-  test.each(frozen.rows.map((row) => [row.id, row]))("%s stays a certified false clean", (_id, row) => {
-    const verdict = judgePattern({ codes: row.codes }, row.findings);
+  test("site rows are present", () => {
+    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["false-clean", "harness", "not-fired", "recall-gap", "unexecuted"]);
+  });
+  test.each(frozen.rows.map((row) => [row.id, row]))("%s keeps its frozen verdict", (_id, row) => {
+    const verdict = judgePattern({ codes: row.codes, stacks: row.stacks, positions: row.stacks !== undefined }, row.findings);
     expect({ outcome: verdict.outcome, certified: verdict.certified }).toEqual(row.expected);
   });
 });

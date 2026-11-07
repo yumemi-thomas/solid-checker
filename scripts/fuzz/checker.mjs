@@ -231,7 +231,7 @@ export function parseFindings(analysis, dir) {
     .map(({ finding }) => finding)
     .map((finding) => ({
       file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind,
-      line: finding.primaryLocation.line, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
+      line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
       ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { claimsSilent: true } : {}),
     }));
 }
