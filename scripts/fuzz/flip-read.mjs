@@ -347,6 +347,10 @@ export const FLIP_READ_LEGAL = {
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   // ADR 0874, review R30-R32: a withheld call's callback proves no run: the program's own `forEach` queues it.
   FLUSH_IN_ACTION: ["wh-action-late"],
+  // ADR 0893: a plain throw in a kept flush callback, stored by the memo and read by nothing: no report, so no violation.
+  RESOLVE_IN_REACTIVE_SCOPE: [FLUSH_READ_STORED],
+  UNTIL_IN_REACTIVE_SCOPE: [FLUSH_READ_STORED],
+  DYNAMIC_STATIC_PROMISE: [FLUSH_READ_STORED],
   STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS)],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
