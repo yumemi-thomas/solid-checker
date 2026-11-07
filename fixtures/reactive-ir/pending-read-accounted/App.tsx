@@ -1,4 +1,4 @@
-import { createEffect, createMemo, isPending, latest, Loading, onSettled } from "solid-js";
+import { createEffect, createMemo, createStore, flush, isPending, latest, Loading, onSettled } from "solid-js";
 
 // ADR 0838: every pending read is accounted for. Each positive is a read an
 // async walk ended at with no row of its rule; each now has an uncertifiable
@@ -106,6 +106,57 @@ export function ShorthandReference() {
   const wrapUse = () => pending();
   const box = { wrapUse };
   return <button onClick={() => [wrapUse(), box.wrapUse()]}>x</button>;
+}
+
+// R2h: a function that returns JSX and is also handed to `forEach` is an
+// escaped component; its body's role is no reason. Chrome rc.21:
+// ASYNC_OUTSIDE_LOADING_BOUNDARY (the tracked insert runs it).
+export function EscapedComponentFlush() {
+  const pending = createMemo(async () => 1);
+  const Inner = () => {
+    flush(() => {
+      pending();
+    });
+    return <span />;
+  };
+  return <p>{([1].forEach(Inner), 1)}</p>;
+}
+
+// R2h: a pending store root handed on whole is read where it is handed
+// (`Object.keys` runs the proxy's `ownKeys`): the reference is a site.
+export function StoreKeysCaught() {
+  const [store] = createStore(async () => ({ v: 0 }), { v: 0 });
+  return (
+    <p>
+      {(() => {
+        try {
+          Object.keys(store);
+        } catch {}
+        return 1;
+      })()}
+    </p>
+  );
+}
+
+// R2h: a getter's read runs where a member access enters it (`held.v` in a
+// `try`); no `try` around the read shows it, so the caught claim stays open.
+export function GetterCaught() {
+  const pending = createMemo(async () => 1);
+  const held = {
+    get v() {
+      return pending();
+    },
+  };
+  return (
+    <p>
+      {(() => {
+        try {
+          void held.v;
+        } catch {}
+        return 1;
+      })()}
+    </p>
+  );
 }
 
 // Negatives, each path decided by the walk (ADR 0838, `WalkDecided`): every

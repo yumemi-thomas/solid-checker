@@ -183,6 +183,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 905,
+      "end": 913,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -193,9 +204,31 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 988,
+      "end": 996,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1174,
+      "end": 1182,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 1174,
@@ -213,10 +246,32 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1246,
+      "end": 1254,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
       "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1487,
+      "end": 1495,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 1487,
       "end": 1495,

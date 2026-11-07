@@ -92,6 +92,12 @@ declare module "solid-js" {
   export function createStore<T extends object>(
     value: T
   ): [get: T, set: StoreSetter<T>];
+  // rc.21's function form (`store/store.d.ts`, `Refreshable` dropped): a
+  // derived store whose compute may be async.
+  export function createStore<T extends object>(
+    fn: (draft: T) => void | T | Promise<void | T>,
+    seed: T
+  ): [get: T, set: StoreSetter<T>];
   export function refresh<T>(target: Accessor<T>): Promise<T>;
   export function resolve<T>(fn: () => T): Promise<T>;
   export function until<T>(fn: () => T, options?: object): Promise<T>;

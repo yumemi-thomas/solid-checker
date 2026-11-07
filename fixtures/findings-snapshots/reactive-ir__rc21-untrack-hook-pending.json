@@ -15,6 +15,28 @@
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 666,
+      "end": 671,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 666,
+      "end": 671,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
@@ -108,6 +130,17 @@
       "code": "SC5001",
       "kind": "violation",
       "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
+      "start": 1515,
+      "end": 1521,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-untrack-hook-pending/App.tsx",
       "start": 1515,
       "end": 1521,

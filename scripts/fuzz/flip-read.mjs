@@ -93,6 +93,8 @@ export const FLIP_READ_CONTEXTS = {
   // ADR 0835 review R1/R6: a helper's read placed at one call (tracked, under `<Loading>`) and cut on another path (a chain past the walk's
   // bound in `onSettled`): the cut path's claim needs a row of its own.
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
+  // ADR 0838 (R2h): a caught read a carrier runs in tracked JSX (CAUGHT_HANDED_READS only).
+  CAUGHT_REACTIVE_READ: ["jsx"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop"],
@@ -284,6 +286,14 @@ export const PROBE_READS = {
   "probe-latest": { ...PEEK, contexts: ["jsx"], imports: ["latest"], text: (o) => `void latest(() => ${o}());` },
   "probe-is-pending": { ...PEEK, contexts: ["jsx"], imports: ["isPending"], text: (o) => `void isPending(() => ${o}());` },
 };
+// ADR 0838 (R2h): a pending read in a `try` whose catch swallows the throw, in a function a carrier runs. The boundary never sees the throw
+// (Chrome rc.21: CAUGHT only); the carrier's position was the only place the `try` was looked for.
+const CAUGHT_HANDED = { kind: "async", only: true, contexts: ["jsx"] };
+export const CAUGHT_HANDED_READS = {
+  "caught-handed-foreach": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; [1].forEach(hf);` },
+  "caught-handed-map": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; void [1].map(hf);` },
+  "caught-handed-call": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; hf.call(undefined);` },
+};
 // Review R17: an exported helper holds the read, one local call is placed (tracked, under `<Loading>`), and another module calls it: no walk here sees
 // that caller. `other` runs it in `onSettled` (Chrome: PENDING_ASYNC_FORBIDDEN_SCOPE) or in a handler never clicked. The source is module-level, so only this variant takes these contexts.
 const exportedHelperFile = (run) => ({ "eo.tsx": `import { onSettled } from "solid-js";\nimport { eRead } from "./App";\nexport function EO() {\n  ${run}\n}\n` });
@@ -458,7 +468,7 @@ export const FLIP_READ_VARIANTS = {
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
   PENDING_ASYNC_FORBIDDEN_SCOPE: EXPORT_READS,
   ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS },
-  CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
+  CAUGHT_REACTIVE_READ: { ...CAUGHT_CHAINS, ...CAUGHT_HANDED_READS },
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");

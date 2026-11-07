@@ -45,8 +45,31 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-declared-first-pass/App.tsx",
+      "start": 1096,
+      "end": 1102,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "declared-loading-value",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-declared-first-pass/App.tsx",
+      "start": 1096,
+      "end": 1102,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "source-pending-unproven",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-declared-first-pass/App.tsx",
       "start": 1096,
       "end": 1102,
@@ -61,6 +84,17 @@
       "path": "fixtures/reactive-ir/rc21-declared-first-pass/App.tsx",
       "start": 1128,
       "end": 1135,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "declared-loading-value",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-declared-first-pass/App.tsx",
+      "start": 1333,
+      "end": 1339,
       "fixes": 0
     },
     {

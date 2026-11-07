@@ -1,0 +1,59 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-caught",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 548,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 548,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-caught",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 873,
+      "end": 882,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 873,
+      "end": 882,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 1265,
+      "end": 1274,
+      "fixes": 0
+    }
+  ]
+}

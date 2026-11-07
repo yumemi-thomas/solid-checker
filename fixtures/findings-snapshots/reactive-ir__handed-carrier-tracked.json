@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2b.tsx",
+      "start": 199,
+      "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2b.tsx",
+      "start": 199,
+      "end": 203,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "violation",

@@ -94,9 +94,7 @@ impl PendingSafe {
             // Review R18: a first load throws from the probe to the boundary
             // around it (rc.21 dev.js, `latest`/`isPending`), and SC5008's own
             // census does not exempt a probe.
-            Self::PendingProbe
-            | Self::SuspendsInComputation
-            | Self::OutsideStrictWindow => {
+            Self::PendingProbe | Self::SuspendsInComputation | Self::OutsideStrictWindow => {
                 &[PendingRule::Unsuspendable]
             }
             Self::NotRenderEffect | Self::UnderLoading | Self::DeclaredFirstPaint => {
@@ -151,6 +149,15 @@ fn row_reasons(lookup: &crate::indexes::SemanticLookup<'_>, row: &AsyncRead) -> 
                 .is_some()
         });
     let mut reasons = role_reasons(lookup, row.execution, row.leaf_owner.is_some(), deferred);
+    // R2h: a body's role is a reason only for a body that runs as one. A
+    // function whose component identity is uncertain (it returns JSX and is
+    // also entered another way, `[1].forEach(K1)`) may run in its caller's
+    // render effect (Chrome rc.21: ASYNC_OUTSIDE_LOADING_BOUNDARY).
+    if row.execution == ExecutionRole::UntrackedRendering
+        && component_identity_uncertain(lookup, row)
+    {
+        reasons.retain(|reason| *reason != PendingSafe::NotRenderEffect);
+    }
     if row.under_loading {
         reasons.push(PendingSafe::UnderLoading);
     }
@@ -158,6 +165,31 @@ fn row_reasons(lookup: &crate::indexes::SemanticLookup<'_>, row: &AsyncRead) -> 
         reasons.push(PendingSafe::DeclaredFirstPaint);
     }
     reasons
+}
+
+/// Whether a function around the row's position may be a component and is
+/// not proven one (`ComponentStatus::Uncertain`), or would be one but for a
+/// reference that enters it another way (an escaped component, analyzed as
+/// one with its body's violations withdrawn to obligations).
+fn component_identity_uncertain(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    row: &AsyncRead,
+) -> bool {
+    let Some(((file, start), end)) = lookup
+        .file_by_path(row.location.path.as_ref())
+        .zip(u32::try_from(row.location.start_byte).ok())
+        .zip(u32::try_from(row.location.end_byte).ok())
+    else {
+        return true;
+    };
+    let span = Span::new(start, end);
+    let escaped = lookup.escaped_component_functions();
+    file.ast.functions.iter().any(|function| {
+        function.span.contains(span)
+            && (lookup.function_component_status(file, function)
+                == crate::indexes::ComponentStatus::Uncertain
+                || escaped.contains(&(file.path.as_str(), function.span)))
+    })
 }
 
 /// What a decided role rules out, and why:
@@ -177,6 +209,7 @@ fn row_reasons(lookup: &crate::indexes::SemanticLookup<'_>, row: &AsyncRead) -> 
 ///   pending read throws its own coded error, dev-shared.js
 ///   `throwPendingUntrackedRead`); `EffectApply`: an apply is no render (ADR
 ///   0614). SC5003 out.
+///
 /// `UntrackedCallback` (an untracked read still suspends its computation),
 /// `Unreported` (a write-classification answer: a setter's draft runs in the
 /// caller's window, review D2), `DirectiveApply` (a ref callback runs while
@@ -218,9 +251,11 @@ pub(crate) fn role_decides_path(
     deferred: bool,
 ) -> bool {
     let reasons = role_reasons(lookup, role, false, deferred);
-    PendingRule::ALL
-        .iter()
-        .all(|rule| reasons.iter().any(|reason| reason.rules_out().contains(rule)))
+    PendingRule::ALL.iter().all(|rule| {
+        reasons
+            .iter()
+            .any(|reason| reason.rules_out().contains(rule))
+    })
 }
 
 /// One read of a pending source.
@@ -240,6 +275,10 @@ pub(crate) fn account_pending_reads(
     walk_decided: &HashSet<Location>,
     draft: &mut ProgramDraft,
 ) {
+    // Review R28: the pass runs inline in `collect_project`, which every
+    // build recomputes; its raw file reads record nothing. Memoizing it
+    // needs recorded reads first.
+    debug_assert!(!crate::base::reads::recording());
     let lookup = ctx.semantic_lookup;
     let mut sites = Vec::<Site>::new();
     let mut seen = HashSet::<Location>::new();
@@ -272,17 +311,38 @@ pub(crate) fn account_pending_reads(
                 continue;
             };
             if store {
+                let mut as_object = false;
                 for member in file
                     .ast
                     .members
                     .iter()
                     .filter(|member| file.ast.peel_ts_sugar_span(member.object) == span)
                 {
+                    as_object = true;
                     add(
                         Site {
                             location: member.span.location(file.path.as_str()),
                             through: Some(reference.clone()),
                             accessor: format!("{name}.").into(),
+                            declaration: declaration.clone(),
+                        },
+                        &mut sites,
+                    );
+                }
+                // R2h: a root handed on whole (`Object.keys(s1)`, a spread, an
+                // argument) is read where it is handed: the reference is a site.
+                if !as_object
+                    && reference != *declaration
+                    && file.ast.identifiers.iter().any(|identifier| {
+                        identifier.span == span
+                            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    })
+                {
+                    add(
+                        Site {
+                            location: reference.clone(),
+                            through: Some(reference.clone()),
+                            accessor: name.to_string().into(),
                             declaration: declaration.clone(),
                         },
                         &mut sites,
@@ -416,7 +476,10 @@ pub(crate) fn account_pending_reads(
             if rule == PendingRule::Caught && (!caught_claim || caught_row) {
                 continue;
             }
-            if reasons.iter().any(|reason| reason.rules_out().contains(&rule)) {
+            if reasons
+                .iter()
+                .any(|reason| reason.rules_out().contains(&rule))
+            {
                 continue;
             }
             let decided = rows.iter().any(|row| {
@@ -479,10 +542,7 @@ fn site_reasons(
     if crate::execution_role::discarded_region_contains(file, span) {
         reasons.push(PendingSafe::Discarded);
     }
-    let callee = file
-        .ast
-        .call_at(span)
-        .map_or(span, |call| call.callee);
+    let callee = file.ast.call_at(span).map_or(span, |call| call.callee);
     if crate::execution_role::pending_accessor_probe(file, callee, lookup) {
         reasons.push(PendingSafe::PendingProbe);
     }
@@ -538,7 +598,23 @@ fn caught_claim(
         })
         .min_by_key(|caught| caught.block.end - caught.block.start)
     else {
-        return false;
+        // R2h: a method's or getter's body runs where a member access or a
+        // method call enters it (`held.v` in a `try`), which no `try` around
+        // the read shows: with a swallowing `try` in the file, the claim
+        // stays open.
+        return file.ast.functions.iter().any(|function| {
+            function.span.contains(span)
+                && (function.method_name.is_some()
+                    || file
+                        .ast
+                        .object_properties
+                        .iter()
+                        .any(|property| !property.data && property.value.contains(function.span)))
+        }) && file
+            .ast
+            .try_catches
+            .iter()
+            .any(|caught| !crate::local_access::handler_only_throws(file, caught.handler));
     };
     let lookup = ctx.semantic_lookup;
     let role = crate::execution_role::read_execution_role(
@@ -589,9 +665,11 @@ fn mounted_only(file: &solid_facts::FileFacts, function: &solid_facts::ast::Func
             .jsx_elements
             .iter()
             .any(|element| element.name.span == reference.span)
-    }) && !file.ast.assignments.iter().any(|assignment| {
-        file.ast.reference_declaration(assignment.target) == Some(binding.span)
-    })
+    }) && !file
+        .ast
+        .assignments
+        .iter()
+        .any(|assignment| file.ast.reference_declaration(assignment.target) == Some(binding.span))
 }
 
 /// ADR 0509: a reported strict read at the row's read opens it, and the
@@ -656,10 +734,16 @@ mod tests {
     fn each_reason_rules_out_only_its_rules() {
         use PendingRule::{Boundary, Caught, Unsuspendable};
         let table = [
-            (PendingSafe::Discarded, &[Unsuspendable, Boundary, Caught][..]),
+            (
+                PendingSafe::Discarded,
+                &[Unsuspendable, Boundary, Caught][..],
+            ),
             (PendingSafe::PendingProbe, &[Unsuspendable]),
             (PendingSafe::WalkDecided, &[Unsuspendable, Boundary]),
-            (PendingSafe::DeclaredServed, &[Unsuspendable, Boundary, Caught]),
+            (
+                PendingSafe::DeclaredServed,
+                &[Unsuspendable, Boundary, Caught],
+            ),
             (PendingSafe::FreshStack, &[Unsuspendable, Boundary, Caught]),
             (PendingSafe::SuspendsInComputation, &[Unsuspendable]),
             (PendingSafe::OutsideStrictWindow, &[Unsuspendable]),

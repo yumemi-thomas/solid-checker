@@ -139,6 +139,8 @@ operator, template or loop there or in the body before the effect, which may
 throw through a coercion (ADR 0511 closes ADR 0507's residual). The climb also passes a `<Loading>` with a literal
 `fallback` and no `on`, which renders its one child at creation (ADR 0511).
 
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent. A walk cut on one path leaves the read its own rows, whatever the other paths placed.
+
 ## Examples
 
 Incorrect:

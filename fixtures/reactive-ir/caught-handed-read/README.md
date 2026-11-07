@@ -1,0 +1,3 @@
+# caught-handed-read
+
+Claim (ADR 0838, R2h): a `try` around a pending read swallows its not-ready throw wherever the carrier that runs the function stands, so no boundary claim (SC5003) is proved there; the read is uncertifiable, blocker `async-read-caught`. The build before looked for the `try` only at the carrier's position (`[1].forEach(handed)`, `handed.call(undefined)`) and proved SC5003 at the read, which Chrome rc.21 does not warn (it reports CAUGHT_REACTIVE_READ only). Positives (uncertifiable, never a violation): `CaughtHandedRead` (`forEach`), `CaughtCalledRead` (`.call`). Negative twin: `HandedRead`, the same carrier with no `try`, keeps its SC5003 violation. Stubs copied from `async-boundary-call-attributed` (rc.21 `createMemo`, `render`).

@@ -117,7 +117,10 @@ fn returned_values(
 }
 
 /// The `catch` at `handler` holds a single `throw` statement and nothing else.
-pub(crate) fn handler_only_throws(file: &solid_facts::FileFacts, handler: solid_facts::core::Span) -> bool {
+pub(crate) fn handler_only_throws(
+    file: &solid_facts::FileFacts,
+    handler: solid_facts::core::Span,
+) -> bool {
     file.ast
         .throw_statements
         .iter()
@@ -5469,13 +5472,9 @@ impl LocalAccessContext<'_, '_> {
             // ADR 0531: the read's row, not this walk, places its function's
             // inline carriers.
             open |= depth == 0 && !all_carriers.is_empty();
-            let carriers = if depth > 0 {
-                all_carriers
-            } else {
-                Vec::new()
-            }
-            .into_iter()
-            .map(|carrier| (carrier, carrier, true));
+            let carriers = if depth > 0 { all_carriers } else { Vec::new() }
+                .into_iter()
+                .map(|carrier| (carrier, carrier, true));
             for (position, anchor, carrier) in calls.chain(carriers).collect::<Vec<_>>() {
                 if crate::execution_role::discarded_region_contains(file, anchor) {
                     continue;
@@ -5506,7 +5505,13 @@ impl LocalAccessContext<'_, '_> {
                 if nested_named_function(file, position, self.lookup)
                     || escapes_nested(file, position, self.lookup)
                 {
-                    sites.push((anchor, depth + 1, every && !carrier, first && !carrier, false));
+                    sites.push((
+                        anchor,
+                        depth + 1,
+                        every && !carrier,
+                        first && !carrier,
+                        false,
+                    ));
                     continue;
                 }
                 // ADR 0563: a carrier that may run the function zero times,
@@ -5619,7 +5624,7 @@ impl LocalAccessContext<'_, '_> {
                             declared_loading: false,
                             options_opaque: options.opaque,
                             provenance_open: options.provenance_open,
-                            caught: false,
+                            caught: caught_in_try(file, read.span) || caught_in_try(file, anchor),
                             component_prop: false,
                             ssr_client_hole: options.ssr_client_bare,
                             server_rendering_unresolved: options.server_rendering_unresolved,
@@ -5723,7 +5728,7 @@ impl LocalAccessContext<'_, '_> {
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
                     provenance_open: options.provenance_open,
-                    caught: false,
+                    caught: caught_in_try(file, read.span) || caught_in_try(file, anchor),
                     component_prop: false,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
@@ -6739,7 +6744,9 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
                 provenance_open: async_options.provenance_open,
-                caught: caught_in_try(file, timing_at),
+                // ADR 0838 (R2h): a `try` around the read swallows its throw
+                // wherever the carrier that runs it stands.
+                caught: caught_in_try(file, timing_at) || caught_in_try(file, call.span),
                 component_prop: self.read_in_component_prop(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
                 server_rendering_unresolved: async_options.server_rendering_unresolved,
