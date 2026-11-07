@@ -1,0 +1,60 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-budget/App.tsx",
+      "start": 10651,
+      "end": 10655,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-budget/App.tsx",
+      "start": 12577,
+      "end": 12583,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-budget/App.tsx",
+      "start": 13070,
+      "end": 13075,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-budget/App.tsx",
+      "start": 13214,
+      "end": 13218,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-budget/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

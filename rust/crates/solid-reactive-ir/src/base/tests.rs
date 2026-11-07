@@ -2279,26 +2279,23 @@ fn an_own_prototype_write_vetoes_the_standard_member() {
         )
     };
     let late = "(cb: () => void) => { queueMicrotask(cb); }";
-    assert_eq!(
+    assert!(
         vetoed(&format!(
             "function Foo() {{}} (Foo as any).prototype = Array.prototype; (Foo as any).prototype.forEach = {late};"
         ))
-        .0,
-        true
+        .0
     );
-    assert_eq!(
+    assert!(
         vetoed(&format!(
             "function Foo() {{}} const k: string = (globalThis as any).k; (Foo as any)[k] = {{}}; (Foo as any).prototype.forEach = {late};"
         ))
-        .0,
-        true
+        .0
     );
-    assert_eq!(
+    assert!(
         vetoed(&format!(
             "const gp = Object.getPrototypeOf([]); gp.forEach = {late};"
         ))
-        .1,
-        true
+        .1
     );
     assert_eq!(
         vetoed(&format!(

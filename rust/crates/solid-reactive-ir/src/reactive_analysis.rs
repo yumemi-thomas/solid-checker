@@ -469,6 +469,17 @@ pub(crate) fn collect_project<'facts>(
     // reference's row stays where it was.
     let mut use_rows = Vec::new();
     let mut used = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
+    // A walk the step budget cut: unknown past the cut, so a row at its root
+    // that nothing deduplicates or covers. A root in a dependency file is not
+    // reported: the project's references of the same symbol carry it too.
+    let mut budget_rows = Vec::new();
+    let budget = |callee: &str, location: typefacts::Location| {
+        census_obligation(
+            callee,
+            location,
+            &crate::blockers::with_detail(crate::blockers::VALUE_USE_UNCLASSIFIED, "budget"),
+        )
+    };
     // ADR 0860: the rows past an escape, after every other.
     let mut escaped_rows = Vec::new();
     let mut escaped_seen = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
@@ -486,6 +497,28 @@ pub(crate) fn collect_project<'facts>(
                 .symbol_names
                 .get(symbol)
                 .map_or_else(|| "this value".to_owned(), ToString::to_string);
+            let cut = census.take_cut();
+            if cut {
+                budget_rows.push(budget(&callee, reference.clone()));
+                if let Some(package) = ctx.facts.dependency_source_root(reference.path.as_ref()) {
+                    let mut project = ctx
+                        .semantic_lookup
+                        .symbol_references(symbol.as_str())
+                        .into_iter()
+                        .filter(|other| {
+                            ctx.facts
+                                .dependency_source_root(other.path.as_ref())
+                                .is_none()
+                        })
+                        .collect::<Vec<_>>();
+                    // Review D33: a dependency source the project never names
+                    // still reaches it; its imports of the package carry the row.
+                    if project.is_empty() {
+                        project = project_imports_of(ctx, package);
+                    }
+                    budget_rows.extend(project.into_iter().map(|other| budget(&callee, other)));
+                }
+            }
             // The obligation sits at each use the walk ended at, too.
             for (location, blocker) in census.take_uses() {
                 if used.insert((
@@ -508,6 +541,10 @@ pub(crate) fn collect_project<'facts>(
             let Some(blocker) = open else {
                 continue;
             };
+            // The budget row stands for a reference the cut left open.
+            if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
+                continue;
+            }
             handed.push(census_obligation(&callee, reference, blocker));
         }
     }
@@ -526,6 +563,17 @@ pub(crate) fn collect_project<'facts>(
                 ctx.dialect.returns_store(primitive),
                 ctx.dialect.returns_reactive_tuple(primitive),
             );
+            let cut = census.take_cut();
+            if cut {
+                budget_rows.push(budget("this value", call.span.location(file.path.as_str())));
+                if let Some(package) = ctx.facts.dependency_source_root(file.path.as_str()) {
+                    budget_rows.extend(
+                        project_imports_of(ctx, package)
+                            .into_iter()
+                            .map(|import| budget("this value", import)),
+                    );
+                }
+            }
             for (location, blocker) in census.take_uses() {
                 if used.insert((
                     location.path.clone(),
@@ -547,6 +595,9 @@ pub(crate) fn collect_project<'facts>(
             let Some(blocker) = open else {
                 continue;
             };
+            if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
+                continue;
+            }
             handed.push(census_obligation(
                 "this value",
                 call.span.location(file.path.as_str()),
@@ -636,6 +687,7 @@ pub(crate) fn collect_project<'facts>(
     for obligation in handed {
         draft.push_defect(obligation);
     }
+    draft.static_defects.extend(budget_rows);
     draft.deferred_defects.extend(escaped_rows);
     // ADR 0509: a reported read of a proven async source with no async row
     // (a transported read, a module source read in another file) may meet the
@@ -1281,6 +1333,83 @@ fn target_summary_complete(
 /// The analyzed file at `path`: a selected slot, or a missing-path probe.
 fn analyzed_file<'c>(ctx: &AnalysisContext<'c>, path: &str) -> Option<&'c solid_facts::FileFacts> {
     ctx.semantic_lookup.file_by_path(path)
+}
+
+/// Review D33: the project imports a budget row for a walk rooted in the
+/// dependency package at `package` is reported at. The project's own imports
+/// of the package, else, through the dependency files that import it, the
+/// project's imports of the packages that reach it (a package the project
+/// reaches only through another); with none at all, every project import of
+/// a selected dependency package, so the row is never internal only.
+/// Resolution is the compiler's attested one, else a relative path.
+fn project_imports_of(ctx: &AnalysisContext<'_>, package: &str) -> Vec<typefacts::Location> {
+    let lookup = ctx.semantic_lookup;
+    let files = lookup.files();
+    // Every non-type import that lands in a dependency package: who imports it,
+    // the importer's package (None in the project), the landed package.
+    let mut edges = Vec::new();
+    for file in files {
+        let from = ctx.facts.dependency_source_root(file.path.as_str());
+        for import in file.ast.imports.iter().filter(|import| !import.type_only) {
+            let landing = match lookup.resolved_imports() {
+                Some(imports) => {
+                    match imports.specifier(file.path.as_str(), import.span, &import.module) {
+                        solid_facts::SpecifierAttestation::Attested(row)
+                            if !row.resolved_path.is_empty() =>
+                        {
+                            Some(if row.included_path.is_empty() {
+                                row.resolved_path.to_string()
+                            } else {
+                                row.included_path.to_string()
+                            })
+                        }
+                        _ => None,
+                    }
+                }
+                None => solid_facts::resolve_relative_module_path(
+                    file.path.as_str(),
+                    &import.module,
+                    files.iter().map(|file| file.path.as_str()),
+                )
+                .map(|path| path.to_string()),
+            };
+            let Some(landed) = landing
+                .as_deref()
+                .and_then(|landing| ctx.facts.dependency_source_root(landing))
+            else {
+                continue;
+            };
+            if from == Some(landed) {
+                continue;
+            }
+            edges.push((from, landed, import.span.location(file.path.as_str())));
+        }
+    }
+    let mut reached = vec![package];
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < reached.len() {
+        let current = reached[index];
+        index += 1;
+        for (from, landed, location) in &edges {
+            if *landed != current {
+                continue;
+            }
+            match from {
+                None => found.push(location.clone()),
+                Some(importer) if !reached.contains(importer) => reached.push(importer),
+                Some(_) => {}
+            }
+        }
+    }
+    if found.is_empty() {
+        found = edges
+            .iter()
+            .filter(|(from, _, _)| from.is_none())
+            .map(|(_, _, location)| location.clone())
+            .collect();
+    }
+    found
 }
 
 #[cfg(test)]

@@ -7074,5 +7074,11 @@
    "lg-strict-read-untracked-proto-const-symbol-signal-direct-closure"
   ],
   "rediscovered": "m35: four uncertifiable legal twins; m36: four clean, Chrome silent on all four. symbol-key-const fails on m35 with standard-member-impostor at sort and passes on m36; patch-const-symbol misuse twins remain held on both builds."
+ },
+ {
+  "finding": "a value walk the 512-step budget cut could end with no row: `position()`'s cut is the one Open returned before its use is recorded, so a caller that discards it (a parameter hop, an escape or past-withheld walk) dropped it; on 26468b004 compass-ui apps/ui cuts at store.test.ts 22890 and in @kobalte/core with no row there",
+  "found": "C2's attribution of the 22 merge sites; review D33",
+  "fixed": "ADR 0878",
+  "outside": "the silent form needs a cut whose Open a discarding caller swallows on a reference no other row covers; the generated alias, holder and parameter chains past the budget all keep a cut row on the old build (rows at the cut and the use), so no generated program fails it. Fixture value-walk-budget pins the budget row and its twin; the corpus measures the rest"
  }
 ]

@@ -361,6 +361,10 @@ pub(crate) struct Census<'l, 'a> {
     /// The uses a walk ended at, past the reference it started from: the
     /// obligation sits at the use too, so each has a row of its own.
     uses: Vec<(Location, &'static str)>,
+    /// A walk of the current reference ran past `MAX_STEPS`: what lies past
+    /// the cut is unknown, so the reference owes a budget row of its own
+    /// ([`Self::take_cut`]), whatever its walks answered.
+    cut: bool,
     /// ADR 0876: the calls a withheld member heads, walked on after every
     /// other walk: this walk's memo and budget decide those walks' rows.
     past_withheld: Vec<(&'a FileFacts, &'a solid_facts::ast::CallFact, Mode)>,
@@ -410,11 +414,19 @@ impl<'l, 'a> Census<'l, 'a> {
             hop_starts: HashSet::default(),
             async_walk: true,
             uses: Vec::new(),
+            cut: false,
             past_withheld: Vec::new(),
             escapes: Vec::new(),
             escaped_uses: Vec::new(),
             allowed: HashMap::default(),
         }
+    }
+
+    /// Whether a walk since the last call ran past the step budget. The
+    /// caller files a budget row at the walk's root for it, which nothing
+    /// deduplicates: a cut walk is never silent.
+    pub(crate) fn take_cut(&mut self) -> bool {
+        std::mem::take(&mut self.cut)
     }
 
     /// The uses the walks so far ended at, each with the position it is in.
@@ -684,6 +696,7 @@ impl<'l, 'a> Census<'l, 'a> {
     fn position(&mut self, file: &'a FileFacts, at: Span, mode: Mode) -> Position {
         self.steps += 1;
         if self.steps > MAX_STEPS {
+            self.cut = true;
             return Position::Open(blockers::VALUE_USE_UNCLASSIFIED);
         }
         let entry = self.steps;
