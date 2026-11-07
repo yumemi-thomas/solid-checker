@@ -241,6 +241,33 @@ Tip `0d4fc51c7` on `claude/flip-r2`, green: `make verify` 0 on `0a28b067d` (its 
 
 **Traps:** a site text over lines needs `AUX` on the statement's line (flip-read.mjs `AUX`), or every program is `not-fired`. A heredoc'd Python with `\"` inside a JSON string fails: write the script to a file. `run.mjs` copies only `App.tsx` (inline helpers for Chrome). A sweep needs a baseline on the same census state: the integrator's is `/Users/thomas/dev/sc-scratch.noindex/flip-reads/sweep-m12a.json`.
 
+## R2f, from 2026-11-07
+
+Same branch, worktree and scratch `$S` as R2e. Census merged twice (3d1518d6a, committed by R2e's verify run under a docs message; 0540b953d).
+
+| Commit | ADR | Proved | Now uncertifiable | Measured |
+|---|---|---|---|---|
+| `e0606cbb7` | 0831 | | every use a census walk ends at (IIFE, `let`, class field walked on) | wd-* 60 FC (mg1) to 0; corpus +2,048 U, 0 removed, 330 V; approved: cases.json 6 rows, wasm-parity w3 metrics |
+| `4787f08e1` | 0832 | | flush in a closure handed to project code in a step | FLUSH_IN_ACTION forward 20 FC to 0; legal 160 clean; corpus 0 |
+| `58d14e945` | 0833 | | read in a setter's callback in a named helper | setter-fn-apply 6 FC to 0; corpus 0 |
+| `3f0c6f146` | 0834 | `resolve` in an IIFE in a flow row's JSX (Chrome) | async read through a chain in a flow row's tracked JSX | ASYNC_OUTSIDE `for` 2 FC to 0; corpus +3 U; ledger drops row SC2004 |
+| `e5589a4aa` | 0836 | | 12 false positives (SC5003 V, Chrome PENDING_ASYNC_UNTRACKED_READ) | 12 wrong-rule to recall-gap; 7,294 ids, nothing else; corpus +5 U |
+| `fa46bab30` | 0835 | | call-attributed walk cut at its bound | PENDING_ASYNC_FORBIDDEN_SCOPE 3 to recall-gap; corpus 0 |
+| `d03b54b5f` | 0837 | | call nothing places in an anonymous closure | ASYNC_OUTSIDE forward 6 FC to 0; 5,740 ids 0 FC; corpus +4 U |
+
+### R2f handoff, 2026-11-07
+
+Tip `0540b953d` on `claude/flip-r2` (merge of census 6bea29db5), green: verify-delta 0, `make verify` 0. Last builds in `$S`: `rmg2` (merged tip), sweep baseline `sweep-ao4.json` (d03b54b5f; the merge's census side moved the corpus, so take a new baseline on `rmg2` first). Context limit reached; nothing uncommitted.
+
+**Next, in order (coordinator):**
+1. ADR 0838, approved design: every pending read claim is accounted for. Per (site, pending rule), not per site: each pending code the site could raise (PENDING_ASYNC_UNTRACKED_READ, PENDING_ASYNC_FORBIDDEN_SCOPE, ASYNC_OUTSIDE_LOADING_BOUNDARY, LOADING_ON_OUTSIDE_HOLD, and whatever else maps to SC5001/SC5003 contexts); a row of one rule does not account for another rule's claim. Sites: every call (and `.call`/bound invoke, member Get of an async store root) of a source not proved Sync (`ctx.async_sources` must include sources whose async-ness is unknown, or those reads join another way: say which in the ADR; `NotAPendingSource` is the only way out). Check: once, in `reactive_analysis.rs`, after every producer (local access, interprocedural, the transported/handed rows near `reactive_analysis.rs:650-920`, upstream) and before projection. Accounted by: (a) an async row of that rule whose `location`, `pending_origin` or a new `origin` (set on call-attributed, unplaced and bounded rows) equals the site; (b) an SC9012 row at the exact site (location or origin = the read), never SC1001/SC5008; (c) a recorded `PendingSafe` reason (`draft.pending_safe`), a closed enum where each variant names the rules it rules out, and only those (e.g. `SuspendsInComputation` rules out the untracked-read claim, never ASYNC_OUTSIDE's): write the variant/rule table in the ADR. Unaccounted: an `AsyncRead` with `execution: Unknown`, flag giving blocker `async-read-unaccounted` (`blockers::for_async_read`), added only where no row of that rule stands (cannot displace a V). Debug: role-log record per unaccounted claim; a lib test over the async fixtures asserting none where the README claims full accounting; ledger key. Audit every end of the async walks: `push_call_attributed_async_reads` (visited, generator, component, `!site_runs_during_local_call`, no binding, written binding, discarded region, probe, served, nested climb), unplaced arms (ADRs 0667/0779/0836/0837: add `origin`), `bounded_async_reads` (0835: add `origin`). `after_await`/`pre_await`: list their row-less ends in the ADR and add an open-work item (follow-up, not in 0838). Measure: corpus V must not move except to U where proof is missing (read each, grouped by the exit that lost it); the async codes' ids (`$S/work/mx-ao4.json` 5,740, `mx-fp.json`, legal `lg-fp.json`, `lg-flow-async.json`); R3's four new contexts (handed-flush, named-flush, flush-iife: ask R3 for ids; R3 owns their generator entries). ADR numbers 0838+.
+2. `<Ui.C />` (R2e's plan, R2e handoff step 1). After merging the census tip, any fixture U count that falls needs a `drops` row (scripts/guard/counts.json).
+3. Window-realm proof (R2d step 5).
+
+**Helpers added in `$S`:** `tools/mkcase.mjs` (checker projects for ids by regex, node_modules linked), `tools/runall.sh` (run1 on each project), `tools/ctxids.mjs` (recall ids by context), `tools/lgctx.mjs` (legal ids by context), `tools/sample.mjs` (added rows per blocker with byte-exact text). `snapdiff.mjs` now resolves `variants/` fixtures and survives a failing project (pass `SOLID_TYPEFACTS_BIN`). Commit messages in `$S/work/msg-08*.txt`.
+
+**Traps.** A row pushed during a walk can block a later V at the same start (one SC9012/async row per location): defer, as `bounded_async_reads` does. Changing `async_execution_role` itself fails open for the interprocedural callers that open an obligation only on a tracked answer (ADR 0836's first draft lost 44 rows): add a placement-only variant. `run1.sh` and `sw.sh` need absolute paths. `python3` may be missing from a `sh -c` PATH: use `/usr/bin/env python3`. The removal safety check blocks `rm` inside `sh -c`: write new log names instead. A fixture copied from `observer-callers`/`flow-iife-tracked` carries an SC9014 `dialect-detection` row from its stub.
+
 ## R2 handoff, 2026-11-06
 
 For a fresh agent. Read `scripts/flip/notes/agents-brief.md`, then the rules below, which replace the brief where they differ. Branch `claude/flip-r2`, worktree `t3-7c67e91b`, no merge or push unless told. Scratch `$S` is `/Users/thomas/dev/sc-scratch.noindex/flip-r2`; never `/tmp`, a reboot wipes it.

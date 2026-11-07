@@ -5577,8 +5577,14 @@ impl LocalAccessContext<'_, '_> {
                     // it may run there, past no boundary.
                     // ADR 0836: so may one in a child function's closure, which
                     // nothing places in a tracked insert (`async_execution_role`).
+                    // ADR 0837: and any position nothing places (an anonymous
+                    // closure handed on in a tracked insert): no binding climbs
+                    // out of it, so the walk would end with no row.
                     let unplaced_child = lexical == ExecutionRole::Unknown
-                        && semantic == ExecutionRole::DeferredCallback;
+                        && matches!(
+                            semantic,
+                            ExecutionRole::DeferredCallback | ExecutionRole::Unknown
+                        );
                     if (unplaced_child
                         || (lexical == ExecutionRole::TrackedJsx
                             && read_loading_cover(self.lookup, file, position, self.symbol_names)
