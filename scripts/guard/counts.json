@@ -163,7 +163,7 @@
   "SC9012 import-unresolved": 37,
   "SC9012 installed-member": 38,
   "SC9012 leaf-callback-opaque": 122,
-  "SC9012 listener-reach": 28,
+  "SC9012 listener-reach": 43,
   "SC9012 package-callee": 14,
   "SC9012 parameter-call-argument-unproven": 47,
   "SC9012 parameter-default-unresolved": 5,

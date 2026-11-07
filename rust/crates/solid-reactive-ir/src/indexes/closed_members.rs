@@ -22,12 +22,23 @@ impl<'a> SemanticLookup<'a> {
         member: &MemberFact,
     ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
         let file = self.file_by_path(file.path.as_str())?;
-        let value = *self
-            .closed_members
-            .get_or_init(|| closed_members(self))
-            .get(&(file.path.as_str(), member.span))?;
-        let function = file.ast.function_at(value)?;
+        let function = file
+            .ast
+            .function_at(self.closed_member_value(file, member)?)?;
         Some((file, function))
+    }
+
+    /// The value of a closed literal's member read: a function, or a name
+    /// that may hold one.
+    pub(crate) fn closed_member_value(
+        &self,
+        file: &FileFacts,
+        member: &MemberFact,
+    ) -> Option<Span> {
+        self.closed_members
+            .get_or_init(|| closed_members(self))
+            .get(&(file.path.as_str(), member.span))
+            .copied()
     }
 }
 
@@ -103,7 +114,7 @@ fn closed_binding_members(
             .trim_matches(['"', '\'']);
         *keys.entry(key).or_default() += 1;
         let value = file.ast.peel_ts_sugar_span(property.value);
-        if file.ast.function_at(value).is_some() {
+        if file.ast.function_at(value).is_some() || crate::owners::is_identifier_span(file, value) {
             functions.insert(key, value);
         }
     }

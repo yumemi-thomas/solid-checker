@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
-import { STOP_VARIANTS, stopPlan, stopProblems } from "./stop-holder.mjs";
+import { STOP_VARIANTS, readStopSource, stopPlan, stopProblems } from "./stop-holder.mjs";
 import { ALIAS_OWNER, CASTS_STAGE2, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
 
 /** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
@@ -128,21 +128,22 @@ async function stopHolderCheck(dir, rows, args) {
   const stop = Object.entries(rows.grids).flatMap(([grid, list]) => Object.entries(list).filter(([, row]) => row.cause === STOP_NAMED_U).map(([id]) => ({ id, grid, variant: variants.get(`${grid}/${id}`) })));
   const plan = stopPlan(stop, ({ grid, id }) => {
     const folder = join(dir, grid, "cases", id);
-    return { text: readFileSync(join(folder, "App.tsx"), "utf8"), others: readdirSync(folder).filter((name) => /\.[cm]?[jt]sx?\$/.test(name) && name !== "App.tsx").length };
+    return readStopSource(folder);
   });
   const root = mkdtempSync(join(tmpdir(), "stop-holder-"));
   const cases = plan.checked.map(({ id, text }) => { const folder = join(root, "src", id); mkdirSync(folder, { recursive: true }); writeFileSync(join(folder, "App.tsx"), text.replace("export function C1()", "export function App()")); return { id, dir: folder }; });
   const { runChecker } = await import("./patterns.mjs");
   const findings = await runChecker(cases, join(root, "work"), { checker, typefacts });
   rmSync(root, { recursive: true, force: true });
-  return { checked: plan.checked.length, unchecked: plan.unchecked.length, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length, problems: stopProblems(plan, findings) };
+  return { checked: plan.checked.length, unchecked: plan.unchecked.length, uncheckedIds: plan.unchecked, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length, problems: stopProblems(plan, findings) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.includes("--final")) {
     const blockers = finalBlockers(readOpenDefects());
-    console.log(`final gate: ${blockers.length} rows under ${F1_OPEN}, ${F2_OPEN}, ${ALIAS_OWNER} or ${CASTS_STAGE2}, certified or false positive`);
+    console.log(`final gate: ${blockers.length} rows under ${F1_OPEN}, ${F2_OPEN}, ${ALIAS_OWNER} or ${CASTS_STAGE2}, certified, false positive or unchecked stop row`);
+    for (const id of readOpenDefects().rows?.stopUnchecked ?? []) console.log(`unchecked stop row ${id}`);
     process.exit(blockers.length ? 1 : 0);
   }
   const at = args.indexOf("--update");
@@ -168,6 +169,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const problem of stopRun.problems) console.log(`stop holder ${problem}`);
   if (stopRun.problems.length) throw new Error(`${stopRun.problems.length} stop rows fail the holder-free check: a U that was the holder's is a false clean, back to its owner`);
   if (added.length && !args.includes("--allow-new")) throw new Error(`${added.length} new rows: a new failing row is a defect to read, not to list. Pass --allow-new to list them`);
+  out.stopUnchecked = stopRun.uncheckedIds;
   writeFileSync(OPEN_ROWS, printLedger(out));
   console.log(JSON.stringify(ledgerCounts(out), null, 1));
 }

@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { STOP_VARIANTS, holderFree, stopPlan, stopProblems } from "./stop-holder.mjs";
+import { readStopSource, STOP_VARIANTS, holderFree, stopPlan, stopProblems } from "./stop-holder.mjs";
+import { finalBlockers } from "./open-defects.mjs";
 import { inStopGroup } from "./open-rows.mjs";
 
 // The generator's own text of each stop variant (misuse.mjs), with `o` the site.
@@ -42,4 +46,22 @@ describe("the stop rows' holder-free check", () => {
   it("leaves a stop row with no holder alone", () => {
     expect(stopPlan([{ id: "a", variant: null }, { id: "b", variant: "other" }], () => { throw new Error("read"); })).toEqual({ checked: [], unmatched: [], unchecked: [] });
   });
+});
+
+
+describe("stop source discovery", () => {
+  it.each(["helper.ts", "helper.tsx", "helper.mts", "helper.cts", "helper.js", "helper.jsx", "helper.mjs", "helper.cjs"])("counts %s from real files as unchecked", (sibling) => {
+    const folder = mkdtempSync(join(tmpdir(), "stop-siblings-"));
+    try {
+      writeFileSync(join(folder, "App.tsx"), "(({ __proto__: s1 }) as any).x = 7");
+      writeFileSync(join(folder, sibling), "export const helper = 1;");
+      writeFileSync(join(folder, "notes.txt"), "ignored");
+      const plan = stopPlan([{ id: "a", variant: "proto-literal" }], () => readStopSource(folder));
+      expect(plan).toEqual({ checked: [], unmatched: [], unchecked: ["a"] });
+    } finally { rmSync(folder, { recursive: true, force: true }); }
+  });
+});
+
+it("keeps every unchecked stop id blocking the final gate", () => {
+  expect(finalBlockers({ rows: { grids: {}, stopUnchecked: ["a", "b"] } })).toEqual(["unchecked-stop/a", "unchecked-stop/b"]);
 });

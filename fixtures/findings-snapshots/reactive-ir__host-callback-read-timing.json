@@ -304,6 +304,17 @@
       "blocker": "listener-reach",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
+      "start": 2454,
+      "end": 2493,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
       "start": 2724,
       "end": 2784,
       "fixes": 0

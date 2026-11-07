@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 // A stop row (open-rows.mjs, R-stop-named-U) clears on a named U in its statement. That U can be raised by a holder the generator adds, not by the
 // site: remove the holder and the same site may be certified while Chrome fires (the coordinator's audit, ADR 0815). So every stop row with a holder
 // must keep a finding with the holder removed. A row a file other than App.tsx holds is reported unchecked, with a count, never as passing.
@@ -48,4 +51,9 @@ export function stopProblems(plan, findings) {
     ...plan.checked.filter(({ id }) => findings.get(id) === null || findings.get(id) === undefined).map(({ id }) => `${id}: the checker gave no result`),
     ...plan.checked.filter(({ id }) => findings.get(id)?.length === 0).map(({ id }) => `${id}: certified with the holder removed, so its U was the holder's`),
   ];
+}
+
+/** Discover the program files from disk so a multi-file case cannot pass as a single-file check. */
+export function readStopSource(folder) {
+  return { text: readFileSync(join(folder, "App.tsx"), "utf8"), others: readdirSync(folder).filter((name) => /\.[cm]?[jt]sx?$/.test(name) && name !== "App.tsx").length };
 }

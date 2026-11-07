@@ -55,6 +55,28 @@
       "start": 283,
       "end": 323,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-listener-shared/App.tsx",
+      "start": 352,
+      "end": 397,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-listener-shared/App.tsx",
+      "start": 469,
+      "end": 540,
+      "fixes": 0
     }
   ]
 }

@@ -50,7 +50,7 @@ export const CASTS_STAGE2 = "R-casts-stage2";
  * The rows #173 may not move with (`make flip-final`, open-rows.mjs --final): R-F1-open and R-F2-open, and any certified false clean or false
  * positive the ledger holds, whatever its cause: the ratchet's `certified`, `certifiedF2` and `falsePositive` must all be 0 (coordinator, Part 16).
  */
-export const finalBlockers = (list) => [...Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN, ALIAS_OWNER, CASTS_STAGE2].includes(row.cause) || row.certified === true || row.outcome === "false-positive").map(([id]) => `${grid}/${id}`)), ...(list.patterns ?? []).filter((row) => row.outcome === "false-positive" || row.certified === true).map((row) => `patterns/${row.id}`)];
+export const finalBlockers = (list) => [...(list.rows?.stopUnchecked ?? []).map((id) => `unchecked-stop/${id}`), ...Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.entries(rows).filter(([, row]) => [F1_OPEN, F2_OPEN, ALIAS_OWNER, CASTS_STAGE2].includes(row.cause) || row.certified === true || row.outcome === "false-positive").map(([id]) => `${grid}/${id}`)), ...(list.patterns ?? []).filter((row) => row.outcome === "false-positive" || row.certified === true).map((row) => `patterns/${row.id}`)];
 
 /**
  * The agent a ledger row is assigned to (open-defects.json `owners`, by exact `grid/id`), written into the row by open-rows.mjs. A certified
