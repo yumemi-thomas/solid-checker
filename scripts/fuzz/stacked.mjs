@@ -4,7 +4,10 @@
 import { readFileSync } from "node:fs";
 import { codesForRule } from "./codes.mjs";
 
-export const STACKED_PAIRS = JSON.parse(readFileSync(new URL("./stacked-pairs.json", import.meta.url), "utf8")).pairs;
+const TABLE = JSON.parse(readFileSync(new URL("./stacked-pairs.json", import.meta.url), "utf8"));
+export const STACKED_PAIRS = TABLE.pairs;
+/** Patterns scored `stacked-claim` by exact id (`patternClaim`); no rule reaches them, each is listed with its pair. */
+export const PATTERN_CLAIMS = TABLE.patternClaims;
 export const pairOf = (row) => `${row.first}|${row.finding.split("@")[0]}`;
 
 /** Off-site rows (`{ finding, verdict, first? }`) split: false positives (an unproved stack among them) and proved stacked claims. */
@@ -28,4 +31,19 @@ export function stackedProblems(rows, records, pairs = STACKED_PAIRS, { only } =
     }
   }
   return problems;
+}
+
+/**
+ * The pattern lane's `stacked-claim`, ADR 0887's rule unchanged: a false positive with the pair's rule alone, of an id `claims` lists, whose first-throw
+ * code fired in Chrome on the pattern, and whose pair's twins hold in this same run. Anything else keeps its outcome: an unlisted pattern, or a failed
+ * twin, is a false positive. `rows` are the run's judged rows, `records` Chrome's by id.
+ */
+export function patternClaim(row, rows, records, claims = PATTERN_CLAIMS, pairs = STACKED_PAIRS) {
+  const pair = claims[row.id]?.pair;
+  if (!pair || row.outcome !== "false-positive" || !pairs[pair]) return row;
+  const [first, rule] = pair.split("|");
+  if (row.rules?.length !== 1 || row.rules[0] !== rule) return row;
+  if (!(records.get(row.id)?.codes ?? []).includes(first)) return row;
+  if (stackedProblems(rows, records, { [pair]: pairs[pair] }).length) return row;
+  return { ...row, outcome: "stacked-claim", pairs: [pair] };
 }

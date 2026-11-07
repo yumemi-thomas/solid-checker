@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { besideCode, codeOfLogged, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
-import { stackedProblems } from "./stacked.mjs";
+import { patternClaim, stackedProblems } from "./stacked.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -254,7 +254,8 @@ async function main() {
   const records = await runChrome(cases, join(out, "chrome"));
   const findings = await runChecker(cases, join(out, "check"), { checker, typefacts });
   const expected = JSON.parse(readFileSync(join(here, "expected-silent.json"), "utf8")).patterns;
-  const rows = cases.map(({ id }) => ({ id, ...expectedSilent(judgePattern(records.get(id) ?? { codes: [], failure: "no record" }, findings.get(id) ?? null), expected[id]) }));
+  const judged = cases.map(({ id }) => ({ id, ...expectedSilent(judgePattern(records.get(id) ?? { codes: [], failure: "no record" }, findings.get(id) ?? null), expected[id]) }));
+  const rows = judged.map((row) => patternClaim(row, judged, records));
   writeFileSync(join(out, "patterns.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
   // Measured, not counted: the false cleans a withholding would cover through a mount line of their stacks (`mountOnly`), or by a frame's
   // line at another column (`lineOnly`).

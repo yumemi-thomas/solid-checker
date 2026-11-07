@@ -24,7 +24,7 @@ describe("the known open list", () => {
     console.log(`known open: ${list.patterns.length} patterns (${count("false-positive")} false positive, ${count("false-clean")} false clean), ${list.grids.length} grid families`);
     for (const entry of list.patterns) {
       expect(entry.item).toBeTruthy();
-      expect(["false-positive", "false-clean", "misplaced", "no-run"]).toContain(entry.outcome);
+      expect(["false-positive", "false-clean", "misplaced", "no-run", "stacked-claim"]).toContain(entry.outcome);
       expect(existsSync(join(PATTERNS, entry.id, "App.tsx")), entry.id).toBe(true);
     }
   });

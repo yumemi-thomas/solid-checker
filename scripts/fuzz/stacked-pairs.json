@@ -11,5 +11,8 @@
   "ACTION_CALLED_IN_OWNED_SCOPE|flush-in-action": { "patterns": ["stacked/s9-flush-action"], "why": "the action run from a handler, with no owned scope to throw first: flush inside it rejects with FLUSH_IN_ACTION. With `act()` in a memo, ACTION_CALLED_IN_OWNED_SCOPE throws before the flush runs" },
   "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": { "kind": "repeat", "patterns": ["stacked/r1-read-after-await-once", "stacked/r1c-bind-read-twice"], "why": "Solid reports the read after an await once per compute: the census aw-helper-late helper reads before and after its own await and Chrome reports only the first; with that read gone, it reports the second (line 8)" },
   "STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter": { "kind": "repeat", "patterns": ["stacked/r2-store-write-once"], "why": "Solid reports the store write once: aw-shared-after-assign writes in the memo and in a helper after its await, Chrome reports the memo's; with that write gone, it reports the helper's (line 7)" }
+ },
+ "patternClaims": {
+  "flip/st-tracked-handled-sync-memo": { "pair": "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async", "why": "a sync memo in a helper a tracked effect runs under <Errored>: PRIMITIVE_IN_FORBIDDEN_SCOPE throws first and the boundary handles it, the smoke's stacked rows in the shape the census no longer generates" }
  }
 }

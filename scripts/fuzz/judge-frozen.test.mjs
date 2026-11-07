@@ -4,6 +4,7 @@ import { judgePattern } from "./patterns.mjs";
 import { judgeTables } from "./judge-tables.mjs";
 import { evaluatedDead, judgeLegal } from "./legal.mjs";
 import { judge } from "./matrix.mjs";
+import { PATTERN_CLAIMS, STACKED_PAIRS, patternClaim } from "./stacked.mjs";
 
 // Frozen false cleans the judge must flag (endstage-report.md 1d, tier 1). See judge-frozen.json's `about`.
 const frozen = JSON.parse(readFileSync(new URL("./judge-frozen.json", import.meta.url), "utf8"));
@@ -24,6 +25,16 @@ describe("judge-frozen", () => {
   test.each(frozen.legalRows.map((row) => [row.id, row]))("%s keeps its legal verdict", (_id, row) => {
     const evaluated = evaluatedDead(null, { ledger: [], files: { "App.tsx": row.text } }, row.input.site);
     expect(judgeLegal({ ...row.input, evaluated }).outcome).toBe(row.expected.outcome);
+  });
+  // ADR 0887: a pattern's stacked claim, by exact id, while its pair's twin holds and the first throw fires on it.
+  test.each((frozen.patternClaimRows ?? []).map((row) => [row.id, row]))("%s keeps its pattern outcome", (_id, { row, twin, records, expected }) => {
+    expect(patternClaim(row, [row, twin], new Map(Object.entries(records))).outcome).toBe(expected);
+  });
+  test("every pattern claim names a pair, and open-defects lists it stacked", () => {
+    for (const [id, { pair }] of Object.entries(PATTERN_CLAIMS)) {
+      expect(STACKED_PAIRS[pair], id).toBeDefined();
+      expect(JSON.parse(readFileSync(new URL("./open-defects.json", import.meta.url), "utf8")).patterns.find((entry) => entry.id === id)?.outcome, id).toBe("stacked-claim");
+    }
   });
   test("site rows are present", () => {
     // ADR 0887 added five: a halted run's stacked claim (proved), its unproved twin, nothing of the rule, the rule's code elsewhere, a line never
