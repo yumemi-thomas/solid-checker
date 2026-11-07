@@ -32,18 +32,42 @@ describe("offSiteVerdicts", () => {
   });
   it("a code of the rule reported elsewhere is unconnected, never a false positive", () => {
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)]))).toEqual(["unconnected"]);
-    // Unplaced (no line at all): a diagnostic nobody can place disturbs the whole run (classify.mjs `disturbances`).
-    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")]))).toEqual(["unjudged(disturbed)"]);
+    // Unplaced (no line at all): a diagnostic nobody can place disturbs the whole run (classify.mjs `disturbances`), and may be this one.
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")]))).toEqual(["unjudged(disturbed-unplaced)"]);
   });
-  it("a finding whose lines never ran, or that no counter covers, or a disturbed run, judges nothing", () => {
+  it("a finding whose lines never ran, or that no counter covers, judges nothing", () => {
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], { h1: 1, h2: 0, h3: 1 }))).toEqual(["unexecuted"]);
     expect(verdictsOf([finding("strict-read-untracked", 25)], run([]))).toEqual(["unjudged(no-site)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], null))).toEqual(["unjudged(no-hit-ledger)"]);
-    expect(verdictsOf([finding("strict-read-untracked", 20)], run([], undefined, { errors: [{ kind: "page-error", message: "boom", positions: [] }] }))).toEqual(["unjudged(disturbed)"]);
+  });
+  // Coordinator, Part 16: 185 violations hid as unjudged(disturbed) on the smoke. A disturbed run is judged; what the halt changes is named.
+  const threw = (code, line) => ({ errors: [{ kind: "page-error", message: code ? `[${code}] m` : "boom", positions: line ? [{ file: "App.tsx", line, column: 1 }] : [] }] });
+  it("a disturbed run: lines that ran with nothing of the rule anywhere are a false positive; another code thrown on them first is a stacked claim", () => {
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([], undefined, threw(null)))).toEqual(["false-positive(disturbed)"]);
+    // Solid reports the code (a diagnostic on the line), then the throw halts the run.
+    const stacked = offSiteVerdicts({ findings: [finding("missing-owner", 20)], built, runtime: run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 20)], undefined, threw(null)), plan: built.plan });
+    expect(stacked).toEqual([{ finding: "missing-owner@20", verdict: "stacked", first: "PRIMITIVE_IN_EFFECT_CALLBACK", why: "disturbed" }]);
+    // Thrown on another line: nothing stands on these, a false positive.
+    expect(verdictsOf([finding("missing-owner", 20)], run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed)"]);
+  });
+  it("a disturbed run: the rule's code placed only off the lines is a false positive, unplaced it judges nothing, lines that never ran stay unexecuted", () => {
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed-unconnected)"]);
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")], undefined, threw(null)))).toEqual(["unjudged(disturbed-unplaced)"]);
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([], { h1: 1, h2: 0, h3: 1 }, threw(null)))).toEqual(["unexecuted"]);
+    expect(verdictsOf([finding("strict-read-untracked", 20)], run([], null, threw(null)))).toEqual(["unjudged(disturbed-no-hit-ledger)"]);
   });
 });
 
 describe("the misuse grid's judge, off the site", () => {
+  it("a stacked violation is a stacked-claim for a proved pair and a false positive for any other (stacked-pairs.json)", () => {
+    const halted = run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 20)], undefined, { errors: [{ kind: "page-error", message: "boom", positions: [] }] });
+    const proved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-owner", 20)] }, runtime: halted, built });
+    expect(proved.outcome).toBe("stacked-claim");
+    expect(proved.detail).toMatchObject({ primary: "not-fired", pairs: ["PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner"], at: [20] });
+    const unproved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("flush-in-effect-callback", 20)] }, runtime: halted, built });
+    expect(unproved.outcome).toBe("false-positive");
+    expect(unproved.detail).toMatchObject({ primary: "not-fired", rules: ["flush-in-effect-callback"], at: [20] });
+  });
   const strictAtSite = { ok: true, findings: [finding("strict-read-untracked", 10), finding("strict-read-untracked", 20)] };
   it("an agree with a contradicted stray violation is a false positive, and keeps the site's own outcome", () => {
     const checker = { ok: true, findings: [finding("flush-in-effect-callback", 10), finding("strict-read-untracked", 20)] };

@@ -32,6 +32,12 @@ export const namedKey = (finding) => `${finding.id}/${finding.blocker}@${finding
  * gate (open-rows.mjs --final, `make flip-final`) fails while this cause holds a row.
  */
 export const F2_OPEN = "R-F2-open";
+/**
+ * A proved stacked claim (stacked.mjs): a violation behind Solid's first throw whose (first code, rule) pair a Chrome twin proves. Listed by
+ * id with its pairs, counted exactly per pair (`stackedClaim`, `stackedPairs`). It is no false positive and does not block #173; an
+ * unproved pair is scored a false positive instead.
+ */
+export const STACKED = "R-stacked";
 /** `flw-guard-yield`: a site past a generator step, its U at the generator: W's F1 places it. Must reach 0 before #173 moves, as F2. */
 export const F1_OPEN = "R-F1-open";
 /**
@@ -105,11 +111,15 @@ export const offLedger = (list, grid, moves) => moves.filter((move) => !list.row
 
 /** The ledger's counts: per cause, and its certified and false-positive rows, which a cause's count could hide. */
 export function ledgerCounts(rows) {
-  const counts = { causes: {}, certified: 0, certifiedF2: 0, falsePositive: 0 };
+  const counts = { causes: {}, certified: 0, certifiedF2: 0, falsePositive: 0, stackedClaim: 0, stackedPairs: {} };
   for (const grid of Object.values(rows?.grids ?? {})) for (const row of Object.values(grid)) {
     counts.causes[row.cause] = (counts.causes[row.cause] ?? 0) + 1;
     if (row.certified) counts[row.cause === F2_OPEN ? "certifiedF2" : "certified"] += 1;
     if (row.outcome === "false-positive") counts.falsePositive += 1;
+    if (row.outcome === "stacked-claim") {
+      counts.stackedClaim += 1;
+      for (const pair of row.pairs ?? []) counts.stackedPairs[pair] = (counts.stackedPairs[pair] ?? 0) + 1;
+    }
   }
   return counts;
 }
@@ -120,6 +130,9 @@ export function ratchetDifferences(list) {
   const ratchet = list.ratchet ?? {};
   const out = [];
   for (const key of ["certified", "certifiedF2", "falsePositive"]) if (counts[key] !== ratchet[key]) out.push({ key, rows: counts[key], ratchet: ratchet[key] ?? null });
+  // `stackedClaim` and `stackedPairs` came later: an absent one is 0, and any listed row needs it exact.
+  if (counts.stackedClaim !== (ratchet.stackedClaim ?? 0)) out.push({ key: "stackedClaim", rows: counts.stackedClaim, ratchet: ratchet.stackedClaim ?? null });
+  for (const pair of new Set([...Object.keys(counts.stackedPairs), ...Object.keys(ratchet.stackedPairs ?? {})])) if (counts.stackedPairs[pair] !== ratchet.stackedPairs?.[pair]) out.push({ key: `stacked ${pair}`, rows: counts.stackedPairs[pair] ?? 0, ratchet: ratchet.stackedPairs?.[pair] ?? null });
   for (const cause of new Set([...Object.keys(counts.causes), ...Object.keys(ratchet.causes ?? {})])) if (counts.causes[cause] !== ratchet.causes?.[cause]) out.push({ key: cause, rows: counts.causes[cause] ?? 0, ratchet: ratchet.causes?.[cause] ?? null });
   return out;
 }

@@ -26,7 +26,8 @@ describe("judge-frozen", () => {
     expect(judgeLegal({ ...row.input, evaluated }).outcome).toBe(row.expected.outcome);
   });
   test("site rows are present", () => {
-    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["false-clean", "false-clean", "harness", "not-fired", "recall-gap", "recall-gap", "unexecuted"]);
+    // ADR 0887 added five: a halted run's stacked claim (proved), its unproved twin, nothing of the rule, the rule's code elsewhere, a line never run.
+    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["false-clean", "false-clean", "false-positive", "false-positive", "false-positive", "harness", "not-fired", "not-fired", "recall-gap", "recall-gap", "stacked-claim", "unexecuted"]);
   });
   test.each(frozen.rows.map((row) => [row.id, row]))("%s keeps its frozen verdict", (_id, row) => {
     const verdict = judgePattern({ codes: row.codes, stacks: row.stacks, positions: row.stacks !== undefined }, row.findings);

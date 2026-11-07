@@ -1,0 +1,12 @@
+{
+ "about": "Stacked claims (coordinator, Part 16; classify.mjs offSiteVerdicts `stacked`, matrix.mjs judge): a violation on a line where Solid's first throw halted the run before the rule's own code could fire. A violation means \"wrong if it runs\", so such a row is no false positive by itself, but the halt is no evidence either: a (first code, rule) pair scores `stacked-claim` only when a pattern here, with the first throw removed and the rule's condition kept, makes Chrome report a code of the rule. Every pair's patterns are checked on each patterns run (patterns.mjs `stackedProblems`): each must be judged fine with a code of the rule. A pair not listed scores false-positive.",
+ "pairs": {
+  "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": { "patterns": ["stacked/s1-cleanup-timer"], "why": "a helper an owned tracked scope and an ownerless caller both run: with the tracked caller gone, the ownerless call reports NO_OWNER_CLEANUP" },
+  "PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner": { "patterns": ["stacked/s2-effect-timer"], "why": "the same with createEffect: NO_OWNER_EFFECT" },
+  "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": { "patterns": ["stacked/s3-sync-memo-body"], "why": "createMemo(async, { sync: true }) where creating is allowed: SYNC_NODE_RECEIVED_ASYNC" },
+  "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": { "patterns": ["stacked/s3-sync-memo-body"], "why": "as above, out of the effect callback" },
+  "PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner": { "patterns": ["stacked/s5-apply-context", "stacked/s5b-apply-cleanup"], "why": "an effect's apply callback has no owner: an owner-needing call that creates no primitive there reports NO_OWNER_CONTEXT and NO_OWNER_CLEANUP" },
+  "NO_OWNER_CONTEXT|missing-context-provider": { "patterns": ["stacked/s6-context-body"], "why": "useContext with an owner and no provider: CONTEXT_NOT_FOUND" },
+  "MISSING_EFFECT_FN|leaf-owner-forbidden-call": { "patterns": ["stacked/s7-action-settled"], "why": "the createEffect given its effect function, in an action onSettled runs: PRIMITIVE_IN_FORBIDDEN_SCOPE" }
+ }
+}

@@ -168,6 +168,15 @@ describe("the row ledger (ADR 0815, R23)", () => {
   it("a lost ledger throws", () => {
     expect(() => readOpenDefects(undefined, "/nonexistent/rows.json")).toThrow(/missing/);
   });
+  it("stacked claims count exactly, in all and per pair, and do not block #173 (ADR 0887)", () => {
+    const rows = { grids: { g: { a: { outcome: "stacked-claim", cause: "R-stacked", pairs: ["A|r"] }, b: { outcome: "stacked-claim", cause: "R-stacked", pairs: ["A|r", "B|s"] } } } };
+    expect(ledgerCounts(rows)).toMatchObject({ stackedClaim: 2, stackedPairs: { "A|r": 2, "B|s": 1 } });
+    const base = { certified: 0, certifiedF2: 0, falsePositive: 0, causes: { "R-stacked": 2 } };
+    expect(ratchetDifferences({ rows, ratchet: { ...base, stackedClaim: 2, stackedPairs: { "A|r": 2, "B|s": 1 } } })).toEqual([]);
+    expect(ratchetDifferences({ rows, ratchet: { ...base, stackedClaim: 2, stackedPairs: { "A|r": 2 } } })).toEqual([{ key: "stacked B|s", rows: 1, ratchet: null }]);
+    expect(ratchetDifferences({ rows, ratchet: base }).map((row) => row.key)).toEqual(["stackedClaim", "stacked A|r", "stacked B|s"]);
+    expect(finalBlockers({ rows })).toEqual([]);
+  });
   it("the ratchet is exact both ways, certified and false-positive rows on their own", () => {
     const rows = { grids: { g: { a: { outcome: "false-clean", certified: true, cause: "R" }, b: { outcome: "false-positive", cause: "R" } } } };
     expect(ratchetDifferences({ rows, ratchet: { certified: 1, certifiedF2: 0, falsePositive: 1, causes: { R: 2 } } })).toEqual([]);

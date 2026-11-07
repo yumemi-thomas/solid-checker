@@ -2201,3 +2201,8 @@ Six uncached Chrome disagreements (`gen-yield-each` and `gen-sync-each`, NO_OWNE
 ## ADR 0853 — An aliased generator's creation calls prove no write context
 
 Snapshot review found `shared` in `generator-step-owner`: a generator read as a value as well as called under an async memo bypassed `generator_creations` and the write walk resumed following creation calls, producing SC2001 V after yield. Named generators with unplaced references now terminate that walk with an obligation; their unplaced references also retain possible resumption in the owner analysis instead of assuming the creation owner persists. Primitive-stepped generators retain their dialect path. `gen-yield-alias` generates the failure; an existing fixture pins it. Owner: `execution_role/write_roles.rs`.
+
+<a id="adr-0887"></a>
+## ADR 0887 — A violation in a halted run is judged; a stacked one needs a Chrome twin
+
+The grid judge left every off-site violation in a run that threw `unjudged(disturbed)`: 185 on the pinned smoke, none counted. Now a disturbed run is judged like any other, with three changes. A violation whose lines ran while Solid threw another code there first is `stacked`: "wrong if it runs" holds, but the halt is no evidence, so it scores `stacked-claim` (listed by id with its pair, exact ratchet per pair, not a #173 blocker) only for a (first code, rule) pair `scripts/fuzz/stacked-pairs.json` proves with a pattern that removes the first throw and makes Chrome report a code of the rule; the patterns run checks every proof. An unproved pair, lines that ran with nothing of the rule anywhere, and the rule's code placed only off the lines are false positives. A line that never ran stays unexecuted; a rule code Chrome could not place stays unjudged.

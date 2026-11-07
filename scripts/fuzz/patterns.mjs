@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { besideCode, codeOfThrown, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
+import { stackedProblems } from "./stacked.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -279,8 +280,11 @@ async function main() {
   console.log(`known open patterns: ${held.length} still fail (${count("false-positive")} false positive, ${count("false-clean")} false clean, ${count("misplaced")} misplaced, ${count("unplaced")} unplaced, ${count("no-run")} no run; scripts/fuzz/open-defects.json)`);
   for (const row of unlisted) console.log(`NEW ${row.outcome} ${row.id} ${JSON.stringify(row.codes ?? row.why ?? "")}`);
   for (const row of fixed) console.log(`FIXED ${row.id}: move its entry from open-defects.json to rediscovery.json`);
+  // The stacked pairs' proofs (stacked-pairs.json): each twin fine, with a code of the pair's rule in Chrome.
+  const stackedFailures = stackedProblems(rows, records, undefined, { only });
+  for (const problem of stackedFailures) console.log(`STACKED ${problem}`);
   if (!only) for (const id of absent) console.log(`ABSENT ${id}: listed, and no such program`);
-  process.exit(unlisted.length || fixed.length || (!only && absent.length) ? 1 : 0);
+  process.exit(unlisted.length || fixed.length || stackedFailures.length || (!only && absent.length) ? 1 : 0);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
