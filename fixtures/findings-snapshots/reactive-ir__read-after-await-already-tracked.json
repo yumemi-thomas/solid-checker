@@ -14,6 +14,17 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",
+      "start": 1080,
+      "end": 1085,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",

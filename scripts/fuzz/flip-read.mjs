@@ -118,9 +118,13 @@ const COND_AWAITS = {
   "aw-label": `awL: { if (${OFF}) break awL; ${P_AWAIT}; }`,
   "aw-optional": `const awO = ((_: unknown) => 1) as ((v: unknown) => number) | undefined; awO?.(${P_AWAIT});`,
 };
+// Review D12: a wrapper that runs its parameter in place but hands its result on (`(f) => f()`, `async (f) => await f()`), or runs it past an
+// await of its own: the compute's flight carries the read. `aw-inplace-stmt` discards the result in a synchronous memo: the read is on the
+// function's own flight.
+const IN_PLACE_USED = ["aw-inplace-return", "aw-inplace-await", "aw-inplace-late"];
 // The await's arm cannot precede the site (the other arm of an `if`), or leaves before it runs: the site runs with no await before it.
 const COND_AWAITS_LEGAL = ["aw-else", "aw-else-flip", "aw-early"];
-const HELPER_AWAITS = ["aw-shared-after", "aw-shared-before", "aw-helper-late", "aw-wrapper", "aw-wrapper-2"];
+const HELPER_AWAITS = ["aw-shared-after", "aw-shared-before", "aw-helper-late", "aw-wrapper", "aw-wrapper-2", ...IN_PLACE_USED];
 
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
@@ -143,7 +147,7 @@ export const FLIP_READ_CONTEXTS = {
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked"],
+  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
@@ -524,7 +528,7 @@ export function flipReadContext(context, stmts, kit) {
     const twice = decl("hkTwice", domExpr("(g: () => void) => { g(); hkSaved.push(g); }"));
     return { body: [keep, twice, decl(kit.name("m"), prim("memo", fn([expr(flush(fn([ctl("run-kept", stmts)]))), ret(num(1))]))), expr(domExpr("hkSaved[0]?.();"))], view: [] };
   }
-  if (COND_AWAITS[context] || HELPER_AWAITS.includes(context) || COND_AWAITS_LEGAL.includes(context) || context === "aw-wrapper-untracked") {
+  if (COND_AWAITS[context] || HELPER_AWAITS.includes(context) || COND_AWAITS_LEGAL.includes(context) || context === "aw-wrapper-untracked" || context === "aw-inplace-stmt") {
     const watch = (m) => expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
     const memo = (body) => { const m = kit.name("m"); return [decl(m, prim("memo", fn([...body, ret(num(1))], { async: true }))), watch(m)]; };
     const hop = expr(domExpr(`${P_AWAIT};`));
@@ -541,6 +545,15 @@ export function flipReadContext(context, stmts, kit) {
     const compute = decl(c, fn([hop, ...stmts, ret(num(1))], { async: true }));
     const type = "(f: () => Promise<number>)";
     if (context === "aw-wrapper-untracked") return { body: [compute, decl(h, domExpr(`${type} => { void f(); }`)), expr(domExpr(`${h}(${c});`))], view: [] };
+    if (IN_PLACE_USED.includes(context) || context === "aw-inplace-stmt") {
+      const m = kit.name("m");
+      const syncMemo = (body) => [decl(m, prim("memo", fn(body))), watch(m)];
+      if (context === "aw-inplace-return") return { body: [compute, decl(h, domExpr(`${type} => f()`)), ...syncMemo([ret(domExpr(`${h}(${c})`))])], view: [] };
+      if (context === "aw-inplace-await") return { body: [compute, decl(h, domExpr(`async ${type} => await f()`)), ...syncMemo([ret(domExpr(`${h}(${c})`))])], view: [] };
+      if (context === "aw-inplace-stmt") return { body: [compute, decl(h, domExpr(`${type} => { f(); }`)), ...syncMemo([expr(domExpr(`${h}(${c});`)), ret(num(1))])], view: [] };
+      const prefix = decl(c, fn([...stmts, ret(num(1))], { async: true }));
+      return { body: [prefix, decl(h, domExpr(`async ${type} => { ${P_AWAIT}; f(); }`)), ...memo([expr(domExpr(`await ${h}(${c});`))])], view: [] };
+    }
     const [wrap, m] = [kit.name("w"), kit.name("m")];
     const inner = decl(h, domExpr(`${type} => createMemo(f)`, undefined, ["createMemo"]));
     const read = expr(domExpr(`createEffect(() => ${m}(), () => {});`, undefined, ["createEffect"]));
