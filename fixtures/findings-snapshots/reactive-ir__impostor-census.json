@@ -40,6 +40,50 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-census/App.tsx",
+      "start": 441,
+      "end": 463,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-census/App.tsx",
+      "start": 472,
+      "end": 479,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-census/App.tsx",
+      "start": 562,
+      "end": 568,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-census/App.tsx",
+      "start": 577,
+      "end": 584,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-census/App.tsx",
       "start": 729,
       "end": 735,
       "fixes": 0
@@ -73,6 +117,28 @@
       "path": "fixtures/reactive-ir/impostor-census/App.tsx",
       "start": 834,
       "end": 841,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-census/App.tsx",
+      "start": 896,
+      "end": 937,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-census/App.tsx",
+      "start": 946,
+      "end": 953,
       "fixes": 0
     },
     {

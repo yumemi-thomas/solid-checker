@@ -171,6 +171,11 @@ describe("the row ledger (ADR 0815, R23)", () => {
   it("a lost ledger throws", () => {
     expect(() => readOpenDefects(undefined, "/nonexistent/rows.json")).toThrow(/missing/);
   });
+  it("an unattributed corpus site blocks the final gate by name, with an owner and a cause (Part 16)", () => {
+    const row = { code: "SC9012", blocker: "b", app: "a", path: "a/x.ts", line: 3, start: 10, end: 12, owner: "C2", cause: "c" };
+    expect(finalBlockers({ rows: { grids: {} }, corpusBlockers: [row] })).toEqual(["corpus/a/x.ts:3:10-12"]);
+    for (const entry of readOpenDefects().corpusBlockers ?? []) for (const key of ["code", "blocker", "path", "line", "start", "end", "owner", "cause"]) expect(entry[key], `${entry.path}:${entry.line} ${key}`).toBeDefined();
+  });
   it("stacked claims count exactly, in all and per pair, and do not block #173 (ADR 0887)", () => {
     const rows = { grids: { g: { a: { outcome: "stacked-claim", cause: "R-stacked", pairs: ["A|r"] }, b: { outcome: "stacked-claim", cause: "R-stacked", pairs: ["A|r", "B|s"] } } } };
     expect(ledgerCounts(rows)).toMatchObject({ stackedClaim: 2, stackedPairs: { "A|r": 2, "B|s": 1 } });

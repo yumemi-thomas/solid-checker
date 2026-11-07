@@ -2721,7 +2721,7 @@ impl<'c> ParameterFlow<'_, 'c> {
         if let Some(declaration) = lookup.placing_standard_declaration(file, call) {
             // ADR 0874: the row stays at its site, and a value a withheld
             // call answers proves no store.
-            self.open |= lookup.impostor_withheld(file, call.callee);
+            self.open |= lookup.standard_call_withheld(file, call.callee);
             let qualified = declaration.qualified_name.as_ref();
             let method = qualified
                 .strip_prefix("Array.")
@@ -5313,7 +5313,7 @@ fn no_store_mutator_call(
         }
         // ADR 0874: a withheld mutator may be the program's: the row stays
         // at its site, and nothing proves it writes.
-        let withheld = context.lookup.impostor_withheld(file, call.callee);
+        let withheld = context.lookup.standard_call_withheld(file, call.callee);
         let Some(root) = member_root(file, callee) else {
             continue;
         };
@@ -5627,11 +5627,7 @@ fn no_store_standard_library_write(
         if call.construct || file.ast.computed_members.binary_search(&callee).is_ok() || !named {
             continue;
         }
-        let Some(declaration) =
-            context
-                .lookup
-                .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        else {
+        let Some(declaration) = context.lookup.placing_standard_declaration(file, call) else {
             continue;
         };
         if !STANDARD_LIBRARY_WRITES
@@ -5640,6 +5636,8 @@ fn no_store_standard_library_write(
         {
             continue;
         }
+        // ADR 0876: as for a mutator: the row stays, and nothing proves it writes.
+        let withheld = context.lookup.standard_call_withheld(file, call.callee);
         let Some(argument) = call.arguments.first().filter(|argument| !argument.spread) else {
             continue;
         };
@@ -5662,12 +5660,15 @@ fn no_store_standard_library_write(
             .ast
             .call_at(file.ast.peel_ts_sugar_span(root))
             .is_some();
-        let Some((symbol, name)) = proven.filter(|_| !call_root) else {
+        let Some((symbol, name)) = proven.filter(|_| !call_root && !withheld) else {
             // ADR 0509: a container a caller handed in may hold a store.
-            if call_root || source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+            if withheld
+                || call_root
+                || source.is_none_or(|symbol| !context.accessors.contains_key(symbol))
+            {
                 let sink = SinkWrite {
                     member: target,
-                    may_not_write: !assign_writes(file, declaration, call),
+                    may_not_write: withheld || !assign_writes(file, declaration, call),
                     delete: false,
                     linked: target != root,
                 };

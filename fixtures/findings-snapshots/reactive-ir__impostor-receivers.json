@@ -74,8 +74,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 910,
-      "end": 924,
+      "start": 804,
+      "end": 818,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 933,
-      "end": 936,
+      "start": 827,
+      "end": 830,
       "fixes": 0
     },
     {
@@ -96,8 +96,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 952,
-      "end": 953,
+      "start": 846,
+      "end": 847,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 974,
-      "end": 977,
+      "start": 868,
+      "end": 871,
       "fixes": 0
     },
     {
@@ -118,8 +118,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1088,
-      "end": 1103,
+      "start": 982,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -129,8 +129,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1112,
-      "end": 1115,
+      "start": 1006,
+      "end": 1009,
       "fixes": 0
     },
     {
@@ -140,8 +140,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1131,
-      "end": 1132,
+      "start": 1025,
+      "end": 1026,
       "fixes": 0
     },
     {
@@ -151,8 +151,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1153,
-      "end": 1156,
+      "start": 1047,
+      "end": 1050,
       "fixes": 0
     },
     {
@@ -162,8 +162,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1265,
-      "end": 1277,
+      "start": 1159,
+      "end": 1171,
       "fixes": 0
     },
     {
@@ -173,8 +173,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1286,
-      "end": 1289,
+      "start": 1180,
+      "end": 1183,
       "fixes": 0
     },
     {
@@ -184,8 +184,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1305,
-      "end": 1306,
+      "start": 1199,
+      "end": 1200,
       "fixes": 0
     },
     {
@@ -195,8 +195,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1327,
-      "end": 1330,
+      "start": 1221,
+      "end": 1224,
       "fixes": 0
     },
     {
@@ -206,8 +206,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1440,
-      "end": 1453,
+      "start": 1334,
+      "end": 1347,
       "fixes": 0
     },
     {
@@ -217,8 +217,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1462,
-      "end": 1465,
+      "start": 1356,
+      "end": 1359,
       "fixes": 0
     },
     {
@@ -228,8 +228,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1481,
-      "end": 1482,
+      "start": 1375,
+      "end": 1376,
       "fixes": 0
     },
     {
@@ -239,41 +239,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1503,
-      "end": 1506,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1634,
-      "end": 1637,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1653,
-      "end": 1654,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "async-provenance-unproven",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1675,
-      "end": 1678,
+      "start": 1397,
+      "end": 1400,
       "fixes": 0
     },
     {
@@ -283,8 +250,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 2064,
-      "end": 2078,
+      "start": 1786,
+      "end": 1800,
       "fixes": 0
     },
     {
@@ -294,8 +261,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 2087,
-      "end": 2090,
+      "start": 1809,
+      "end": 1812,
       "fixes": 0
     },
     {
@@ -305,8 +272,8 @@
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 2106,
-      "end": 2107,
+      "start": 1828,
+      "end": 1829,
       "fixes": 0
     },
     {
@@ -316,8 +283,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 2128,
-      "end": 2131,
+      "start": 1850,
+      "end": 1853,
       "fixes": 0
     },
     {
@@ -467,6 +434,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 795,
+      "end": 806,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
@@ -478,11 +456,33 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 848,
+      "end": 859,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 873,
       "end": 876,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 900,
+      "end": 911,
       "fixes": 0
     },
     {

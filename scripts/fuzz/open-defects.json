@@ -695,16 +695,6 @@
    "outcome": "not-legal",
    "item": "R-not-legal",
    "note": "Legal-grid iter-* programs: a hidden iteration patch runs the write inside the compute, so Solid reports the code the generator labels legal. Held open by id; not classified as fine."
-  },
-  {
-   "idPrefix": "lg-reactive-write-in-owned-scope-",
-   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-   "contexts": [
-    "recv-replace-late"
-   ],
-   "outcome": "false-positive",
-   "item": "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`",
-   "note": "SC2001 violation at the setter in `f` on every build measured (mg8 census tip, m0, m6, m10: not a casts regression). The write-role walk logs the write Unknown (`write_roles.walk-unknown-11`), and the read twin (STRICT_READ_UNTRACKED) stays uncertifiable, so another SC2001 producer takes `replace`'s inline callback timing past ADR 0874's `replace` veto; not traced (C2 commit report)"
   }
  ],
  "patterns": [
@@ -907,24 +897,6 @@
    "certified": false
   },
   {
-   "id": "types/lc-g3-getproto-then",
-   "item": "R-casts-stage2: a built-in prototype reached by a key no fact names, or by Object.getPrototypeOf; the U stands at the call, none at the write",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "types/lc-g6-key-global-alias",
-   "item": "R-casts-stage2: a built-in prototype reached by a key no fact names, or by Object.getPrototypeOf; the U stands at the call, none at the write",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
    "id": "flip/st-tracked-handled-flush",
    "item": "R3e: V in a helper a tracked effect runs under <Errored>: the boundary handles the throw and Chrome logs nothing. Kept here when b6b38884b took st-* out of the census",
    "outcome": "false-positive",
@@ -980,23 +952,6 @@
  "owners": {
   "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-direct-handoff-reflect": "R5",
   "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-namespace-handoff-tagged": "R5",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-assign-callee-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-direct-switch": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-namespace-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-reexport-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-reexport-ns-none": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-refresh-wrapper-chain-5": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-signal-direct-do": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-signal-getter-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-signal-hook-member-closure": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-alias-for": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-destructured-closure-m-show-signal": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-direct-try-finally": "C2",
-  "lg-recall/lg-reactive-write-in-owned-scope-recv-replace-late-store-hook-while": "C2",
-  "lg-recall/lg-strict-read-untracked-recv-replace-late-memo-hook-member-none-m-show-later": "C2",
-  "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-label": "C2",
-  "lg-recall/lg-strict-read-untracked-recv-replace-late-signal-hook-member-none": "C2",
-  "mx-census/mx-action-called-in-owned-scope-recv-replace-late-x-direct-none": "C2",
   "mx-census/mx-loading-on-accessor-flw-flow-show-value-accessor-direct-none": "R5",
   "mx-census/mx-loading-on-accessor-flw-flow-show-value-arrow-direct-none": "R5",
   "mx-census/mx-loading-on-accessor-flw-flow-show-value-memo-direct-none": "R5",
@@ -1005,10 +960,34 @@
   "mx-census/mx-untracked-read-after-await-flw-flow-show-value-x-direct-none": "R5",
   "mx-recall/mx-settled-cleanup-unowned-flw-flow-for-async-x-ns-exported-none": "R5"
  },
+ "corpusBlockers": [
+  {"code": "SC9012", "blocker": "value-use-unclassified", "app": "grease-pencil-typegpu", "path": "grease-pencil-typegpu/src/features/interaction/strokeDrawing.ts", "line": 347, "start": 9083, "end": 9085, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-use-unclassified", "app": "grease-pencil-typegpu", "path": "grease-pencil-typegpu/src/features/interaction/strokeDrawing.ts", "line": 425, "start": 10318, "end": 10322, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-use-unclassified", "app": "solid-svg-editor", "path": "solid-svg-editor/src/svg-model.ts", "line": 544, "start": 15081, "end": 15122, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-forwarded", "app": "solid-svg-editor", "path": "solid-svg-editor/src/svg-model.ts", "line": 552, "start": 15313, "end": 15326, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-use-unclassified", "app": "app-game", "path": "app-game/packages/solid-dnd/src/primitives/createSortable.ts", "line": 353, "start": 13851, "end": 13864, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-use-unclassified", "app": "app-game", "path": "app-game/packages/typegpu-examples/typegpu-draw-app-example/canvas/useCanvasTransform.ts", "line": 312, "start": 9566, "end": 9567, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC1001", "blocker": "callee-callback-timing:deleteSelected", "app": "app-game", "path": "app-game/packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx", "line": 353, "start": 11125, "end": 11164, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "tuple-iteration-written", "app": "app-game", "path": "app-game/packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx", "line": 353, "start": 11125, "end": 11164, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC1001", "blocker": "callee-callback-timing:downloadSelected", "app": "app-game", "path": "app-game/packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx", "line": 382, "start": 12048, "end": 12087, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "tuple-iteration-written", "app": "app-game", "path": "app-game/packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx", "line": 382, "start": 12048, "end": 12087, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-use-unclassified", "app": "ui", "path": "ui/src/store.test.ts", "line": 657, "start": 23611, "end": 23694, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "value-to-unresolved-callee", "app": "ui", "path": "ui/src/store.test.ts", "line": 658, "start": 23622, "end": 23689, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "standard-member-impostor:the", "app": "error-menu-web", "path": "error-menu-web/web/src/components/Counts.tsx", "line": 82, "start": 2767, "end": 2780, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "standard-member-impostor:the", "app": "error-menu-web", "path": "error-menu-web/web/src/domain/time.ts", "line": 13, "start": 447, "end": 457, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/components/CameraSheet.tsx", "line": 78, "start": 2688, "end": 2705, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/components/CameraSheet.tsx", "line": 94, "start": 3303, "end": 3320, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/components/StopCard.tsx", "line": 85, "start": 3244, "end": 3266, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/components/StopPreview.tsx", "line": 174, "start": 6584, "end": 6602, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/routes/Plan.tsx", "line": 170, "start": 6471, "end": 6484, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/routes/Plan.tsx", "line": 185, "start": 7116, "end": 7132, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/routes/Plan.tsx", "line": 225, "start": 8791, "end": 8802, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"},
+  {"code": "SC9012", "blocker": "parameter-use-unmodeled", "app": "probus-hk", "path": "probus-hk/src/routes/RouteDetail.tsx", "line": 1180, "start": 51772, "end": 51794, "owner": "C2", "cause": "lost at the merge of claude/flip-casts-c2 onto 72e9b2ff6 (3bbd1cb70), not yet attributed"}
+ ],
  "ratchet": {
-  "certified": 124,
+  "certified": 4,
   "certifiedF2": 0,
-  "falsePositive": 72,
+  "falsePositive": 7,
   "stackedClaim": 185,
   "stackedPairs": {
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -1027,7 +1006,7 @@
    "R10d: `\"x\".replace(t, f)` where `t[Symbol.replace]` queues `f`": 13,
    "false-positive": 11,
    "createRoot inside onCleanup inside createRoot": 2,
-   "R-casts-stage2": 307,
+   "R-casts-stage2": 15,
    "R-unplaced": 165,
    "R-unjudged-unplaced": 3,
    "R-stacked": 185,

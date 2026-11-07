@@ -1739,10 +1739,7 @@ impl<'w> FileRead<'_, '_, 'w> {
         };
         let vetoed = crate::base::contributions::subclass_veto(self.view.file, callee, name)
             .is_some_and(|hazards| hazards.into_iter().any(|hazard| self.ctx.hazard(hazard)))
-            || (self.ctx.hazard(crate::base::Hazard::AnyStandardPatch)
-                && crate::base::contributions::patch_veto(name)
-                    .into_iter()
-                    .any(|hazard| self.ctx.hazard(hazard)))
+            || crate::base::contributions::patch_vetoed(name, &|hazard| self.ctx.hazard(hazard))
             || crate::base::contributions::unproven_assertion(
                 self.view.file,
                 callee,

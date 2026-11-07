@@ -1446,7 +1446,7 @@ pub(crate) fn withheld_carrier_arguments(
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<usize> {
-    if !lookup.impostor_withheld(file, call.callee) {
+    if !lookup.standard_call_withheld(file, call.callee) {
         return Vec::new();
     }
     inline_carrier_arguments_by(

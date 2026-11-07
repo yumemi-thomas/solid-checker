@@ -46,3 +46,5 @@ Variants (each `patch.ts` beside the same body):
 - `handed-timer-local-in-export` (negative): a helper local to an exported function is no export: proved SC2001. `handed-timer-param-default-export`: `export default function`, uncertifiable.
 
 - Review R56: `handed-path-find-patched` and `handed-path-find-open-key` keep the path use uncertifiable when `Array.prototype.find` is replaced by a literal or open key. The replacement ignores the Node guard and returns the window; the iterator key in the later write is hidden. `handed-path-find` remains the intact proved twin.
+
+- `proto-alias-short`, `proto-alias-deep` (review R58): the iterator patched through `Object.getPrototypeOf([])` held by 2, and by 16, plain `const` aliases, under a key from a non-global source. ADR 0876's walk now answers a chain it cannot finish as a reach, never as none. Both uncertifiable today; ADR 0803's census of an unknown-key write on an unproven object also holds them, so no program shows the depth cut alone.

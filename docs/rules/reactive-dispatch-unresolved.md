@@ -268,3 +268,10 @@ A prop read in a leaf owner (`createTrackedEffect`, `onSettled`) is `prop-pendin
 A value the type facts attribute to a Solid primitive is named only when an import of a Solid module confirms it (ADR 0711); otherwise the row is `primitive-identity-unproven`, named by the value's own text (ADR 0825). An unresolved import is no primitive at all: a Solid package's own unresolved import names nothing (ADR 0826). Each runtime use of an import the compiler did not resolve (a missing module, an export its target lacks) is open, `import-unresolved`: nothing says what the value is (ADR 0827).
 
 A guarded `composedPath().find(...)` excludes the window only while `Array.find`, `Node` and `instanceof` remain intact. A replaced `find` may ignore the guard and return the window, so the path use stays uncertifiable and tuple slots are held (`tuple-iteration-written`, ADR 0803).
+
+ADR 0877: a computed key held by an immutable same-file identifier is a symbol
+only when its initializer proves that value, through assertions. Such a key
+cannot replace a named standard member. Mutable and destructured bindings,
+`Symbol.replace`, `Symbol.species`, and reflective definers retain the open
+key. A census that may replace `Symbol` or `Symbol.for` reopens symbol sites;
+this proof does not trust the spelling of a shadowed `Symbol`.

@@ -551,13 +551,20 @@ pub(crate) fn assignment_writes(file: &FileFacts) -> Vec<AssignmentWrite> {
         // of a destructuring pattern (`[c.run] = …`) or loop head (`for
         // (c.run of …)`). A member that is another written member's object
         // (`C.prototype` in `C.prototype.m = f`) is read, not written.
-        let inside = file
-            .ast
-            .members
-            .iter()
-            .enumerate()
-            .filter(|(_, member)| target.contains(member.span))
-            .collect::<Vec<_>>();
+        let inside =
+            file.ast
+                .members
+                .iter()
+                .enumerate()
+                // ADR 0874: `document.getElementById("x")!.title = v` writes `title`,
+                // and a member a call in the target holds is only read.
+                .filter(|(_, member)| {
+                    target.contains(member.span)
+                        && !file.ast.calls.iter().any(|call| {
+                            target.contains(call.span) && call.span.contains(member.span)
+                        })
+                })
+                .collect::<Vec<_>>();
         let mut written = inside
             .iter()
             .copied()
@@ -770,6 +777,167 @@ fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
     }
 }
 
+/// The owner of a patch reached through a prototype no spelling names (ADR
+/// 0876): any owner's. `OWN_PROTOTYPE`'s only while the program writes some
+/// `prototype` key: `PROTOTYPE_KEY` records that, as this file cannot see it.
+const REACHED_OWNER: &str = "*";
+const OWN_PROTOTYPE: &str = "own-prototype";
+const PROTOTYPE_KEY: &str = "prototype-key";
+
+/// How the object at `span` of a write reaches a prototype (ADR 0876).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PrototypeReach {
+    No,
+    /// Some prototype, by a chain no fact pins to the program's own.
+    Reaches,
+    /// `Foo.prototype`, where `Foo` is a function or class of this file that
+    /// nothing rebinds: the program's own, while no `prototype` key is written.
+    OwnPrototype,
+}
+
+/// The text at a callee that reads a prototype, or an unknown member of the
+/// objects that do. A false hit only keeps a proof from standing.
+fn reads_prototype(text: &str) -> bool {
+    ["getPrototypeOf", "getOwnPropertyDescriptor", "Reflect.get"]
+        .iter()
+        .any(|name| text.contains(name))
+        || text.starts_with("Object[")
+        || text.starts_with("Reflect[")
+        || text.contains("(Object as any)[")
+        || text.contains("(Reflect as any)[")
+}
+
+/// ADR 0876: whether the written object at `span` reaches a prototype by its
+/// own chain: a `prototype` or `__proto__` member, or a call that reads one,
+/// through assertions, members and the bindings that hold it, a `let` by each
+/// of its assignments. A value that leaves the expression is no such chain.
+fn prototype_reach(file: &FileFacts, span: Span) -> PrototypeReach {
+    prototype_reach_within(file, span, true, 16)
+}
+
+fn prototype_reach_within(
+    file: &FileFacts,
+    span: Span,
+    immediate: bool,
+    depth: u8,
+) -> PrototypeReach {
+    let ast = &file.ast;
+    // Review R58: a chain the walk cannot finish proves no absence of a reach.
+    if depth == 0 {
+        return PrototypeReach::Reaches;
+    }
+    let value = ast.peel_ts_sugar_span(span);
+    let walk =
+        |next: Span, immediate: bool| prototype_reach_within(file, next, immediate, depth - 1);
+    if let Some(member) = ast.member_at(value) {
+        let computed = ast.computed_members.binary_search(&member.span).is_ok();
+        let key = if computed {
+            ast.literal_computed_members
+                .iter()
+                .find(|literal| literal.span == member.span)
+                .map(|literal| literal.key.to_string())
+        } else {
+            file.source_text(member.property).map(str::to_owned)
+        };
+        return match key.as_deref() {
+            Some("__proto__") => PrototypeReach::Reaches,
+            Some("prototype") if immediate && own_function_or_class(file, member.object) => {
+                PrototypeReach::OwnPrototype
+            }
+            Some("prototype") => PrototypeReach::Reaches,
+            _ => match walk(member.object, false) {
+                // A member of `Foo.prototype` may hold anything.
+                PrototypeReach::OwnPrototype => PrototypeReach::Reaches,
+                reach => reach,
+            },
+        };
+    }
+    if let Some(call) = ast.call_at(value) {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let held = ast
+            .reference_declaration(callee)
+            .and_then(|declaration| ast.identifier_binding(declaration))
+            .and_then(|binding| binding.initializer);
+        let destructured = ast
+            .reference_declaration(callee)
+            .and_then(|declaration| {
+                ast.bindings.iter().find(|binding| {
+                    binding.names.iter().any(|name| name.span == declaration)
+                        && binding.shape != solid_facts::ast::BindingShape::Identifier
+                })
+            })
+            .and_then(|binding| binding.initializer)
+            .and_then(|initializer| file.source_text(ast.peel_ts_sugar_span(initializer)))
+            .is_some_and(|text| matches!(text.trim(), "Object" | "Reflect"));
+        let reads = |span: Span| file.source_text(span).is_some_and(reads_prototype);
+        return if destructured || reads(callee) || held.is_some_and(reads) {
+            PrototypeReach::Reaches
+        } else {
+            PrototypeReach::No
+        };
+    }
+    let Some(declaration) = ast.reference_declaration(value) else {
+        return PrototypeReach::No;
+    };
+    let held = ast
+        .identifier_binding(declaration)
+        .and_then(|binding| binding.initializer);
+    let assigned = ast
+        .assignments
+        .iter()
+        .filter(|assignment| {
+            !assignment.reads_target
+                && ast.reference_declaration(ast.peel_ts_sugar_span(assignment.target))
+                    == Some(declaration)
+        })
+        .map(|assignment| assignment.value_span);
+    // Review R46: an assignment that reaches decides, whatever the initializer
+    // held. Only a binding that holds `Foo.prototype` by its initializer
+    // alone is that prototype.
+    if assigned
+        .into_iter()
+        .any(|value| walk(value, false) != PrototypeReach::No)
+    {
+        return PrototypeReach::Reaches;
+    }
+    held.map_or(PrototypeReach::No, |held| walk(held, immediate))
+}
+
+/// Whether the root at `span` names a function or class this file declares
+/// and nothing rebinds. An import or a parameter is not one.
+fn own_function_or_class(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    !crate::indexes::binding_written(file, declaration)
+        && (ast.functions.iter().any(|function| {
+            function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        }) || ast.classes.iter().any(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        }))
+}
+
+/// Pushes the patch of a write to `key` of the object at `object`: of the
+/// standard root it names, or (ADR 0876) of the prototype its chain reaches.
+fn push_written_patch(file: &FileFacts, object: Span, key: &str, patches: &mut Vec<Hazard>) {
+    if let Some(root) = file.standard_root(object) {
+        push_patch(&root, key, patches);
+        return;
+    }
+    match prototype_reach(file, object) {
+        PrototypeReach::No => {}
+        PrototypeReach::Reaches => patches.push(standard_patch(REACHED_OWNER, key)),
+        PrototypeReach::OwnPrototype => patches.push(standard_patch(OWN_PROTOTYPE, key)),
+    }
+}
+
 /// The definers that write a named key of their first argument, and those
 /// that write the keys of their second.
 const KEY_DEFINERS: [&str; 3] = [
@@ -789,9 +957,10 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
         match write {
             AssignmentWrite::Name(member, key) => {
                 let object = ast.members[*member as usize].object;
-                if let Some(root) = file.standard_root(object) {
-                    push_patch(&root, key, &mut patches);
+                if key == "prototype" {
+                    patches.push(standard_patch(PROTOTYPE_KEY, key));
                 }
+                push_written_patch(file, object, key, &mut patches);
             }
             AssignmentWrite::PrototypeOwner(member) => {
                 let prototype = ast.members[*member as usize].span;
@@ -811,7 +980,6 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
         // after it scan the file's tables.
         if ast.computed_members.binary_search(&target).is_ok()
             && let Some(member) = ast.member_at(target)
-            && let Some(root) = file.standard_root(member.object)
             && !ast
                 .literal_computed_members
                 .iter()
@@ -824,24 +992,42 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
                 .entity_at(member.property)
                 .and_then(|entity| entity.constant_value.as_ref())
                 .and_then(constant_key);
-            push_patch(&root, key.unwrap_or(ANY_MEMBER), &mut patches);
+            let key = key.unwrap_or(ANY_MEMBER);
+            if key == ANY_MEMBER || key == "prototype" {
+                patches.push(standard_patch(PROTOTYPE_KEY, "prototype"));
+            }
+            push_written_patch(file, member.object, key, &mut patches);
+        }
+    }
+    // ADR 0876: `delete` uncovers what the prototype chain holds next.
+    for target in &ast.deleted_targets {
+        if let Some(member) = ast.member_at(ast.peel_ts_sugar_span(*target)) {
+            let key = if ast.computed_members.binary_search(&member.span).is_ok() {
+                ANY_MEMBER
+            } else {
+                file.source_text(member.property).unwrap_or(ANY_MEMBER)
+            };
+            push_written_patch(file, member.object, key, &mut patches);
         }
     }
     for call in &ast.calls {
         let Some(callee) = file.source_text(ast.peel_ts_sugar_span(call.callee)) else {
             continue;
         };
-        let by_key = KEY_DEFINERS.contains(&callee);
-        if !by_key && !SHAPE_DEFINERS.contains(&callee) {
-            continue;
-        }
-        let Some(root) = call
-            .arguments
-            .first()
-            .and_then(|target| file.standard_root(target.span))
-        else {
+        let callee = callee.trim();
+        let spelled = |names: &[&str]| names.iter().any(|name| spelled_callee(callee, name));
+        let Some(target) = call.arguments.first().map(|target| target.span) else {
             continue;
         };
+        // ADR 0876: a new prototype replaces every member at once.
+        if spelled(&["Object.setPrototypeOf", "Reflect.setPrototypeOf"]) {
+            push_written_patch(file, target, ANY_MEMBER, &mut patches);
+            continue;
+        }
+        let by_key = spelled(&KEY_DEFINERS);
+        if !by_key && !spelled(&SHAPE_DEFINERS) {
+            continue;
+        }
         let Some(argument) = call.arguments.get(1) else {
             continue;
         };
@@ -852,24 +1038,34 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
             });
             let literal =
                 quoted.or_else(|| crate::indexes::constant_string_key(file, argument.span));
-            push_patch(
-                &root,
-                literal.as_deref().unwrap_or(ANY_MEMBER),
-                &mut patches,
-            );
+            let key = literal.as_deref().unwrap_or(ANY_MEMBER);
+            if key == ANY_MEMBER || key == "prototype" {
+                patches.push(standard_patch(PROTOTYPE_KEY, "prototype"));
+            }
+            push_written_patch(file, target, key, &mut patches);
         } else if argument.exact_object_literal {
             for key in &argument.property_names {
                 let key = file.source_text(*key).unwrap_or(ANY_MEMBER);
+                // Review R45: `Object.assign(Foo, { prototype: … })`.
+                if key.trim_matches(['\'', '"', '`']) == "prototype" {
+                    patches.push(standard_patch(PROTOTYPE_KEY, "prototype"));
+                }
                 // ADR 0874: what `replace` dispatches through (`symbol_key`).
                 let key = if key.contains("Symbol.replace") {
                     ANY_MEMBER
                 } else {
                     key
                 };
-                push_patch(&root, key.trim_matches(['\'', '"', '`']), &mut patches);
+                push_written_patch(
+                    file,
+                    target,
+                    key.trim_matches(['\'', '"', '`']),
+                    &mut patches,
+                );
             }
         } else {
-            push_patch(&root, ANY_MEMBER, &mut patches);
+            patches.push(standard_patch(PROTOTYPE_KEY, "prototype"));
+            push_written_patch(file, target, ANY_MEMBER, &mut patches);
         }
     }
     patches
@@ -879,7 +1075,19 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
 /// `Symbol` makes on the spot. A program that replaces `Symbol` reopens each
 /// such site ([`SYMBOL_SITE`]): this file cannot see that.
 fn symbol_key(file: &FileFacts, key: Span) -> bool {
-    symbol_made_at(file, file.ast.peel_ts_sugar_span(key))
+    symbol_made_at(file, file.ast.peel_ts_sugar_span(key)) || const_symbol_key(file, key)
+}
+
+/// ADR 0877: the key at `key` names a `const` of this file holding what
+/// [`symbol_made_at`] accepts at its initializer. `Symbol` replaced is
+/// `symbol_open`'s, as for the same call written in place.
+fn const_symbol_key(file: &FileFacts, key: Span) -> bool {
+    let ast = &file.ast;
+    ast.reference_declaration(ast.peel_ts_sugar_span(key))
+        .and_then(|declaration| ast.identifier_binding(declaration))
+        .filter(|binding| binding.immutable)
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| symbol_made_at(file, ast.peel_ts_sugar_span(initializer)))
 }
 
 /// The well-known symbols no census member reads. Not `replace`, through which
@@ -977,7 +1185,43 @@ pub(crate) fn patch_veto(qualified_name: &str) -> Vec<Hazard> {
     if EVENT_TARGETS.contains(&container) || container.ends_with("Element") {
         hazards.extend(EVENT_TARGETS.map(|target| standard_patch(target, member)));
     }
+    // ADR 0876: a write a prototype chain reaches may be any owner's. A bare
+    // global (`setTimeout`) is no prototype's member; a `*Constructor` is
+    // reachable (`gp.constructor.resolve = f`).
+    if !owner.is_empty() {
+        hazards.push(standard_patch(REACHED_OWNER, member));
+        hazards.push(standard_patch(REACHED_OWNER, ANY_MEMBER));
+    }
     hazards
+}
+
+/// ADR 0876: whether a write a prototype chain reaches may have replaced the
+/// member of `qualified_name`, with no patch naming that owner.
+pub(crate) fn reached_patch(qualified_name: &str, hazard: &impl Fn(Hazard) -> bool) -> bool {
+    let Some((owner, member)) = qualified_name.rsplit_once('.') else {
+        return false;
+    };
+    !owner.is_empty()
+        && hazard(Hazard::AnyStandardPatch)
+        && (hazard(standard_patch(REACHED_OWNER, member))
+            || hazard(standard_patch(REACHED_OWNER, ANY_MEMBER)))
+}
+
+/// ADR 0781: whether a patch replaces the standard `qualified_name`
+/// ([`patch_veto`]), and ADR 0876: a write to a project's own `prototype`,
+/// once some `prototype` key is written and that may be anyone's.
+pub(crate) fn patch_vetoed(qualified_name: &str, hazard: &impl Fn(Hazard) -> bool) -> bool {
+    if !hazard(Hazard::AnyStandardPatch) {
+        return false;
+    }
+    let member = qualified_name
+        .rsplit_once('.')
+        .map_or(qualified_name, |(_, member)| member);
+    patch_veto(qualified_name).into_iter().any(hazard)
+        || (qualified_name.contains('.')
+            && hazard(standard_patch(PROTOTYPE_KEY, "prototype"))
+            && (hazard(standard_patch(OWN_PROTOTYPE, member))
+                || hazard(standard_patch(OWN_PROTOTYPE, ANY_MEMBER))))
 }
 
 /// The interfaces a window, a document or an element takes a member from.
@@ -1463,6 +1707,8 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
         let argument_key = |index: usize| match argument(index) {
             Some(key) => match &key.literal_value {
                 ArgumentLiteralFact::String(name) => CensusKey::Named(name.to_string()),
+                // ADR 0877: a definer keeps `*`.
+                _ if const_symbol_key(file, key.span) => CensusKey::Unknown,
                 _ => census_key(file, key.span, true),
             },
             None => CensusKey::Unknown,
@@ -2138,6 +2384,7 @@ fn standard_receiver(
     qualified: (&str, &str),
     patched: &dyn Fn(&str) -> bool,
     written: &dyn Fn(&str) -> bool,
+    named_written: &dyn Fn(&str) -> bool,
     replace_read: bool,
 ) -> bool {
     let ast = &file.ast;
@@ -2162,7 +2409,14 @@ fn standard_receiver(
             && primitive_dispatch_standard(file, callee, member_name, patched, replace_read)
     };
     let receiver = ast.peel_ts_sugar_span(member.object);
-    if primitive(receiver) || host(receiver) || standard_made(file, receiver, owner, patched, 0) {
+    // ADR 0876: a named write may have reached this value, by any route.
+    // ADR 0874: a string is made too, and `replace` dispatches all the same.
+    let dispatches =
+        || primitive_dispatch_standard(file, callee, member_name, patched, replace_read);
+    let made = |value: Span| {
+        !named_written(member_name) && dispatches() && standard_made(file, value, owner, patched, 0)
+    };
+    if primitive(receiver) || host(receiver) || made(receiver) {
         return true;
     }
     let Some(declaration) = ast.reference_declaration(receiver) else {
@@ -2196,8 +2450,7 @@ fn standard_receiver(
     };
     unbound
         && !exported
-        && initializer
-            .is_some_and(|initializer| standard_made(file, initializer, owner, patched, 0))
+        && initializer.is_some_and(made)
         && ast
             .references_to(declaration)
             .iter()
@@ -2241,10 +2494,7 @@ pub(crate) fn impostor_veto(
                 ]
                 .into_iter()
                 .any(&hazard)));
-    let patched = |name: &str| {
-        symbol_open
-            || (hazard(Hazard::AnyStandardPatch) && patch_veto(name).into_iter().any(&hazard))
-    };
+    let patched = |name: &str| symbol_open || patch_vetoed(name, &hazard);
     (symbol_open
         || hazard(standard_impostor(member))
         || hazard(standard_impostor(ANY_MEMBER))
@@ -2262,6 +2512,7 @@ pub(crate) fn impostor_veto(
                     || hazard(standard_impostor_write(ANY_MEMBER))
                     || defined_reflectively(name)
             },
+            &|name| symbol_open || hazard(standard_impostor_write(name)),
             hazard(standard_impostor(SYMBOL_REPLACE)),
         )
 }

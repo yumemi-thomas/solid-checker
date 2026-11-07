@@ -3393,10 +3393,10 @@ pub(crate) fn layer_run(
     // as a standard one would, for one run among others, never the sole run:
     // a site there has no role (`runs_in_withheld_layer`), and a scheduler's
     // fresh stack is no fact. Callers that take a run here as proof ask
-    // `impostor_withheld` themselves (after_await's ADR 0565 arm).
+    // `standard_call_withheld` themselves (after_await's ADR 0565 arm).
     let withheld = behavior
         .as_ref()
-        .is_some_and(|(call, _)| lookup.impostor_withheld(file, call.callee));
+        .is_some_and(|(call, _)| lookup.standard_call_withheld(file, call.callee));
     if withheld {
         return match behavior {
             Some((call, RuntimeArgumentBehavior::InlineCallback)) => LayerRun::Withheld(call.span),
@@ -3474,7 +3474,7 @@ fn handed_to_withheld_call(
             .min_by_key(|(call, _)| call.span.end - call.span.start)
     };
     if let Some((call, _)) =
-        nearest(function.span).filter(|(call, _)| lookup.impostor_withheld(file, call.callee))
+        nearest(function.span).filter(|(call, _)| lookup.standard_call_withheld(file, call.callee))
     {
         return Some(call.span);
     }
@@ -3486,7 +3486,7 @@ fn handed_to_withheld_call(
             nearest(*reference)
                 .filter(|(call, index)| {
                     ast.peel_ts_sugar_span(call.arguments[*index].span) == *reference
-                        && lookup.impostor_withheld(file, call.callee)
+                        && lookup.standard_call_withheld(file, call.callee)
                 })
                 .map(|(call, _)| call.span)
         })
