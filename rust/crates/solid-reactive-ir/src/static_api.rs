@@ -1,6 +1,7 @@
 //! Static validation for Solid 2.0 API shapes and explicit refresh writes.
 
 use crate::{HashMap, HashSet};
+use std::cell::Cell;
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
@@ -256,7 +257,12 @@ impl StaticApiContext<'_> {
                         StaticSource::Promise("")
                     });
                 }
-                Some(static_source_state(file, argument, self))
+                // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
+                // as `then`, unlike the static `dynamic()` check.
+                Some(match static_source_state(file, argument, self) {
+                    StaticSource::AsyncIterable => StaticSource::Promise(""),
+                    state => state,
+                })
             };
             // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
             // a non-literal `sync:` value) may assert `sync: true`: with a
@@ -338,8 +344,9 @@ impl StaticApiContext<'_> {
             }
             // The same guard where nothing places the call: a helper that a
             // tracked scope may reach (`createMemo(() => waitReady())`).
+            let walk_limited = Cell::new(None);
             if kind == Some(Primitive::Resolve)
-                && resolve_scope_unplaced(file, call, &allowed, self)
+                && resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
             {
                 result.violations.push(StaticViolation {
                     id: "SC2004".into(),
@@ -347,7 +354,7 @@ impl StaticApiContext<'_> {
                     message: "resolve() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call resolve inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
                     hint: "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: walk_limit_context(&walk_limited),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -378,7 +385,8 @@ impl StaticApiContext<'_> {
             }
             // The same guard where nothing places the call: a helper that a
             // tracked scope may reach (`createMemo(() => waitReady())`).
-            if kind == Some(Primitive::Until) && resolve_scope_unplaced(file, call, &allowed, self)
+            if kind == Some(Primitive::Until)
+                && resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
             {
                 result.violations.push(StaticViolation {
                     id: "SC2005".into(),
@@ -386,7 +394,7 @@ impl StaticApiContext<'_> {
                     message: "until() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call until inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
                     hint: "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: walk_limit_context(&walk_limited),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -413,12 +421,24 @@ impl StaticApiContext<'_> {
                 let state = static_source_state(file, source, self);
                 let unknown_form = kind == Some(Primitive::DynamicUnknownForm);
                 let reported = match state {
-                    StaticSource::Sync => None,
+                    // ADR 0865: `staticDynamic` throws on a thenable only.
+                    StaticSource::Sync | StaticSource::AsyncIterable => None,
                     StaticSource::Promise(proof) if !unknown_form => Some((proof, false)),
                     StaticSource::Promise(proof) => Some((proof, true)),
                     StaticSource::Open => Some(("is not proven to return synchronously", true)),
                 };
                 if let Some((proof, uncertain)) = reported {
+                    // ADR 0852: the source's thenable return proves the guard,
+                    // but a throw in a generator its async caller steps rejects
+                    // that caller's flight. Error observation is a separate,
+                    // unproved step; do not claim a visible runtime error.
+                    let flight_error_unobserved = crate::execution_role::generator_step_resumption(
+                        file,
+                        call.span,
+                        self.lookup,
+                    )
+                    .is_some();
+                    let uncertain = uncertain || flight_error_unobserved;
                     result.violations.push(StaticViolation {
                         id: "SC2007".into(),
                         rule: "static-dynamic-async-source".into(),
@@ -431,7 +451,9 @@ impl StaticApiContext<'_> {
                             dialect.boundary_name(solid_dialect::Boundary::Async)
                         ),
                         location: location(file.path.shared(), call.callee),
-                        analysis_context: if uncertain {
+                        analysis_context: if flight_error_unobserved {
+                            crate::blockers::ASYNC_FLIGHT_ERROR_UNOBSERVED.to_owned()
+                        } else if uncertain {
                             crate::blockers::STATIC_SOURCE_UNPROVEN.to_owned()
                         } else {
                             String::new()
@@ -1076,7 +1098,13 @@ fn resolve_tracked_scope(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
 ) -> Option<String> {
-    resolve_tracked_scope_within(file, call, allowed, context, ENTRY_DEPTH)
+    resolve_tracked_scope_within(file, call, allowed, context, ENTRY_DEPTH, &Cell::new(None))
+}
+
+/// ADR 0857 (reviews R13, R16): the row's blocker when the walk over entries
+/// stopped before reading them all.
+fn walk_limit_context(limited: &Cell<Option<&'static str>>) -> String {
+    limited.get().unwrap_or_default().to_owned()
 }
 
 /// ADR 0857: how many calls [`resolve_tracked_scope_within`] follows out of
@@ -1089,6 +1117,7 @@ fn resolve_tracked_scope_within(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
     depth: usize,
+    limited: &Cell<Option<&'static str>>,
 ) -> Option<String> {
     // ADR 0612: the guard reads the observer, which no task past an await has.
     // Past one on some path nothing is proven ([`resolve_scope_unplaced`]).
@@ -1131,7 +1160,7 @@ fn resolve_tracked_scope_within(
         let Some(primitive) = context.lookup.primitive_at_call(file, container.span) else {
             // ADR 0857: a standard-library call that provably runs the
             // literal inline runs it under the call's own observer.
-            return resolve_scope_of_entries(file, at, allowed, context, depth, true);
+            return resolve_scope_of_entries(file, at, allowed, context, depth, true, limited);
         };
         // ADR 0857: a callback proven to run during the call under the
         // caller's observer (`flush(fn)`) runs where the call does.
@@ -1140,9 +1169,11 @@ fn resolve_tracked_scope_within(
             .dialect
             .inline_callback_keeps_observer(primitive, index)
         {
-            return depth.checked_sub(1).and_then(|depth| {
-                resolve_tracked_scope_within(file, container, allowed, context, depth)
-            });
+            let Some(depth) = depth.checked_sub(1) else {
+                limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+                return None;
+            };
+            return resolve_tracked_scope_within(file, container, allowed, context, depth, limited);
         }
         let tracked = crate::owners::callback_execution_at_call(
             file,
@@ -1194,7 +1225,7 @@ fn resolve_tracked_scope_within(
     {
         return Some("tracked JSX".to_owned());
     }
-    resolve_scope_of_entries(file, at, allowed, context, depth, true)
+    resolve_scope_of_entries(file, at, allowed, context, depth, true, limited)
 }
 
 /// ADR 0857: the tracked scope of a call that runs the function holding `at`
@@ -1202,7 +1233,9 @@ fn resolve_tracked_scope_within(
 /// standard-library call proven to run it inline at least once
 /// (`[1].map(Row)`, `[1].forEach(() => …)`), each asked as the call itself
 /// is. One such entry under an observer is a run that throws, whatever the
-/// function's other entries are, a component's render among them.
+/// function's other entries are, a component's render among them. A walk the
+/// walk that stops sets `limited`: its answer proves nothing about the
+/// entries it did not read.
 fn resolve_scope_of_entries(
     file: &FileFacts,
     at: Span,
@@ -1210,12 +1243,24 @@ fn resolve_scope_of_entries(
     context: &StaticApiContext<'_>,
     depth: usize,
     require_run: bool,
+    limited: &Cell<Option<&'static str>>,
 ) -> Option<String> {
     use crate::local_access::HandOff;
-    let depth = depth.checked_sub(1)?;
+    let Some(depth) = depth.checked_sub(1) else {
+        limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+        return None;
+    };
     let lookup = context.lookup;
     let function = crate::owners::containing_body_function(&file.ast, at)?;
-    if function.generator || function.r#async || !lookup.function_value_is_current(file, function) {
+    // ADR 0857 (review R16): an `async` function's prefix runs on the call's
+    // stack, and a site past its await never got here. Calling a bound
+    // generator runs none of it, and a function its binding may no longer
+    // hold is not what a call of the binding runs: no entry is read. A literal
+    // with no binding (an `action` step, a handler) is its consumer's.
+    if function.generator || !lookup.function_value_is_current(file, function) {
+        if crate::owners::function_binding_name(file, function).is_some() {
+            limited.set(Some(crate::blockers::FUNCTION_RUN_UNPLACED));
+        }
         return None;
     }
     let hand_offs = match crate::local_access::function_reference_hand_offs(file, function, lookup)
@@ -1241,7 +1286,7 @@ fn resolve_scope_of_entries(
             }
             _ => return None,
         };
-        resolve_tracked_scope_within(file, entry, allowed, context, depth)
+        resolve_tracked_scope_within(file, entry, allowed, context, depth, limited)
             .map(|scope| format!("{scope}, through the call that runs this function"))
     })
 }
@@ -1263,6 +1308,7 @@ fn resolve_scope_unplaced(
     call: &solid_facts::ast::CallFact,
     allowed: &[Span],
     context: &StaticApiContext<'_>,
+    limited: &Cell<Option<&'static str>>,
 ) -> bool {
     use crate::ExecutionRole;
     if resolve_tracked_scope(file, call, allowed, context).is_some() {
@@ -1281,7 +1327,12 @@ fn resolve_scope_unplaced(
     let at = crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
         .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
         .map_or(call.span, |climb| climb.at);
-    if resolve_scope_of_entries(file, at, allowed, context, ENTRY_DEPTH, false).is_some() {
+    if resolve_scope_of_entries(file, at, allowed, context, ENTRY_DEPTH, false, limited).is_some() {
+        return true;
+    }
+    // Reviews R13, R16: the walk stopped, so the entries beyond are unread
+    // and no role at the call itself can clear them.
+    if limited.get().is_some() {
         return true;
     }
     // ADR 0517: a library callback on the way (`[1].forEach`) may run zero
@@ -1322,7 +1373,7 @@ fn resolve_scope_unplaced(
             index,
             container.arguments.len(),
         ) {
-            return resolve_scope_unplaced(file, container, allowed, context);
+            return resolve_scope_unplaced(file, container, allowed, context, limited);
         }
         // ADR 0614: a `flush()` under a computation drains this callback with
         // that computation's observer active (ADR 0613).
@@ -1357,7 +1408,7 @@ fn resolve_scope_unplaced(
                 .is_none_or(|calls| {
                     calls.iter().any(|caller| {
                         resolve_tracked_scope(file, caller, allowed, context).is_some()
-                            || resolve_scope_unplaced(file, caller, allowed, context)
+                            || resolve_scope_unplaced(file, caller, allowed, context, limited)
                     })
                 });
     }
@@ -1423,9 +1474,14 @@ fn static_source_state(
     let Some(function) = static_source_function(file, source, context) else {
         return StaticSource::Open;
     };
-    // A generator's iterator has no `then`.
+    // A generator's iterator has no `then`; an async generator's has
+    // `Symbol.asyncIterator` (ADR 0865).
     if function.generator {
-        return StaticSource::Sync;
+        return if function.r#async {
+            StaticSource::AsyncIterable
+        } else {
+            StaticSource::Sync
+        };
     }
     if let Some(proof) = static_source_promise(file, function, context) {
         return StaticSource::Promise(proof);
@@ -1459,6 +1515,8 @@ fn static_source_state(
 /// What a static `dynamic()` source does on its one call (ADR 0654).
 enum StaticSource {
     Promise(&'static str),
+    /// An async generator's iterator: no `then`, an async iterator (ADR 0865).
+    AsyncIterable,
     Sync,
     Open,
 }

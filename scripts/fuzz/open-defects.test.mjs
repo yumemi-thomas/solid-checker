@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { gridStanding, heldGridEntry, ledgerCovers, namedKey, offLedger, ratchetDifferences, readOpenDefects } from "./open-defects.mjs";
+import { finalBlockers, gridStanding, heldGridEntry, ledgerCounts, ledgerCovers, namedKey, offLedger, ownerProblems, ratchetDifferences, readOpenDefects } from "./open-defects.mjs";
 import { inStopGroup, ledgerChange, runSeed, stopFinding } from "./open-rows.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { PATTERNS, comparePatterns, expectedSilent, judgePattern, patternCases } from "./patterns.mjs";
@@ -102,6 +102,26 @@ describe("the row ledger (ADR 0815, R23)", () => {
     expect(gridStanding(list, { ...row, outcome: "agree" }, null, { grid: "g" }).kind).toBe("fixed");
     expect(gridStanding(list, { ...row, id: "mx-a-2", outcome: "agree" }, null, { grid: "g" })).toBe(null);
   });
+  it("the final gate fails while R-F1-open or R-F2-open holds a row, or any certified or false-positive row is listed (before #173)", () => {
+    const rows = { grids: { g: { a: { outcome: "false-clean", certified: true, cause: "R-F2-open" }, b: { outcome: "false-clean", certified: true, cause: "R" } } } };
+    expect(finalBlockers({ rows })).toEqual(["g/a", "g/b"]);
+    expect(finalBlockers({ rows: { grids: { g: { b: rows.grids.g.b } } } })).toEqual(["g/b"]);
+    expect(finalBlockers({ rows: { grids: { g: { c: { outcome: "false-clean", cause: "R-F1-open" } } } } })).toEqual(["g/c"]);
+    expect(finalBlockers({ rows: { grids: { g: { d: { outcome: "false-positive", cause: "fam" } } } } })).toEqual(["g/d"]);
+    expect(finalBlockers({ rows: { grids: { g: { e: { outcome: "false-clean", cause: "R" }, f: { outcome: "misplaced", cause: "fam" } } } } })).toEqual([]);
+    expect(ledgerCounts(rows)).toMatchObject({ certified: 1, certifiedF2: 1 });
+    if (process.env.FLIP_FINAL) expect(finalBlockers(readOpenDefects())).toEqual([]);
+  });
+  it("a certified or false-positive row with no family has an owner, and an owner names a listed row with that owner", () => {
+    const rows = { grids: { g: { a: { outcome: "false-positive", cause: "false-positive", owner: "X" }, b: { outcome: "false-clean", certified: true, cause: "R-other" }, c: { outcome: "false-clean", certified: true, cause: "fam" }, d: { outcome: "false-clean", certified: true, cause: "R-F2-open" } } } };
+    expect(ownerProblems({ rows, owners: { "g/a": "X", "g/b": "Y" } })).toEqual(["g/b: the row says no owner, owners says Y"]);
+    expect(ownerProblems({ rows, owners: { "g/a": "X" } })).toEqual(["g/b: certified under R-other with no owner"]);
+    expect(ownerProblems({ rows, owners: { "g/a": "X", "g/z": "X" } })).toEqual(["g/z: an owner for no ledger row", "g/b: certified under R-other with no owner"]);
+    expect(ownerProblems(readOpenDefects())).toEqual([]);
+  });
+  it("lists no row of ADR 0866's contradiction: those are R5's, and fail the smoke", () => {
+    for (const rows of Object.values(readOpenDefects().rows.grids)) for (const id of Object.keys(rows)) expect(id).not.toMatch(/-flw-guard-(?:early|probe-loop)-/);
+  });
   it("a stop row stays held only while its listed uncertifiable stands, on every run (R27)", () => {
     const named = { id: "SC9012", blocker: "value-in-carrier", line: 5, column: 7 };
     const stop = { rows: { grids: { g: { "mx-a-1": { outcome: "false-clean", cause: "R-stop-named-U", blocker: namedKey(named) } } } } };
@@ -150,9 +170,9 @@ describe("the row ledger (ADR 0815, R23)", () => {
   });
   it("the ratchet is exact both ways, certified and false-positive rows on their own", () => {
     const rows = { grids: { g: { a: { outcome: "false-clean", certified: true, cause: "R" }, b: { outcome: "false-positive", cause: "R" } } } };
-    expect(ratchetDifferences({ rows, ratchet: { certified: 1, falsePositive: 1, causes: { R: 2 } } })).toEqual([]);
-    expect(ratchetDifferences({ rows, ratchet: { certified: 1, falsePositive: 1, causes: { R: 3 } } })).toEqual([{ key: "R", rows: 2, ratchet: 3 }]);
-    expect(ratchetDifferences({ rows, ratchet: { certified: 0, falsePositive: 1, causes: { R: 2 } } })).toEqual([{ key: "certified", rows: 1, ratchet: 0 }]);
+    expect(ratchetDifferences({ rows, ratchet: { certified: 1, certifiedF2: 0, falsePositive: 1, causes: { R: 2 } } })).toEqual([]);
+    expect(ratchetDifferences({ rows, ratchet: { certified: 1, certifiedF2: 0, falsePositive: 1, causes: { R: 3 } } })).toEqual([{ key: "R", rows: 2, ratchet: 3 }]);
+    expect(ratchetDifferences({ rows, ratchet: { certified: 0, certifiedF2: 0, falsePositive: 1, causes: { R: 2 } } })).toEqual([{ key: "certified", rows: 1, ratchet: 0 }]);
   });
 });
 

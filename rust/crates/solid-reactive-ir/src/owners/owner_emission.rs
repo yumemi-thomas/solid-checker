@@ -207,14 +207,12 @@ pub(super) fn emit_file(
         // it was handed to, the holder of a member it was assigned to, a
         // timer constructing its class, a getter's reader) is not followed,
         // and no region it is written in answers for it. The operation is
-        // unplaced, never certified. A JSX boundary (`allow_uncertain` false)
-        // keeps today's answer.
+        // unplaced, never certified.
         let unplaced_callback = context
             & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
             == 0
             && !candidate.in_parameter_list
             && !returned_unplaced
-            && candidate.allow_uncertain
             && !region_answers
             && !exported_seed
             && candidate.owner.is_some_and(|span| !unreached(&span));
@@ -224,7 +222,7 @@ pub(super) fn emit_file(
             context = OWNER_CONTEXT_UNOWNED;
         }
         // As in the fragment: effects, cleanups, context reads and boundary
-        // calls, never a JSX boundary or `onSettled`'s returned cleanup. A
+        // calls, never `onSettled`'s returned cleanup. A
         // context read after an `await` is unowned (ADR 0352), and so is a
         // `Loading(props)` call (ADR 0462).
         let continuation_placed = matches!(
@@ -305,12 +303,28 @@ pub(super) fn emit_file(
         let step_resumption = possible_site
             .filter(|_| !after_await && context != 0)
             .and_then(|site| action_step_resumption(file, site, lookup));
-        let after_yield = step_resumption == Some(StepResumption::Proven);
+        // ADR 0851: the same past a `yield` of a generator its async caller
+        // steps across one of its suspensions (`for await`, a loop that
+        // awaits): that step is called from the caller's continuation.
+        let generator_resumed = possible_site
+            .filter(|_| !after_await && context != 0 && step_resumption.is_none())
+            .and_then(|site| crate::execution_role::generator_step_resumption(file, site, lookup));
+        // ADR 0852: a throw in the step rejects the async caller's flight.
+        // Its owner context proves the guard, not propagation to an observed
+        // read or error boundary. Keep the context-read obligation open.
+        let flight_error_unobserved = candidate.operation == "context-read"
+            && generator_resumed.is_some()
+            && possible_site.is_some_and(|site| {
+                crate::execution_role::generator_flight_stepped(file, site, lookup)
+            });
+        let after_yield =
+            step_resumption == Some(StepResumption::Proven) || generator_resumed == Some(true);
         let after_await = after_await || after_yield;
         let possible_continuation = possible_site.filter(|_| !after_await).and_then(|site| {
             possible_await_continuation_context(file, site, context).or_else(|| {
-                (step_resumption == Some(StepResumption::Possible))
-                    .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
+                (step_resumption == Some(StepResumption::Possible)
+                    || generator_resumed == Some(false))
+                .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
             })
         });
         let context = if after_await {
@@ -411,21 +425,14 @@ pub(super) fn emit_file(
         }
         // ADR 0575: a default the syntax does not prove is not `undefined`.
         let default_unproven = provider_verdict == Some(false);
-        // A JSX boundary keeps the answer by detaching bits alone (ADR 0534
-        // scopes the proven-run requirement to the operations that can be
-        // obligations).
-        // ADR 0612: and a region's owner is the synchronous run's: past an await
+        // ADR 0612: a region's owner is the synchronous run's: past an await
         // of its compute (`createMemo(async () => { await p; createEffect(…) })`)
         // none is current, whatever the region provides.
         let root_owned = !after_await
             && possible_continuation.is_none()
             && !candidate.in_parameter_list
             && !returned_unplaced
-            && if candidate.allow_uncertain {
-                region_answers
-            } else {
-                root_owned_at(candidate.providing_region_chain.as_deref(), context_of)
-            };
+            && region_answers;
         // A providing region owns its reads, so a provider-free read there is
         // a provider finding, not an owner question (ADR 0352).
         let provider = provider_free_read && (root_owned || owned_on_every_path(context));
@@ -488,14 +495,16 @@ pub(super) fn emit_file(
                     inputs.callback_hash(graph, target),
                 ));
             }
-            let settled_call_valid = file.ast.calls.iter().any(|call| {
+            // ADR 0867: only a call tsc rejects has nothing to place. A call
+            // with no resolved fact (an `any` callee, a held value) still runs.
+            let settled_call_rejected = file.ast.calls.iter().any(|call| {
                 call.arguments
                     .first()
                     .is_some_and(|argument| argument.span == candidate.operation_span)
                     && lookup
                         .resolved_callee_call(file, call.callee)
                         .is_some_and(|resolved| {
-                            resolved.validity == typefacts::ResolvedCallValidity::Valid
+                            resolved.validity == typefacts::ResolvedCallValidity::Recovery
                         })
             });
             let cleanup_skipped = |arm| {
@@ -518,7 +527,7 @@ pub(super) fn emit_file(
                     // The callback may return a cleanup. Preserve that as
                     // runtime uncertainty instead of certifying it absent.
                 }
-                CleanupReturnProof::Unresolved if settled_call_valid => {}
+                CleanupReturnProof::Unresolved if !settled_call_rejected => {}
                 CleanupReturnProof::Unresolved => {
                     cleanup_skipped(arm_id!("owner_emission.cleanup-unresolved-call"));
                     continue;
@@ -556,8 +565,7 @@ pub(super) fn emit_file(
                                 == Some(solid_dialect::CallbackOwner::Conditional)
                         })
                 });
-        let caller_uncertain = candidate.allow_uncertain
-            && !proven_unowned
+        let caller_uncertain = !proven_unowned
             && !unplaced_callback
             && (exported_seed
                 || owner.is_some_and(|(node, _)| open_world_unowned_only(context, node)));
@@ -577,7 +585,8 @@ pub(super) fn emit_file(
         let provider_open = provider && !inputs.lookup.program_closed;
         let default_unproven = provider && default_unproven;
         let unplaced_callback = unplaced_callback && !proven_unowned;
-        let uncertain = runtime_uncertain
+        let uncertain = flight_error_unobserved
+            || runtime_uncertain
             || conditional_owner
             || later_run_unowned
             || caller_uncertain
@@ -592,8 +601,11 @@ pub(super) fn emit_file(
             let default_unproven = provider_verdict == Some(false);
             let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                 || owner.is_some_and(|(node, _)| node.component_uncertain);
-            let uncertain =
-                runtime_uncertain || component_uncertain || provider_open || default_unproven;
+            let uncertain = flight_error_unobserved
+                || runtime_uncertain
+                || component_uncertain
+                || provider_open
+                || default_unproven;
             crate::role_log::owner(
                 "context-provider",
                 path,
@@ -609,6 +621,7 @@ pub(super) fn emit_file(
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
+                    flight_error_unobserved,
                     uncertain,
                     runtime_uncertain,
                     caller_uncertain: false,
@@ -648,6 +661,7 @@ pub(super) fn emit_file(
             file,
             candidate.operation_span,
             OwnerRequirementStatus {
+                flight_error_unobserved,
                 uncertain,
                 runtime_uncertain,
                 caller_uncertain,

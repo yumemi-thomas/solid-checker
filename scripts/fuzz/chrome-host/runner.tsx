@@ -15,6 +15,7 @@ const settings = { eventPasses: 2, pauseMs: Number(params.get('pause') ?? 60), f
 let clock: ReturnType<typeof installVirtualClock> | null = null;
 const pause = (ms: number) => (clock ? clock.advance(ms) : new Promise<void>(resolve => setTimeout(resolve, ms)));
 const describeError = (e: any) => ({
+  name: String(e?.constructor?.name ?? ''),
   message: String(e?.message ?? e),
   stack: String(e?.stack ?? ''),
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,

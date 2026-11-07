@@ -1,5 +1,5 @@
 // open-rows.mjs: writes open-defects-rows.json, the exact grid rows open-defects.json holds, from a smoke run at one sample seed:
-//   node scripts/fuzz/open-rows.mjs --update <finished smoke dir> [--allow-new]
+//   node scripts/fuzz/open-rows.mjs --update <finished smoke dir> [--allow-new] [--allow-gone]
 // The only writer of that file; review its diff. Each row: its outcome, `certified`, and its cause (a family's `item` for a family someone
 // already named). The seed comes from the run. New rows need --allow-new; any changed count needs the ratchet in open-defects.json edited
 // in the same diff (exact both ways, open-defects.test.mjs), certified and false-positive rows counted on their own.
@@ -7,15 +7,19 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
-import { OPEN_DEFECTS, OPEN_ROWS, STOP_NAMED_U, heldGridEntry, ledgerCounts, namedKey } from "./open-defects.mjs";
+import { F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STOP_NAMED_U, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
 
 /** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
 const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "secondary-false-clean", "not-legal"];
+/** Rows the ledger may not hold: certified CONTEXT_NOT_FOUND, a real hole R5 is closing. They fail the smoke until that lands. */
+export const NOT_LISTED = (row) => /^flw-guard-(?:early|probe-loop)$/.test(String(row.context ?? ""));
 const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted"];
 const PLACELESS = ["CAUGHT_REACTIVE_READ", "SETTLED_CLEANUP_UNOWNED", "ASYNC_OUTSIDE_LOADING_BOUNDARY"];
 
 /** Why a failing row fails, from what the row itself says. A row of a family already named keeps that name. */
 export function causeOf(row, problem, entry) {
+  if (/^flw-owned-/.test(String(row.context ?? ""))) return F2_OPEN;
+  if (row.context === "flw-guard-yield") return F1_OPEN;
   if (entry && !entry.item.startsWith("R-")) return entry.item;
   if (problem === "unplaced") return "R-unplaced";
   if (problem === "misplaced") return "R-misplaced";
@@ -25,7 +29,7 @@ export function causeOf(row, problem, entry) {
   if (/^(?:store-)?proto-|^installed-|^use-|^net-|^cast-|^store-dstr-/.test(variant)) return "R-carrier";
   if (variant === "refresh") return "R-call-arg";
   if (PLACELESS.includes(row.code)) return "R-placeless";
-  if (ALIAS_BINDINGS.includes(row.binding)) return "R-alias-call";
+  if (ALIAS_BINDINGS.includes(row.binding) || (/^flw-(?:guard|getter)-/.test(String(row.context ?? "")) && ["call", "or-assign"].includes(row.binding))) return "R-alias-call";
   const atSite = (row.detail?.findings ?? []).map((finding) => finding.split("/")[0]);
   if (atSite.some((rule) => !withholdingRules.includes(rule))) return "R-neighbour-U";
   return row.detail?.withheldNear ? "R-near" : "R-other";
@@ -56,23 +60,29 @@ export function stopFinding(row) {
 export function ledger(dir, seed, list) {
   const grids = {};
   const stopCheck = { listed: [], rejected: [], family: [] };
+  const judged = new Set();
   for (const grid of readdirSync(dir).sort()) {
     const path = join(dir, grid, "programs.jsonl");
     if (!existsSync(path)) continue;
     const rows = {};
     for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean)) {
       const row = JSON.parse(line);
+      judged.add(`${grid}/${row.id}`);
       const problem = rowProblem(row);
-      if (!LEDGERED.includes(problem)) continue;
+      if (!LEDGERED.includes(problem) || NOT_LISTED(row)) continue;
       const named = inStopGroup(row) ? stopFinding(row) : null;
       const entry = heldGridEntry(list, row, problem);
       if (inStopGroup(row)) { (entry && !entry.item.startsWith("R-") ? stopCheck.family : named ? stopCheck.listed : stopCheck.rejected).push(row.id); }
       const stops = named && !(entry && !entry.item.startsWith("R-"));
-      rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}) };
+      const owner = list.owners?.[`${grid}/${row.id}`];
+      rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}), ...(owner ? { owner } : {}) };
     }
     if (Object.keys(rows).length) grids[grid] = Object.fromEntries(Object.entries(rows).sort(([a], [b]) => (a < b ? -1 : 1)));
   }
-  return { rows: { seed: Number(seed), complete: false, grids }, stopCheck };
+  // A listed row the run did not judge has not stopped failing: the smoke takes every ledger id (cover.mjs requiredIds), so one is missing only
+  // when the grid no longer generates it, and the update says so instead of dropping it as if fixed.
+  const unjudged = Object.entries(list.rows?.grids ?? {}).flatMap(([grid, rows]) => Object.keys(rows).map((id) => `${grid}/${id}`)).filter((key) => !judged.has(key));
+  return { unjudged, rows: { note: "Generated by open-rows.mjs. R-F2-open (flw-owned-*) holds open defects with certified false cleans, their fix in R5's queue: it must reach 0 before #173 moves, and make flip-final fails until it does. So must R-F1-open (flw-guard-yield), W's F1.", seed: Number(seed), complete: false, grids }, stopCheck };
 }
 
 /** One row a line, so the diff of an update is the rows that moved. */
@@ -102,12 +112,19 @@ export function ledgerChange(before, after) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
+  if (args.includes("--final")) {
+    const blockers = finalBlockers(readOpenDefects());
+    console.log(`final gate: ${blockers.length} rows under ${F1_OPEN} or ${F2_OPEN}, certified or false positive`);
+    process.exit(blockers.length ? 1 : 0);
+  }
   const at = args.indexOf("--update");
   if (at < 0) throw new Error("usage: open-rows.mjs --update <smoke dir> [--allow-new]");
   const dir = args[at + 1];
   const before = existsSync(OPEN_ROWS) ? JSON.parse(readFileSync(OPEN_ROWS, "utf8")) : { grids: {} };
   const list = { ...JSON.parse(readFileSync(OPEN_DEFECTS, "utf8")), rows: before };
-  const { rows: out, stopCheck } = ledger(dir, runSeed(dir), list);
+  const { rows: out, stopCheck, unjudged } = ledger(dir, runSeed(dir), list);
+  for (const id of unjudged) console.log(`not in this run ${id}`);
+  if (unjudged.length && !args.includes("--allow-gone")) throw new Error(`${unjudged.length} listed rows are not in this run: the grid no longer generates them, or the run missed the ledger's ids. Read them; --allow-gone drops them`);
   console.log(`stop rule: ${stopCheck.listed.length} checked and listed, ${stopCheck.family.length} in a named family, ${stopCheck.rejected.length} rejected (no named uncertifiable on the site's line)`);
   for (const id of stopCheck.rejected) console.log(`rejected ${id}`);
   const { added, removed, moved } = ledgerChange(before, out);

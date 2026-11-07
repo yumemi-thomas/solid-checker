@@ -358,6 +358,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/conditional-await-accessor.tsx",
+      "start": 209,
+      "end": 213,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
