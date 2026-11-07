@@ -123,3 +123,5 @@ Ownership gate: passes (96 cases), with the case [86] edit. Each program was con
 - Re-ran `a_redirected_types_main_or_exports_field_is_resolved_again` alone under the heavy lock and 12 GB guard: exit 0 (1 passed). Router retries are queued behind another agent's heavy job.
 - Next: router retries; isolated executor/rewrite/rediscovery tests; verify-delta; verification handoff. Job 2 remains untouched.
 - The Next steps above predate the update and VM sections: sites, sweep, snapshots, ownership and VM t1 were already measured, as recorded there. Do not redo those without a changed semantic build.
+
+- Count ledger preflight found the snapshot rise had not been recorded. `node scripts/guard/count.mjs --update` records the measured +175 SC9012 rows (11 existing keys); no drops or renames changed. The gate now exits 0: 8,108 U rows / 189 keys. This records Job 1 results; the Job 2 gate implementation is unchanged.
