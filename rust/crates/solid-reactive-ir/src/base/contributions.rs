@@ -1865,6 +1865,14 @@ fn hands_nothing_on(owner: &str, member: &str) -> bool {
     }
 }
 
+/// Whether a [`hands_nothing_on`] member's result is its receiver.
+fn answers_with_receiver(member: &str) -> bool {
+    matches!(
+        member,
+        "reverse" | "sort" | "fill" | "copyWithin" | "set" | "add"
+    )
+}
+
 /// The parameter position at which a callback-taking member of a standard
 /// container hands the callback its receiver, 0-based.
 fn receiver_slot(owner: &str, member: &str) -> Option<usize> {
@@ -1905,7 +1913,12 @@ fn receiver_stays(
         return false;
     }
     if hands_nothing_on(owner, member) {
-        return true;
+        // A member that answers with its receiver hands it to the program
+        // unless the answer is discarded.
+        return !answers_with_receiver(member)
+            || ast
+                .calls_with_peeled_callee(used.span)
+                .all(|call| call.result_discarded);
     }
     let Some(slot) = receiver_slot(owner, member) else {
         return false;

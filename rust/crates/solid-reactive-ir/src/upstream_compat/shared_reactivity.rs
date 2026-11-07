@@ -4102,7 +4102,10 @@ fn write_window_standing(
                 }
                 at = call;
             }
-            crate::execution_role::LayerRun::InPlaceAmongOthers(_) if inside => {
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+            | crate::execution_role::LayerRun::Withheld(_)
+                if inside =>
+            {
                 return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::FreshStack if inside => return WriteStanding::Dropped,

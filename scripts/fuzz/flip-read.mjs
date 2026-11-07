@@ -102,6 +102,8 @@ const LATE_RECEIVERS = {
   "recv-this-late": (t) => ({ hoisted: [expr(domExpr(`(Array.prototype as any).hand = function (this: any) { this.forEach = ${LATE_EACH}; }; const ${t} = [1]; (${t} as any).hand();`))], held: [], callee: `${t}.forEach` }),
   // Review D7: a listed method the program replaced runs with the array as this.
   "recv-slice-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}o = Array.prototype.slice; (Array.prototype as any).slice = function (this: any, ...a: any[]) { if (this[0] === 7) this.forEach = ${LATE_EACH}; return ${t}o.apply(this, a); }; const ${t} = [7]; ${t}.slice();`))], held: [], callee: `${t}.forEach` }),
+  // Review R33: a member that answers with its receiver hands it on.
+  "recv-answer-late": (t) => ({ hoisted: [expr(domExpr(`const ${t} = [1, 2]; const ${t}y: any = ${t}.reverse(); ${t}y.forEach = ${LATE_EACH};`))], held: [], call: (h) => `${t}.forEach(() => { ${h}(); })` }),
   // R10b: an array's species, as a promise's above.
   "recv-species-array": (t) => ({ hoisted: [expr(domExpr(`class ${t} { static get [Symbol.species](): unknown { return ${IN_RUN} ? ${t} : Array; } forEach(f: () => void) { queueMicrotask(f); } } (Array.prototype as any).constructor = ${t};`))], held: [], callee: "[1].map((v) => v).forEach" }),
   // ADR 0875: a key that only looks like a symbol puts the program's late `forEach` on the array: a string from a symbol
@@ -181,10 +183,12 @@ export const FLIP_READ_LEGAL = {
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...Object.keys(LATE_RECEIVERS)],
+  // ADR 0874, review R30-R32: a withheld call's callback proves no run: the program's own `forEach` queues it.
+  FLUSH_IN_ACTION: ["wh-action-late"],
+  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...Object.keys(LATE_RECEIVERS)],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(ITER_PATCHES)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
 };
 
@@ -604,6 +608,16 @@ export function flipReadContext(context, stmts, kit) {
     if (effect) return { body: [expr(prim("effect", fn(body, { async: true }), { apply: fn([]) }))], view: [] };
     const m = kit.name("m");
     return { body: [decl(m, prim("memo", fn(body, { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
+  // ADR 0874, review R30-R32: `names` is the program's own object, typed as a list: its `forEach` runs nothing on this stack.
+  if (context === "wh-helper-late" || context === "wh-action-late" || context === "wh-root-cleanup") {
+    const [own, names, f, h] = [kit.name("o"), kit.name("n"), kit.name("f"), kit.name("h")];
+    const each = context === "wh-root-cleanup" ? "(cb: () => void) => { onCleanup(cb); }" : "(cb: () => void) => { queueMicrotask(cb); }";
+    const hold = expr(domExpr(`const ${own}: any = {}; ${own}.forEach = ${each}; const ${names}: string[] = ${own};`, undefined, context === "wh-root-cleanup" ? ["onCleanup"] : undefined));
+    const site = decl(f, fn(stmts));
+    if (context === "wh-helper-late") return { body: [hold, site, decl(h, domExpr(`() => { ${names}.forEach(() => { ${f}(); }); }`)), expr(domExpr(`${h}()`))], view: [] };
+    if (context === "wh-action-late") return { body: [hold, site, decl(h, domExpr(`action(function* () { ${names}.forEach(() => { ${f}(); }); yield; })`, undefined, ["action"])), expr(domExpr(`${h}()`))], view: [] };
+    return { body: [hold, site, expr(domExpr(`${names}.forEach(() => { createRoot(() => { ${f}(); }); })`, undefined, ["createRoot"]))], view: [] };
   }
   // ADR 0874: `then` on a receiver no fact proves, under a key no fact names: the read past the await keeps its rule's row. Chrome warns there.
   if (context === "then-withheld" || context === "then-withheld-named") {

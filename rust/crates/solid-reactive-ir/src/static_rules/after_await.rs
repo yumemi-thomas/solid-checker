@@ -1529,8 +1529,6 @@ impl<'f, 'a> Reach<'f, 'a> {
             | crate::execution_role::LayerRun::InPlaceAmongOthers(at) =
                 crate::execution_role::layer_run(file, callback, ctx.semantic_lookup)
                 && at == call.span
-                // ADR 0874: a withheld call proves no run of its callback.
-                && !ctx.semantic_lookup.impostor_withheld(file, call.callee)
                 && ctx
                     .semantic_lookup
                     .resolved_callee_call(file, call.callee)

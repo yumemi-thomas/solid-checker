@@ -5864,5 +5864,57 @@
    "mx-no-owner-cleanup-flw-withheld-late-x-direct-none"
   ],
   "rediscovered": "the checker at 3c921e7dd plus R9/R10 (C2 build m6) on matrix.mjs --grid --recall --ids (codes NO_OWNER_EFFECT, NO_OWNER_CLEANUP; flip-write.mjs context flw-withheld-late), judged by the census tip's 4c judge ff31e12bb: 3 false-clean of 6 (Chrome 3/3 same), 3 typed-away; the fix (m7): 0 false-clean, 3 recall-gap (missing-owner uncertifiable at the site), 3 typed-away"
+ },
+ {
+  "finding": "SC1001 V at a helper's call: `function h() { names.forEach(() => { r(); }); } h();` where `names` is the program's own object whose `forEach` queues the callback: a withheld call's callback was a proven run; Chrome quiet",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-wh-helper-late-signal-direct-none",
+   "lg-strict-read-untracked-wh-helper-late-memo-direct-none",
+   "lg-strict-read-untracked-wh-helper-late-store-link-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 3 false-positive; m19 0, uncertifiable"
+ },
+ {
+  "finding": "SC2006 V in an action step: `names.forEach(() => { flush(); })` on the same object: the step climb crossed a withheld call; Chrome quiet",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "lg-flush-in-action-wh-action-late-x-direct-none",
+   "lg-flush-in-action-wh-action-late-x-direct-none-m-show-signal",
+   "lg-flush-in-action-wh-action-late-x-direct-none-m-show-later"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 5 disturbed (the V stood where Chrome reports nothing); m19 0, uncertifiable"
+ },
+ {
+  "finding": "SC2001 V: `names.forEach(() => { createRoot(() => set(1)); })` where the program's `forEach` hands the callback to `onCleanup`: the disposal climb crossed a withheld call as a run outside a disposal; the write is legal in a disposal",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-wh-root-cleanup-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-wh-root-cleanup-store-direct-none",
+   "lg-reactive-write-in-owned-scope-wh-root-cleanup-refresh-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 12 unexecuted; m19 0, uncertifiable"
+ },
+ {
+  "finding": "R10a's exemption took `reverse`, `sort`, `fill`, `copyWithin`, Map `set`, Set `add` as handing nothing on, but each answers with its receiver: `const ys: any = xs.reverse(); ys.forEach = late; xs.forEach(() => { … })` was a standard call; Chrome quiet",
+  "found": "review R30-R33 of 67987ca14 (read in code); the fuzz twins confirm each",
+  "fixed": "ADR 0874",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-recv-answer-late-signal-direct-none",
+   "lg-strict-read-untracked-recv-answer-late-memo-direct-none",
+   "lg-strict-read-untracked-recv-answer-late-store-link-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 3 false-positive; m19 0, uncertifiable"
  }
 ]

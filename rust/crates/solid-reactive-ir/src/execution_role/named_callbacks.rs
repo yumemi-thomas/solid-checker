@@ -670,6 +670,10 @@ pub(crate) fn named_at_tracked_position(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    // ADR 0874: its position says nothing while an impostor may run it.
+    if runs_in_withheld_layer(file, span, lookup) {
+        return false;
+    }
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         let role = lookup.named_callback_roles(file).get(function.span);
         role.tracked || role.effect_compute

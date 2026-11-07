@@ -8805,7 +8805,9 @@ fn placed_nowhere(
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    function_escapes_unfollowed(file, span, lookup)
+    // ADR 0874: a withheld call proves no run, and an impostor may make one.
+    crate::execution_role::runs_in_withheld_layer(file, span, lookup)
+        || function_escapes_unfollowed(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
         || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
 }
