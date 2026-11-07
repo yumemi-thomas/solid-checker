@@ -117,6 +117,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-forwarding/context.tsx",
+      "start": 345,
+      "end": 355,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",

@@ -116,6 +116,18 @@ pub(super) fn emit_file(
             .context(pid, *span)
             .unwrap_or(OWNER_CONTEXT_LEAVES_REGION)
     };
+    // ADR 0868: the function making a run at `at` holds context zero (no
+    // edge reaches it) and is not proven never to run.
+    let caller_unplaced = |at: Span| {
+        file.ast
+            .innermost_function_owning(at)
+            .is_some_and(|caller| {
+                graph
+                    .node_context(pid, caller.span)
+                    .is_some_and(|(_, context)| context == 0)
+                    && reach.function_runs(file, caller)
+            })
+    };
     for candidate in &entry.fragment.requirements {
         let owner = candidate
             .owner
@@ -436,14 +448,53 @@ pub(super) fn emit_file(
             && possible_continuation.is_none()
             && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0;
         if root_owned && !provider {
+            // ADR 0868: the region answers for the run its chain proves, not
+            // for a run through a named layer's other entries.
+            let entry_open = named_layer_entry_open(
+                file,
+                candidate.operation_span,
+                candidate.providing_region,
+                lookup,
+                caller_unplaced,
+            );
             crate::role_log::owner(
                 candidate.operation,
                 path,
                 candidate.operation_span,
-                arm_id!("owner_emission.root-owned"),
+                if entry_open {
+                    arm_id!("owner_emission.root-owned-entry-open")
+                } else {
+                    arm_id!("owner_emission.root-owned")
+                },
                 context,
-                true,
+                !entry_open,
             );
+            if entry_open {
+                push_owner_requirement(
+                    &mut emission.requirements,
+                    &mut seen,
+                    candidate.operation,
+                    file,
+                    candidate.operation_span,
+                    OwnerRequirementStatus {
+                        uncertain: true,
+                        runtime_uncertain: false,
+                        caller_uncertain: true,
+                        unplaced_callback: false,
+                        conditional_owner: false,
+                        owner_varies_by_caller: false,
+                        later_run_unowned: false,
+                        component_uncertain: false,
+                        provider_open: false,
+                        default_unproven: false,
+                        owned_run_throws: false,
+                        after_await: false,
+                        after_yield: false,
+                        report: true,
+                    },
+                    lookup,
+                );
+            }
             continue;
         }
         if provider {
@@ -630,6 +681,26 @@ pub(super) fn emit_file(
             || (candidate.operation == "cleanup"
                 && context & OWNER_CONTEXT_LEAF != 0
                 && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0);
+        // ADR 0868: an owned context is the edges the graph holds. A named
+        // layer entered some other way (assigned, stored, handed on, a
+        // method) may run with no owner, and that run has no edge.
+        let entry_open = !report
+            && !uncertain
+            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+            && named_layer_entry_open(
+                file,
+                candidate.operation_span,
+                candidate.providing_region,
+                lookup,
+                caller_unplaced,
+            );
+        if entry_open {
+            arm = arm_id!("owner_emission.named-layer-entry-open");
+        }
+        let caller_uncertain = caller_uncertain || entry_open;
+        let uncertain = uncertain || entry_open;
+        // An obligation is a reported requirement, as every other one.
+        let report = report || entry_open;
         crate::role_log::owner(
             operation,
             path,
@@ -709,4 +780,113 @@ fn returned_unreached_function(
     // ADR 0532: the functions past the bound are unread; context zero there
     // is no proof, so the operation stays unplaced.
     true
+}
+
+/// ADR 0868: whether a function between `span` and the component around it
+/// may be entered by a way the owner graph holds no edge for, so that the
+/// owned context its edges give is no proof of every run:
+///
+/// - a method, or a function value no binding names (an object slot, an array
+///   element, a class field), unless it is invoked in place or is a whole
+///   argument of a call (that call gives it its edge, or leaves it unplaced);
+/// - a named function whose entry census is open
+///   ([`crate::execution_role::entry_census_complete`]), or a reference to
+///   which, here or in another file, is anything but a direct call or an
+///   inline run. A value-only argument counts too: the callee may keep it
+///   (`keep.call(f)`, an `object` parameter, an `EventTarget` subclass's
+///   `removeEventListener`);
+/// - any layer at all when the program calls direct `eval`, which reaches a
+///   binding by name.
+///
+/// The walk ends at a function a tag is proven to render, whose entries are
+/// renders, and at the innermost owner-creating region around `span`. A function that only may be a component is a layer like any other.
+/// `caller_unplaced` answers whether the function making a run at a span holds
+/// no owner context and may run (the emission's ADR 0534 question).
+fn named_layer_entry_open(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    region: Option<Span>,
+    lookup: &SemanticLookup<'_>,
+    caller_unplaced: impl Fn(Span) -> bool,
+) -> bool {
+    use crate::local_access::HandOff;
+    let escapes = |hand_off: &HandOff| !matches!(hand_off, HandOff::Call | HandOff::Inline(_));
+    // Innermost first: the span index yields its owners in span order.
+    let mut layers = file.ast.functions_owning(span).collect::<Vec<_>>();
+    layers.sort_by_key(|function| function.span.end - function.span.start);
+    for function in layers {
+        // The innermost region whose primitive creates the owner its
+        // callback runs under (`CallbackOwner::Creates`: a memo, a root, an
+        // effect's compute, a tracked JSX expression): who enters a layer
+        // around it changes nothing inside.
+        if region.is_some_and(|region| !region.contains(function.span)) {
+            return false;
+        }
+        if lookup.function_proven_component(file, function) {
+            return false;
+        }
+        if lookup.program_has_eval() || function.method_name.is_some() {
+            return true;
+        }
+        if function_binding_name(file, function).is_none() {
+            let in_place = file
+                .ast
+                .calls_with_peeled_callee(function.span)
+                .next()
+                .is_some();
+            let argument = file.ast.calls.iter().any(|call| {
+                call.arguments.iter().any(|argument| {
+                    !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == function.span
+                })
+            });
+            if in_place || argument {
+                continue;
+            }
+            return true;
+        }
+        let Some(local) = crate::local_access::function_reference_hand_offs(file, function, lookup)
+        else {
+            return true;
+        };
+        // A whole argument of a primitive's call is a position the owner
+        // graph places (`createRoot(helper)`): its edge is in the context.
+        let primitive_position = |at: Span| {
+            file.ast.arguments_containing(at).any(|(call, index)| {
+                !call.arguments[index].spread
+                    && file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
+                    && lookup.primitive_at_call(file, call.span).is_some()
+            })
+        };
+        if local
+            .iter()
+            .any(|(at, hand_off)| escapes(hand_off) && !primitive_position(*at))
+            || crate::local_access::foreign_reference_hand_offs(file, function, lookup)
+                .iter()
+                .any(|(_, _, hand_off)| escapes(hand_off))
+        {
+            return true;
+        }
+        // A call or an inline run is an entry only as placed as the code
+        // making it: from a function no edge reaches that may still run
+        // (assigned to `onclick`, say), the run has no owner edge either.
+        let run_at = |(at, hand_off): &(Span, HandOff)| match hand_off {
+            HandOff::Inline(carrier) => *carrier,
+            _ => *at,
+        };
+        if local
+            .iter()
+            .any(|reference| caller_unplaced(run_at(reference)))
+        {
+            return true;
+        }
+        let inline = local
+            .iter()
+            .filter(|(_, hand_off)| matches!(hand_off, HandOff::Inline(_)))
+            .map(|(at, _)| *at)
+            .collect::<Vec<_>>();
+        if !crate::execution_role::entry_census_complete_except(file, function, lookup, &inline) {
+            return true;
+        }
+    }
+    false
 }
