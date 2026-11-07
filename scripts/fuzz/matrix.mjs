@@ -192,7 +192,12 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
     }
     if (runtime.failure && !events.length && !failureCode) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
     // ADR 0858: the throw halted the page before the site ran: nothing was measured there, neither a pass nor a problem.
-    if (failureCode && !events.length && hitCount(runtime.hits, site?.hit) === 0) return { outcome: "unexecuted", detail: { why: `the page halted on ${failureCode} before the site ran` } };
+    // Review R14: the halting code is judged anywhere in the file, or a false clean of it would read as "unexecuted".
+    if (failureCode && !events.length && hitCount(runtime.hits, site?.hit) === 0) {
+      const covered = !(codeRules[failureCode] ?? []).length || relevant.some((finding) => codeRules[failureCode].includes(finding.rule) || declinesCode(failureCode, finding));
+      const haltSecondary = covered ? {} : { secondary: { [failureCode]: relevant.some((finding) => finding.kind === "uncertifiable") ? "false-clean" : "false-clean-certified" } };
+      return { outcome: "unexecuted", detail: { why: `the page halted on ${failureCode} before the site ran`, ...haltSecondary } };
+    }
     return { outcome: "not-fired", detail: { reported: [...new Set(runtimeEvents(runtime).map((event) => event.code))], misplaced: events.map((event) => attributed(event).map((p) => p.line)), ...(Object.keys(secondary).length ? { secondary } : {}) } };
   }
   const placed = atSite.length ? "placed" : "unplaced";

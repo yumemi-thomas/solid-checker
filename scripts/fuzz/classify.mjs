@@ -66,6 +66,47 @@ export function sourceAt(lines, line, column) {
   return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(chain) ? chain : null;
 }
 
+/**
+ * What a position reads, whole: the chain and its calls (`r1()`, `r1.bind(null)()`, `get()()`), or null. Chrome's frame for a bound read sits on the
+ * `)` of `r1.bind(null)`: that `)` walks back to its `(` and the chain before it (no chain there, as at the second `)` of `get()()`, is no text). The
+ * calls count, so `get()()` and `get()` are two sources. A repeat's same-source test compares these.
+ */
+export function sourceExprAt(lines, line, column) {
+  const row = Number.isInteger(line) && Number.isInteger(column) ? lines[line - 1] : undefined;
+  if (row === undefined || column < 1 || column > row.length) return null;
+  let at = column;
+  if (row[at - 1] === ")") {
+    let depth = 0;
+    let open = at - 1;
+    for (; open >= 0; open -= 1) {
+      if (row[open] === ")") depth += 1;
+      if (row[open] === "(") depth -= 1;
+      if (depth === 0) break;
+    }
+    if (open < 1 || !/[\w$]/.test(row[open - 1])) return null;
+    at = open;
+  }
+  const chain = sourceAt(lines, line, at);
+  if (!chain) return null;
+  let word = at - 1;
+  while (word > 0 && /[\w$.]/.test(row[word - 1])) word -= 1;
+  let end = row.indexOf(chain, word) + chain.length;
+  let text = chain;
+  while (row[end] === "(") {
+    let depth = 0;
+    let close = end;
+    for (; close < row.length; close += 1) {
+      if (row[close] === "(") depth += 1;
+      if (row[close] === ")") depth -= 1;
+      if (depth === 0) break;
+    }
+    if (close === row.length) return null;
+    text += row.slice(end, close + 1);
+    end = close + 1;
+  }
+  return text;
+}
+
 /** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
 export function runtimeEvents(runtime) {
   const rows = [];
@@ -173,8 +214,8 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
     const sameSource = (event) => {
       const at = event.positions.find((position) => position.file === "App.tsx" || position.file === undefined);
-      const one = sourceAt(text, at?.line, at?.column);
-      return Boolean(one) && one === sourceAt(text, finding.line, finding.column);
+      const one = sourceExprAt(text, at?.line, at?.column);
+      return Boolean(one) && one === sourceExprAt(text, finding.line, finding.column);
     };
     const elsewhere = reported.find((event) => appLines(event).length && sameSource(event))?.code ?? null;
     const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });

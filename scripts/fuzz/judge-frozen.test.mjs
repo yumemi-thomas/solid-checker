@@ -27,8 +27,8 @@ describe("judge-frozen", () => {
   });
   test("site rows are present", () => {
     // ADR 0887 added five: a halted run's stacked claim (proved), its unproved twin, nothing of the rule, the rule's code elsewhere, a line never
-    // run; then four: a proved repeat, a repeat of another source, an unproved repeat, an unjudged claim; then a repeat whose line never ran; then two: a code beside the V on its own line, and on another.
-    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["agree", "agree", "false-clean", "false-clean", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "harness", "not-fired", "not-fired", "recall-gap", "recall-gap", "stacked-claim", "stacked-claim", "unexecuted", "unjudged-claim"]);
+    // run; then four: a proved repeat, a repeat of another source, an unproved repeat, an unjudged claim; then a repeat whose line never ran; then two: a code beside the V on its own line, and on another; then three repeats at a call, and a halt whose code has a finding.
+    expect((frozen.siteRows ?? []).map((row) => row.expected.outcome).sort()).toEqual(["agree", "agree", "false-clean", "false-clean", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "false-positive", "harness", "not-fired", "not-fired", "recall-gap", "recall-gap", "stacked-claim", "stacked-claim", "stacked-claim", "unexecuted", "unexecuted", "unjudged-claim"]);
   });
   test.each(frozen.rows.map((row) => [row.id, row]))("%s keeps its frozen verdict", (_id, row) => {
     const verdict = judgePattern({ codes: row.codes, stacks: row.stacks, positions: row.stacks !== undefined }, row.findings);
