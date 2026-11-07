@@ -265,7 +265,6 @@ Known false-positive shapes left open (fire today, wanted gone):
 - SC5003 of a read in tracked JSX: the 690 programs of ADR 0668 are closed (ADRs 0774-0776, 0779). An alias, a literal member, a hook's value and an unplaced read are uncertifiable, and only a carrier's named function is proved. Later proof: a never-rewritten `let` or a closed literal over an async source.
 
 - SC5001 of a pending getter handed through a member tag (`<ui.C a={a()} />`) has no row (71 programs, `open-defects.json`). SC1003 of a store destructure in a `ref` in a row, by name or from a factory certifies (152, ADR 0670). SC1002 of a named handler reading an accessor held by assignment has no row (20, ADR 0669). SC1002 `c05`, a `Map`-held accessor, is now uncertifiable through the census (ADR 0692).
-- ADR 0838, V → U: a walk cut on a path with no binding (an IIFE in the body) leaves its read an unplaced SC5001 row, and that row reopens the strict read even for a declared `loadingValue` served on the creating pass (ADR 0632): `rc21-declared-first-pass` `Layers` SC1001. Corpus: 1,241 of ADR 0838's rows are one ai-memory-ui source over a generated, absent module (`~/paraglide/runtime`); their blocker names the read, not the missing module.
 
 ## 4. Open questions and live approximations
 - The fuzz judge files a violation of another rule the runtime does not report as `wrong-rule`, not a false positive: 64 SC5003 rows on R3's handed-flush ids passed every judged set that way (ADR 0838). Part 16's judge rechecks.

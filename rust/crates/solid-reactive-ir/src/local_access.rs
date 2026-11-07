@@ -5320,6 +5320,7 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: None,
                 origin: None,
                 unaccounted: false,
+                source_module_unresolved: false,
                 walk_cut: false,
                 async_provenance: true,
                 declared_loading: options.declared_loading,
@@ -5411,7 +5412,16 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             }
             let Some(binding) = function_binding_name(file, function) else {
-                cut |= !decided;
+                // ADR 0890: a closure run on the creating pass's stack reads
+                // the served value (ADR 0632), as a direct read does.
+                cut |= !decided
+                    && !(options.declared_loading
+                        && crate::execution_role::served_in_creating_pass(
+                            file,
+                            site,
+                            declaration,
+                            self.lookup,
+                        ));
                 continue;
             };
             if self
@@ -5619,6 +5629,7 @@ impl LocalAccessContext<'_, '_> {
                             pending_apply: Some(location(file.path.shared(), apply)),
                             origin: None,
                             unaccounted: false,
+                            source_module_unresolved: false,
                             walk_cut: false,
                             async_provenance: true,
                             declared_loading: false,
@@ -5723,6 +5734,7 @@ impl LocalAccessContext<'_, '_> {
                     pending_apply: None,
                     origin: Some(location(file.path.shared(), read.span)),
                     unaccounted: false,
+                    source_module_unresolved: false,
                     walk_cut: false,
                     async_provenance: true,
                     declared_loading: options.declared_loading,
@@ -6739,6 +6751,7 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: pending_apply.map(|apply| location(file.path.shared(), apply)),
                 origin: None,
                 unaccounted: false,
+                source_module_unresolved: false,
                 walk_cut: false,
                 async_provenance,
                 declared_loading: async_options.declared_loading,
@@ -7368,6 +7381,7 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: None,
                 origin: None,
                 unaccounted: false,
+                source_module_unresolved: false,
                 walk_cut: false,
                 async_provenance: member_async,
                 declared_loading: member_options.declared_loading,
@@ -8209,6 +8223,7 @@ impl LocalAccessContext<'_, '_> {
                 pending_apply: None,
                 origin: None,
                 unaccounted: false,
+                source_module_unresolved: false,
                 walk_cut: false,
                 async_provenance: true,
                 declared_loading: false,

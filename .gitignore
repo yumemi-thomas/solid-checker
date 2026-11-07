@@ -1129,3 +1129,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-closure-pending-read/node_modules/**
 !fixtures/reactive-ir/pending-read-accounted/node_modules/
 !fixtures/reactive-ir/pending-read-accounted/node_modules/**
+!fixtures/reactive-ir/declared-served-closure/node_modules/
+!fixtures/reactive-ir/declared-served-closure/node_modules/**

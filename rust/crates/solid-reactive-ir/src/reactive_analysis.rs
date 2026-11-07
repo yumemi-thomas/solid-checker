@@ -684,6 +684,7 @@ pub(crate) fn collect_project<'facts>(
             pending_apply: None,
             origin: None,
             unaccounted: false,
+            source_module_unresolved: false,
             walk_cut: false,
         })
         .collect::<Vec<_>>();
@@ -768,6 +769,7 @@ pub(crate) fn collect_project<'facts>(
                 pending_apply: None,
                 origin: None,
                 unaccounted: false,
+                source_module_unresolved: false,
                 walk_cut: false,
             })
         })

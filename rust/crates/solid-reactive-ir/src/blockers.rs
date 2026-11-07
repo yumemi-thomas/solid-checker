@@ -70,6 +70,10 @@ pub(crate) const ASYNC_OPTIONS_OPAQUE: &str = "async-options-opaque";
 /// ADR 0838: a pending rule's claim at a read no producer accounted for: no
 /// row of that rule, no SC9012 at the read, no recorded reason.
 pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";
+/// ADR 0891: the same claim, where the source's initial value comes from an
+/// import nothing resolves: `createSignal(fromAbsentModule())` may be a
+/// function, and its compute anything.
+pub(crate) const SOURCE_MODULE_UNRESOLVED: &str = "source-module-unresolved";
 pub(crate) const ASYNC_READ_CAUGHT: &str = "async-read-caught";
 pub(crate) const ASYNC_COMPONENT_PROP: &str = "async-component-prop";
 pub(crate) const DECLARED_LOADING_VALUE: &str = "declared-loading-value";
@@ -239,7 +243,9 @@ pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static
 }
 
 pub(crate) const fn for_async_read(read: &crate::AsyncRead) -> &'static str {
-    if read.unaccounted {
+    if read.source_module_unresolved {
+        SOURCE_MODULE_UNRESOLVED
+    } else if read.unaccounted {
         ASYNC_READ_UNACCOUNTED
     } else if read.options_opaque {
         ASYNC_OPTIONS_OPAQUE

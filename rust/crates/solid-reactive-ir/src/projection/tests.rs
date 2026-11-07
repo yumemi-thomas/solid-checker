@@ -241,6 +241,7 @@ fn catalog_capabilities_gate_whole_program_tables() {
             pending_apply: None,
             origin: None,
             unaccounted: false,
+            source_module_unresolved: false,
             walk_cut: false,
         }],
         ..Program::default()
@@ -299,6 +300,7 @@ fn a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit() {
             pending_apply: None,
             origin: None,
             unaccounted: false,
+            source_module_unresolved: false,
             walk_cut: false,
         }],
         ..Program::default()
@@ -366,6 +368,7 @@ fn selection_filters_safe_rows_before_the_catalog_seam() {
             pending_apply: None,
             origin: None,
             unaccounted: false,
+            source_module_unresolved: false,
             walk_cut: false,
         }],
         ..Program::default()

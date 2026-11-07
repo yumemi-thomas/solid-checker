@@ -498,12 +498,60 @@ pub(crate) fn account_pending_reads(
             if rule == PendingRule::Caught {
                 caught_rows.push(unaccounted_caught(&site));
             } else {
-                added.push(unaccounted_row(&site, rule));
+                let mut row = unaccounted_row(&site, rule);
+                row.source_module_unresolved = source_from_unresolved_import(ctx, &site);
+                added.push(row);
             }
         }
     }
     draft.async_reads.extend(added);
     draft.static_violations.extend(caught_rows);
+}
+
+/// ADR 0891: the site's source is created by a primitive whose first argument
+/// is a call of, or a reference to, an import that resolves to nothing.
+fn source_from_unresolved_import(ctx: &AnalysisContext<'_>, site: &Site) -> bool {
+    let Some(file) = ctx
+        .semantic_lookup
+        .file_by_path(site.declaration.path.as_ref())
+    else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(site.declaration.start_byte),
+        u32::try_from(site.declaration.end_byte),
+    ) else {
+        return false;
+    };
+    let span = Span::new(start, end);
+    let created = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == span))
+        .and_then(|binding| file.ast.call_at(binding.call_initializer?));
+    let Some(argument) = created.and_then(|call| call.arguments.first()) else {
+        return false;
+    };
+    let value = file.ast.peel_ts_sugar_span(argument.span);
+    let value = file
+        .ast
+        .call_at(value)
+        .map_or(value, |call| file.ast.peel_ts_sugar_span(call.callee));
+    let Some(declared) = file.ast.reference_declaration(value) else {
+        return false;
+    };
+    file.ast
+        .imports
+        .iter()
+        .flat_map(|import| &import.bindings)
+        .any(|binding| {
+            binding.local.span == declared
+                && ctx
+                    .entities
+                    .at(file.path.as_str(), declared)
+                    .is_none_or(|symbol| ctx.semantic_lookup.symbol_undeclared(symbol.as_str()))
+        })
 }
 
 /// SC5008's own row shape (`discover_caught_reads`), uncertain.
@@ -720,6 +768,7 @@ fn unaccounted_row(site: &Site, rule: PendingRule) -> AsyncRead {
         pending_apply: None,
         origin: None,
         unaccounted: true,
+        source_module_unresolved: false,
         walk_cut: false,
     }
 }
