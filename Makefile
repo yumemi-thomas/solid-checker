@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
+.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -217,6 +217,10 @@ fuzz-test:
 # fails on a new failure or a listed program that passes. `make fuzz-patterns ARGS=--update` rewrites the list, for reading the diff.
 fuzz-patterns: build-checker-release
 	node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(ARGS)
+
+# Fails while the row ledger holds an R-F1-open or R-F2-open row, a certified false clean or a false positive; must pass before #173 moves.
+flip-final:
+	node scripts/fuzz/open-rows.mjs --final
 
 fuzz-smoke: build-checker-release
 	node scripts/fuzz/focus.mjs --smoke \

@@ -97,6 +97,7 @@ fn catalog_prose_program() -> Program {
             multiplicity: 1,
         }],
         missing_owners: vec![OwnerRequirement {
+            flight_error_unobserved: false,
             operation: OwnerRequirementOperation::Cleanup,
             location: location(5),
             uncertain: false,
@@ -144,6 +145,10 @@ fn catalog_prose_program() -> Program {
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            source_module_unresolved: false,
+            walk_cut: false,
         }],
         static_defects: defect_kinds
             .into_iter()

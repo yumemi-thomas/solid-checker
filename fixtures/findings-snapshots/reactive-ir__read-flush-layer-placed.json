@@ -1,0 +1,81 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 324,
+      "end": 327,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 518,
+      "end": 521,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 734,
+      "end": 737,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 1007,
+      "end": 1010,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 1206,
+      "end": 1209,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 1805,
+      "end": 1808,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "computed-call-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 1834,
+      "end": 1842,
+      "fixes": 0
+    }
+  ]
+}

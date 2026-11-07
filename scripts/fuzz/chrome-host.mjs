@@ -11,6 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_FAST_INSTALL, ENTRY_SOURCE, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
 import { EXECUTOR_SOURCES } from "./exec.mjs";
+import { cleanPositions } from "./hits.mjs";
 import { pinnedBrowser } from "../playwright-browser.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -289,9 +290,12 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
    * The files are fast.mjs `stageCases`'s: App.tsx (the twin's text unless `variant` is clean), its plan and oracle files, its other
    * modules; from `files` (the case's files as built, by relative path) when given, else from `dir`.
    */
+  const twins = new Map();
   const stage = (cases) => {
     for (const { id, dir, variant, files: given } of cases) {
       const files = given ?? Object.fromEntries(readdirSync(dir).filter((name) => name !== "node_modules").map((name) => [name, readFileSync(join(dir, name), "utf8")]));
+      // The twin runs, the checker reads the clean text: its positions are put back on that text where the record is made (`map`).
+      if (variant !== "clean" && files["App.run.txt"] !== undefined && files["App.tsx"] !== undefined) twins.set(id, cleanPositions(files["App.run.txt"], files["App.tsx"]));
       if (Object.keys(files).some((name) => name.startsWith("node_modules/")) || (!given && existsSync(join(dir, "node_modules")))) {
         if (!existsSync(dir)) throw new Error(`a case with a package is staged from its directory: ${dir}`);
         stageCases(work, [{ id, dir, variant }]);
@@ -311,21 +315,23 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
   const done = async (ids) => {
     for (const id of ids) {
       staged.delete(id);
+      twins.delete(id);
       rmSync(join(casesRoot, id), { recursive: true, force: true });
       const module = await server.moduleGraph.getModuleByUrl(`/cases/${id}/App.tsx`);
       if (module) server.moduleGraph.invalidateModule(module);
     }
   };
-  return { work, server, base, freeze, stage, done, map: (id, record) => mapPositions(server, lookup, id, record, staged.get(id)?.get("App.tsx") ?? readStaged(id)) };
+  return { work, server, base, freeze, stage, done, map: (id, record) => mapPositions(server, lookup, id, record, staged.get(id)?.get("App.tsx") ?? readStaged(id), twins.get(id) ?? undefined) };
 }
 
 /**
  * Maps a record's served App.tsx positions to the source's, through the transform Vite served it with, as the oracle does
  * (packages/cli/scripts/feedback-attribution.mjs: `originalPositionFor` at the frame's column, the mapping at or before it on its
  * line); a frame with no original position, or one past the end of its line in `source` (the oracle's `position-out-of-range`), is
- * dropped, never passed through as an App.tsx line.
+ * dropped, never passed through as an App.tsx line. `clean` (hits.mjs `cleanPositions`) then takes a position on the instrumented twin
+ * to the clean text the checker's findings are on; a position with none there (the counter's prelude) is dropped too.
  */
-export async function mapPositions(server, { TraceMap, originalPositionFor }, id, record, source) {
+export async function mapPositions(server, { TraceMap, originalPositionFor }, id, record, source, clean = (position) => position) {
   const url = `/cases/${id}/App.tsx`;
   const module = await server.moduleGraph.getModuleByUrl(url);
   const raw = module?.transformResult?.map ?? (await server.transformRequest(url))?.map;
@@ -333,10 +339,12 @@ export async function mapPositions(server, { TraceMap, originalPositionFor }, id
   const map = new TraceMap(raw);
   const lines = source === undefined ? null : source.split("\n");
   const original = (positions) => (positions ?? []).flatMap((p) => {
+    if (p.file !== undefined && p.file !== "App.tsx") return [{ file: p.file }];
     const at = originalPositionFor(map, { line: p.line, column: Math.max(0, p.column - 1) });
     if (!at.line) return [];
     if (lines && (at.line > lines.length || at.column >= lines[at.line - 1].length)) return [];
-    return [{ file: "App.tsx", line: at.line, column: at.column + 1 }];
+    const position = clean({ line: at.line, column: at.column + 1 });
+    return position ? [{ file: "App.tsx", ...position }] : [];
   });
   return {
     ...record,

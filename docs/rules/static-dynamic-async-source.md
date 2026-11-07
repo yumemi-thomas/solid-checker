@@ -110,6 +110,8 @@ block body or a `.then` chain whose return type is a Promise on every path is a 
 - **A site that never runs.** A call in a function only a `defer: true` apply
   with no compute source calls is silent (ADR 0590).
 
+A throw inside a generator stepped by an async caller rejects that caller's flight. The thenable source proves the runtime guard, but no proof follows the rejected flight to an observed read or error boundary. These sites retain a named `async-flight-error-unobserved` obligation (ADR 0852), including in-place callback layers.
+
 ## Related
 
 - [sync-computation-received-async](sync-computation-received-async.md) — the

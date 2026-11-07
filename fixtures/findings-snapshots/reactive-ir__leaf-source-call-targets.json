@@ -68,6 +68,28 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets/App.tsx",
+      "start": 1236,
+      "end": 1254,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets/App.tsx",
+      "start": 1256,
+      "end": 1276,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-source-call-targets/App.tsx",

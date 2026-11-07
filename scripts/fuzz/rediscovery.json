@@ -5843,6 +5843,846 @@
   "rediscovered": "by id in the sc VM, uncached Chrome: e57cc0dc5 70 false-clean (Chrome same on 70); ADR 0850 70 recall-gap. Whole cells gen-yield and gen-sync-loop (1,352): old 70 false-clean, new 0 (1,352 recall-gap); lg-recall UNTRACKED_READ_AFTER_AWAIT 5,642 unchanged, 0 false positives. Fixture reactive-ir/generator-hand-off holds the forms, with a drained sync generator and two plain-value twins that stay clean"
  },
  {
+  "finding": "census mount-named: `const f1 = () => { try { a1(); } catch {} return <i />; }; render(f1, el)` at module scope, `a1` an async memo: SC5001 V at the read; Chrome is silent (the pending read throws a plain NotReadyError while the module evaluates, and the catch swallows it)",
+  "found": "R3 smoke refresh (owner item); restored to open-defects by b7f560940 (Part 13)",
+  "fixed": "ADR 0855; now uncertifiable (async-read-caught), not proved",
+  "grid": "mx-census",
+  "code": "CAUGHT_REACTIVE_READ",
+  "ids": [
+   "mx-caught-reactive-read-mount-named-async-direct-none"
+  ],
+  "rediscovered": "matrix --census, Chrome confirming, by id: 75c33dbbc false-positive, this build not-fired (SC5001 uncertifiable). Fixture pending-read-caught-module"
+ },
+ {
+  "finding": "census handed-flush: `const Row = () => { flush(() => { resolve(() => 1); }); return <span />; }` run by `[1].map(Row)` in a tracked JSX IIFE was certified (RESOLVE_IN_REACTIVE_SCOPE, UNTIL_IN_REACTIVE_SCOPE); Chrome throws. `flush(fn)` keeps the caller's observer, and a function was placed only by the in-place climb, never by the calls that run it",
+  "found": "R3 smoke refresh; restored to open-defects by b7f560940 (Part 13)",
+  "fixed": "ADR 0857; now uncertifiable (component-identity-unproven: the census takes Row for an escaped component), not proved",
+  "grid": "mx-census",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-handed-flush-x-direct-none"
+  ],
+  "rediscovered": "matrix --census by id, Chrome confirming: 75c33dbbc false-clean, this build recall-gap; UNTIL_IN_REACTIVE_SCOPE's pair (mx-until-in-reactive-scope-handed-flush-x-direct-none) the same"
+ },
+ {
+  "finding": "resolve/until in `flush(fn)` or in a function a tracked JSX IIFE runs (`[1].forEach(K1)`, `K1.call(null)`, `K1()`, flush in the IIFE itself): certified, Chrome throws RESOLVE_IN_REACTIVE_SCOPE",
+  "found": "R3c, ADR 0857's recall contexts (flip-read.mjs handed-flush-each, -call, named-flush-call, flush-iife)",
+  "fixed": "ADR 0857; proved where the function is plain, uncertifiable where the census takes it for a component",
+  "grid": "mx-recall",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-named-flush-call-x-direct-none",
+   "mx-resolve-in-reactive-scope-flush-iife-x-direct-none",
+   "mx-resolve-in-reactive-scope-handed-flush-each-x-direct-none"
+  ],
+  "rediscovered": "matrix --recall by id, Chrome confirming (472 ids over both codes: direct bindings every layer, namespace/alias/wrapper layer none): 75c33dbbc 226 false-clean, this build 0 (50 agree, 176 recall-gap; 134 recall-gap to agree), 0 false-positive. Legal twins handed-flush-handler, -empty, -tag (354 ids): 0 false-positive on both"
+ },
+ {
+  "finding": "SC1001 V on a read in an IIFE inside `flush(fn)` in a named helper a tracked JSX expression runs (`[1].forEach(k)`): the role fell through to `inside-component`; Chrome is silent",
+  "found": "R3c, ADR 0856's probes (cases/w3)",
+  "fixed": "ADR 0859; now uncertifiable where the helper's run is not placed, no row in a memo",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-flush-read-each-iife-signal-direct-none",
+   "lg-strict-read-untracked-flush-read-each-signal-direct-iife",
+   "lg-strict-read-untracked-flush-read-each-signal-direct-helper"
+  ],
+  "rediscovered": "legal --recall by id, Chrome confirming (136 ids): 183cff9c0 build 54 false positives (stopped), this commit 0 (68 clean, 68 uncertifiable)"
+ },
+ {
+  "finding": "SC7002 answered every generator Sync: a named async generator, one in a const, and a closed return of AsyncGenerator (`() => o.g()`) threw SYNC_NODE_RECEIVED_ASYNC in Chrome, certified (ADR 0865)",
+  "found": "the owner/scope scout (F7), widened by R5's probes",
+  "fixed": "ADR 0865",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-body-cmp-async-gen-named-direct-none",
+   "mx-sync-node-received-async-body-cmp-async-gen-member-direct-none",
+   "mx-sync-node-received-async-body-cmp-async-iter-class-direct-none"
+  ],
+  "rediscovered": "cmp-async-gen* ids (76, Chrome confirmed): build rmg7 (b2e910572) 57 false cleans; r2: 0 (57 agree, 19 uncertifiable)"
+ },
+ {
+  "finding": "an `if (getOwner())` guard dropped SC4002's provider-free claim with the owner questions: the read runs only with an owner, so rc.21 throws CONTEXT_NOT_FOUND there (Chrome), certified (ADR 0866 amendment)",
+  "found": "Part 15's smoke on the census judge (c3b7cbf48)",
+  "fixed": "ADR 0866 amendment",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-flw-guard-early-x-direct-none",
+   "mx-context-not-found-flw-guard-probe-loop-x-direct-none"
+  ],
+  "rediscovered": "census ids flw-guard-{early,probe-loop,await,for-await,loop,yield} direct (6, Chrome confirmed): build r3 (bbd9bfbf3) 2 certified false cleans; r6: early agree (SC4002 V, corroborated), probe-loop SC4002 U at the site, the other 4 unchanged"
+ },
+ {
+  "finding": "guarded_by_owner_probe looked only at `await` before the operation: a `for await` or a later loop iteration in the guarded block raised NO_OWNER_* in Chrome, with the requirement dropped and the file certified (ADR 0866)",
+  "found": "the owner/scope scout (F5)",
+  "fixed": "ADR 0866",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-guard-for-await-x-direct-none",
+   "mx-no-owner-cleanup-flw-guard-loop-x-direct-none"
+  ],
+  "rediscovered": "flw-guard-* direct ids over the five owner codes (105, Chrome confirmed): build rmg7 (b2e910572) 70 false cleans; r2: 0 (76 uncertifiable, 29 agree); legal twins 80 clean on both"
+ },
+ {
+  "finding": "SC3001 placed a forbidden call inside IIFEs a leaf callback runs (onSettled, a tracked compute) at the IIFE's line; rc.21 raises the code from the call's own line, so the strict judge read the V as off-site (Part 16, 13 rows)",
+  "found": "Part 16's strict judge (0a656082c, claude/flip-stacked)",
+  "fixed": "R5's SC3001 IIFE placement",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-tracked-signal-fn-wrapper-iife",
+   "mx-primitive-in-forbidden-scope-settled-effect-reexport-iife"
+  ],
+  "rediscovered": "the 13 rows' programs replayed (Chrome confirmed the code each time): build r7 V on the IIFE line in 13 of 13; r8 V on the forbidden call's line in 13 of 13 (each row's region). Part 16's judge confirms on merge"
+ },
+ {
+  "finding": "an owned edge hid another entry: `f(); el.onclick = f` (stored, a member, a map, a library registry, returned) certified the site, and Chrome raised NO_OWNER_* on the click (ADR 0868)",
+  "found": "the owner/scope scout (F2)",
+  "fixed": "ADR 0868",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-owned-assigned-x-direct-none",
+   "mx-no-owner-cleanup-flw-owned-stored-x-direct-none"
+  ],
+  "rediscovered": "flw-owned-* direct ids over the five owner codes (210, Chrome confirmed): build rmg7 (b2e910572) 140 false cleans; r7: 0 (210 uncertifiable); legal twins 84: 0 false positives. Reviewer D13 shapes (147): bbd9bfbf3 35 false cleans; r7 0 (126 uncertifiable, 21 agree); an array element and a class field have no generator node (model.mjs has no array or class literal holding a function)"
+ },
+ {
+  "finding": "the `cleanup-unresolved-call` arm dropped an `onSettled` whose callback has no proof and whose call has no Valid fact, also where the call simply has no resolved fact (ADR 0867)",
+  "found": "the owner/scope scout (F8)",
+  "fixed": "ADR 0867",
+  "outside": "no tsc-accepted program reached the arm silently: `(onSettled as any)(cb)` and every variant probed are already V or a named U on rmg7; `any-callee` in SETTLED_CLEANUP_UNOWNED holds the shape, 36 of 36 agree on both builds"
+ },
+ {
+  "finding": "a JSX `<Loading>`/`<Errored>` at an unowned site was SC4001: rc.21's dev `createComponent` runs the component under its own transparent root, so Chrome is quiet and NO_OWNER_BOUNDARY cannot fire through JSX (ADR 0869)",
+  "found": "R5's probes of the scout's F3, which expected the opposite",
+  "fixed": "ADR 0869",
+  "grid": "lg-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "lg-no-owner-boundary-timer-jsx-loading-direct-none",
+   "lg-no-owner-boundary-handler-jsx-loading-direct-none"
+  ],
+  "rediscovered": "jsx-loading and jsx-errored direct ids (28): build rmg7 (b2e910572) 5 Chrome-confirmed false positives; r2: 0, 28 clean"
+ },
+ {
+  "finding": "A read after an await a branch may skip (`if`, `&&`, `||`, `??=`, `?:`, `switch` case, label, optional call, destructuring default) in a tracked async compute: certified, Chrome warns UNTRACKED_READ_AFTER_AWAIT; also a store read in a closure, helper or IIFE run past it",
+  "found": "scout-bind-afterawait B1 (R3c); store reads in layers by R3d on the g4 build",
+  "fixed": "ADR 0870; now uncertifiable (`suspension-unplaced`), no violation",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-aw-if-x-direct-none",
+   "mx-untracked-read-after-await-aw-and-x-direct-none",
+   "mx-untracked-read-after-await-aw-dstr-x-direct-none",
+   "mx-untracked-read-after-await-aw-if-store-link-direct-closure"
+  ],
+  "rediscovered": "matrix --recall by id, Chrome confirming (aw-mx, 336 ids): f1a8da6a4 216 false-clean in the 9 contexts, this commit 0 (216 uncertifiable); legal twins aw-else, aw-else-flip, aw-early 0 false positives"
+ },
+ {
+  "finding": "A helper two computations await was walked once, under the first one's windows: the second computation's read past the helper's await was silent",
+  "found": "scout-bind-afterawait B3 (R3c)",
+  "fixed": "ADR 0871; proved (violation)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-aw-shared-after-x-direct-none",
+   "mx-untracked-read-after-await-aw-shared-after-store-link-direct-none"
+  ],
+  "rediscovered": "matrix --recall by id, Chrome confirming (24 ids): f1a8da6a4 4 false-clean and 20 recall-gap in aw-shared-after, this commit 24 agree"
+ },
+ {
+  "finding": "A helper called past the computation's first await counted its own window as tracking: its prefix read was taken for a dependency",
+  "found": "scout-bind-afterawait B4 (R3c)",
+  "fixed": "ADR 0872; proved (violation)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-none"
+  ],
+  "rediscovered": "matrix --recall by id, Chrome confirming (24 ids): f1a8da6a4 14 recall-gap and 10 agree in aw-helper-late, this commit 24 agree"
+ },
+ {
+  "finding": "An async compute handed to `createMemo` through a project wrapper's parameter (`(f) => createMemo(f)`, two wrappers deep): no row",
+  "found": "scout-bind-afterawait B2 (R3c)",
+  "fixed": "ADR 0873; proved (violation) where the wrapper's straight-line body hands it to the primitive",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-aw-wrapper-x-direct-none",
+   "mx-untracked-read-after-await-aw-wrapper-2-x-direct-none"
+  ],
+  "rediscovered": "matrix --recall by id, Chrome confirming: f1a8da6a4 48 false-clean, this commit 48 agree"
+ },
+ {
+  "finding": "A wrapper that runs its parameter in place but hands its result on (`(f) => f()`, `async (f) => await f()`) or runs it past its own await: the compute's flight carries the read",
+  "found": "review D12 on ADR 0873's in-place exemption (never built without it)",
+  "fixed": "ADR 0873 (D12): the exemption needs a discarded result in a synchronous wrapper",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-aw-inplace-return-x-direct-none",
+   "mx-untracked-read-after-await-aw-inplace-await-x-direct-none",
+   "mx-untracked-read-after-await-aw-inplace-late-x-direct-none"
+  ],
+  "rediscovered": "matrix --recall by id, Chrome confirming (48 ids): f1a8da6a4 32 false-clean (return, await) and 16 recall-gap (late); this commit 48 uncertifiable; legal twin aw-inplace-stmt 0 false positives"
+ },
+ {
+  "finding": "W1: exported generator/iterator must not be proven never stepped; W2: in-place callbacks after yield run on the resumed step stack, not the async computation owner",
+  "found": "review W1/W2 on a84e8af61, coordinator 2026-11-07; d7 uncached Chrome census, scripts/flip/notes/gen-wip/d7-w1w2-comparison.txt",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-gstep-exported-x-direct-none",
+   "mx-no-owner-cleanup-gstep-exported-it-x-direct-none",
+   "mx-no-owner-cleanup-gen-yield-each-x-direct-none",
+   "mx-no-owner-cleanup-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "Old v0850 (97c1bb966) versus d7: W2 produces false violations for writes/action or a missing owner row for cleanup. W1 is not executed by the runtime; raw checker output, rather than not-fired, is the required proof of its obligation. Final raw and fuzz-by-id results are recorded in the green commit report."
+ },
+ {
+  "finding": "W1: exported generator/iterator must not be proven never stepped; W2: in-place callbacks after yield run on the resumed step stack, not the async computation owner",
+  "found": "review W1/W2 on a84e8af61, coordinator 2026-11-07; d7 uncached Chrome census, scripts/flip/notes/gen-wip/d7-w1w2-comparison.txt",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-gstep-exported-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-exported-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-exported-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-exported-it-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-exported-it-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-exported-it-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-yield-each-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-yield-each-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-yield-each-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-sync-each-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-sync-each-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-sync-each-refresh-direct-none"
+  ],
+  "rediscovered": "Old v0850 (97c1bb966) versus d7: W2 produces false violations for writes/action or a missing owner row for cleanup. W1 is not executed by the runtime; raw checker output, rather than not-fired, is the required proof of its obligation. Final raw and fuzz-by-id results are recorded in the green commit report."
+ },
+ {
+  "finding": "W1: exported generator/iterator must not be proven never stepped; W2: in-place callbacks after yield run on the resumed step stack, not the async computation owner",
+  "found": "review W1/W2 on a84e8af61, coordinator 2026-11-07; d7 uncached Chrome census, scripts/flip/notes/gen-wip/d7-w1w2-comparison.txt",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-gstep-exported-x-direct-none",
+   "mx-action-called-in-owned-scope-gstep-exported-it-x-direct-none",
+   "mx-action-called-in-owned-scope-gen-yield-each-x-direct-none",
+   "mx-action-called-in-owned-scope-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "Old v0850 (97c1bb966) versus d7: W2 produces false violations for writes/action or a missing owner row for cleanup. W1 is not executed by the runtime; raw checker output, rather than not-fired, is the required proof of its obligation. Final raw and fuzz-by-id results are recorded in the green commit report."
+ },
+ {
+  "finding": "A throw inside an in-place callback after yield rejects the async stepper flight; owner state or a thenable source did not prove an observed error",
+  "found": "six uncached Chrome disagreements at d7 (0980aa424); previously recorded in docs/open-work.md and scripts/flip/notes/gen-wip-handoff.md; rc.21 watchAsyncTail/handleAsync store the rejected flight error",
+  "fixed": "ADR 0852",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-gen-yield-each-x-direct-none",
+   "mx-no-owner-context-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "d7 made a violation at these sites while Chrome reported no matching error (for CONTEXT_NOT_FOUND, missing-owner was the off-site claim). The final checker must retain async-flight-error-unobserved on the throw claim; raw output and the uncached Chrome rerun are required before green handoff."
+ },
+ {
+  "finding": "A throw inside an in-place callback after yield rejects the async stepper flight; owner state or a thenable source did not prove an observed error",
+  "found": "six uncached Chrome disagreements at d7 (0980aa424); previously recorded in docs/open-work.md and scripts/flip/notes/gen-wip-handoff.md; rc.21 watchAsyncTail/handleAsync store the rejected flight error",
+  "fixed": "ADR 0852",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-gen-yield-each-x-direct-none",
+   "mx-context-not-found-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "d7 made a violation at these sites while Chrome reported no matching error (for CONTEXT_NOT_FOUND, missing-owner was the off-site claim). The final checker must retain async-flight-error-unobserved on the throw claim; raw output and the uncached Chrome rerun are required before green handoff."
+ },
+ {
+  "finding": "A throw inside an in-place callback after yield rejects the async stepper flight; owner state or a thenable source did not prove an observed error",
+  "found": "six uncached Chrome disagreements at d7 (0980aa424); previously recorded in docs/open-work.md and scripts/flip/notes/gen-wip-handoff.md; rc.21 watchAsyncTail/handleAsync store the rejected flight error",
+  "fixed": "ADR 0852",
+  "grid": "mx-census",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "mx-dynamic-static-promise-gen-yield-each-x-direct-none",
+   "mx-dynamic-static-promise-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "d7 made a violation at these sites while Chrome reported no matching error (for CONTEXT_NOT_FOUND, missing-owner was the off-site claim). The final checker must retain async-flight-error-unobserved on the throw claim; raw output and the uncached Chrome rerun are required before green handoff."
+ },
+ {
+  "finding": "A generator also handed on as a value fell through the write walker to creation calls, which are no body edges, producing SC2001 V after yield in an async memo",
+  "found": "snapshot review of generator-step-owner/App.tsx shared on 0980aa424 continuation; generated as gen-yield-alias",
+  "fixed": "ADR 0853",
+  "grid": "mx-census",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-gen-yield-alias-signal-direct-none"
+  ],
+  "rediscovered": "Old/new by-id focus and raw results required on the final build; the write must retain function-run-unplaced."
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-gen-yield-x-direct-none",
+   "mx-no-owner-cleanup-gen-sync-loop-x-direct-none",
+   "mx-no-owner-cleanup-gstep-unstepped-handler-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 2 false-clean, 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-gen-yield-effect-direct-none",
+   "mx-no-owner-effect-gen-yield-render-direct-none",
+   "mx-no-owner-effect-gen-sync-loop-effect-direct-none",
+   "mx-no-owner-effect-gen-sync-loop-render-direct-none",
+   "mx-no-owner-effect-gstep-unstepped-handler-effect-direct-none",
+   "mx-no-owner-effect-gstep-unstepped-handler-render-direct-none",
+   "mx-no-owner-effect-gen-yield-each-effect-direct-none",
+   "mx-no-owner-effect-gen-yield-each-render-direct-none",
+   "mx-no-owner-effect-gen-sync-each-effect-direct-none",
+   "mx-no-owner-effect-gen-sync-each-render-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 8 false-clean, 2 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "NO_OWNER_BOUNDARY in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-gen-yield-loading-direct-none",
+   "mx-no-owner-boundary-gen-yield-errored-direct-none",
+   "mx-no-owner-boundary-gen-sync-loop-loading-direct-none",
+   "mx-no-owner-boundary-gen-sync-loop-errored-direct-none",
+   "mx-no-owner-boundary-gstep-unstepped-handler-loading-direct-none",
+   "mx-no-owner-boundary-gstep-unstepped-handler-errored-direct-none",
+   "mx-no-owner-boundary-gen-yield-each-loading-direct-none",
+   "mx-no-owner-boundary-gen-yield-each-errored-direct-none",
+   "mx-no-owner-boundary-gen-sync-each-loading-direct-none",
+   "mx-no-owner-boundary-gen-sync-each-errored-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 8 false-clean, 2 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-gstep-unstepped-handler-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "CONTEXT_NOT_FOUND in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-gen-yield-x-direct-none",
+   "mx-context-not-found-gen-sync-loop-x-direct-none",
+   "mx-context-not-found-gstep-unstepped-handler-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 2 false-positive, 1 wrong-rule (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "SETTLED_CLEANUP_UNOWNED in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "SETTLED_CLEANUP_UNOWNED",
+  "ids": [
+   "mx-settled-cleanup-unowned-gen-yield-x-direct-none",
+   "mx-settled-cleanup-unowned-gen-sync-loop-x-direct-none",
+   "mx-settled-cleanup-unowned-gstep-unstepped-handler-x-direct-none",
+   "mx-settled-cleanup-unowned-gen-yield-each-x-direct-none",
+   "mx-settled-cleanup-unowned-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 4 false-clean, 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "REACTIVE_WRITE_IN_OWNED_SCOPE in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-gen-yield-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-yield-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-yield-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-sync-loop-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-sync-loop-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gen-sync-loop-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-handler-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-handler-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-handler-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-timer-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-timer-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-timer-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-kept-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-kept-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-kept-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-returned-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-returned-store-direct-none",
+   "mx-reactive-write-in-owned-scope-gstep-returned-refresh-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 18 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "CLEANUP_IN_FORBIDDEN_SCOPE in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-cleanup-in-forbidden-scope-gstep-unstepped-handler-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_FORBIDDEN_SCOPE in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-gstep-unstepped-handler-effect-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "SYNC_NODE_RECEIVED_ASYNC in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-gstep-unstepped-handler-effect-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-gen-yield-x-direct-none",
+   "mx-action-called-in-owned-scope-gen-sync-loop-x-direct-none",
+   "mx-action-called-in-owned-scope-gstep-handler-x-direct-none",
+   "mx-action-called-in-owned-scope-gstep-timer-x-direct-none",
+   "mx-action-called-in-owned-scope-gstep-kept-x-direct-none",
+   "mx-action-called-in-owned-scope-gstep-returned-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 6 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-gstep-unstepped-handler-effect-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 1 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "ON_FLUSH_IN_OWNED_SCOPE in a generator past its first yield, or its body at a call that steps nothing: the generator inherited the caller's owner and role (gen-yield/gen-sync-loop under for await or an awaiting loop, gstep-* steps in a handler, a timer, a kept or returned iterator, a call in a handler stepped under a root)",
+  "found": "integrator smoke at b40d5d6a7 (mx-census gen-yield, gen-sync-loop) and the gstep-* shapes built for ADR 0851",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-gen-yield-x-direct-none",
+   "mx-on-flush-in-owned-scope-gen-sync-loop-x-direct-none",
+   "mx-on-flush-in-owned-scope-gstep-handler-x-direct-none",
+   "mx-on-flush-in-owned-scope-gstep-timer-x-direct-none",
+   "mx-on-flush-in-owned-scope-gstep-kept-x-direct-none",
+   "mx-on-flush-in-owned-scope-gstep-returned-x-direct-none",
+   "mx-on-flush-in-owned-scope-gen-yield-each-x-direct-none",
+   "mx-on-flush-in-owned-scope-gen-sync-each-x-direct-none"
+  ],
+  "rediscovered": "sc VM release, uncached Chrome on every row, by id: 97c1bb966 8 false-positive (Chrome same); 34a681ffc tree 0 (agree or not-fired)"
+ },
+ {
+  "finding": "A secondary NO_OWNER_CLEANUP certified false clean in a CLEANUP_IN_FORBIDDEN_SCOPE census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_CLEANUP",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-cleanup-in-forbidden-scope-gen-yield-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-gen-sync-loop-x-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_CLEANUP false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+ {
+  "finding": "A secondary NO_OWNER_EFFECT certified false clean in a PRIMITIVE_IN_EFFECT_CALLBACK census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_EFFECT",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-gen-yield-effect-direct-none",
+   "mx-primitive-in-effect-callback-gen-sync-loop-effect-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_EFFECT false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+ {
+  "finding": "A secondary NO_OWNER_EFFECT certified false clean in a PRIMITIVE_IN_FORBIDDEN_SCOPE census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_EFFECT",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-gen-yield-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-gen-sync-loop-effect-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_EFFECT false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+ {
+  "finding": "A secondary NO_OWNER_EFFECT certified false clean in a SYNC_NODE_RECEIVED_ASYNC census program past a generator's yield (gen-yield, gen-sync-loop): the stepped body inherited the caller's owner, so the file was certified while Chrome threw NO_OWNER_EFFECT",
+  "found": "integrator smoke at b40d5d6a7 (mg6, mx-census, listed as secondary-false-clean under 'census generator contexts: past a yield')",
+  "fixed": "ADR 0851",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-gen-yield-effect-direct-none",
+   "mx-sync-node-received-async-gen-sync-loop-effect-direct-none"
+  ],
+  "rediscovered": "Pinned smoke seed 21400934, by id: c3b7cbf48's build (rp6, before 34a681ffc) secondary NO_OWNER_EFFECT false-clean-certified on both; e0f03c0b2's build (rp7, smoke-p7 and Part 16's smoke-q1) no secondary problem on both"
+ },
+  {
+   "finding": "A call past a suspension whose callee names no symbol (`fns[0]()`, `get()()`, `(c ? a : b)()`) had no after-await row",
+   "found": "scout-bind-afterawait B5; review D14",
+   "fixed": "ADR 0879; uncertifiable (callee-inexact)",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-memo-async-x-elem-callee-none",
+    "mx-untracked-read-after-await-memo-async-x-result-callee-none",
+    "mx-untracked-read-after-await-memo-async-x-cond-callee-closure"
+   ],
+   "rediscovered": "not rediscovered: on f1a8da6a4 and 0140ec6fb every one of the 24 ids already had an uncertifiable at the site (reactive-dispatch-unresolved, the dispatch census), so no build fails them; the shapes stay as recall ids"
+  },
+  {
+   "finding": "A promise handler on the flight given as a member (`then(api.fmt)`) was skipped: certified, Chrome warns",
+   "found": "scout-bind-afterawait B6",
+   "fixed": "ADR 0880; uncertifiable",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-then-member-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable; twin aw-catch-member 0 false positives"
+  },
+  {
+   "finding": "An async handler on the flight was skipped: certified, Chrome warns",
+   "found": "scout-bind-afterawait B7",
+   "fixed": "ADR 0881; uncertifiable",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-then-async-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable"
+  },
+  {
+   "finding": "`.then` on an `any` receiver (no exact standard declaration) returned with its handlers unread: certified, Chrome warns",
+   "found": "scout-bind-afterawait B8",
+   "fixed": "ADR 0882; uncertifiable",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-then-any-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable; aw-then-cast 16 agree on both"
+  },
+  {
+   "finding": "a helper's pending read placed at one call (tracked, under `<Loading>`) and cut on another path (a chain past the walk's bound in `onSettled`, an effect apply) certified while Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE / PENDING_ASYNC_UNTRACKED_READ: the placed call's row spoke for every path (review R1, R6)",
+   "found": "review R1/R6 of ADR 0835 (review/findings-rolling.md)",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+   "ids": [
+    "mx-pending-async-forbidden-scope-settled-chain-placed-x-direct-none"
+   ],
+   "rediscovered": "contexts settled-chain-placed, apply-placed-twin (1,316, Chrome confirmed): build mg2 (3aa2b4e3f) 70 false cleans; ADR 0838 (pa11) 0, all uncertifiable; legal twins handler-chain-placed 0 false positives. Fixture reactive-ir/pending-read-accounted MixedBoundPath, TwoCallers"
+  },
+  {
+   "finding": "an exported helper's pending read placed at its one local call certified while another module calls it in `onSettled` (Chrome: PENDING_ASYNC_FORBIDDEN_SCOPE): the walk took the local calls for all of them (review R17)",
+   "found": "review R17 (review/findings-rolling.md)",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+   "ids": [
+    "mx-pending-async-forbidden-scope-export-placed-export-read-direct-none"
+   ],
+   "rediscovered": "work/mx-r17.json (12, Chrome confirmed): build mg2 10 false cleans; ADR 0838 0, all uncertifiable; legal twins export-placed-l 12 uncertifiable, 0 false positives. Fixture reactive-ir/pending-read-accounted ExportedHelper, ShorthandReference"
+  },
+  {
+   "finding": "a probe (`latest(() => a1())`, `isPending(() => a1())`) with no `<Loading>` above it certified while Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY: a probe position was taken to rule out every pending rule (review R18)",
+   "found": "review R18 (review/findings-rolling.md)",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "ids": [
+    "mx-async-outside-loading-boundary-jsx-probe-latest-direct-none",
+    "mx-async-outside-loading-boundary-jsx-probe-is-pending-direct-none"
+   ],
+   "rediscovered": "work/mx-r17r18.json (36, Chrome confirmed): build mg2 36 false cleans; ADR 0838 0, all uncertifiable. Fixture reactive-ir/pending-read-accounted BareProbe, HelperBareProbe"
+  },
+  {
+   "finding": "a pending read in a `try` whose catch swallows it, in a function a carrier runs in tracked JSX (`[1].forEach(hf)`, `hf.call()`, `flush(() => ...)`), proved SC5003 while Chrome rc.21 reports CAUGHT_REACTIVE_READ only: the `try` was looked for at the carrier's position, not the read's",
+   "found": "R2h reading R3's handed-flush ids on pa6 (64 wrong-rule, the extra rule static-only in Chrome); the plain carrier form was already on mg2",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "CAUGHT_REACTIVE_READ",
+   "ids": [
+    "mx-caught-reactive-read-jsx-caught-handed-foreach-direct-none"
+   ],
+   "rediscovered": "CAUGHT_REACTIVE_READ jsx caught-handed-* (layers none, helper; 18, Chrome confirmed): builds mg2 and pa6 12 wrong-rule (SC5003 violation Chrome does not report), mg2 also 6 false cleans; ADR 0838 (pa11) 18 uncertifiable. R3's ids: pa6 64 wrong-rule, pa11 0. Fixture reactive-ir/caught-handed-read (twin HandedRead keeps its violation)"
+  },
+  {
+   "finding": "R3's handed-flush ids (`[1].forEach(K1)` where `K1` runs `flush(() => a1())` and returns JSX; a store root read whole by `Object.keys`; a getter read by `held.v` in a `try`) certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY / CAUGHT_REACTIVE_READ: an escaped component's body role ruled SC5003 out, a store root handed on whole was no site, and a getter's caught claim was never raised",
+   "found": "R3c's handed-flush grids (flip-r3c/ids/mx-ca.json), handed to R2g",
+   "fixed": "ADR 0838",
+   "outside": "the handed-flush contexts (handed-flush-each/-call, named-flush-call, flush-iife) are flip-r3c's generator (ADRs 0857, 0859), not on this branch: the ids below are pinned there at the merge",
+   "grid": "mx-recall",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "ids": [
+    "mx-async-outside-loading-boundary-handed-flush-each-x-direct-none",
+    "mx-caught-reactive-read-handed-flush-each-store-keys-direct-none",
+    "mx-caught-reactive-read-handed-flush-each-get-literal-direct-none"
+   ],
+   "rediscovered": "flip-r3c/ids/mx-ca.json (4,232, Chrome confirmed, run from r3c's generator): build mg2 1,641 false cleans, pa2 638, pa6 510 (+64 wrong-rule), pa9 24; ADR 0838 (pa11) 0 false cleans, 0 wrong-rule, 524 violations Chrome agrees with. Fixture reactive-ir/pending-read-accounted EscapedComponentFlush, StoreKeysCaught, GetterCaught"
+  },
+ {
+  "finding": "a read or write through a value the census could not follow (a Map, ??, Object.assign, forEach, a global's slot, untrack's result, a method answering this, a hook another module exports) on a later line than its escape had no row at the read: the only SC9012 stood where the value escaped, so the read Chrome reports (STRICT_READ_UNTRACKED, STORE_WRITE_OUTSIDE_SETTER) was clean at its site",
+  "found": "the integrator's site-aware judge (4c), 18 fuzz patterns",
+  "fixed": "ADR 0860, ADR 0862",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-map-apart-direct-none",
+   "mx-strict-read-untracked-body-use-global-apart-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-untrack-apart-direct-none",
+   "mx-strict-read-untracked-root-use-self-apart-direct-none",
+   "mx-strict-read-untracked-body-use-store-map-apart-direct-none"
+  ],
+  "rediscovered": "the -apart ids in the sc VM (540 STRICT_READ_UNTRACKED, 72 STORE_WRITE_OUTSIDE_SETTER, Chrome confirmed): build b40d5d6a7 270 + 36 recall-gap with only a remote SC9012 (false cleans at the site); the escaped walk 0 remote (540 recall-gap at the site; 36 at the site, 36 agree). Legal twins (360): no false positive on either; 12 use-each-apart wrapper twins clean to uncertifiable. The 18 patterns: 0 of 18 with a row at the read, then 18 of 18. Package-global shapes (d8) are not generated: the grids carry no package; held by the pattern lane"
+ },
+ {
+  "finding": "a write through a store the census could not follow (a Map, ??) on a later line than its escape had no row at the write: the only SC9012 stood where the store escaped (STORE_WRITE_OUTSIDE_SETTER clean at its site)",
+  "found": "the integrator's site-aware judge (4c), 18 fuzz patterns",
+  "fixed": "ADR 0860, ADR 0862",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-handler-sw-map-apart-direct-none",
+   "mx-store-write-outside-setter-handler-sw-map-apart-direct-closure"
+  ],
+  "rediscovered": "the -apart ids in the sc VM (540 STRICT_READ_UNTRACKED, 72 STORE_WRITE_OUTSIDE_SETTER, Chrome confirmed): build b40d5d6a7 270 + 36 recall-gap with only a remote SC9012 (false cleans at the site); the escaped walk 0 remote (540 recall-gap at the site; 36 at the site, 36 agree). Legal twins (360): no false positive on either; 12 use-each-apart wrapper twins clean to uncertifiable. The 18 patterns: 0 of 18 with a row at the read, then 18 of 18. Package-global shapes (d8) are not generated: the grids carry no package; held by the pattern lane"
+ },
+ {
+  "finding": "a store written into a call's result (`ecb().s = ect`, the review of 7c0eff2d9, W3) and read on a later line had no row at the read: the escaped walk ended silently at an object that is no name",
+  "found": "the review of claude/flip-w-carrier 7c0eff2d9 (W3)",
+  "fixed": "ADR 0860 (W3)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-call-target-apart-direct-none",
+   "mx-strict-read-untracked-body-use-call-target-apart-direct-closure",
+   "mx-strict-read-untracked-body-use-call-target-apart-direct-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-direct-iife",
+   "mx-strict-read-untracked-body-use-call-target-apart-direct-closure-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-direct-module-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-alias-none",
+   "mx-strict-read-untracked-body-use-call-target-apart-alias-closure",
+   "mx-strict-read-untracked-body-use-call-target-apart-alias-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-alias-iife",
+   "mx-strict-read-untracked-body-use-call-target-apart-alias-closure-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-alias-module-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-wrapper-none",
+   "mx-strict-read-untracked-body-use-call-target-apart-wrapper-closure",
+   "mx-strict-read-untracked-body-use-call-target-apart-wrapper-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-wrapper-iife",
+   "mx-strict-read-untracked-body-use-call-target-apart-wrapper-closure-helper",
+   "mx-strict-read-untracked-body-use-call-target-apart-wrapper-module-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-direct-closure",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-direct-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-direct-iife",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-direct-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-direct-module-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-alias-none",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-alias-closure",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-alias-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-alias-iife",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-alias-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-alias-module-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-wrapper-none",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-wrapper-closure",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-wrapper-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-wrapper-iife",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-wrapper-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-target-apart-wrapper-module-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-direct-none",
+   "mx-strict-read-untracked-root-use-call-target-apart-direct-closure",
+   "mx-strict-read-untracked-root-use-call-target-apart-direct-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-direct-iife",
+   "mx-strict-read-untracked-root-use-call-target-apart-direct-closure-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-direct-module-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-alias-none",
+   "mx-strict-read-untracked-root-use-call-target-apart-alias-closure",
+   "mx-strict-read-untracked-root-use-call-target-apart-alias-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-alias-iife",
+   "mx-strict-read-untracked-root-use-call-target-apart-alias-closure-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-alias-module-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-wrapper-none",
+   "mx-strict-read-untracked-root-use-call-target-apart-wrapper-closure",
+   "mx-strict-read-untracked-root-use-call-target-apart-wrapper-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-wrapper-iife",
+   "mx-strict-read-untracked-root-use-call-target-apart-wrapper-closure-helper",
+   "mx-strict-read-untracked-root-use-call-target-apart-wrapper-module-helper"
+  ],
+  "rediscovered": "the use-call-target-apart ids in the sc VM (54, Chrome confirmed): build 7c0eff2d9 54 false clean; the W3 tree 54 recall-gap at the site; legal twins (36) clean on both. use-setter-apart (18, a read in a store setter's callback in a body) did not fire in Chrome: no runtime defect, its new row is fail-closed U"
+ },
+ {
+  "finding": "a store written into the result of a call whose callee is itself a call's result (`const box = make(() => 0); box().s = st`, W5, R19a) and read on a later line had no row at the read: escaped_returned_object took function_called_at's answer, which does not follow a call's result",
+  "found": "the review of claude/flip-w-carrier a747fa28d (W5)",
+  "fixed": "ADR 0860 (W5)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-call-made-apart-direct-none",
+   "mx-strict-read-untracked-body-use-call-made-apart-direct-closure",
+   "mx-strict-read-untracked-body-use-call-made-apart-direct-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-direct-iife",
+   "mx-strict-read-untracked-body-use-call-made-apart-direct-closure-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-direct-module-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-alias-none",
+   "mx-strict-read-untracked-body-use-call-made-apart-alias-closure",
+   "mx-strict-read-untracked-body-use-call-made-apart-alias-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-alias-iife",
+   "mx-strict-read-untracked-body-use-call-made-apart-alias-closure-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-alias-module-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-wrapper-none",
+   "mx-strict-read-untracked-body-use-call-made-apart-wrapper-closure",
+   "mx-strict-read-untracked-body-use-call-made-apart-wrapper-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-wrapper-iife",
+   "mx-strict-read-untracked-body-use-call-made-apart-wrapper-closure-helper",
+   "mx-strict-read-untracked-body-use-call-made-apart-wrapper-module-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-direct-closure",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-direct-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-direct-iife",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-direct-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-direct-module-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-alias-none",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-alias-closure",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-alias-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-alias-iife",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-alias-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-alias-module-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-wrapper-none",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-wrapper-closure",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-wrapper-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-wrapper-iife",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-wrapper-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-call-made-apart-wrapper-module-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-direct-none",
+   "mx-strict-read-untracked-root-use-call-made-apart-direct-closure",
+   "mx-strict-read-untracked-root-use-call-made-apart-direct-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-direct-iife",
+   "mx-strict-read-untracked-root-use-call-made-apart-direct-closure-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-direct-module-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-alias-none",
+   "mx-strict-read-untracked-root-use-call-made-apart-alias-closure",
+   "mx-strict-read-untracked-root-use-call-made-apart-alias-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-alias-iife",
+   "mx-strict-read-untracked-root-use-call-made-apart-alias-closure-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-alias-module-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-wrapper-none",
+   "mx-strict-read-untracked-root-use-call-made-apart-wrapper-closure",
+   "mx-strict-read-untracked-root-use-call-made-apart-wrapper-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-wrapper-iife",
+   "mx-strict-read-untracked-root-use-call-made-apart-wrapper-closure-helper",
+   "mx-strict-read-untracked-root-use-call-made-apart-wrapper-module-helper"
+  ],
+  "rediscovered": "the use-call-made-apart ids in the sc VM (54, Chrome confirmed): build a747fa28d 54 false clean; this tree 54 recall-gap at the site; legal twins (36) clean on both"
+ },
+ {
+  "finding": "ADR 0868's layer walk read every primitive's whole argument as placed: `f(); const act = action(f as any);` left the site silent while the click raises NO_OWNER_CLEANUP (reviewer's R29)",
+  "found": "the rolling review of a1e37776f",
+  "fixed": "ADR 0868, R29 amendment",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-owned-action-x-direct-none"
+  ],
+  "rediscovered": "flw-owned-action direct ids (35, Chrome confirmed): build r8 (a1e37776f plus the SC3001 fix) 35 false cleans; r9: 0, 35 uncertifiable"
+ },
+ {"finding": "a read or write through a value the census could not follow (open-defects patterns, R-carrier: the census row stood at the carrier, none at the read or write): silent at the site, Chrome reports STRICT_READ_UNTRACKED", "found": "open-defects patterns api/r06-values-at, api/r08-values-member, api/v01-store-map-get, api/v02-store-nullish, api/v20-props-map-get, api/v21-props-nullish and more", "fixed": "ADR 0860; uncertifiable", "grid": "patterns", "code": "STRICT_READ_UNTRACKED", "ids": ["api/r06-values-at", "api/r08-values-member", "api/v01-store-map-get", "api/v02-store-nullish", "api/v20-props-map-get", "api/v21-props-nullish", "census/a05-object-assign", "census/a19-globalthis", "census/a21-map-call", "census/k13-untrack-returns-accessor", "census/k14-runWithOwner-returns-accessor", "returns/fc-04-param-handoff", "returns/fc-05-array-foreach", "returns/fc-15-sibling-this", "returns/q4-typed-module-field", "returns/r05-array-real-assign", "returns/r05c-array-real-assign-index", "returns/r05d-array-slot-closure-assign", "returns/t14-closure-over-object-field", "types/b15-accessor-default-param", "values/d3-object-entries-fromentries", "values/d3-param-default", "values/d5-object-assign", "values/d7-window-member", "values/d8-pkg-global-named-fn", "values/d8-pkg-side-effect-import", "values/d8-pkg-window-read", "values/d9-this-getter-store", "values/r2-hook-store-module"], "rediscovered": "patterns lane, Chrome confirming: false clean on q5's build (88bb6b087), fine on the merge of W 178f587a7 (cycle w1); every program's new row is uncertifiable, none proved", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' use-* contexts generate the family"},
+ {"finding": "a read or write through a value the census could not follow (open-defects patterns, R-carrier: the census row stood at the carrier, none at the read or write): silent at the site, Chrome reports STORE_WRITE_OUTSIDE_SETTER", "found": "open-defects patterns api/v08-store-write-map, values/d6-proxy-wrap, values/t4-object-create-own", "fixed": "ADR 0860; uncertifiable", "grid": "patterns", "code": "STORE_WRITE_OUTSIDE_SETTER", "ids": ["api/v08-store-write-map", "values/d6-proxy-wrap", "values/t4-object-create-own"], "rediscovered": "patterns lane, Chrome confirming: false clean on q5's build (88bb6b087), fine on the merge of W 178f587a7 (cycle w1); every program's new row is uncertifiable, none proved", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' use-* contexts generate the family"},
+ {"finding": "a read or write through a value the census could not follow (open-defects patterns, R-carrier: the census row stood at the carrier, none at the read or write): silent at the site, Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE", "found": "open-defects patterns types/h14-default-param-setter", "fixed": "ADR 0860; uncertifiable", "grid": "patterns", "code": "REACTIVE_WRITE_IN_OWNED_SCOPE", "ids": ["types/h14-default-param-setter"], "rediscovered": "patterns lane, Chrome confirming: false clean on q5's build (88bb6b087), fine on the merge of W 178f587a7 (cycle w1); every program's new row is uncertifiable, none proved", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' use-* contexts generate the family"},
+  {
+   "finding": "a `sync: true` async memo read in tracked JSX (`createMemo(async () => 1, { sync: true })`) proved ASYNC_OUTSIDE_LOADING_BOUNDARY while Chrome rc.21 reports only SYNC_NODE_RECEIVED_ASYNC: a sync node is never pending",
+   "found": "Part 16's stricter judge, patterns/flip/sync-memo-jsx-read",
+   "fixed": "ADR 0889",
+   "grid": "mx-recall",
+   "code": "SYNC_NODE_RECEIVED_ASYNC",
+   "ids": [
+    "mx-sync-node-received-async-jsx-sync-memo-read-direct-none",
+    "mx-sync-node-received-async-jsx-sync-memo-read-direct-iife"
+   ],
+   "rediscovered": "SYNC_NODE_RECEIVED_ASYNC jsx sync-memo-read (6, Chrome confirmed): build pa11 (5870569bb) 4 wrong-rule (SC5003 violation Chrome does not report); ADR 0889 (pa12) 6 agree, SC5003 uncertifiable. Fixture reactive-ir/sync-memo-read (twin SyncFalseRead keeps its violation)"
+  },
+ {
+  "finding": "ADR 0868's walk stopped at a closed named layer: `wrapUse` called from an `f` that escapes stayed certified, and the click raises the site's NO_OWNER_* code (every wrapper binding of the flw-owned contexts)",
+  "found": "Part 16's smoke on the merged build",
+  "fixed": "ADR 0868, callers amendment",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-flw-owned-assigned-errored-wrapper-handoff-call"
+  ],
+  "rediscovered": "every flw-owned wrapper id (7,152, Chrome confirmed): build r9 2,737 false cleans; r13: 0, 6,816 uncertifiable, 336 agree; legal twins 1,431: 0 false positives, 406 clean, 1,025 uncertifiable"
+ },
+ {
+  "finding": "SC3001's IIFE placement ended at its bound with `false`, and the IIFE call took no helper path, so a forbidden call past 16 nested IIFEs lost the walk's obligation and was certified",
+  "found": "Part 16's q5 smoke",
+  "fixed": "the IIFE placement's bound leaves an obligation",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-tracked-root-alias-depth-17"
+  ],
+  "rediscovered": "depth-15/16/17 ids of the three forbidden-scope codes in settled, tracked and their contexts (450, Chrome confirmed): build r9 75 false cleans; r13: 0, 330 uncertifiable, 120 agree"
+ },
+ {
   "finding": "SC4001: a helper the component body runs (owned) and a withheld call's callback runs (`hand(arr).forEach(h)`, the program's own forEach on that receiver queues it) was certified: ADR 0840's census withheld the call and with it every owner edge of the callback, so the body's owned call alone placed the helper; Chrome (rc.21) reports no owner from the microtask (corpus: solid-dockview `watch`, R9 review)",
   "found": "C2 exact-span re-measure of ADR 0840's removed rows (R9)",
   "fixed": "ADR 0874",
@@ -5916,5 +6756,7 @@
    "lg-strict-read-untracked-recv-answer-late-store-link-direct-none"
   ],
   "rediscovered": "flip-read.mjs legal.mjs --grid --recall --ids, Chrome confirming: build m14 (67987ca14's checker) 3 false-positive; m19 0, uncertifiable"
- }
+ },
+ {"finding": "an impostor away from the receiver (a parameter, a return, a structural type): the write stood silent, certified on the cast forms, Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE", "found": "open-defects patterns types/d03-param-structural, types/p3-cast-param, types/p3-cast-return", "fixed": "ADRs 0840, 0874; uncertifiable", "grid": "patterns", "code": "REACTIVE_WRITE_IN_OWNED_SCOPE", "ids": ["types/d03-param-structural", "types/p3-cast-param", "types/p3-cast-return"], "rediscovered": "patterns lane, Chrome confirming: false clean on fbddde125, fine on the merge of C2's b2c3dee81 (cycle c1), every new row uncertifiable, none proved", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' cast-*, recv-* and wh-* contexts generate the family"},
+ {"finding": "a primitive's own setter taken as exact where a Function held in a parameter patches it: SC2001 V, Chrome silent", "found": "open-defects patterns types/s02-setter-slot-function-escaped", "fixed": "ADRs 0840, 0874; uncertifiable", "grid": "patterns", "code": "REACTIVE_WRITE_IN_OWNED_SCOPE", "ids": ["types/s02-setter-slot-function-escaped"], "rediscovered": "patterns lane, Chrome confirming: false positive on fbddde125, fine on the merge of C2's b2c3dee81 (cycle c1), the V is now uncertifiable", "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns), each a fixed shape; the grids' cast-*, recv-* and wh-* contexts generate the family"}
 ]

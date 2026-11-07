@@ -732,7 +732,7 @@ async function runCase(id, slot) {
     .filter((finding) => caseFile(finding.primaryLocation?.path))
     .map((finding) => ({
       file: caseFile(finding.primaryLocation.path), rule: finding.rule, id: finding.id, kind: finding.kind,
-      line: finding.primaryLocation.line, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
+      line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
     }));
   const seen = new Set();
   // An uncaught error a coded rule claims, as a diagnostic row at its mapped
@@ -763,7 +763,7 @@ async function runCase(id, slot) {
       // The read site first, then each application frame below it: a finding
       // may anchor at the call that led to the read.
       const positions = [row.site, ...(row.stack ?? [])]
-        .map((frame) => ({ file: caseFile(frame.location.path), line: frame.line }))
+        .map((frame) => ({ file: caseFile(frame.location.path), line: frame.line, column: frame.column }))
         .filter((position) => position.file);
       const covering = findings.filter((finding) => positions.some((position) => finding.file === position.file
         && finding.line <= position.line && position.line <= finding.endLine)
@@ -776,7 +776,8 @@ async function runCase(id, slot) {
         verdict: !rules ? "no-rule"
           : covering.some((finding) => finding.kind === "violation") ? "covered-violation"
           : covering.length ? "covered-uncertifiable" : "unproven-clean",
-        stack: positions.slice(1).map((position) => `${position.file}:${position.line}`),
+        // `file:line:column` (review 4c: the judges cover at positions, never lines); the column is left off when the frame has none.
+        stack: positions.slice(1).map((position) => `${position.file}:${position.line}${Number.isInteger(position.column) ? `:${position.column}` : ""}`),
         covering: covering.map((finding) => `${finding.file}:${finding.line} ${finding.id} ${finding.kind} ${finding.rule}`),
       };
     });
@@ -860,6 +861,9 @@ async function runCase(id, slot) {
     id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
     unattributed: (report.execution?.diagnostics ?? []).filter((row) => !caseFile(row.site?.location?.path)).map((row) => row.code),
     pageErrors: (report.execution?.pageErrors ?? []).map((error) => error.message.slice(0, 200)),
+    // What the page logged as an error (R3e, Part 16): a user effect logs the throw of its compute or of a computation it read
+    // (`NoOwnerError: …`), and an `<Errored>` boundary logs what it caught. Solid reported them, though no error reached the window.
+    consoleErrors: (report.execution?.consoleDiagnostics ?? []).filter((row) => row.severity === "error").map((row) => String(row.message).slice(0, 200)),
   };
 }
 

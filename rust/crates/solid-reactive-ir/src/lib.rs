@@ -78,6 +78,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 pub mod package_boundary;
+mod pending_accounting;
 mod pipeline;
 mod projection;
 mod reachability;
@@ -1305,6 +1306,10 @@ pub struct OwnerRequirement {
     pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
+    /// ADR 0852: the throw rejects an async generator stepper's flight; no
+    /// proof follows the rejection to an observed read or error boundary.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub flight_error_unobserved: bool,
     /// Allocation itself depends on a runtime fact not available to the
     /// analyzer (for example server-entry selection or spread arity).
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1449,8 +1454,10 @@ pub struct AsyncRead {
     /// ADR 0665: `options_opaque`, because no fact says the source is async.
     #[serde(default)]
     pub provenance_open: bool,
-    /// The read sits in a `try`. rc.21 emits the untracked-read diagnostic before
-    /// it throws, so SC5001 stands (ADR 0640); a boundary warning needs the throw
+    /// The read sits in a `try`, or (ADR 0855) runs while a module with a
+    /// handler evaluates. In a strict-read window rc.21 emits the untracked-read
+    /// diagnostic before it throws, so SC5001 stands; while a module evaluates
+    /// it emits nothing, so SC5001 is open. A boundary warning needs the throw
     /// to reach it, which a `catch` may stop.
     #[serde(default)]
     pub caught: bool,
@@ -1548,6 +1555,25 @@ pub struct AsyncRead {
     /// strict read withdrawn through [`Self::pending_origin`] lies in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_apply: Option<Location>,
+    /// ADR 0838: the read this row stands for, where the row sits elsewhere
+    /// (a call-attributed row at the call of the function that reads): the
+    /// pending-read accounting finds the read's row through it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Location>,
+    /// ADR 0838: the pending-read accounting added this row for a claim no
+    /// producer accounted for (`async-read-unaccounted`): never a violation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unaccounted: bool,
+    /// ADR 0891: the unaccounted read's source is created from an import that
+    /// resolves to nothing (`source-module-unresolved`): the blocker names the
+    /// missing module's value, not the read.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub source_module_unresolved: bool,
+    /// ADR 0835, review R1/R6: an unplaced row a call-attributed walk left at
+    /// its read because it cut a path; the rows it placed at calls then
+    /// account for no path but their own.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub walk_cut: bool,
 }
 
 fn default_async_provenance() -> bool {

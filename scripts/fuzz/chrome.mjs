@@ -10,7 +10,7 @@ import { freshDir } from "./scratch.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { caseFiles, caseKey, recordDigest } from "./cache.mjs";
-import { HALT_TEXT, HITS_SELECTOR, findingsDiff, haltable, parseHitsText } from "./hits.mjs";
+import { HALT_TEXT, HITS_SELECTOR, cleanPositions, findingsDiff, haltable, parseHitsText } from "./hits.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -21,9 +21,10 @@ export const DEFAULT_ORACLE_INSTALL = join(repo, "scripts/runtime-oracle-install
 export function chromeDiagnostics(row) {
   return (row.diagnostics ?? []).map((diagnostic) => ({
     code: diagnostic.code, message: diagnostic.message ?? null,
-    positions: [{ file: diagnostic.file, line: diagnostic.line }, ...(diagnostic.stack ?? []).map((frame) => {
-      const [file, line] = frame.split(":");
-      return { file, line: Number(line) };
+    // Review 4c: with each frame's column (`file:line:column`), the judges cover at positions; a row recorded without one has none.
+    positions: [{ file: diagnostic.file, line: diagnostic.line, ...(Number.isInteger(diagnostic.column) ? { column: diagnostic.column } : {}) }, ...(diagnostic.stack ?? []).map((frame) => {
+      const [file, line, column] = frame.split(":");
+      return { file, line: Number(line), ...(column === undefined ? {} : { column: Number(column) }) };
     })],
   }));
 }
@@ -55,6 +56,8 @@ export function chromeRuntime(row, checkpoints, sites) {
     quiescent: counted && reads.length >= 2 ? reads.at(-1).text === reads.at(-2).text : null,
     diagnostics: chromeDiagnostics(row),
     errors: (row.pageErrors ?? []).map((message) => ({ kind: "page-error", message, positions: [] })),
+    // Solid's logged errors (runtime-oracle.mjs `consoleErrors`), read as the grid host's are (matrix.mjs `judge`, codes.mjs codeOfLogged).
+    consoleErrors: (row.consoleErrors ?? []).map(String),
     // Codes of diagnostics Chrome saw but could not place in the case file (the oracle's `unattributed`). The comparator
     // treats them as a disturbance: a candidate false positive is never confirmed past one.
     unattributed: (row.unattributed ?? []).map(String),
@@ -85,6 +88,28 @@ export const chromeChecker = (row, cleanFindings) => {
   const perturbed = cleanFindings === undefined ? [] : cleanFindings === null ? ["no clean reference run in Chrome to compare with"] : findingsDiff(cleanFindings, findings);
   return { ok: !["harness-error", "type-error"].includes(row.verdict), error: row.error, findings, perturbed };
 };
+
+/** hits.mjs `cleanPositions` for a case directory's twin, or null with no twin or a text that does not strip to the clean one. */
+function twinPositions(dir) {
+  const twin = join(dir, "App.run.txt");
+  return existsSync(twin) ? cleanPositions(readFileSync(twin, "utf8"), readFileSync(join(dir, "App.tsx"), "utf8")) : null;
+}
+
+const isApp = (place) => place.file === "App.tsx" || place.file === undefined;
+const placed = (place, clean) => (isApp(place) && Number.isInteger(place.column) ? clean({ line: place.line, column: place.column }) : place);
+
+/**
+ * A twin's record, put on the clean text: the counters keep lines, not columns, so the judges (which read the clean text for call starts
+ * and mount lines, and a package case's checker ran on it) would compare columns of two texts (ADR 0815). A frame in the counter's
+ * prelude has no place there.
+ */
+export const runtimeOnClean = (runtime, clean) => {
+  const positions = (list) => (list ?? []).flatMap((place) => { const at = placed(place, clean); return at ? [{ ...place, ...at }] : []; });
+  return { ...runtime, diagnostics: runtime.diagnostics.map((d) => ({ ...d, positions: positions(d.positions) })), errors: runtime.errors.map((e) => ({ ...e, positions: positions(e.positions) })) };
+};
+
+/** The oracle's findings on the twin, on the clean text (`runtimeOnClean`); `perturbed` compared them on the twin already. */
+export const findingsOnClean = (checker, clean) => ({ ...checker, findings: (checker.findings ?? []).map((finding) => ({ ...finding, ...(placed(finding, clean) ?? {}) })) });
 
 function spawnOracle(args, env, oracle = ORACLE) {
   return new Promise((done) => {
@@ -213,7 +238,7 @@ async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bi
     return existsSync(reportPath) ? (JSON.parse(readFileSync(reportPath, "utf8")).execution?.checkpoints ?? []) : [];
   };
   const records = new Map();
-  for (const { id, sites, findings, checker } of cases) {
+  for (const { id, dir, sites, findings, checker } of cases) {
     const row = rows.get(id);
     if (!row) { records.set(id, { row: null, runtime: { failure: { phase: "chrome", message: "no row" }, diagnostics: [], errors: [], witnesses: [] }, checker: { ok: false, error: "no oracle row", findings: [] } }); continue; }
     // The reference for the twin's findings: the oracle's own on the clean text (from this call's control, or passed in).
@@ -223,7 +248,10 @@ async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bi
       const cleanChecker = cleanRow ? (checker ?? chromeChecker(cleanRow, undefined)) : null;
       reference = cleanChecker?.ok ? cleanChecker.findings : null;
     }
-    records.set(id, { row, runtime: chromeRuntime(row, reportOf(id), sites), checker: checker ?? chromeChecker(row, control ? undefined : reference), ...(retries.has(id) ? { retries: retries.get(id) } : {}) });
+    const own = checker ?? chromeChecker(row, control ? undefined : reference);
+    const clean = control ? null : twinPositions(dir);
+    const runtime = chromeRuntime(row, reportOf(id), sites);
+    records.set(id, { row, runtime: clean ? runtimeOnClean(runtime, clean) : runtime, checker: clean && !checker ? findingsOnClean(own, clean) : own, ...(retries.has(id) ? { retries: retries.get(id) } : {}) });
   }
   return records;
 }

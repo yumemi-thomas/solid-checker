@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import {
-  INSTRUMENT_PRELUDE, ORDER_LIMIT, PRELUDE_MARK, compareVerdictRuns, counterIds, findingsDiff, hitRecord, hitSummary, normalizeHits, outcomeDiff, outcomeOf, parseHitsText, stripInstrumentation,
+  INSTRUMENT_PRELUDE, ORDER_LIMIT, PRELUDE_MARK, cleanPositions, compareVerdictRuns, counterIds, findingsDiff, hitRecord, hitSummary, normalizeHits, outcomeDiff, outcomeOf, parseHitsText, stripInstrumentation,
 } from "./hits.mjs";
 import { printProgram } from "./print.mjs";
 
@@ -194,5 +194,57 @@ describe("a built case", () => {
     const sitesJson = JSON.parse(built.files["sites.json"]);
     expect(sitesJson.glue).toEqual(built.glue);
     expect(sitesJson.ledger).toEqual(built.ledger);
+  });
+});
+
+describe("cleanPositions: stack positions on the twin, put back on the clean text (ADR 0815)", () => {
+  const at = (text, line, column) => text.split("\n")[line - 1].slice(column - 1);
+
+  it("takes a frame past a statement counter to the call the checker reports", () => {
+    const clean = cleanPositions(`function f() {\n  __h(2); useIt();\n}\n${INSTRUMENT_PRELUDE}`, "function f() {\n  useIt();\n}\n");
+    expect(clean({ line: 2, column: 11 })).toEqual({ line: 2, column: 3 });
+  });
+
+  it("takes expression, entry and empty-body counters off the column, and a nested close with them", () => {
+    const run = "const a = (__h(1), f((__h(2), g(1)), 2)); function b() { __h(3); c(); } const d = () => { __h(4); };\n";
+    const text = "const a = f(g(1), 2); function b() { c(); } const d = () => {};\n";
+    const clean = cleanPositions(run, text);
+    expect(at(text, 1, clean({ line: 1, column: run.indexOf("f((") + 1 }).column)).toMatch(/^f\(g/);
+    expect(at(text, 1, clean({ line: 1, column: run.indexOf("g(1") + 1 }).column)).toMatch(/^g\(1/);
+    expect(at(text, 1, clean({ line: 1, column: run.indexOf(", 2)") + 1 }).column)).toMatch(/^, 2\)/);
+    expect(at(text, 1, clean({ line: 1, column: run.indexOf("c();") + 1 }).column)).toMatch(/^c\(\)/);
+    expect(at(text, 1, clean({ line: 1, column: run.indexOf("() => {") + 1 }).column)).toMatch(/^\(\) => \{\}/);
+  });
+
+  it("gives a position on a counter the code it sits in front of, and nothing in the prelude", () => {
+    const run = `  __h(2); useIt();\n${INSTRUMENT_PRELUDE}`;
+    const clean = cleanPositions(run, "  useIt();\n");
+    expect(clean({ line: 1, column: 3 })).toEqual({ line: 1, column: 3 });
+    expect(clean({ line: 3, column: 1 })).toBeNull();
+    expect(clean({ line: 400, column: 1 })).toBeNull();
+  });
+
+  it("answers null for a text that does not strip to the clean one", () => {
+    expect(cleanPositions("  __h(2); a();\n", "  b();\n")).toBeNull();
+  });
+
+  it("keeps every kept character at its own place, on every seed and profile", () => {
+    for (const profile of PROFILES) {
+      for (const seed of SEEDS.slice(0, 40)) {
+        const { text, runText } = printProgram(generateProgram(seed, { profile }));
+        const clean = cleanPositions(runText, text);
+        expect(clean, `seed ${seed} ${profile}`).not.toBeNull();
+        const runLines = runText.split("\n");
+        const lines = text.split("\n");
+        // The first word of every counted statement and call: what a stack frame points at.
+        lines.forEach((line, index) => {
+          for (const match of (runLines[index] ?? "").matchAll(/\b(?!__h\b)[a-zA-Z_]\w*\(/g)) {
+            const to = clean({ line: index + 1, column: match.index + 1 });
+            expect(to?.line, `${seed} ${profile} ${runLines[index]}`).toBe(index + 1);
+            expect(line.slice(to.column - 1, to.column - 1 + match[0].length), `${seed} ${profile} ${runLines[index]}`).toBe(match[0]);
+          }
+        });
+      }
+    }
   });
 });

@@ -21,6 +21,10 @@ pub(crate) const SEARCH_DEPTH_LIMIT: &str = "search-depth-limit";
 /// decided.
 pub(crate) const SEARCH_BUDGET_EXHAUSTED: &str = "search-budget-exhausted";
 
+/// ADR 0852: a throw rejects an async stepper's flight, whose error propagation
+/// to a read or error boundary is not proved.
+pub(crate) const ASYNC_FLIGHT_ERROR_UNOBSERVED: &str = "async-flight-error-unobserved";
+
 // Track W.
 pub(crate) const SOLID_VERSION_UNCLASSIFIED: &str = "solid-version-unclassified";
 pub(crate) const RESPONSE_HEAD_POSITION_UNPROVEN: &str = "response-head-position-unproven";
@@ -67,6 +71,13 @@ pub(crate) const COMPONENT_IDENTITY_UNPROVEN: &str = "component-identity-unprove
 pub(crate) const OWNER_ALLOCATION_UNPROVEN: &str = "owner-allocation-unproven";
 pub(crate) const OWNER_UNPROVEN: &str = "owner-unproven";
 pub(crate) const ASYNC_OPTIONS_OPAQUE: &str = "async-options-opaque";
+/// ADR 0838: a pending rule's claim at a read no producer accounted for: no
+/// row of that rule, no SC9012 at the read, no recorded reason.
+pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";
+/// ADR 0891: the same claim, where the source's initial value comes from an
+/// import nothing resolves: `createSignal(fromAbsentModule())` may be a
+/// function, and its compute anything.
+pub(crate) const SOURCE_MODULE_UNRESOLVED: &str = "source-module-unresolved";
 pub(crate) const ASYNC_READ_CAUGHT: &str = "async-read-caught";
 pub(crate) const ASYNC_COMPONENT_PROP: &str = "async-component-prop";
 pub(crate) const DECLARED_LOADING_VALUE: &str = "declared-loading-value";
@@ -216,7 +227,9 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 }
 
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
-    if requirement.unplaced_callback {
+    if requirement.flight_error_unobserved {
+        ASYNC_FLIGHT_ERROR_UNOBSERVED
+    } else if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
     } else if requirement.owner_varies_by_caller {
         OWNER_VARIES_BY_CALLER
@@ -236,7 +249,11 @@ pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static
 }
 
 pub(crate) const fn for_async_read(read: &crate::AsyncRead) -> &'static str {
-    if read.options_opaque {
+    if read.source_module_unresolved {
+        SOURCE_MODULE_UNRESOLVED
+    } else if read.unaccounted {
+        ASYNC_READ_UNACCOUNTED
+    } else if read.options_opaque {
         ASYNC_OPTIONS_OPAQUE
     } else if read.caught {
         ASYNC_READ_CAUGHT

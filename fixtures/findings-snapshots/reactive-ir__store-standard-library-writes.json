@@ -272,6 +272,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-standard-library-writes/App.tsx",
+      "start": 2983,
+      "end": 2999,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-standard-library-writes/App.tsx",
       "start": 2989,
       "end": 2994,
       "fixes": 0

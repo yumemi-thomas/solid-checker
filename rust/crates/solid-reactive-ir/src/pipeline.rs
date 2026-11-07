@@ -53,6 +53,10 @@ pub(crate) struct ProgramDraft {
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
+    /// ADR 0860: obligations no other producer's row may yield to: pushed
+    /// after every producer has run, so a row at the same start keeps its
+    /// place.
+    pub(crate) deferred_defects: Vec<StaticDefect>,
     /// ADR 0874: the exact spans filed, so an uncertain row at a use nested
     /// in a withheld call's start (`t.slice(0, i).trim()` in `t.slice`)
     /// keeps its row.
@@ -73,6 +77,24 @@ impl ProgramDraft {
     /// The identity is derived from the defect kind's family rather than
     /// passed in, so a caller cannot file a defect under another finding
     /// kind's identity and silently suppress it.
+    /// [`Self::push_defect`], where a proven row replaces an obligation at the
+    /// same site (ADR 0871): another walk of the function proved what this one
+    /// could not.
+    pub(crate) fn push_defect_or_strengthen(&mut self, defect: StaticDefect) {
+        if !defect.uncertain
+            && let Some(row) = self.static_defects.iter_mut().find(|row| {
+                row.uncertain
+                    && row.kind.dedup_identity() == defect.kind.dedup_identity()
+                    && row.location.path == defect.location.path
+                    && row.location.start_byte == defect.location.start_byte
+            })
+        {
+            *row = defect;
+            return;
+        }
+        self.push_defect(defect);
+    }
+
     pub(crate) fn push_defect(&mut self, defect: StaticDefect) {
         // ADR 0874: a withheld call's row (`props.items.map`) shares no slot
         // with a row at a use it starts at (`props`).
@@ -725,6 +747,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             semantic_lookup,
         ));
     for defect in dependency_source_call_error_defects(facts) {
+        draft.push_defect(defect);
+    }
+    for defect in std::mem::take(&mut draft.deferred_defects) {
         draft.push_defect(defect);
     }
     draft.discard_deleted_static_diagnostics(facts);

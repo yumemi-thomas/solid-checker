@@ -24,8 +24,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // pinned as incidental below.
         ("strict-read-untracked", 21),
         // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
-        // pinned below.
-        ("reactive-read-after-await", 20),
+        // pinned below. ADR 0870: two more, the reads after
+        // `conditionalAwait`'s and `shortCircuitAwait`'s skippable awaits.
+        ("reactive-read-after-await", 22),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
         // ADR 0646: two more, `owned-scope-valid.tsx:28`, a tuple's function
         // slots from a local hook: its transport does not resolve.
@@ -212,12 +213,14 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             [("strict-read-untracked", 1)].as_slice(),
         ),
         // ADR 0516: the read after `loopAwait`'s `while` loop may follow an
-        // await the loop ran (an uncertifiable result, no violation).
+        // await the loop ran (an uncertifiable result, no violation). ADR
+        // 0870: so may the reads after `conditionalAwait`'s `if` and
+        // `shortCircuitAwait`'s `&&` await: wrong when the branch awaits.
         (
             "await-control-flow-valid.tsx",
             [
                 ("strict-read-untracked", 1),
-                ("reactive-read-after-await", 1),
+                ("reactive-read-after-await", 3),
             ]
             .as_slice(),
         ),

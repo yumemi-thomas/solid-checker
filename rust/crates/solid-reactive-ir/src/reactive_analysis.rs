@@ -188,6 +188,7 @@ pub(crate) fn collect_project<'facts>(
         action_invocations,
         mut async_reads,
         bounded_async_reads,
+        walk_decided_reads,
         strict_read_obligations,
         write_action_obligations,
         dispatch_obligations,
@@ -195,15 +196,17 @@ pub(crate) fn collect_project<'facts>(
     } = local_access.result;
     // ADR 0835: `discover` keeps these per file; any left here are kept the
     // same way, never dropped.
+    // Review R1: per rule, as `discover` keeps them.
     let placed = async_reads
         .iter()
-        .map(|read| read.location.clone())
+        .filter_map(|read| {
+            crate::pending_accounting::reported_rule(read).map(|rule| (read.location.clone(), rule))
+        })
         .collect::<HashSet<_>>();
-    async_reads.extend(
-        bounded_async_reads
-            .into_iter()
-            .filter(|read| !placed.contains(&read.location)),
-    );
+    async_reads.extend(bounded_async_reads.into_iter().filter(|read| {
+        crate::pending_accounting::reported_rule(read)
+            .is_none_or(|rule| !placed.contains(&(read.location.clone(), rule)))
+    }));
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -466,6 +469,9 @@ pub(crate) fn collect_project<'facts>(
     // reference's row stays where it was.
     let mut use_rows = Vec::new();
     let mut used = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
+    // ADR 0860: the rows past an escape, after every other.
+    let mut escaped_rows = Vec::new();
+    let mut escaped_seen = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
@@ -488,6 +494,15 @@ pub(crate) fn collect_project<'facts>(
                     location.end_byte,
                 )) {
                     use_rows.push(census_obligation(&callee, location, blocker));
+                }
+            }
+            for (location, blocker) in census.take_escaped_uses() {
+                if escaped_seen.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    escaped_rows.push(census_obligation(&callee, location, blocker));
                 }
             }
             let Some(blocker) = open else {
@@ -518,6 +533,15 @@ pub(crate) fn collect_project<'facts>(
                     location.end_byte,
                 )) {
                     use_rows.push(census_obligation("this value", location, blocker));
+                }
+            }
+            for (location, blocker) in census.take_escaped_uses() {
+                if escaped_seen.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    escaped_rows.push(census_obligation("this value", location, blocker));
                 }
             }
             let Some(blocker) = open else {
@@ -593,9 +617,26 @@ pub(crate) fn collect_project<'facts>(
         .into_iter()
         .filter(|obligation| !covered(obligation))
         .collect::<Vec<_>>();
+    // A use before the escape speaks for its span only where its own row
+    // stands: one `covered` dropped leaves the escaped row there.
+    let kept = handed
+        .iter()
+        .map(|obligation| {
+            let at = &obligation.location;
+            (at.path.clone(), at.start_byte, at.end_byte)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let escaped_rows = escaped_rows
+        .into_iter()
+        .filter(|obligation| {
+            let at = &obligation.location;
+            !kept.contains(&(at.path.clone(), at.start_byte, at.end_byte))
+        })
+        .collect::<Vec<_>>();
     for obligation in handed {
         draft.push_defect(obligation);
     }
+    draft.deferred_defects.extend(escaped_rows);
     // ADR 0509: a reported read of a proven async source with no async row
     // (a transported read, a module source read in another file) may meet the
     // source pending; give it the row the projection opens it with
@@ -717,8 +758,12 @@ pub(crate) fn collect_project<'facts>(
             root_pass_unproven: false,
             carrier_run_unproven: false,
             apply_first_run_pending: false,
-            pending_origin: None,
+            pending_origin: read.origin.clone(),
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            source_module_unresolved: false,
+            walk_cut: false,
         })
         .collect::<Vec<_>>();
     draft.async_reads.extend(synthesized);
@@ -798,8 +843,12 @@ pub(crate) fn collect_project<'facts>(
                 root_pass_unproven: false,
                 carrier_run_unproven: false,
                 apply_first_run_pending: false,
-                pending_origin: None,
+                pending_origin: read.origin.clone(),
                 pending_apply: None,
+                origin: None,
+                unaccounted: false,
+                source_module_unresolved: false,
+                walk_cut: false,
             })
         })
         .collect::<Vec<_>>();
@@ -989,6 +1038,22 @@ pub(crate) fn collect_project<'facts>(
         });
     }
     hold_withdrawn_static_rows(draft);
+    // ADR 0838: after every producer, every pending read is accounted for.
+    crate::pending_accounting::account_pending_reads(
+        ctx,
+        &|symbol| {
+            source.async_sources.contains(symbol)
+                || local_access_context.source_compute_open(symbol, &open_computes)
+        },
+        &|symbol| {
+            source
+                .source_async_options
+                .get(symbol)
+                .is_some_and(|options| options.declared_loading)
+        },
+        &walk_decided_reads.into_iter().collect(),
+        draft,
+    );
     interprocedural.factory_instances
 }
 

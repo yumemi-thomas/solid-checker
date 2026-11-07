@@ -492,6 +492,31 @@ fn owner_logged(
     append(&line);
 }
 
+/// ADR 0838: the pending rule `rule`'s claim at the read `span` of `path`
+/// ended at `exit` with no row, reason or SC9012 to account for it.
+#[inline]
+pub(crate) fn pending(rule: &str, path: &str, span: Span, exit: &str) {
+    if enabled() {
+        pending_logged(rule, path, span, exit);
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn pending_logged(rule: &str, path: &str, span: Span, exit: &str) {
+    let Some(path) = path_ref(path) else {
+        return;
+    };
+    let mut line = Vec::with_capacity(96);
+    line.extend_from_slice(b"{\"k\":\"pending\",\"rule\":");
+    push_json_str(&mut line, rule);
+    push_path(&mut line, path);
+    let _ = write!(line, ",\"s\":{},\"e\":{},\"exit\":", span.start, span.end);
+    push_json_str(&mut line, exit);
+    let _ = writeln!(line, "}}");
+    append(&line);
+}
+
 fn push_json_str(line: &mut Vec<u8>, text: &str) {
     let _ = serde_json::to_writer(&mut *line, text);
 }

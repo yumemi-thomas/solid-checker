@@ -82,6 +82,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
+      "start": 2380,
+      "end": 2383,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
@@ -109,6 +120,17 @@
       "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
       "start": 2434,
       "end": 2435,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
+      "start": 2472,
+      "end": 2479,
       "fixes": 0
     },
     {

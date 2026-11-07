@@ -43,6 +43,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
+      "start": 289,
+      "end": 290,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -51,6 +62,17 @@
       "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
       "start": 342,
       "end": 349,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
+      "start": 347,
+      "end": 348,
       "fixes": 0
     },
     {
@@ -65,6 +87,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
+      "start": 417,
+      "end": 418,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -76,6 +109,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
+      "start": 488,
+      "end": 489,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -84,6 +128,17 @@
       "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
       "start": 666,
       "end": 673,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-census-no-entry/Unrendered.tsx",
+      "start": 671,
+      "end": 672,
       "fixes": 0
     },
     {

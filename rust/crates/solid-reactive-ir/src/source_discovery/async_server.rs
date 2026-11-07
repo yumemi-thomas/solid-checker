@@ -132,11 +132,24 @@ pub(crate) fn async_source_options(
         && !loading_key
         && (!seed_key || seed_false)
         && function_form;
+    // R2h (patterns/flip/sync-memo-jsx-read): `sync: true` makes a compute
+    // that answers a Promise an error (dev, SYNC_NODE_RECEIVED_ASYNC) or an
+    // unawaited value (production), never a pending source; a pending read
+    // in it still suspends it. Nothing here tells the two apart, so a `sync`
+    // key not proved `false` leaves every pending claim of the source open.
+    let sync_open = argument
+        .property_names
+        .iter()
+        .any(|key| named(*key, "sync"))
+        && !argument
+            .boolean_properties
+            .iter()
+            .any(|property| named(property.name, "sync") && !property.value);
     AsyncSourceOptions {
         declared_loading,
         ssr_client_bare,
         server_rendering_unresolved: false,
-        opaque: !argument.exact_object_literal && !declared_loading,
+        opaque: (!argument.exact_object_literal && !declared_loading) || sync_open,
         provenance_open: false,
     }
 }

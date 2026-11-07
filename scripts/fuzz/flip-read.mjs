@@ -4,7 +4,7 @@
 //   flipReadContext(context, stmts, kit)  the program, as a misuse.mjs context returns one, or undefined when the context is not this file's
 //   FLIP_READ_LEGAL     { [code]: [context, ...] }, appended to that code's recallLegal
 //   FLIP_READ_VARIANTS  { [code]: { [variant]: { kind, contexts } } }, a source of that kind, in those contexts, added to the code's recall variants
-import { apiSignal, awaitStmt, button, call, child, ctl, decl, domExpr, expr, fn, iife, jsxExpr, member, mounted, num, prim, ref, ret } from "./model.mjs";
+import { apiSignal, awaitStmt, button, call, child, ctl, decl, domExpr, expr, flush, fn, iife, jsx, jsxExpr, member, mounted, num, prim, ref, ret } from "./model.mjs";
 
 // ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
 export const STATIC_SOURCES = {
@@ -21,6 +21,17 @@ export const SYNC_COMPUTES = {
   "cmp-unknown": '((() => Promise.resolve(1)) as () => unknown), { sync: true }',
   "cmp-cond": '() => (Math.random() >= 0 ? Promise.resolve(1) : 1), { sync: true }',
   "cmp-options": 'async () => 1, ({ sync: true }) as { sync: boolean }',
+  // ADR 0865: an async generator's iterator is an AsyncIterable: the name reaches the checker as a declaration, not an async literal.
+  "cmp-async-gen": 'async function* () { yield 1; }, { sync: true }',
+  "cmp-async-gen-named": "cmpGen, { sync: true }",
+  "cmp-async-gen-member": "() => cmpHolder.g(), { sync: true }",
+  "cmp-async-iter-class": "() => new CmpIter(), { sync: true }",
+};
+
+export const SYNC_COMPUTE_LINES = {
+  "cmp-async-gen-named": "async function* cmpGen() { yield 1; }",
+  "cmp-async-gen-member": "const cmpHolder = { async *g() { yield 1; } };",
+  "cmp-async-iter-class": "class CmpIter { async *[Symbol.asyncIterator]() { yield 1; } }",
 };
 
 // ADR 0657: a destructure no exact root reaches. Each is a Get of the store at setup.
@@ -160,16 +171,75 @@ const ITER_PATCHES = {
   "iter-gpo-destructure": `const { getPrototypeOf: itGp } = Object; const itAP: any = itGp([]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
 };
 
+// ADR 0857: the census's `handed-flush` (misuse.mjs) through other entries. A function a tracked JSX expression runs (by a call, or by a
+// standard-library call that runs it inline) runs under the render effect's observer, and `flush(fn)` runs `fn` there. Then the legal
+// twins: a handler runs the same entry with no observer, an empty receiver runs nothing, and `<K />` renders the function as a component.
+const HANDED_FLUSH = ["handed-flush-each", "handed-flush-call", "named-flush-call", "flush-iife"];
+const HANDED_FLUSH_LEGAL = ["handed-flush-handler", "handed-flush-empty", "handed-flush-tag"];
+// ADR 0857's entry walk ends at its bound (review R13): the site is N named functions from tracked JSX. Twice-called helpers end the in-place
+// climb at once; the sole-call chain outruns the climb's own 16 layers. Past either bound the row is open, never the site's lexical role.
+const ENTRY_CHAINS = { "entry-chain-5": [5, 2], "entry-chain-13": [13, 2], "sole-chain-17": [17, 1] };
+// ADR 0859: `flush(fn)` keeps the observer, for a read in a layer `fn` runs too. In a named helper, the helper's caller decides: tracked JSX is
+// silent, the component body warns. An IIFE on the way is no reason to take the read for the body's.
+const FLUSH_READ_BODY = ["flush-read-body", "flush-read-body-iife"];
+const FLUSH_READ_LEGAL = ["flush-read-each", "flush-read-each-iife", "flush-read-call", "flush-read-call-iife"];
+// Review R15: a helper that runs the literal in place and keeps it: the in-place run is tracked, the kept one runs in the body.
+const FLUSH_READ_STORED = "flush-read-stored";
+// Review R16: an `async` function's prefix runs on its caller's stack; past its await it runs on no observer.
+const ASYNC_ENTRY = "async-entry";
+
+// ADRs 0870-0873: where the after-await walk had no row. The branch runs (the condition holds at run time; no fact says so), so the read follows
+// the await on the path that runs.
+const P_AWAIT = "await Promise.resolve()";
+const ON = "Math.random() >= 0";
+const OFF = "Math.random() < 0";
+const COND_AWAITS = {
+  "aw-if": `if (${ON}) ${P_AWAIT};`,
+  "aw-and": `${ON} && (${P_AWAIT});`,
+  "aw-or": `${OFF} || (${P_AWAIT});`,
+  "aw-nullish": `let awN: number | undefined; awN ??= (${P_AWAIT}, 1); void awN;`,
+  "aw-ternary": `${ON} ? ${P_AWAIT} : 0;`,
+  "aw-switch": `switch (${ON} ? 1 : 2) { case 1: ${P_AWAIT}; }`,
+  "aw-dstr": `const { awA = (${P_AWAIT}, 1) } = {} as { awA?: number }; void awA;`,
+  "aw-label": `awL: { if (${OFF}) break awL; ${P_AWAIT}; }`,
+  "aw-optional": `const awO = ((_: unknown) => 1) as ((v: unknown) => number) | undefined; awO?.(${P_AWAIT});`,
+};
+// Review D12: a wrapper that runs its parameter in place but hands its result on (`(f) => f()`, `async (f) => await f()`), or runs it past an
+// await of its own: the compute's flight carries the read. `aw-inplace-stmt` discards the result in a synchronous memo: the read is on the
+// function's own flight.
+const IN_PLACE_USED = ["aw-inplace-return", "aw-inplace-await", "aw-inplace-late"];
+// B6-B8 (ADRs 0879-0882): a promise handler on the compute's flight the walk did not read: a member (`then(api.fmt)`), an `async` function, a
+// receiver cast away from or to `any`. `aw-catch-member` is a rejection handler on a fulfilled promise: it never runs.
+const THEN_HANDLERS = {
+  "aw-then-member": (h, o) => `Promise.resolve(1).then(${o}.fmt)`,
+  "aw-then-async": (h) => `Promise.resolve(1).then(${h})`,
+  "aw-then-cast": (h) => `(Promise.resolve(1) as unknown as Promise<number>).then(${h})`,
+  "aw-then-any": (h) => `(Promise.resolve(1) as any).then(${h})`,
+  // Legal (review, D-R3d-2): a sync handler that calls an async function and drops nothing it awaits; Chrome (rc.21) is silent at the
+  // read past that function's own await, on 16 of 16 ids.
+  "aw-then-calls-async": (h) => `Promise.resolve(1).then(() => ${h}())`,
+};
+// The await's arm cannot precede the site (the other arm of an `if`), or leaves before it runs: the site runs with no await before it.
+const COND_AWAITS_LEGAL = ["aw-else", "aw-else-flip", "aw-early"];
+const HELPER_AWAITS = ["aw-shared-after", "aw-shared-before", "aw-helper-late", "aw-wrapper", "aw-wrapper-2", ...IN_PLACE_USED];
+
 export const FLIP_READ_CONTEXTS = {
   LOADING_ON_ACCESSOR: ["on-any", "on-unknown", "on-spread", "on-json", "on-prop", "on-call"],
   // ADR 0662, ADR 0668: a `<Dynamic>` body has no strict window and still warns with no boundary; a `<Portal>` is a plain synchronous mount.
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn"],
-  PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn", ...HANDED_FLUSH],
+  RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH, ...Object.keys(ENTRY_CHAINS), ASYNC_ENTRY],
+  UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH, ...Object.keys(ENTRY_CHAINS), ASYNC_ENTRY],
+  // ADR 0838 (R2h): "jsx", a caught read a carrier runs in tracked JSX (CAUGHT_HANDED_READS only).
+  CAUGHT_REACTIVE_READ: [...HANDED_FLUSH, "jsx"],
+  PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed", "apply-placed-twin"],
+  // ADR 0835 review R1/R6: a helper's read placed at one call (tracked, under `<Loading>`) and cut on another path (a chain past the walk's
+  // bound in `onSettled`): the cut path's claim needs a row of its own.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "then-withheld", "then-withheld-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop"],
+  UNTRACKED_READ_AFTER_AWAIT: ["then-named", "then-withheld", "then-withheld-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
-  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
+  STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
   REACTIVE_WRITE_IN_OWNED_SCOPE: [...LYING, ...Object.keys(RECEIVERS), "cleanup-mount-mixed", "handler-mount", ...Object.keys(ITER_SAME)],
 };
@@ -178,18 +248,22 @@ export const FLIP_READ_CONTEXTS = {
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", "await-object-then"],
+  UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
+  // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["handler-chain-placed", "export-placed-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   // ADR 0874, review R30-R32: a withheld call's callback proves no run: the program's own `forEach` queues it.
   FLUSH_IN_ACTION: ["wh-action-late"],
-  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...Object.keys(LATE_RECEIVERS)],
+  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS)],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
+  RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
+  UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
 };
 
 // ADR 0665: a source no type proves sync or async. Each is pending at the read; the build before took it for a settled signal.
@@ -234,6 +308,9 @@ export const ABSENT_GUARD = {
 const SUB_WRITE = { kind: "store-nested", contexts: ["handler", "timer"] };
 const SUB_IDS = "const swId = <T,>(x: T): T => x; const swOuter = <T,>(y: T): T => swId(y);";
 export const SUB_VALUE_WRITES = {
+  // ADR 0860: the store escapes at module scope, and the site writes through what holds it.
+  "sw-map-apart": { ...SUB_WRITE, imports: ["createStore"], importLines: ["const [swm] = createStore({ v: 1 });", 'const swmm = new Map([["s", swm]]);'], text: (o) => `void ${o}; swmm.get("s")!.v = 7;` },
+  "sw-nullish-apart": { ...SUB_WRITE, imports: ["createStore"], importLines: ["const [swn] = createStore({ v: 1 });", "const swn2 = ((): typeof swn | null => null)() ?? swn;"], text: (o) => `void ${o}; swn2.v = 7;` },
   "sw-loop-pattern": { ...SUB_WRITE, text: (o) => `for (const { a } of [${o}]) a.v = 7;` },
   "sw-decl-pattern": { ...SUB_WRITE, text: (o) => `const { a } = ${o}; a.v = 7;` },
   "sw-nested-identity": { ...SUB_WRITE, text: (o) => `${SUB_IDS} swOuter(${o}).v = 7;` },
@@ -351,6 +428,39 @@ export const SETTLED_SLOTS = {
   "settled-slot-writer": { ...SETTLED_SLOT, ...nowHook("createSignal, onSettled", "onSettled(() => { const t = setInterval(() => setNow(new Date()), interval); return () => clearInterval(t); });") },
 };
 // ADR 0801: the same slot over a pending source is a proved read of it.
+// Review R18: a probe reads the source too; a first load throws from `latest`/`isPending` to the surrounding boundary (legal under `<Loading>`).
+export const PROBE_READS = {
+  "probe-latest": { ...PEEK, contexts: ["jsx"], imports: ["latest"], text: (o) => `void latest(() => ${o}());` },
+  "probe-is-pending": { ...PEEK, contexts: ["jsx"], imports: ["isPending"], text: (o) => `void isPending(() => ${o}());` },
+};
+// ADR 0838 (R2h): a pending read in a `try` whose catch swallows the throw, in a function a carrier runs. The boundary never sees the throw
+// (Chrome rc.21: CAUGHT only); the carrier's position was the only place the `try` was looked for.
+const CAUGHT_HANDED = { kind: "async", only: true, contexts: ["jsx"] };
+export const CAUGHT_HANDED_READS = {
+  "caught-handed-foreach": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; [1].forEach(hf);` },
+  "caught-handed-map": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; void [1].map(hf);` },
+  "caught-handed-call": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; hf.call(undefined);` },
+};
+// R2h (patterns/flip/sync-memo-jsx-read): a `sync: true` async memo read in tracked JSX. Chrome rc.21 reports SYNC_NODE_RECEIVED_ASYNC
+// only: the node errors, it is never pending, so no boundary claim holds; the build before proved ASYNC_OUTSIDE_LOADING_BOUNDARY there.
+export const SYNC_NODE_READS = {
+  "sync-memo-read": { kind: "plain", contexts: ["jsx"], bindings: ["direct"], imports: ["createMemo"], text: () => "const sm = createMemo(async () => 1, { sync: true }); void sm();" },
+};
+// Review R17: an exported helper holds the read, one local call is placed (tracked, under `<Loading>`), and another module calls it: no walk here sees
+// that caller. `other` runs it in `onSettled` (Chrome: PENDING_ASYNC_FORBIDDEN_SCOPE) or in a handler never clicked. The source is module-level, so only this variant takes these contexts.
+const exportedHelperFile = (run) => ({ "eo.tsx": `import { onSettled } from "solid-js";\nimport { eRead } from "./App";\nexport function EO() {\n  ${run}\n}\n` });
+export const EXPORT_READS = {
+  "export-read": {
+    kind: "async", only: true, bindings: ["direct", "alias"], contexts: ["export-placed"], imports: ["createMemo"], text: () => "eA()",
+    importLines: ['const eA = createMemo(async () => { await new Promise((r) => setTimeout(r, 10)); return 1; });', 'import { EO } from "./eo";'],
+    files: exportedHelperFile("onSettled(() => { eRead(); });\n  return null;"),
+  },
+  "export-read-handler": {
+    kind: "async", only: true, bindings: ["direct", "alias"], contexts: [], legal: ["export-placed-l"], imports: ["createMemo"], text: () => "eA()",
+    importLines: ['const eA = createMemo(async () => { await new Promise((r) => setTimeout(r, 10)); return 1; });', 'import { EO } from "./eo";'],
+    files: exportedHelperFile('void onSettled;\n  return <button onClick={() => eRead()}>x</button>;'),
+  },
+};
 export const PENDING_SLOTS = {
   "pending-slot": { ...PEEK, text: (o) => `const useM = () => [${o}] as const; const [m] = useM(); void m();` },
 };
@@ -437,6 +547,24 @@ export const VALUE_USES = {
   "use-hook-store-member": { ...USE_READ, imports: ["createStore"], importLines: ['const [hsm] = createStore({ v: 1 });', 'const useHsm = () => hsm;'], text: (o) => `void ${o}; void useHsm().v;` },
   // The hook is App's own export and another module reads through it, so the obligation lands in App.tsx, the file the grid judge reads.
   "use-hook-store-module": { ...USE_READ, imports: ["createStore"], importLines: ['const [hse] = createStore({ v: 1 });', 'export function useHse() { return hse; }', 'import { readHse } from "./hse";'], files: { "hse.ts": 'import { useHse } from "./App";\nexport const readHse = () => useHse().v;\n' }, text: (o) => `void ${o}; void readHse();` },
+  // ADR 0860: the source escapes at module scope, on a line of its own, and the site reads it in the body. The escape's row is no row
+  // at the read: the old build's only SC9012 stood on the escape's line, so a judge that keeps the site saw the read clean.
+  "use-map-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [emc] = createSignal(1);", 'const emm = new Map([["k", emc]]);'], text: (o) => `void ${o}; void emm.get("k")!();` },
+  "use-logical-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [elc] = createSignal(1);", "const elh = ((): (() => number) | null => null)() ?? elc;"], text: (o) => `void ${o}; void elh();` },
+  "use-assign-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [eac] = createSignal(1);", "const eao = Object.assign({}, { c: eac });"], text: (o) => `void ${o}; void eao.c();` },
+  "use-each-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [eec] = createSignal(1);", "const eef = [{ run: (): number => 0 }];", "Object.assign(eef, [{ run: eec }]);"], text: (o) => `void ${o}; eef.forEach((f) => void f.run());` },
+  "use-global-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [egc] = createSignal(1);", "(globalThis as any).__egc = egc;"], text: (o) => `void ${o}; void (globalThis as any).__egc();` },
+  "use-untrack-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["untrack"], importLines: ["const [euc] = createSignal(1);", "const euh = untrack(() => euc);"], text: (o) => `void ${o}; void euh();` },
+  "use-self-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [esc] = createSignal(1);", "const esx = { read: (): number => 0, self: function (this: unknown) { return this; } };", "const esy: any = esx.self();", 'esy[String("read")] = esc;'], text: (o) => `void ${o}; void esx.read();` },
+  "use-store-map-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["createStore"], importLines: ["const [esm] = createStore({ v: 1 });", 'const esmm = new Map([["s", esm]]);'], text: (o) => `void ${o}; void esmm.get("s")!.v;` },
+  "use-store-nullish-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["createStore"], importLines: ["const [esn] = createStore({ v: 1 });", "const esn2 = ((): typeof esn | null => null)() ?? esn;"], text: (o) => `void ${o}; void esn2.v;` },
+  "use-hook-module-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ['import { useEhs } from "./ehm";'], files: { "ehm.ts": 'import { createStore } from "solid-js";\nconst [ehs] = createStore({ v: 1 });\nexport function useEhs() { return ehs; }\n' }, text: (o) => `void ${o}; void useEhs().v;` },
+  // W3 (review of 7c0eff2d9): a write into a call's result (`ecb().v = ecc`), and an escaped read in a store setter's callback (run on
+  // the caller's stack, though its role is a deferred callback).
+  "use-call-target-apart": { ...USE_READ, imports: ["createStore"], legal: ["memo", "effect-compute"], importLines: ["const [ect] = createStore({ a: 1 });", "const ech: any = {};", "const ecb = () => ech;", "ecb().s = ect;"], text: (o) => `void ${o}; void ech.s.a;` },
+  // W5 (R19a): the written call's callee is a call's result, which `function_called_at` does not follow.
+  "use-call-made-apart": { ...USE_READ, imports: ["createStore"], legal: ["memo", "effect-compute"], importLines: ["const [ecm] = createStore({ a: 1 });", "const ecmh: any = {};", "const ecmk = (f: () => number) => { void f; return () => ecmh; };", "const ecmb = ecmk(() => 0);", "ecmb().s = ecm;"], text: (o) => `void ${o}; void ecmh.s.a;` },
+  "use-setter-apart": { ...USE_READ, contexts: ["body"], importLines: ['import { setSw2 } from "./sw2";', "const [esp] = createSignal(1);", "const esph = ((): (() => number) | null => null)() ?? esp;"], files: SETTER_STORE.files, text: (o) => `void ${o}; setSw2((d) => { d.n = esph(); });` },
   "use-export-let": { ...USE_READ, importLines: ['const [elc] = createSignal(1);', 'export let elRead = elc;', 'import { readEl } from "./el";'], files: { "el.ts": 'import { elRead } from "./App";\nexport const readEl = () => elRead();\n' }, text: (o) => `void ${o}; void readEl();` },
 };
 const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
@@ -502,14 +630,23 @@ const SLOT_WRITES = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([na
   ...(holder.held ? [[`wd-${name}-held-write`, { ...slotHost(holder), text: () => `${holder.held} ${holder.heldWrite};` }]] : []),
 ]));
 
+// Reviewer's W3 gap: a read past an await in an async compute, through a holder the census follows (`[n]`), was cleared by the
+// compute's role.
+export const AWAIT_USES = {
+  "use-await-apart": { kind: "plain", contexts: ["memo-async", "effect-async"], importLines: ["const [eaw] = createSignal(1);", "const eawf = [eaw];"], text: (o) => `void ${o}; void eawf[0]();` },
+};
+
 export const FLIP_READ_VARIANTS = {
+  UNTRACKED_READ_AFTER_AWAIT: AWAIT_USES,
   MISSING_EFFECT_FN: SUPPRESSED_EFFECTS,
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
-  CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
+  PENDING_ASYNC_FORBIDDEN_SCOPE: EXPORT_READS,
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS },
+  CAUGHT_REACTIVE_READ: { ...CAUGHT_CHAINS, ...CAUGHT_HANDED_READS },
+  SYNC_NODE_RECEIVED_ASYNC: SYNC_NODE_READS,
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
@@ -539,7 +676,108 @@ const holderForms = (k) => ({
   "dyn-jsx-later": { read: "jsx", later: (on) => `<Show when={${on}[0]()}><Dynamic component={${k}} /></Show>` },
 });
 
+/** A second copy of the site's statements, each local declared under a new name. */
+function freshCopy(stmts, kit) {
+  const names = new Set();
+  JSON.stringify(stmts, (key, value) => { if (value?.k === "decl") names.add(value.name); return value; });
+  let text = JSON.stringify(stmts);
+  for (const name of names) text = text.replace(new RegExp(`"${name}"`, "g"), JSON.stringify(kit.name(name.replace(/\d+$/, ""))));
+  return JSON.parse(text);
+}
+
 export function flipReadContext(context, stmts, kit) {
+  if (context === ASYNC_ENTRY || context === "async-entry-late") {
+    const h = kit.name("f");
+    const held = decl(h, fn(context === ASYNC_ENTRY ? stmts : [expr(domExpr("await 0;")), ...stmts], { async: true }));
+    return { body: [held], view: [child(kit.name("v"), iife(fn([expr(domExpr(`void ${h}();`)), ret(num(1))])))] };
+  }
+  if (context === FLUSH_READ_STORED) {
+    const keep = decl("hkSaved", domExpr("[] as (() => void)[]"));
+    const twice = decl("hkTwice", domExpr("(g: () => void) => { g(); hkSaved.push(g); }"));
+    return { body: [keep, twice, decl(kit.name("m"), prim("memo", fn([expr(flush(fn([ctl("run-kept", stmts)]))), ret(num(1))]))), expr(domExpr("hkSaved[0]?.();"))], view: [] };
+  }
+  if (COND_AWAITS[context] || HELPER_AWAITS.includes(context) || COND_AWAITS_LEGAL.includes(context) || context === "aw-wrapper-untracked" || context === "aw-inplace-stmt") {
+    const watch = (m) => expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
+    const memo = (body) => { const m = kit.name("m"); return [decl(m, prim("memo", fn([...body, ret(num(1))], { async: true }))), watch(m)]; };
+    const hop = expr(domExpr(`${P_AWAIT};`));
+    if (COND_AWAITS[context]) return { body: memo([expr(domExpr(COND_AWAITS[context])), ...stmts]), view: [] };
+    if (context === "aw-early") return { body: memo([expr(domExpr(`if (${OFF}) { ${P_AWAIT}; return 1; }`)), ...stmts]), view: [] };
+    if (COND_AWAITS_LEGAL.includes(context)) return { body: memo([ctl(context, stmts)]), view: [] };
+    const h = kit.name("f");
+    const awaitH = expr(domExpr(`await ${h}();`));
+    const asyncFn = (body) => decl(h, fn([...body, ret(num(1))], { async: true }));
+    if (context === "aw-shared-after") return { body: [asyncFn([hop, ...stmts]), ...memo([...freshCopy(stmts, kit), awaitH]), ...memo([awaitH])], view: [] };
+    if (context === "aw-shared-before") return { body: [asyncFn([hop, ...stmts]), ...memo([awaitH]), ...memo([...freshCopy(stmts, kit), awaitH])], view: [] };
+    if (context === "aw-helper-late") return { body: [asyncFn([...freshCopy(stmts, kit), hop, ...stmts]), ...memo([hop, awaitH])], view: [] };
+    const c = kit.name("f");
+    const compute = decl(c, fn([hop, ...stmts, ret(num(1))], { async: true }));
+    const type = "(f: () => Promise<number>)";
+    if (context === "aw-wrapper-untracked") return { body: [compute, decl(h, domExpr(`${type} => { void f(); }`)), expr(domExpr(`${h}(${c});`))], view: [] };
+    if (IN_PLACE_USED.includes(context) || context === "aw-inplace-stmt") {
+      const m = kit.name("m");
+      const syncMemo = (body) => [decl(m, prim("memo", fn(body))), watch(m)];
+      if (context === "aw-inplace-return") return { body: [compute, decl(h, domExpr(`${type} => f()`)), ...syncMemo([ret(domExpr(`${h}(${c})`))])], view: [] };
+      if (context === "aw-inplace-await") return { body: [compute, decl(h, domExpr(`async ${type} => await f()`)), ...syncMemo([ret(domExpr(`${h}(${c})`))])], view: [] };
+      if (context === "aw-inplace-stmt") return { body: [compute, decl(h, domExpr(`${type} => { f(); }`)), ...syncMemo([expr(domExpr(`${h}(${c});`)), ret(num(1))])], view: [] };
+      const prefix = decl(c, fn([...stmts, ret(num(1))], { async: true }));
+      return { body: [prefix, decl(h, domExpr(`async ${type} => { ${P_AWAIT}; f(); }`)), ...memo([expr(domExpr(`await ${h}(${c});`))])], view: [] };
+    }
+    const [wrap, m] = [kit.name("w"), kit.name("m")];
+    const inner = decl(h, domExpr(`${type} => createMemo(f)`, undefined, ["createMemo"]));
+    const read = expr(domExpr(`createEffect(() => ${m}(), () => {});`, undefined, ["createEffect"]));
+    if (context === "aw-wrapper") return { body: [compute, inner, decl(m, domExpr(`${h}(${c})`)), read], view: [] };
+    return { body: [compute, inner, decl(wrap, domExpr(`${type} => ${h}(f)`)), decl(m, domExpr(`${wrap}(${c})`)), read], view: [] };
+  }
+  if (THEN_HANDLERS[context] || context === "aw-catch-member") {
+    const [h, o, m] = [kit.name("f"), kit.name("o"), kit.name("m")];
+    const late = context === "aw-then-calls-async";
+    const handler = decl(h, fn([...(late ? [expr(domExpr(`${P_AWAIT};`))] : []), ...stmts, ret(num(1))], { async: context === "aw-then-async" || late }));
+    const holder = decl(o, domExpr(`{ fmt: ${h} }`));
+    const flight = context === "aw-catch-member" ? `Promise.resolve(1).catch(${o}.fmt)` : THEN_HANDLERS[context](h, o);
+    const watch = expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
+    return { body: [handler, holder, decl(m, prim("memo", fn([ret(domExpr(flight))]))), watch], view: [] };
+  }
+  if (ENTRY_CHAINS[context] || context === "entry-chain-handler") {
+    const [n, calls] = ENTRY_CHAINS[context] ?? [5, 2];
+    const names = Array.from({ length: n }, () => kit.name("f"));
+    const held = names.map((name, i) => decl(name, fn(i === 0 ? stmts : Array.from({ length: calls }, () => expr(call(ref(names[i - 1])))))));
+    const entry = expr(call(ref(names[n - 1])));
+    return { body: held, view: [context === "entry-chain-handler" ? button(kit.name("b"), [entry]) : child(kit.name("v"), iife(fn([entry, ret(num(1))])))] };
+  }
+  if (FLUSH_READ_BODY.includes(context) || FLUSH_READ_LEGAL.includes(context)) {
+    const k = kit.name("f");
+    const held = decl(k, fn([expr(flush(fn(context.endsWith("-iife") ? [expr(iife(fn(stmts)))] : stmts))), ret(num(1))]));
+    if (FLUSH_READ_BODY.includes(context)) return { body: [held, expr(call(ref(k)))], view: [] };
+    return { body: [held], view: [child(kit.name("v"), iife(fn([expr(context.startsWith("flush-read-each") ? domExpr(`[1].forEach(${k})`) : call(ref(k))), ret(num(1))])))] };
+  }
+  if (HANDED_FLUSH.includes(context) || HANDED_FLUSH_LEGAL.includes(context)) {
+    if (context === "flush-iife") return { body: [], view: [child(kit.name("v"), iife(fn([expr(flush(fn(stmts))), ret(num(1))])))] };
+    const k = kit.name("K");
+    const held = decl(k, fn([expr(flush(fn(stmts))), ret(jsx())]));
+    const entry = { "handed-flush-each": `[1].forEach(${k})`, "handed-flush-call": `${k}.call(null)`, "named-flush-call": `${k}()`, "handed-flush-handler": `[1].map(${k})`, "handed-flush-empty": `([] as number[]).map(${k})` }[context];
+    if (context === "handed-flush-tag") return { body: [held], view: [mounted(kit.name("v"), domExpr(`<${k} />`))] };
+    if (context === "handed-flush-handler") return { body: [held], view: [button(kit.name("b"), [expr(domExpr(entry))])] };
+    return { body: [held], view: [child(kit.name("v"), iife(fn([expr(domExpr(entry)), ret(num(1))])))] };
+  }
+  // ADR 0835 review R1/R6: the helper `u` holds the site; one call of it is placed (tracked, under `<Loading>`), the other path is cut
+  // (a chain of five past the walk's bound in `onSettled`, a guarded effect apply, a handler).
+  if (context === "export-placed" || context === "export-placed-l") {
+    const placed = mounted(kit.name("v"), domExpr('<Loading fallback={0}><i>{(eRead(), "x")}</i></Loading>', undefined, ["Loading"]));
+    return { hoisted: [decl("eRead", fn(stmts)), expr(domExpr("export { eRead }"))], body: [], view: [placed, mounted(kit.name("w"), domExpr("<EO />"))] };
+  }
+  if (["settled-chain-placed", "apply-placed-twin", "handler-chain-placed"].includes(context)) {
+    const u = kit.name("u");
+    const hc = Array.from({ length: 5 }, () => kit.name("hc"));
+    const chain = hc.map((name, i) => decl(name, fn([expr(call(ref(i === 0 ? u : hc[i - 1])))])));
+    const placed = mounted(kit.name("v"), domExpr(`<Loading fallback={0}><i>{(${u}(), "x")}</i></Loading>`, undefined, ["Loading"]));
+    const other = {
+      "settled-chain-placed": [...chain, expr(prim("settled", fn([expr(call(ref(hc[4])))])))],
+      "apply-placed-twin": [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(u)))]) }))],
+      "handler-chain-placed": chain,
+    }[context];
+    const view = context === "handler-chain-placed" ? [button(kit.name("b"), [expr(call(ref(hc[4])))]), placed] : [placed];
+    return { body: [decl(u, fn(stmts)), ...other], view };
+  }
   if (context === "mount-named") {
     const h = kit.name("f");
     return { hoisted: [decl(h, fn([...stmts, ret(domExpr("<i />"))])), expr(domExpr(`render(${h}, document.createElement("div"));`, ["render"]))], body: [], view: [] };

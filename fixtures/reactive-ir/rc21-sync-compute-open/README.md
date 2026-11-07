@@ -3,3 +3,7 @@
 An async function, or a Promise on every path, is proven. A return typed `any` or
 `unknown`, one that may be sync, and a function no fact describes are uncertifiable.
 A closed synchronous return is silent.
+
+ADR 0865: an async generator's iterator is an AsyncIterable, proven inline, by a
+declaration's name and through a `const`; with unreadable options it is
+uncertifiable. A sync generator's iterator is a plain value, silent.

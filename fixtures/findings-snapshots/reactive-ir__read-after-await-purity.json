@@ -809,6 +809,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-purity/App.tsx",
+      "start": 12697,
+      "end": 12702,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1348,6 +1359,17 @@
       "path": "fixtures/reactive-ir/read-after-await-purity/App.tsx",
       "start": 24142,
       "end": 24149,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-purity/App.tsx",
+      "start": 24142,
+      "end": 24147,
       "fixes": 0
     },
     {

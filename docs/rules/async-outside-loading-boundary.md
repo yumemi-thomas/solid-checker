@@ -61,6 +61,8 @@ may declare either key, so the bare render is **uncertifiable**, never a
 violation (ADR 0430; the same holds for the SSR variant below, and for
 SC5001). Pass the options as an object literal so the checker can read them.
 
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889).
+
 ## Why is this bad?
 
 It isn't wrong, but it may not be what you intended. Without a boundary, the

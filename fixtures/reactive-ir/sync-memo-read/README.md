@@ -1,0 +1,3 @@
+# sync-memo-read
+
+Claim (R2h, patterns/flip/sync-memo-jsx-read): a source created with a `sync` option not proved `false` leaves every pending claim open. rc.21 turns a `sync: true` compute's Promise into an error in dev (SYNC_NODE_RECEIVED_ASYNC) and an unawaited value in production, never a pending source, while a pending read inside a sync compute still suspends it; nothing here tells the two apart. Positives (SC5003 uncertifiable, `async-options-opaque`, never a violation): `SyncAsyncRead` (`sync: true`), `SyncFlagRead` (`sync: props.flag`). Negative twin: `SyncFalseRead` (`sync: false`) keeps its SC5003 violation. The build before proved SC5003 at `SyncAsyncRead`, where Chrome rc.21 reports only SYNC_NODE_RECEIVED_ASYNC. Stubs copied from `caught-handed-read`.

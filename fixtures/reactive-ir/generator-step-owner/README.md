@@ -1,0 +1,8 @@
+# generator-step-owner
+
+**Claim (ADR 0851).** Code past a `yield` of a generator that an async compute steps across one of its suspensions (`for await` over the generator, or a `for…of` whose body starts with an `await`) runs on the compute's continuation: no owner, no observer. A signal write there is not SC2001, and `onCleanup` there is SC5001 `missing-owner`. A loop whose `await` is not first in its body leaves both open (uncertifiable). Negatives: a sync generator drained before the compute's only `await`, a generator's first segment, keep their owner context (write positions may remain obligations); a generator handed on through another value use has unplaced steps (ADR 0853).
+
+W1 (`Exported.ts`): exported declarations, a renamed export, and an exported iterator cannot prove no future steps. Writes and cleanup stay obligations with named blockers. An unrelated local binding with the same spelling is not that export. An unreferenced private generator is the negative.
+W2 (`App.tsx`): standard `forEach` and IIFE layers past a yield inherit the resumed step's context; a shadowed member has no standard-library in-place proof.
+
+ADR 0852: the six `*-gen-*-each.tsx` programs reproduce the uncached Chrome disagreements. The owner and thenable guard are known; whether the async stepper's rejected flight is subsequently observed is not. They keep SC4001/SC2007 obligations named `async-flight-error-unobserved`, not violations. Context signatures and the static-source parameter accept the same programs as the published rc.21 typings; the final fuzz run type-checks the programs against that install.

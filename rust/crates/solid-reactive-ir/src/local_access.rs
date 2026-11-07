@@ -117,7 +117,10 @@ fn returned_values(
 }
 
 /// The `catch` at `handler` holds a single `throw` statement and nothing else.
-fn handler_only_throws(file: &solid_facts::FileFacts, handler: solid_facts::core::Span) -> bool {
+pub(crate) fn handler_only_throws(
+    file: &solid_facts::FileFacts,
+    handler: solid_facts::core::Span,
+) -> bool {
     file.ast
         .throw_statements
         .iter()
@@ -2256,16 +2259,23 @@ impl LocalAccessContext<'_, '_> {
                 Arc::make_mut(read).callback_invocation_unproven = true;
             }
         }
-        // ADR 0835: a read whose call-attributed walk stopped at its bound,
-        // with no async row of its own anywhere in the file's rows, is
-        // unplaced, never silent.
+        // ADR 0835, review R1: a read whose call-attributed walk cut a path is
+        // unplaced, never silent: each held row stays unless a row at the read
+        // already reports its rule (the direct twin's violation).
         let placed = result
             .async_reads
             .iter()
-            .map(|existing| existing.location.clone())
+            .filter_map(|existing| {
+                crate::pending_accounting::reported_rule(existing)
+                    .map(|rule| (existing.location.clone(), rule))
+            })
             .collect::<Vec<_>>();
         for row in std::mem::take(&mut result.bounded_async_reads) {
-            if !placed.contains(&row.location) {
+            let rule = crate::pending_accounting::reported_rule(&row);
+            if !placed
+                .iter()
+                .any(|(location, held)| *location == row.location && Some(*held) == rule)
+            {
                 result.async_reads.push(row);
             }
         }
@@ -5312,6 +5322,10 @@ impl LocalAccessContext<'_, '_> {
                 apply_first_run_pending: false,
                 pending_origin: None,
                 pending_apply: None,
+                origin: None,
+                unaccounted: false,
+                source_module_unresolved: false,
+                walk_cut: false,
                 async_provenance: true,
                 declared_loading: options.declared_loading,
                 options_opaque: options.opaque,
@@ -5344,18 +5358,28 @@ impl LocalAccessContext<'_, '_> {
         // called closure skips it on the apply's first run).
         // The second flag (ADR 0510): no call of each function's own body is
         // written before the site, so nothing there throws first.
-        let mut sites = vec![(read.span, 0_usize, true, true)];
+        // The fourth flag (ADR 0838, review R6): the site's role is decided,
+        // so a climb from it that places nothing leaves its path decided.
+        let mut sites = vec![(read.span, 0_usize, true, true, false)];
         let mut visited = HashSet::<solid_facts::core::Span>::default();
-        // ADR 0835: a walk cut at its bound proves no place; if it placed no
-        // row either, the read is unplaced, not silent.
+        // ADR 0835, review R1/R6: a path cut before a place (the bound, a
+        // visited function, a generator, a component, no binding, a written
+        // binding, a site no local call runs, a call another row holds)
+        // proves nothing for its read. The read then has its own unplaced
+        // rows, whatever the other paths placed.
+        let mut cut = false;
+        // ADR 0838: whether a decided climb ended somewhere that proves it
+        // enumerated nothing: no `WalkDecided` for this read.
+        let mut open = self.lookup.program_has_eval();
         let rows_before = result.async_reads.len();
-        let mut bounded = false;
-        while let Some((site, depth, every, first)) = sites.pop() {
+        while let Some((site, depth, every, first, decided)) = sites.pop() {
             let Some(function) = containing_ast_function(&file.ast, site) else {
+                cut |= !decided;
                 continue;
             };
             if depth >= CALL_ATTRIBUTED_DEPTH {
-                bounded = true;
+                cut |= !decided;
+                open = true;
                 continue;
             }
             if !visited.insert(function.span)
@@ -5363,6 +5387,8 @@ impl LocalAccessContext<'_, '_> {
                 || self.lookup.function_may_be_component(file, function)
                 || !site_runs_during_local_call(file, function, site)
             {
+                cut |= !decided;
+                open = true;
                 continue;
             }
             let every = every
@@ -5390,6 +5416,16 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             }
             let Some(binding) = function_binding_name(file, function) else {
+                // ADR 0890: a closure run on the creating pass's stack reads
+                // the served value (ADR 0632), as a direct read does.
+                cut |= !decided
+                    && !(options.declared_loading
+                        && crate::execution_role::served_in_creating_pass(
+                            file,
+                            site,
+                            declaration,
+                            self.lookup,
+                        ));
                 continue;
             };
             if self
@@ -5399,6 +5435,8 @@ impl LocalAccessContext<'_, '_> {
                     crate::value_identity::binding_has_write(file, self.entities, binding)
                 })
             {
+                cut |= !decided;
+                open = true;
                 continue;
             }
             // The positions that run the function: each direct call of its
@@ -5424,17 +5462,42 @@ impl LocalAccessContext<'_, '_> {
                     })
                 })
                 .map(|call| (call.callee, call.span, false));
-            let carriers = if depth > 0 {
-                inline_carriers(file, function, self.lookup)
-            } else {
-                Vec::new()
+            let all_carriers = inline_carriers(file, function, self.lookup);
+            // Review R17: a reference that is no call this walk follows and no
+            // carrier (a literal's member, a push, a handler property, a prop,
+            // an export) runs the function where nothing here places it.
+            let exported = crate::execution_role::flow_binding_exported(file, binding.span);
+            let unfollowed = file.ast.identifiers.iter().any(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && file.ast.reference_declaration(identifier.span) == Some(binding.span)
+                    && !file.ast.calls.iter().any(|call| {
+                        call.direct_callee
+                            && !call.construct
+                            && file.ast.peel_ts_sugar_span(call.callee) == identifier.span
+                    })
+                    && !all_carriers
+                        .iter()
+                        .any(|carrier| carrier.contains(identifier.span))
+            });
+            if exported || unfollowed {
+                cut |= !decided;
+                open = true;
             }
-            .into_iter()
-            .map(|carrier| (carrier, carrier, true));
+            // ADR 0531: the read's row, not this walk, places its function's
+            // inline carriers.
+            open |= depth == 0 && !all_carriers.is_empty();
+            let carriers = if depth > 0 { all_carriers } else { Vec::new() }
+                .into_iter()
+                .map(|carrier| (carrier, carrier, true));
             for (position, anchor, carrier) in calls.chain(carriers).collect::<Vec<_>>() {
-                if crate::execution_role::discarded_region_contains(file, anchor)
-                    || pending_accessor_probe(file, anchor, self.lookup)
-                {
+                if crate::execution_role::discarded_region_contains(file, anchor) {
+                    continue;
+                }
+                // Review R18: a probe's first load throws to the boundary
+                // around it: decided only under a `Loading`.
+                if pending_accessor_probe(file, anchor, self.lookup) {
+                    cut |= read_loading_cover(self.lookup, file, anchor, self.symbol_names)
+                        != LoadingCover::Covered;
                     continue;
                 }
                 // ADR 0632, as for a direct read: the call reads the served value.
@@ -5456,7 +5519,13 @@ impl LocalAccessContext<'_, '_> {
                 if nested_named_function(file, position, self.lookup)
                     || escapes_nested(file, position, self.lookup)
                 {
-                    sites.push((anchor, depth + 1, every && !carrier, first && !carrier));
+                    sites.push((
+                        anchor,
+                        depth + 1,
+                        every && !carrier,
+                        first && !carrier,
+                        false,
+                    ));
                     continue;
                 }
                 // ADR 0563: a carrier that may run the function zero times,
@@ -5538,11 +5607,13 @@ impl LocalAccessContext<'_, '_> {
                     )
                 {
                     let call_location = location(file.path.shared(), anchor);
-                    if !result
+                    if result
                         .async_reads
                         .iter()
                         .any(|existing| existing.location == call_location)
                     {
+                        cut = true;
+                    } else {
                         result.async_reads.push(Arc::new(AsyncRead {
                             accessor: format!("{name}()").into(),
                             location: call_location,
@@ -5560,11 +5631,15 @@ impl LocalAccessContext<'_, '_> {
                             apply_first_run_pending: true,
                             pending_origin: Some(location(file.path.shared(), read.span)),
                             pending_apply: Some(location(file.path.shared(), apply)),
+                            origin: None,
+                            unaccounted: false,
+                            source_module_unresolved: false,
+                            walk_cut: false,
                             async_provenance: true,
                             declared_loading: false,
                             options_opaque: options.opaque,
                             provenance_open: options.provenance_open,
-                            caught: false,
+                            caught: caught_in_try(file, read.span) || caught_in_try(file, anchor),
                             component_prop: false,
                             ssr_client_hole: options.ssr_client_bare,
                             server_rendering_unresolved: options.server_rendering_unresolved,
@@ -5610,8 +5685,27 @@ impl LocalAccessContext<'_, '_> {
                         continue;
                     }
                     // The call may itself sit in a named local function a
-                    // rendered call runs.
-                    sites.push((anchor, depth + 1, every && !carrier, first && !carrier));
+                    // rendered call runs. A role whose sourced reasons rule
+                    // out every pending rule (ADR 0838's table) decides this
+                    // path wherever the climb ends; any other is a cut.
+                    let decided = leaf_owner.is_none()
+                        && crate::pending_accounting::role_decides_path(
+                            self.lookup,
+                            execution,
+                            crate::execution_role::fresh_stack_callback_call(
+                                file,
+                                position,
+                                self.lookup,
+                            )
+                            .is_some(),
+                        );
+                    sites.push((
+                        anchor,
+                        depth + 1,
+                        every && !carrier,
+                        first && !carrier,
+                        decided,
+                    ));
                     continue;
                 }
                 let call_location = location(file.path.shared(), anchor);
@@ -5620,6 +5714,8 @@ impl LocalAccessContext<'_, '_> {
                     .iter()
                     .any(|existing| existing.location == call_location)
                 {
+                    // Another read's row holds the call: none for this one.
+                    cut = true;
                     continue;
                 }
                 let cover = read_loading_cover(self.lookup, file, position, self.symbol_names);
@@ -5640,11 +5736,17 @@ impl LocalAccessContext<'_, '_> {
                     apply_first_run_pending: false,
                     pending_origin: None,
                     pending_apply: None,
+                    origin: Some(location(file.path.shared(), read.span)),
+                    unaccounted: false,
+                    source_module_unresolved: false,
+                    walk_cut: false,
                     async_provenance: true,
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
                     provenance_open: options.provenance_open,
-                    caught: false,
+                    caught: caught_in_try(file, read.span)
+                        || caught_in_try(file, anchor)
+                        || module_evaluation_may_catch(file, execution),
                     component_prop: false,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
@@ -5664,10 +5766,21 @@ impl LocalAccessContext<'_, '_> {
                 }));
             }
         }
-        if bounded && result.async_reads.len() == rows_before {
+        if !cut && !open && result.async_reads.len() == rows_before {
+            result
+                .walk_decided_reads
+                .push(location(file.path.shared(), read.span));
+        }
+        if cut {
             let mut held = LocalAccessResult::default();
             self.push_unplaced_async_reads(file, read, name, declaration, &options, &mut held);
-            result.bounded_async_reads.extend(held.async_reads);
+            result
+                .bounded_async_reads
+                .extend(held.async_reads.into_iter().map(|row| {
+                    let mut row = (*row).clone();
+                    row.walk_cut = true;
+                    Arc::new(row)
+                }));
         }
     }
 
@@ -6642,11 +6755,19 @@ impl LocalAccessContext<'_, '_> {
                 apply_first_run_pending: pending_apply.is_some(),
                 pending_origin: None,
                 pending_apply: pending_apply.map(|apply| location(file.path.shared(), apply)),
+                origin: None,
+                unaccounted: false,
+                source_module_unresolved: false,
+                walk_cut: false,
                 async_provenance,
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
                 provenance_open: async_options.provenance_open,
-                caught: caught_in_try(file, timing_at),
+                // ADR 0838 (R2h): a `try` around the read swallows its throw
+                // wherever the carrier that runs it stands.
+                caught: caught_in_try(file, timing_at)
+                    || caught_in_try(file, call.span)
+                    || module_evaluation_may_catch(file, async_execution),
                 component_prop: self.read_in_component_prop(file, timing_at),
                 ssr_client_hole: async_options.ssr_client_bare,
                 server_rendering_unresolved: async_options.server_rendering_unresolved,
@@ -7266,11 +7387,16 @@ impl LocalAccessContext<'_, '_> {
                 apply_first_run_pending: false,
                 pending_origin: None,
                 pending_apply: None,
+                origin: None,
+                unaccounted: false,
+                source_module_unresolved: false,
+                walk_cut: false,
                 async_provenance: member_async,
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
                 provenance_open: member_options.provenance_open,
-                caught: caught_in_try(file, member),
+                caught: caught_in_try(file, member)
+                    || module_evaluation_may_catch(file, async_execution),
                 component_prop: self.read_in_component_prop(file, member),
                 ssr_client_hole: member_options.ssr_client_bare,
                 server_rendering_unresolved: member_options.server_rendering_unresolved,
@@ -8104,6 +8230,10 @@ impl LocalAccessContext<'_, '_> {
                 apply_first_run_pending: false,
                 pending_origin: None,
                 pending_apply: None,
+                origin: None,
+                unaccounted: false,
+                source_module_unresolved: false,
+                walk_cut: false,
                 async_provenance: true,
                 declared_loading: false,
                 options_opaque: provenance_open,
@@ -8135,6 +8265,9 @@ pub(crate) fn append_local_access_result(
     target
         .bounded_async_reads
         .extend(source.bounded_async_reads.iter().cloned());
+    target
+        .walk_decided_reads
+        .extend(source.walk_decided_reads.iter().cloned());
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations
@@ -8177,6 +8310,7 @@ pub(crate) fn append_local_access_result_owned(
     target
         .bounded_async_reads
         .extend(source.bounded_async_reads);
+    target.walk_decided_reads.extend(source.walk_decided_reads);
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations
@@ -10023,6 +10157,16 @@ enum MergeGet {
     /// A plain literal source serves it.
     Plain,
     Unproven,
+}
+
+/// ADR 0855: no strict-read window is open while a module evaluates, so a
+/// pending read there throws a plain `NotReadyError` and emits nothing: a
+/// `catch` anywhere on the evaluating stack swallows it (rc.21, probed). A
+/// module-evaluation role is lexical or reached through this file's own calls
+/// and mounts (`named_mount_root_role`, the call-attributed walk), so only a
+/// handler in this file may be on that stack.
+fn module_evaluation_may_catch(file: &solid_facts::FileFacts, execution: ExecutionRole) -> bool {
+    execution == ExecutionRole::ModuleInitialization && !file.ast.try_catches.is_empty()
 }
 
 /// ADR 0637: a `catch` around the read swallows the throw that would report it,
