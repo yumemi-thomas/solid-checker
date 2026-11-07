@@ -141,7 +141,7 @@
   "SC9012 forwarded-to-undescribed-callee": 28,
   "SC9012 function-call-target-unresolved": 9,
   "SC9012 function-prototype-callee-unresolved": 1,
-  "SC9012 handed-member-dispatch": 368,
+  "SC9012 handed-member-dispatch": 370,
   "SC9012 handed-member-read": 63,
   "SC9012 handed-read-after-await": 9,
   "SC9012 import-unresolved": 36,
@@ -165,7 +165,7 @@
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
   "SC9012 store-key-undecided": 12,
-  "SC9012 tuple-iteration-written": 1275,
+  "SC9012 tuple-iteration-written": 1279,
   "SC9012 type-only-source": 80,
   "SC9012 value-as-parameter-default": 8,
   "SC9012 value-bound-held": 5,
@@ -481,6 +481,18 @@
     "open": "reactive-ir/arrow-bound-helper-reachability-eval"
    },
    "note": "ADR 0803 step 2 follow-up: callback/listener proofs restore exact slots and remove withdrawal-only obligations. rc21-listener-shared retains value-in-carrier and listener-reach; this relabel is not a proof of that use."
+  },
+  {
+   "key": "SC9012 tuple-iteration-written",
+   "from": 1300,
+   "to": 1279,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "T2's fall (1300 -> 1275, the row above), net of the 4 rows the new review R56 fixtures add (handed-path-find-patched and handed-path-find-open-key hold the slots); the ledger compares against the base, so this is the same proof at its current size"
   }
  ],
  "renames": []

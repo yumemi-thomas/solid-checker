@@ -1266,6 +1266,7 @@ fn received_by_seen_code(
         }
         Slot::PathFind => {
             return [
+                "Array.find",
                 "Node",
                 "NodeConstructor.hasInstance",
                 "Function.hasInstance",

@@ -5703,5 +5703,16 @@
    "lg-reactive-write-in-owned-scope-iter-event-value-called-signal-direct-none"
   ],
   "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-returned-expression-body, iter-named-expression-param: rf11 78 false-positive each; iter-event-value-called: rf12 78; rf13 0. iter-event-value-tagged is the tagged twin. Fixtures handed-returned-expression-body, handed-timer-param-named, handed-event-value-called, handed-event-value-tagged, handed-window-method-tagged"
+ },
+ {
+  "finding": "review R56: Slot::PathFind discharged a guarded `composedPath().find(...)` checking only Node and instanceof, not that `find` is the standard one: a replaced `Array.prototype.find` returned the window and the census proved the tuple slots, SC2001 V where Chrome is quiet",
+  "found": "review R56 of T2 5e5d3a307 (findings-rolling.md, source-traced)",
+  "fixed": "ADR 0803 step 2: `Array.find` joins the PathFind intact list; now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-path-find-patched-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE iter-path-find-patched, layers none (190 programs, origin judge): rf14 (5e5d3a307) 78 false-positive (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal). Fixtures handed-path-find-patched (V on 5e5d3a307, U here), handed-path-find-open-key (U on both), handed-path-find (proved V on both)"
  }
 ]

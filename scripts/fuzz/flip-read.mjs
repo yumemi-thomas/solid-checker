@@ -130,6 +130,7 @@ const ITER_PATCHES = {
   // Review R19d: a platform caller by a bare alias.
   "iter-listener-alias": `const itOn = addEventListener; itOn("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); dispatchEvent(new Event("itx"));`,
   // Review R19e: `composedPath()` of a bubbling event holds the window on any target.
+  "iter-path-find-patched": `Array.prototype.find = function (this: any[]) { return this[this.length - 1]; } as any; document.body.addEventListener("itx", (e) => { const g: any = e.composedPath().find(el => el instanceof Node && true); const itAP = g.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR} }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-path": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath().at(-1); itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-index": `document.body.addEventListener("itx", (e) => { const itT: any = e.composedPath()[3]; itT.Function(${JSON.stringify(ITER_CODE)})(); }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,
   "iter-composed-forof": `document.body.addEventListener("itx", (e) => { for (const itT of e.composedPath() as any[]) { if (itT === window) itT.Function(${JSON.stringify(ITER_CODE)})(); } }); document.body.dispatchEvent(new Event("itx", { bubbles: true }));`,

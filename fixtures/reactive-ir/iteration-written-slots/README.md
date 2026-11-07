@@ -44,3 +44,5 @@ Variants (each `patch.ts` beside the same body):
 - Review R53, each uncertifiable: `handed-event-value-called` (a listed value called runs with the event as `this`, whose `currentTarget` is the window), `handed-event-data-window` and `handed-event-data-getter` (the window in an event's init: `handed_on` counts it there, which is why `data` may be read). `handed-on-reads-data` is the proved twin.
 - Tagged templates are calls: `handed-event-value-tagged` (`` e.data`x` ``) and `handed-window-method-tagged` (`` (window as any).__log`x` ``), each uncertifiable. `handed-on-reads-data` and `handed-window-absent-member` are the proved twins.
 - `handed-timer-local-in-export` (negative): a helper local to an exported function is no export: proved SC2001. `handed-timer-param-default-export`: `export default function`, uncertifiable.
+
+- Review R56: `handed-path-find-patched` and `handed-path-find-open-key` keep the path use uncertifiable when `Array.prototype.find` is replaced by a literal or open key. The replacement ignores the Node guard and returns the window; the iterator key in the later write is hidden. `handed-path-find` remains the intact proved twin.
