@@ -87,6 +87,9 @@ How to judge the run:
 - On the new build they should come out `recall-gap` without `remote`, or `agree`.
 - The legal twins must show 0 false positives.
 
+## Update (build with the deferred-defects fix, same tree as this commit)
+Measured on it: the 18 patterns have a row at the read in 18 of 18. Corpus base against the change: V 294 → 294, 0 rows removed, +2,035 SC9012 U (value-to-unresolved-callee 1,146, value-forwarded 333, value-in-carrier 282, value-through-await 111; app-game 900, kui 629, solid-groove 99, compass-ui 78, expenses-app 68). Fixtures: +175 U, 0 removed; snapshots regenerated on this build. Still owed: the ownership gate rerun, the VM run, verify.
+
 ## Next steps
 
 1. Rebuild. Rerun `sites.mjs` (still 18 of 18) and `coverage-update` against the before-snapshots (`~/EDF/tmp/flipcarrier/snap-before`, `tools/snaptext.py` prints each row with its source line). Read every moved row.
