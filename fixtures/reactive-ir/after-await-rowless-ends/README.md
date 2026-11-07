@@ -8,6 +8,7 @@
 - B2 (ADR 0873): an async compute a project wrapper hands to `createMemo`. A wrapper that calls its parameter in place (`now(f) { f(); }`) hands over no compute: the read runs on a later task with no tracking claim, as an async IIFE there does.
 
 - B5 (ADR 0879): a callee that names no symbol past the await (`fns[0]()`).
+- B9 (ADR 0897): a comma, conditional, logical or assignment callee in a late helper's prefix reads the accessor its operands name: V when every operand is that accessor and the callee total (`(slot = n)()`, `(flag ? n : n)()`), U otherwise (`(flag ? n : plain)()`, `(n && n)()`, and a tracked first operand beside an untracked one, `(flag ? n : u)()`, in the prefix and in the member's own continuation; review D31). Called before the member's first await: no row.
 - B6-B8 (ADRs 0880-0882): a promise handler on the flight given as a member (`then(api.fmt)`), an `async` function, or on an `any` receiver. `then(null)` has no handler and no row.
 
 B1's and B5-B8's rows are uncertifiable (`handed-read-after-await`): position cannot tell an arm that leaves from one that falls through. B3, B4 and B2's reads are violations (Chrome warns on the fuzz shapes `aw-shared-after`, `aw-helper-late`, `aw-wrapper`). Stub reduced from rc.21's published typings.

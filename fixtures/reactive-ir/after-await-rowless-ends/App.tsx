@@ -128,8 +128,51 @@ export function Ends() {
   // B6, negative: no handler at all.
   const viaNull = createMemo(() => p.then(null));
 
+  // B9 (ADR 0897): a composite callee in a late helper's prefix. Exact: every
+  // operand is `n` and the callee total (V). Inexact: another operand, or `&&`
+  // (U). Mixed with a tracked first operand (review D31): U, in the prefix and
+  // in the member's own continuation.
+  const [u] = createSignal(1);
+  const plain = () => 0;
+  let slot: typeof n | undefined;
+  const lateComposite = async () => {
+    (slot = n)();
+    (flag ? n : n)();
+    (flag ? n : plain)();
+    (n && n)();
+    await p;
+    return 1;
+  };
+  const sixth = createMemo(async () => {
+    await p;
+    await lateComposite();
+    return 1;
+  });
+  // B9, negative: called before the member's first await, its reads are dependencies.
+  const earlyComposite = async () => {
+    (flag ? n : n)();
+    await p;
+    return 1;
+  };
+  const seventh = createMemo(async () => {
+    await earlyComposite();
+    return 1;
+  });
+  const lateMixed = async () => {
+    (flag ? n : u)();
+    await p;
+    return 1;
+  };
+  const eighth = createMemo(async () => {
+    n();
+    await p;
+    await lateMixed();
+    (flag ? n : u)();
+    return 1;
+  });
+
   createEffect(
-    () => [first(), second(), third(), fourth(), query(), fifth(), viaMember(), viaAsync(), viaAny(), viaNull()],
+    () => [first(), second(), third(), fourth(), query(), fifth(), viaMember(), viaAsync(), viaAny(), viaNull(), sixth(), seventh(), eighth()],
     () => {}
   );
   return <p />;

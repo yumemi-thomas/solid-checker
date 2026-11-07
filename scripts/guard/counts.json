@@ -18,7 +18,7 @@
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 167,
+  "SC1002 handed-read-after-await": 175,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
   "SC1003 destructure-root-unproven": 29,
@@ -146,7 +146,7 @@
   "SC9005 package-source-unavailable": 60,
   "SC9012 async-prop-getter": 3,
   "SC9012 closed-parameter-member-dispatch": 68,
-  "SC9012 composite-callee-unresolved": 4,
+  "SC9012 composite-callee-unresolved": 8,
   "SC9012 computed-call-target-unresolved": 15,
   "SC9012 created-accessor-read-unproven": 1,
   "SC9012 dependency-source-getter": 49,
@@ -190,7 +190,7 @@
   "SC9012 value-exported-unnamed": 5,
   "SC9012 value-forwarded": 238,
   "SC9012 value-from-primitive-callback": 23,
-  "SC9012 value-held-in-binding": 108,
+  "SC9012 value-held-in-binding": 109,
   "SC9012 value-held-in-member": 17,
   "SC9012 value-in-carrier": 324,
   "SC9012 value-in-class-field": 12,
@@ -202,7 +202,7 @@
   "SC9012 value-through-logical": 36,
   "SC9012 value-through-new": 29,
   "SC9012 value-to-unresolved-callee": 258,
-  "SC9012 value-use-unclassified": 63,
+  "SC9012 value-use-unclassified": 64,
   "SC9012 withheld-object-member": 51,
   "SC9014 dialect-detection": 145,
   "SC9014 router-release": 4,
@@ -1291,6 +1291,15 @@
     "open": "reactive-ir/impostor-receivers"
    },
    "note": "no proof: fa042308c moved `CleanArity` (R10a) out of this fixture into impostor-host-intact, where its write is a proved SC2001 (that README); the fall is the component leaving, the key's other rows here stand"
+  },
+  {
+   "fixture": "reactive-ir/handed-net",
+   "key": "SC9012 handed-read-after-await",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0897",
+   "kind": "relabel",
+   "relabeledTo": "SC1002 handed-read-after-await"
   }
  ],
  "renames": []

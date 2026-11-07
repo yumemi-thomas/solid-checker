@@ -475,7 +475,7 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-mixed-cont", "aw-mixed-late", "aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
@@ -498,7 +498,7 @@ FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT = [...(FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT ?
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["aw-forward-timer", "aw-forward-onclick", "aw-forward-return", "aw-forward-cond", "aw-forward-cond-hop", "aw-forward-fan", "gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-helper-late-pick", "aw-forward-timer", "aw-forward-onclick", "aw-forward-return", "aw-forward-cond", "aw-forward-cond-hop", "aw-forward-fan", "gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
@@ -922,6 +922,13 @@ const SLOT_WRITES = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([na
 // compute's role.
 export const AWAIT_USES = {
   "use-await-apart": { kind: "plain", contexts: ["memo-async", "effect-async"], importLines: ["const [eaw] = createSignal(1);", "const eawf = [eaw];"], text: (o) => `void ${o}; void eawf[0]();` },
+  // ADR 0897 (review D31): a composite callee whose first operand the computation read before its await, and whose taken operand it did
+  // not: the read past the await is of `emx`. The context reads the site's own source before the await (`aw-mixed-cont`: the member's
+  // continuation; `aw-mixed-late`: a helper's prefix the member calls past it).
+  // ADR 0897: a composite callee whose first token is the source and whose value is not (`n.length` is the accessor's arity, 0): no read
+  // runs, in the helper's prefix or past its await. Legal; the build before read the first token as the callee.
+  "use-len-pick": { kind: "plain", only: true, bindings: ["direct"], contexts: [], legal: ["aw-helper-late-pick"], text: (o) => `(${o}.length > 5 ? ${o} : (() => 0))();` },
+  "use-mixed-tracked": { kind: "plain", only: true, bindings: ["direct"], contexts: ["aw-mixed-cont", "aw-mixed-late"], importLines: ["const [emx] = createSignal(4);"], text: (o) => `(Math.random() < 0 ? ${o} : emx)();` },
 };
 
 export const FLIP_READ_VARIANTS = {
@@ -974,6 +981,19 @@ function freshCopy(stmts, kit) {
 }
 
 export function flipReadContext(context, stmts, kit) {
+  if (context === "aw-mixed-cont" || context === "aw-mixed-late") {
+    // The site's own source, read by the computation before its first await (ADR 0897's mixed composite).
+    let source = null;
+    JSON.stringify(stmts, (key, value) => { if (value?.k === "use" && value.site) source ??= value.sigs?.[0] ?? null; return value; });
+    const m = kit.name("m");
+    const tracked = expr(domExpr(`${source}();`));
+    const hop = expr(domExpr(`${P_AWAIT};`));
+    const watch = expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
+    if (context === "aw-mixed-cont") return { body: [decl(m, prim("memo", fn([tracked, hop, ...stmts, ret(num(1))], { async: true }))), watch], view: [] };
+    const h = kit.name("f");
+    const helper = decl(h, fn([...stmts, hop, ret(num(1))], { async: true }));
+    return { body: [helper, decl(m, prim("memo", fn([tracked, hop, expr(domExpr(`await ${h}();`)), ret(num(1))], { async: true }))), watch], view: [] };
+  }
   if (AW_FORWARDS[context]) {
     const [h, m, w] = [kit.name("f"), kit.name("m"), kit.name("w")];
     const held = decl(h, fn([...stmts, ret(num(1))]));
@@ -996,7 +1016,7 @@ export function flipReadContext(context, stmts, kit) {
     const twice = decl("hkTwice", domExpr("(g: () => void) => { g(); hkSaved.push(g); }"));
     return { body: [keep, twice, decl(kit.name("m"), prim("memo", fn([expr(flush(fn([ctl("run-kept", stmts)]))), ret(num(1))]))), expr(domExpr("hkSaved[0]?.();"))], view: [] };
   }
-  if (COND_AWAITS[context] || HELPER_AWAITS.includes(context) || COND_AWAITS_LEGAL.includes(context) || context === "aw-wrapper-untracked" || context === "aw-inplace-stmt") {
+  if (COND_AWAITS[context] || HELPER_AWAITS.includes(context) || COND_AWAITS_LEGAL.includes(context) || context === "aw-wrapper-untracked" || context === "aw-inplace-stmt" || context === "aw-helper-late-pick") {
     const watch = (m) => expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
     const memo = (body) => { const m = kit.name("m"); return [decl(m, prim("memo", fn([...body, ret(num(1))], { async: true }))), watch(m)]; };
     const hop = expr(domExpr(`${P_AWAIT};`));
@@ -1008,7 +1028,7 @@ export function flipReadContext(context, stmts, kit) {
     const asyncFn = (body) => decl(h, fn([...body, ret(num(1))], { async: true }));
     if (context === "aw-shared-after") return { body: [asyncFn([hop, ...stmts]), ...memo([...freshCopy(stmts, kit), awaitH]), ...memo([awaitH])], view: [] };
     if (context === "aw-shared-before") return { body: [asyncFn([hop, ...stmts]), ...memo([awaitH]), ...memo([...freshCopy(stmts, kit), awaitH])], view: [] };
-    if (context === "aw-helper-late") return { body: [asyncFn([...freshCopy(stmts, kit), hop, ...stmts]), ...memo([hop, awaitH])], view: [] };
+    if (context === "aw-helper-late" || context === "aw-helper-late-pick") return { body: [asyncFn([...freshCopy(stmts, kit), hop, ...stmts]), ...memo([hop, awaitH])], view: [] };
     const c = kit.name("f");
     const compute = decl(c, fn([hop, ...stmts, ret(num(1))], { async: true }));
     const type = "(f: () => Promise<number>)";
