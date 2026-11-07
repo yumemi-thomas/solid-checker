@@ -4787,7 +4787,7 @@
 "SC9012/cases2-a19-globalthis": {
 "rule": "SC9012",
 "kind": "clean",
-"closedAt": {"file": "App.tsx", "line": 11, "blocker": "value-held-in-member"},
+"closedAt": {"file": "App.tsx", "line": 11, "blocker": "tuple-iteration-written"},
 "source": "import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack } from \"solid-js\";\nimport { Dynamic, clientOnly } from \"@solidjs/web\";\nconst log = (...a: any[]) => { (window as any).__log?.(...a); };\nconst own = () => (getOwner() ? \"owner\" : \"no-owner\");\nconst [c, setC] = createSignal(1);\nconst [c2, setC2] = createSignal(1);\nconst [w, setW] = createSignal(0);\nconst [on, setOn] = createSignal(true);\nlet runs = 0;\nexport function App() {\n  (globalThis as any).__c = c;\n  createEffect(() => c2(), () => { log(\"apply\", own()); const v = (globalThis as any).__c(); log(\"apply\", \"read \" + String(v)); });\n  return <i>app</i>;\n}\n",
 "runtime": {
 "diagnostics": [

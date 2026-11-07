@@ -1110,7 +1110,7 @@
  {
   "id": "SC9012/cases2-a19-globalthis",
   "adr": "ADR 0814",
-  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site; ADR 0803 step 2 moves it: `(globalThis as any).__c()` on line 12 calls a member the program wrote, so the census cannot call it absent and every slot is withdrawn, tuple-iteration-written at line 11",
   "fields": [
    "closedAt"
   ],
@@ -1121,7 +1121,7 @@
    "closedAt": {
     "file": "App.tsx",
     "line": 11,
-    "blocker": "value-held-in-member"
+    "blocker": "tuple-iteration-written"
    }
   }
  },
