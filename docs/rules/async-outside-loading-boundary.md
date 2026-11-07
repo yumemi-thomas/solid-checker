@@ -61,7 +61,7 @@ may declare either key, so the bare render is **uncertifiable**, never a
 violation (ADR 0430; the same holds for the SSR variant below, and for
 SC5001). Pass the options as an object literal so the checker can read them.
 
-A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889).
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
 
 ## Why is this bad?
 
@@ -152,3 +152,5 @@ read a condition may delay, or a component mounted later, is uncertifiable, bloc
 A named function a carrier provably runs at a tracked position reads there, with the carrier's cover: `[1].map(hf)` with no boundary is proven, `[].map(hf)` reads nothing, and a carrier that may not run leaves it uncertifiable (ADR 0776). A read no fact places, a read at an anonymous function in a tracked position, and a call of a value that may hold a pending source (an alias, a literal member, a hook's value) are uncertifiable; a value that reaches only settled sources stays clean (ADRs 0774, 0775, 0779).
 
 A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). So is a source whose compute reads what it was handed (`createMemo(() => props.get())`) or names an async source in a function form: it is pending while that is, and a settled caller is not followed yet (ADR 0802). A hook's tuple slot is the accessor it names, so its read is proved or certified by that source (ADR 0801). A `Loading` covers what it holds, not what sits beside it (ADR 0668).
+
+A flow element that is no JSX child and no component's return may never render, and rc.21 is silent then: its read is uncertifiable, blocker `carrier-run-unproven` (ADR 0892).

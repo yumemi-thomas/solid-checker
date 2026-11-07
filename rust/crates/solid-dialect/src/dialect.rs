@@ -1891,6 +1891,12 @@ pub trait Dialect: Sync {
     }
 
     /// Whether a tag opens the async boundary specifically.
+    /// ADR 0892: whether this component reads this prop only inside a
+    /// computation of its own, so a tracked getter there suspends it.
+    fn flow_prop_read_in_own_computation(&self, _tag: &str, _prop: &str) -> bool {
+        false
+    }
+
     fn is_async_boundary(&self, tag: &str) -> bool {
         self.boundary_kind(tag) == Some(Boundary::Async)
     }
