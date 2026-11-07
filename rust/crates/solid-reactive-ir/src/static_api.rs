@@ -1531,7 +1531,10 @@ fn action_step_body_unplaced(
     } else if crate::local_access::run_unplaced(file, function, context.lookup) {
         function.span
     } else {
-        return None;
+        // A closure handed to project code that no layer follows (a chain of
+        // forwarding helpers, ADR 0828's `forward-2`): it may run on that
+        // call's stack.
+        crate::execution_role::handed_to_unreviewed_call_at(file, function, context.lookup)?
     };
     // Module-level code runs in no step.
     crate::owners::containing_ast_function(&file.ast, anchor)?;

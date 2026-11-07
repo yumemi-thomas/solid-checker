@@ -16,7 +16,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "returned-callable-outside-source-universe",
+      "blocker": "handed-member-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-dead-return-prototype/App.tsx",
       "start": 399,

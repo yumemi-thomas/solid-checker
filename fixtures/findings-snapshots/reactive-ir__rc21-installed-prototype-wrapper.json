@@ -27,22 +27,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 250,
       "end": 255,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
-      "start": 274,
-      "end": 279,
       "fixes": 0
     },
     {
@@ -60,7 +49,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 473,
@@ -82,17 +71,6 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
-      "start": 525,
-      "end": 530,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
       "blocker": "installed-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
@@ -104,7 +82,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "value-held-in-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 716,
@@ -120,17 +98,6 @@
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 730,
       "end": 739,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
-      "start": 767,
-      "end": 772,
       "fixes": 0
     },
     {
@@ -159,22 +126,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "value-held-in-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 1002,
       "end": 1007,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
-      "start": 1034,
-      "end": 1039,
       "fixes": 0
     },
     {
@@ -192,22 +148,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 1270,
       "end": 1275,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "tuple-iteration-written",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
-      "start": 1295,
-      "end": 1300,
       "fixes": 0
     }
   ]

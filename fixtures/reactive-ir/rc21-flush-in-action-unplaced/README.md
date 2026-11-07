@@ -1,3 +1,5 @@
 # rc21-flush-in-action-unplaced
 
 Claim (ADR 0708): `flush()` in a function no call edge places (member, slot, getter, tag, hand-off) an action's body reaches throws in Chrome: an SC2006 obligation, blocker `function-run-unplaced`. Kept: `flush()` in the generator, a violation. Silent: a member nothing reaches. SC2008 asks there too (ADR 0709).
+
+`Forwarded.tsx` (ADR 0832): `flush()` in a closure handed through two forwarding helpers in the body (W's `forward-2` layer, certified before) is the same obligation; after the body's `await` it stays silent.

@@ -1103,6 +1103,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/value-use-census/node_modules/**
 !fixtures/reactive-ir/generator-stepped/node_modules/
 !fixtures/reactive-ir/generator-stepped/node_modules/**
+!fixtures/reactive-ir/generator-hand-off/node_modules/
+!fixtures/reactive-ir/generator-hand-off/node_modules/**
 !fixtures/reactive-ir/tuple-accessor-slots/node_modules/
 !fixtures/reactive-ir/tuple-accessor-slots/node_modules/**
 !fixtures/reactive-ir/tuple-accessor-slots-vetoed/node_modules/
@@ -1125,3 +1127,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/props-destructure-pending/node_modules/**
 !fixtures/reactive-ir/import-unresolved/node_modules/
 !fixtures/reactive-ir/import-unresolved/node_modules/**
+!fixtures/reactive-ir/setter-callback-in-helper/node_modules/
+!fixtures/reactive-ir/setter-callback-in-helper/node_modules/**
+!fixtures/reactive-ir/flow-iife-tracked/node_modules/
+!fixtures/reactive-ir/flow-iife-tracked/node_modules/**
+!fixtures/reactive-ir/show-child-pending-read/node_modules/
+!fixtures/reactive-ir/show-child-pending-read/node_modules/**
+!fixtures/reactive-ir/handed-closure-pending-read/node_modules/
+!fixtures/reactive-ir/handed-closure-pending-read/node_modules/**

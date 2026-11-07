@@ -597,6 +597,10 @@ pub(crate) struct LocalAccessResult {
     pub(crate) writes: Vec<Arc<ReactiveWrite>>,
     pub(crate) action_invocations: Vec<Arc<ActionInvocation>>,
     pub(crate) async_reads: Vec<Arc<AsyncRead>>,
+    /// ADR 0835: the unplaced rows of an async read whose call-attributed
+    /// walk stopped at its bound; kept at the end of the file's discovery
+    /// only where the read has no async row of its own.
+    pub(crate) bounded_async_reads: Vec<Arc<AsyncRead>>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,

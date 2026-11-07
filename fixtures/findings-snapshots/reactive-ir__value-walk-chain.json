@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
+      "start": 139,
+      "end": 142,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
+      "start": 139,
+      "end": 142,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -21,6 +43,28 @@
       "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
       "start": 288,
       "end": 292,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
+      "start": 140,
+      "end": 143,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
+      "start": 140,
+      "end": 143,
       "fixes": 0
     },
     {

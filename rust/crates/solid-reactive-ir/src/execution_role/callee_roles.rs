@@ -844,6 +844,35 @@ pub(super) fn semantic_role_before_awaits(
                 };
             }
         }
+        // ADR 0834: a site in a tracked JSX expression nested inside the flow
+        // callback, run in place there (`<For>{() => <p>{(() => { h(); })()}</p>}</For>`),
+        // runs in that expression's insert, not in a nested handler: tracked,
+        // as the tracked-region arm below decides it. A function the region
+        // hands on (a handler, a callback prop) keeps the callback's answer.
+        // Writes keep their own classification.
+        if role == ExecutionRole::DeferredCallback
+            && !classifying.contains(&write_classification_marker())
+            && let Some(body) = flow_callback_body(file, span, entities, symbol_names, dialect)
+            && file.compiler.tracked_regions.iter().any(|region| {
+                body.contains(region.span)
+                    && region.span.contains(span)
+                    && !component_child_function_within(file, region.span, span)
+                    && !attribute_function_within(file, region.span, span, lookup)
+                    && !unrun_closure_within(
+                        file,
+                        region.span,
+                        span,
+                        entities,
+                        symbol_names,
+                        lookup,
+                    )
+            })
+        {
+            return role_arm!(
+                "callee_roles.control-flow-tracked-region",
+                ExecutionRole::TrackedJsx
+            );
+        }
         return role_arm!("callee_roles.control-flow", role);
     }
     {

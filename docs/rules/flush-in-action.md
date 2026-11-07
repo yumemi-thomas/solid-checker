@@ -135,6 +135,9 @@ the result, read after the action resolves (`await save(); …`).
   nothing follows it), or in a named helper one of those calls, when the
   project names `action`. Chrome throws for each when an action's body
   reaches it; module-level members are no longer silent.
+  A closure written as an argument of a project call in a step (a chain of
+  forwarding helpers, `hc1(() => flush())`) is uncertifiable too, with the
+  same blocker (ADR 0832): no layer follows the forward.
 - **After a suspension.** In an async generator, a call that any `await`,
   `for await`, `yield*` or `await using` of the body can run before — or that
   a loop can reach again after one — is not claimed. A later `yield` re-enters

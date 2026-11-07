@@ -1,0 +1,60 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "returned-callable-outside-source-universe",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/global-alias-hook/body-write.tsx",
+      "start": 105,
+      "end": 108,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/global-alias-hook/patch.ts",
+      "start": 176,
+      "end": 183,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/global-alias-hook/use-now.ts",
+      "start": 118,
+      "end": 134,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/global-alias-hook/use-now.ts",
+      "start": 119,
+      "end": 122,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/global-alias-hook/use-now.ts",
+      "start": 124,
+      "end": 130,
+      "fixes": 0
+    }
+  ]
+}

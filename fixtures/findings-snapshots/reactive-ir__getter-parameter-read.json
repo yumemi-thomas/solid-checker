@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 978,
-      "end": 1013,
+      "start": 931,
+      "end": 966,
       "fixes": 0
     },
     {
@@ -18,8 +18,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1004,
-      "end": 1007,
+      "start": 957,
+      "end": 960,
       "fixes": 0
     },
     {
@@ -28,8 +28,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1121,
-      "end": 1160,
+      "start": 1074,
+      "end": 1113,
       "fixes": 0
     },
     {
@@ -39,8 +39,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1151,
-      "end": 1154,
+      "start": 1104,
+      "end": 1107,
       "fixes": 0
     },
     {
@@ -49,8 +49,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1272,
-      "end": 1317,
+      "start": 1225,
+      "end": 1270,
       "fixes": 0
     },
     {
@@ -60,8 +60,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1308,
-      "end": 1311,
+      "start": 1261,
+      "end": 1264,
       "fixes": 0
     },
     {
@@ -70,8 +70,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1431,
-      "end": 1471,
+      "start": 1384,
+      "end": 1424,
       "fixes": 0
     },
     {
@@ -81,8 +81,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1462,
-      "end": 1465,
+      "start": 1415,
+      "end": 1418,
       "fixes": 0
     },
     {
@@ -92,8 +92,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1608,
-      "end": 1611,
+      "start": 1561,
+      "end": 1564,
       "fixes": 0
     },
     {
@@ -102,8 +102,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1634,
-      "end": 1649,
+      "start": 1587,
+      "end": 1602,
       "fixes": 0
     },
     {
@@ -112,8 +112,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1767,
-      "end": 1819,
+      "start": 1720,
+      "end": 1772,
       "fixes": 0
     },
     {
@@ -123,8 +123,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1793,
-      "end": 1796,
+      "start": 1746,
+      "end": 1749,
       "fixes": 0
     },
     {
@@ -133,8 +133,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1933,
-      "end": 1985,
+      "start": 1886,
+      "end": 1938,
       "fixes": 0
     },
     {
@@ -144,8 +144,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 1962,
-      "end": 1965,
+      "start": 1915,
+      "end": 1918,
       "fixes": 0
     },
     {
@@ -154,8 +154,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2096,
-      "end": 2135,
+      "start": 2049,
+      "end": 2088,
       "fixes": 0
     },
     {
@@ -165,8 +165,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2126,
-      "end": 2129,
+      "start": 2079,
+      "end": 2082,
       "fixes": 0
     },
     {
@@ -175,8 +175,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2253,
-      "end": 2296,
+      "start": 2206,
+      "end": 2249,
       "fixes": 0
     },
     {
@@ -186,19 +186,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2287,
-      "end": 2290,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "withheld-object-member",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2411,
-      "end": 2419,
+      "start": 2240,
+      "end": 2243,
       "fixes": 0
     },
     {
@@ -208,8 +197,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2439,
-      "end": 2442,
+      "start": 2392,
+      "end": 2395,
       "fixes": 0
     },
     {
@@ -218,8 +207,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 2819,
-      "end": 2822,
+      "start": 2772,
+      "end": 2775,
       "fixes": 0
     },
     {
@@ -229,8 +218,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 3099,
-      "end": 3102,
+      "start": 3052,
+      "end": 3055,
       "fixes": 0
     },
     {
@@ -240,8 +229,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 3261,
-      "end": 3264,
+      "start": 3214,
+      "end": 3217,
       "fixes": 0
     },
     {
@@ -251,8 +240,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 3506,
-      "end": 3509,
+      "start": 3459,
+      "end": 3462,
       "fixes": 0
     },
     {
@@ -262,8 +251,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 3530,
-      "end": 3535,
+      "start": 3483,
+      "end": 3488,
       "fixes": 0
     },
     {
@@ -273,8 +262,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 3657,
-      "end": 3660,
+      "start": 3610,
+      "end": 3613,
       "fixes": 0
     },
     {
@@ -284,8 +273,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 3885,
-      "end": 3888,
+      "start": 3838,
+      "end": 3841,
       "fixes": 0
     },
     {
@@ -295,8 +284,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4036,
-      "end": 4039,
+      "start": 3989,
+      "end": 3992,
       "fixes": 0
     },
     {
@@ -306,8 +295,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4063,
-      "end": 4068,
+      "start": 4016,
+      "end": 4021,
       "fixes": 0
     },
     {
@@ -317,8 +306,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4180,
-      "end": 4183,
+      "start": 4133,
+      "end": 4136,
       "fixes": 0
     },
     {
@@ -328,8 +317,8 @@
       "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4307,
-      "end": 4334,
+      "start": 4260,
+      "end": 4287,
       "fixes": 0
     },
     {
@@ -339,8 +328,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4326,
-      "end": 4329,
+      "start": 4279,
+      "end": 4282,
       "fixes": 0
     },
     {
@@ -350,8 +339,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4482,
-      "end": 4485,
+      "start": 4435,
+      "end": 4438,
       "fixes": 0
     },
     {
@@ -361,8 +350,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4636,
-      "end": 4639,
+      "start": 4589,
+      "end": 4592,
       "fixes": 0
     },
     {
@@ -372,8 +361,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4787,
-      "end": 4790,
+      "start": 4740,
+      "end": 4743,
       "fixes": 0
     },
     {
@@ -383,8 +372,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 4943,
-      "end": 4946,
+      "start": 4896,
+      "end": 4899,
       "fixes": 0
     },
     {
@@ -394,8 +383,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 5090,
-      "end": 5093,
+      "start": 5043,
+      "end": 5046,
       "fixes": 0
     },
     {
@@ -405,8 +394,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 5253,
-      "end": 5256,
+      "start": 5206,
+      "end": 5209,
       "fixes": 0
     },
     {
@@ -416,8 +405,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 5412,
-      "end": 5415,
+      "start": 5365,
+      "end": 5368,
       "fixes": 0
     },
     {
@@ -427,8 +416,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 5555,
-      "end": 5558,
+      "start": 5508,
+      "end": 5511,
       "fixes": 0
     },
     {
@@ -438,8 +427,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 5730,
-      "end": 5733,
+      "start": 5683,
+      "end": 5686,
       "fixes": 0
     },
     {
@@ -449,8 +438,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 5918,
-      "end": 5921,
+      "start": 5871,
+      "end": 5874,
       "fixes": 0
     },
     {
@@ -460,8 +449,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6088,
-      "end": 6091,
+      "start": 6041,
+      "end": 6044,
       "fixes": 0
     },
     {
@@ -471,8 +460,8 @@
       "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6223,
-      "end": 6250,
+      "start": 6176,
+      "end": 6203,
       "fixes": 0
     },
     {
@@ -482,8 +471,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6242,
-      "end": 6245,
+      "start": 6195,
+      "end": 6198,
       "fixes": 0
     },
     {
@@ -493,8 +482,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6394,
-      "end": 6397,
+      "start": 6347,
+      "end": 6350,
       "fixes": 0
     },
     {
@@ -504,8 +493,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6565,
-      "end": 6568,
+      "start": 6518,
+      "end": 6521,
       "fixes": 0
     },
     {
@@ -515,8 +504,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6713,
-      "end": 6716,
+      "start": 6666,
+      "end": 6669,
       "fixes": 0
     },
     {
@@ -526,8 +515,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 6862,
-      "end": 6865,
+      "start": 6881,
+      "end": 6884,
       "fixes": 0
     },
     {
@@ -537,8 +526,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 7077,
-      "end": 7080,
+      "start": 7066,
+      "end": 7069,
       "fixes": 0
     },
     {
@@ -548,8 +537,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 7262,
-      "end": 7265,
+      "start": 7219,
+      "end": 7222,
       "fixes": 0
     },
     {
@@ -559,8 +548,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 7415,
-      "end": 7418,
+      "start": 7378,
+      "end": 7381,
       "fixes": 0
     },
     {
@@ -570,8 +559,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 7574,
-      "end": 7577,
+      "start": 7552,
+      "end": 7555,
       "fixes": 0
     },
     {
@@ -581,8 +570,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 7748,
-      "end": 7751,
+      "start": 7732,
+      "end": 7735,
       "fixes": 0
     },
     {
@@ -592,8 +581,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 7928,
-      "end": 7931,
+      "start": 8057,
+      "end": 8060,
       "fixes": 0
     },
     {
@@ -603,8 +592,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 8253,
-      "end": 8256,
+      "start": 8356,
+      "end": 8359,
       "fixes": 0
     },
     {
@@ -614,8 +603,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 8552,
-      "end": 8555,
+      "start": 8535,
+      "end": 8538,
       "fixes": 0
     },
     {
@@ -625,8 +614,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 8731,
-      "end": 8734,
+      "start": 8722,
+      "end": 8725,
       "fixes": 0
     },
     {
@@ -636,19 +625,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 8918,
-      "end": 8921,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 9112,
-      "end": 9115,
+      "start": 8916,
+      "end": 8919,
       "fixes": 0
     },
     {
@@ -658,8 +636,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 9139,
-      "end": 9144,
+      "start": 8943,
+      "end": 8948,
       "fixes": 0
     },
     {
@@ -669,8 +647,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 9349,
-      "end": 9352,
+      "start": 9153,
+      "end": 9156,
       "fixes": 0
     },
     {
@@ -680,8 +658,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 9506,
-      "end": 9509,
+      "start": 9310,
+      "end": 9313,
       "fixes": 0
     },
     {
@@ -691,8 +669,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 9676,
-      "end": 9679,
+      "start": 9480,
+      "end": 9483,
       "fixes": 0
     },
     {
@@ -702,8 +680,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
-      "start": 9828,
-      "end": 9831,
+      "start": 9632,
+      "end": 9635,
       "fixes": 0
     },
     {

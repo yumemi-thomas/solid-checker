@@ -186,12 +186,24 @@ pub(crate) fn collect_project<'facts>(
         reads,
         writes,
         action_invocations,
-        async_reads,
+        mut async_reads,
+        bounded_async_reads,
         strict_read_obligations,
         write_action_obligations,
         dispatch_obligations,
         static_violations,
     } = local_access.result;
+    // ADR 0835: `discover` keeps these per file; any left here are kept the
+    // same way, never dropped.
+    let placed = async_reads
+        .iter()
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    async_reads.extend(
+        bounded_async_reads
+            .into_iter()
+            .filter(|read| !placed.contains(&read.location)),
+    );
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -949,7 +961,49 @@ pub(crate) fn collect_project<'facts>(
                 && uncaptured.contains(&defect.location))
         });
     }
+    hold_withdrawn_static_rows(draft);
     interprocedural.factory_instances
+}
+
+/// ADR 0803, review a9fc #7: a static row (upstream_compat's, a static rule's)
+/// names no source symbol, so one that rests on a withdrawn slot is found by
+/// place: its span holds a reference of one, which carries the
+/// `tuple-iteration-written` obligation. Such a row is a claim about the
+/// primitive's own slot, which nothing proves now: uncertain.
+fn hold_withdrawn_static_rows(draft: &mut ProgramDraft) {
+    let held_references = draft
+        .static_defects
+        .iter()
+        .filter(|defect| defect.analysis_context == crate::blockers::TUPLE_ITERATION_WRITTEN)
+        .map(|defect| defect.location.clone())
+        .collect::<Vec<_>>();
+    if held_references.is_empty() {
+        return;
+    }
+    let holds = |at: &crate::Location| {
+        held_references.iter().any(|reference| {
+            reference.path == at.path
+                && at.start_byte <= reference.start_byte
+                && reference.end_byte <= at.end_byte
+        })
+    };
+    for violation in &mut draft.static_violations {
+        if !violation.uncertain && holds(&violation.location) {
+            violation.uncertain = true;
+            if !crate::blockers::named(&violation.analysis_context) {
+                crate::blockers::TUPLE_ITERATION_WRITTEN
+                    .clone_into(&mut violation.analysis_context);
+            }
+        }
+    }
+    for defect in &mut draft.static_defects {
+        if !defect.uncertain && holds(&defect.location) {
+            defect.uncertain = true;
+            if !crate::blockers::named(&defect.analysis_context) {
+                crate::blockers::TUPLE_ITERATION_WRITTEN.clone_into(&mut defect.analysis_context);
+            }
+        }
+    }
 }
 
 /// ADR 0803: a withdrawn slot stays a source, so transport, the handed net and

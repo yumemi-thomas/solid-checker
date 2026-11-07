@@ -345,6 +345,63 @@ pub(crate) fn async_execution_role(
     }
 }
 
+/// [`async_execution_role`] for the row an async read is placed by. A
+/// deferred site inside JSX is taken as rendered there. ADR 0836: not when
+/// the only JSX around it is an element whose child the site's function is
+/// (a children callback, a render prop: `<Show when={1}>{(_u) => {
+/// hc1(() => { a1(); }); … }}</Show>`): that function runs where the element
+/// calls it, and the closure where its carrier runs it, so nothing places the
+/// read in a tracked insert. It is unplaced: never a proven missing-boundary
+/// violation, and an obligation for every pending rule. Callers that open an
+/// obligation only for a tracked answer keep [`async_execution_role`].
+pub(crate) fn async_read_placement(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+) -> ExecutionRole {
+    match async_execution_role(file, span, execution) {
+        ExecutionRole::TrackedJsx
+            if execution == ExecutionRole::DeferredCallback
+                && only_child_function_jsx_around(file, span) =>
+        {
+            ExecutionRole::Unknown
+        }
+        role => role,
+    }
+}
+
+/// Whether the innermost JSX element around `span` holds it only through a
+/// function written as one of its children, with no JSX element or fragment
+/// between that function and `span`.
+fn only_child_function_jsx_around(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let size = |span: Span| span.end - span.start;
+    let Some(element) = ast
+        .jsx_containing(span)
+        .min_by_key(|element| size(element.span))
+    else {
+        return false;
+    };
+    let Some(child) = ast
+        .functions_body_containing(span)
+        .filter(|function| {
+            element.span.contains(function.span)
+                && element
+                    .children
+                    .iter()
+                    .any(|child| child.contains(function.span))
+        })
+        .max_by_key(|function| size(function.body))
+    else {
+        return false;
+    };
+    // A fragment inside the child function around the site is JSX the site
+    // renders in; an element there would be the innermost one.
+    !ast.jsx_fragments
+        .iter()
+        .any(|fragment| fragment.contains(span) && child.body.contains(*fragment))
+}
+
 /// The label of an exact `untrack` call. `strictRead = strictReadLabel || false`
 /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev-shared.js:5853`): a non-empty
 /// string opens a window, and a call that passes anything else opens none.

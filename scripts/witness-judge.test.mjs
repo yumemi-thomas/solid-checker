@@ -22,6 +22,18 @@ test("an SC9012 clean row does not pass on an uncertifiable that covers nothing"
   assert.equal(judgeWitness({ rule: "SC9012", kind: "clean", runtime: fired }, out).ok, false);
 });
 
+test("an SC9012 clean row passes only at its closedAt: an SC9012 at another line, or none pinned, says nothing about the site", () => {
+  const row = { rule: "SC9012", kind: "clean", runtime: fired };
+  const at = (line) => ({ status: "uncertifiable", findings: [finding("SC9012", "reactive-dispatch-unresolved", "uncertifiable", line, "value-in-carrier")] });
+  assert.equal(judgeWitness(row, at(9)).ok, false);
+  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-in-carrier" } }, at(9)).ok, true);
+  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-in-carrier" } }, at(4)).ok, false);
+  assert.equal(judgeWitness({ ...row, closedAt: { line: 9, blocker: "value-forwarded" } }, at(9)).ok, false);
+  const proved = { status: "violations", findings: [finding("SC1001", "strict-read-untracked", "violation", 8)] };
+  assert.equal(judgeWitness({ ...row, closedAt: { line: 8, id: "SC1001" } }, proved).ok, true);
+  assert.equal(judgeWitness({ ...row, closedAt: { line: 7, id: "SC1001" } }, proved).ok, false);
+});
+
 test("a covering finding keeps the row", () => {
   const out = { status: "violations", findings: [finding("SC1001", "strict-read-untracked", "violation")] };
   assert.equal(judgeWitness({ rule: "SC1001", kind: "clean", runtime: fired }, out).ok, true);
@@ -58,4 +70,16 @@ test("a base row removed or changed needs a retired row naming an existing ADR",
   assert.equal(vanishedRows({ x: row }, {}, [{ id: "x", adr: "ADR 0999", why: "w" }], decisions).length, 1);
   assert.equal(vanishedRows({ x: row }, {}, [{ id: "x", adr: "ADR 0801" }], decisions).length, 1);
   assert.deepEqual(vanishedRows({ x: row }, {}, [{ id: "x", adr: "ADR 0801", why: "proved" }], decisions), []);
+});
+
+test("every field of a row is compared, both ways, and a retired row of a row still there names the fields it excuses", () => {
+  const row = { rule: "SC1001", kind: "clean", source: "a", runtime: fired };
+  const decisions = '<a id="adr-0801"></a>\n## ADR 0801';
+  const closed = { ...row, closedBy: "SC9012", closedAt: { line: 3, blocker: "value-in-carrier" } };
+  assert.equal(vanishedRows({ x: row }, { x: closed }, [], decisions).length, 1);
+  assert.equal(vanishedRows({ x: closed }, { x: row }, [], decisions).length, 1);
+  assert.equal(vanishedRows({ x: row }, { x: { ...row, rule: "SC1003" } }, [], decisions).length, 1);
+  assert.equal(vanishedRows({ x: row }, { x: closed }, [{ id: "x", adr: "ADR 0801", why: "w" }], decisions).length, 1);
+  assert.equal(vanishedRows({ x: row }, { x: closed }, [{ id: "x", adr: "ADR 0801", why: "w", fields: ["closedBy"] }], decisions).length, 1);
+  assert.deepEqual(vanishedRows({ x: row }, { x: closed }, [{ id: "x", adr: "ADR 0801", why: "w", fields: ["closedBy", "closedAt"] }], decisions), []);
 });

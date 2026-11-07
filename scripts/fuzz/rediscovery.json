@@ -5599,5 +5599,247 @@
    "mx-strict-read-untracked-patch-key-ctor-signal-direct-none"
   ],
   "rediscovered": "the same run: e57cc0dc5 413 false-clean in STRICT_READ (59 per context; cast-param, cast-any-param and cast-guard 0 there), ADR 0840 0. Both codes: 1,133 false cleans (994 cast, 139 patch-key-ctor), 1,267 of the old build's false cleans in the 14 contexts had no uncertifiable finding. patch-getproto (139) and patch-key-proto, patch-key-alias, patch-assign-key-proto (15 each) stay false-clean on both builds: Q2's"
+ },
+ {
+  "finding": "item 5: a pattern over a store root reached through a holder slot (`const o = { st }; const { a } = o.st;`) was followed with no row; the file certified while Chrome warns",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-store-holder-pattern-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-store-holder-pattern-direct-none",
+   "mx-strict-read-untracked-root-use-store-holder-pattern-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs use-store-holder-pattern and use-namespace-throw (108 programs, body, effect-apply, root; Chrome warns on each): mg1 (e57cc0dc5) 106 false-clean, all certified, 2 typed-away; ADR 0812 0 false-clean (106 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PatternThroughSlot, negative PatternOnRoot"
+ },
+ {
+  "finding": "item 6: a namespace member (`import * as S`; `throw S.count`, then called) is listed at its property, which no identifier reference names, so the census skipped it; the file certified while Chrome warns",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-namespace-throw-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-namespace-throw-direct-none",
+   "mx-strict-read-untracked-root-use-namespace-throw-direct-none"
+  ],
+  "rediscovered": "the same run as item 5 (use-namespace-throw, 54 of the 108). Fixture reactive-ir/value-use-census ReviewTwo.tsx NamespaceThrown with ReviewNs.ts, negative NamespaceTracked; router-params/variants/use-action-imported-namespace gains its row at `actions.save`"
+ },
+ {
+  "finding": "item 10: a source not proven sync as an element's bare child (`<b>{v as unknown as string}</b>`, the only tsc-clean spelling) was followed with no row; the file certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md), reproduced by Part 13 in the checker (m13a, mg1) and Chrome rc.21, tsc-clean",
+  "fixed": "ADR 0812",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-net-bare-child-direct-none",
+   "mx-async-outside-loading-boundary-show-net-bare-child-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs net-bare-child (36 programs, jsx and show; Chrome warns on each): mg1 36 false-clean, all certified; ADR 0812 0 false-clean (36 recall-gap). Fixture reactive-ir/value-use-census ReviewTwo.tsx PendingChild, negative SyncChild"
+ },
+ {
+  "finding": "`flush()` in a closure handed through forwarding helpers (`hc1(() => flush())`, `hc1 = (g) => hc0(g)`) inside `action(function* …)` certified while Chrome throws FLUSH_IN_ACTION: the action-step climb stops at a forwarded closure and the unplaced net placed it",
+  "found": "W's recall grids at 4c81fcc00 (origin/claude/flip-research-w 41ccacbc0, research-w-grids-merged.md), every row rerun uncached in Chrome",
+  "fixed": "ADR 0832",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-action-x-direct-forward-2",
+   "mx-flush-in-action-action-x-wrapper-forward-13",
+   "mx-flush-in-action-action-after-yield-x-direct-forward-2",
+   "mx-flush-in-action-action-after-yield-x-destructured-forward-13"
+  ],
+  "rediscovered": "FLUSH_IN_ACTION forward-2/forward-13 ids (40, Chrome confirmed): build wd3 (e0606cbb7) 20 certified false cleans (action and action-after-yield, every binding); ADR 0832 0 (40 recall-gap, SC2006 U function-run-unplaced). Legal twins of the same layers (160): clean on both. Fixture rc21-flush-in-action-unplaced Forwarded.tsx (U, and silent after the body's await)"
+ },
+ {
+  "finding": "a read in a store setter's callback inside a named helper an effect's apply calls (`const wrapUse = () => { setSw2((d) => { d.n = a1(); }); }`) certified while Chrome warns STRICT_READ_UNTRACKED: the setter-callback row is the helper's, and no summary carries it",
+  "found": "R3b (open-work, held in open-defects.json until f1d5f3710's merge dropped the entry); W's recall grids at 4c81fcc00 (research-w-grids-merged.md)",
+  "fixed": "ADR 0833",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-none",
+   "mx-strict-read-untracked-effect-apply-setter-fn-apply-wrapper-module-helper"
+  ],
+  "rediscovered": "setter-fn ids (18, Chrome confirmed): build fl1 (4787f08e1) 6 certified false cleans (wrapper, every layer), alias and direct agree; ADR 0833 0 (wrapper recall-gap, SC1001 U function-run-unplaced at the read), alias and direct agree. Fixture reactive-ir/setter-callback-in-helper (InHelper U; fl1 silent there)"
+ },
+ {
+  "finding": "SC2003 V-D1, the whole lg-recall noop-* set: a store operation that writes nothing on its run was a violation (ADR 0718's entry above, 540 programs then); the set grew to 720 and its open-defects.json entry stayed after the fix",
+  "found": "W's full grids at 4c81fcc00 (research-w-grids-merged.md, origin/claude/flip-research-w 41ccacbc0): 720 rows open-defect-fixed",
+  "fixed": "ADR 0718",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-noop-nullish-direct-none",
+   "lg-store-write-outside-setter-handler-noop-nullish-wrapper-none",
+   "lg-store-write-outside-setter-handler-noop-and-alias-none"
+  ],
+  "rediscovered": "W at 4c81fcc00: 720 of 720 no longer false positives (234 clean, 486 uncertifiable). Part 13 on mg2 (75c33dbbc's build): every 12th of the 720 ids (60) through legal.mjs --grid --recall with Chrome confirming: 0 false-positive, 19 clean, 41 uncertifiable. W's rolling grid confirms the full set on the next tip"
+ },
+ {
+  "finding": "ADR 0803's gate missed iteration patched where no write spells it: a Function held in a parameter and run with a string (patterns types/s02-setter-slot-function-escaped, types/s03-local-setter-function-escaped), `new Function(code)()`, `Array.prototype` handed to a helper that writes it. A primitive's or a hook's setter slot stayed exact: SC2001 V where Chrome is quiet (the patch hands back a no-op). Pattern values/d3-new-function (`new Function(\"g\", \"return g()\")(a)`) certified a read Chrome warns on",
+  "found": "R1c, patterns s02 and s03 (Chrome and tsc); R1e, flip-read.mjs iter-fn-escaped, iter-fn-new, iter-handed-proto",
+  "fixed": "ADR 0803, item 3 (visible side: writes that can reach iteration; hidden side: ADR 0801's census) (R1e); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-fn-escaped-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-fn-new-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-handed-proto-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, contexts iter-fn-escaped, iter-fn-new, iter-handed-proto, layers none (570 programs): 7788b7295 234 false-positive (78 per context, each Chrome-confirmed), item 3 0 false-positive, 0 disturbed. Patterns s02, s03 and values/d3-new-function now uncertifiable"
+ },
+ {
+  "finding": "review a9fc #1, #2: a write to Array.prototype under a key no literal names, reached through `Object.getPrototypeOf([])`, `([] as any).__proto__`, `[].constructor.prototype`, a global alias (`const g = globalThis; g.Array.prototype`) or a destructured `getPrototypeOf`, left a primitive's own setter exact: SC2001 V where Chrome is quiet (the patch hands back a no-op setter)",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md items 1, 2); R1e, flip-read.mjs iter-gpo-key and the alias spellings",
+  "fixed": "ADR 0803 (review a9fc); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-gpo-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-proto-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-ctor-key-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-global-alias-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-gpo-destructure-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, these five contexts, layers none: 7788b7295 78 false-positive each (Chrome-confirmed); item 3 before the review fixes (0228b92e3) 0 for gpo/proto/ctor-key and 78 each for global-alias and gpo-destructure; this build 0. The hook-slot form (#1) is fixture iteration-written-slots/global-alias-hook: on 7788b7295 and 0228b92e3 `now()` had no row"
+ },
+ {
+  "finding": "review a9fc #7: ADR 0803's hold covered reads, writes and async reads only; upstream_compat's uncalled-accessor arm proved SC1005 V on `${c}` of a withdrawn slot, and a store write on a withdrawn store slot stayed SC2003 V",
+  "found": "independent review of a9fcbe8f1 (findings-a9fc.md item 7)",
+  "fixed": "ADR 0803 (review a9fc, hold_withdrawn_static_rows); now uncertifiable",
+  "outside": "no runtime code claims SC1005, so no grid judges it; fixture iteration-written-slots/uncalled-accessor (SC1005 V on 7788b7295 and 0228b92e3, uncertifiable here) and uncalled-accessor-intact (proved V)"
+ },
+ {
+  "finding": "an async memo read through a helper chain an IIFE runs in a JSX expression of a `For` row (`<For>{() => <p>{(() => { hc4(); })()}</p>}</For>`, `wrapUse` reading the memo) certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY: a site in a nested function of the row took the row's deferred handler answer",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md), rerun uncached in Chrome",
+  "fixed": "ADR 0834",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-for-x-wrapper-chain-5",
+   "mx-async-outside-loading-boundary-for-x-wrapper-chain-13"
+  ],
+  "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY flow-context ids (1,568, Chrome confirmed): build sf1 (58d14e945) 2 certified false cleans; ADR 0834 0 (recall-gap, SC5003 U), no other id moved; legal twins (3,868) unchanged. Fixture reactive-ir/flow-iife-tracked PendingInRow (sf1 silent) and ResolveInRow (U to a Chrome-confirmed V)"
+ },
+ {
+  "finding": "a pending async memo read in a closure handed through forwarding helpers inside a `Show` child callback with a parameter (`<Show when={1}>{(_u) => { hc1(() => { a1(); }); … }}</Show>`) was SC5003 async-outside-loading-boundary violation where Chrome reports only PENDING_ASYNC_UNTRACKED_READ: a deferred site inside JSX was taken as rendered",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md); confirmed by Part 13 on m13e, 12 of 12",
+  "fixed": "ADR 0836",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-flow-show-x-direct-forward-2",
+   "mx-pending-async-untracked-read-flow-show-x-hook-member-forward-13",
+   "mx-pending-async-untracked-read-flow-show-x-tuple-forward-2"
+  ],
+  "rediscovered": "PENDING_ASYNC_UNTRACKED_READ and ASYNC_OUTSIDE_LOADING_BOUNDARY ids in flow, JSX and callback-prop contexts (7,294, Chrome confirmed): build ao3 (3f0c6f146) 12 wrong-rule (SC5003 V, the runtime's code PENDING_ASYNC_UNTRACKED_READ); ADR 0836 0 (recall-gap), nothing else moved; legal twins (72) clean on both. Fixture reactive-ir/show-child-pending-read Forwarded (U for both pending rules), InChild (SC5001 V kept)"
+ },
+ {
+  "finding": "an async memo read in a named helper reached through five closures in `onSettled` (`const wrapUse = () => { a1(); }`, chain-5) certified while Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE: the call-attributed walk stopped at its bound of four with no row",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md); the bounds audit had marked the bound safe",
+  "fixed": "ADR 0835",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-pending-async-forbidden-scope-settled-x-wrapper-chain-5",
+   "mx-pending-async-forbidden-scope-tracked-x-wrapper-chain-5",
+   "mx-pending-async-forbidden-scope-tracked-rerun-x-wrapper-chain-5"
+  ],
+  "rediscovered": "deep-layer ids of PENDING_ASYNC_FORBIDDEN_SCOPE, PENDING_ASYNC_UNTRACKED_READ, ASYNC_OUTSIDE_LOADING_BOUNDARY (1,372, Chrome confirmed): build fp3 (e5589a4aa) settled wrapper chain-5 certified false clean, tracked and tracked-rerun false clean under another rule; ADR 0835 all three recall-gap, nothing else moved. Fixture reactive-ir/walk-bounds reads0 (silent there before)"
+ },
+ {
+  "finding": "a named helper's pending read called in an anonymous closure handed down forwarding helpers in a tracked insert (`<p>{(() => { hc1(() => { wrapUse(); }); return 1; })()}</p>`) had no row of the missing-boundary rule while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY: ADR 0462's walk ended at a position with no role and no binding",
+  "found": "W's recall grids at 4c81fcc00 (research-w-grids-merged.md)",
+  "fixed": "ADR 0837",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-wrapper-forward-2",
+   "mx-async-outside-loading-boundary-show-x-wrapper-forward-13",
+   "mx-async-outside-loading-boundary-portal-jsx-x-wrapper-forward-2"
+  ],
+  "rediscovered": "ASYNC_OUTSIDE_LOADING_BOUNDARY ids and the deep-layer ids of the pending codes (5,740, Chrome confirmed): build pf3 (fa46bab30) 6 false cleans (jsx, show, portal-jsx wrapper forward-2/13); ADR 0837 0, nothing else moved. Fixture reactive-ir/handed-closure-pending-read (pf3: no SC5003 row)"
+ },
+ {
+  "finding": "a read in a function a generator hands on past its first `yield` (`ho.m()` of `{ m: hf }`, an assigned member, a member a helper assigns through its parameter, a callback forwarded 2 or 13 times), in an async generator under `for await` or a sync generator a loop steps across its `await`, inside an async memo: no reactive-read-after-await row (only strict-read-untracked function-run-unplaced), Chrome warns",
+  "found": "research W grids report at 4c81fcc00 (scripts/flip/notes/research-w-grids-merged.md, claude/flip-research-w 41ccacbc0), 70 rows not listed as open",
+  "fixed": "ADR 0850",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-gen-yield-x-direct-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-direct-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-direct-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-direct-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-direct-forward-13",
+   "mx-untracked-read-after-await-gen-yield-x-alias-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-alias-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-alias-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-alias-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-alias-forward-13",
+   "mx-untracked-read-after-await-gen-yield-x-destructured-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-destructured-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-destructured-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-destructured-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-destructured-forward-13",
+   "mx-untracked-read-after-await-gen-yield-x-wrapper-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-wrapper-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-wrapper-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-wrapper-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-wrapper-forward-13",
+   "mx-untracked-read-after-await-gen-yield-x-hook-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-hook-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-hook-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-hook-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-hook-forward-13",
+   "mx-untracked-read-after-await-gen-yield-x-hook-member-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-hook-member-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-hook-member-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-hook-member-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-hook-member-forward-13",
+   "mx-untracked-read-after-await-gen-yield-x-tuple-handoff-member",
+   "mx-untracked-read-after-await-gen-yield-x-tuple-handoff-assign",
+   "mx-untracked-read-after-await-gen-yield-x-tuple-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-yield-x-tuple-forward-2",
+   "mx-untracked-read-after-await-gen-yield-x-tuple-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-direct-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-alias-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-alias-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-alias-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-alias-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-alias-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-destructured-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-destructured-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-destructured-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-destructured-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-destructured-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-wrapper-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-wrapper-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-wrapper-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-wrapper-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-wrapper-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-member-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-member-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-member-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-member-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-hook-member-forward-13",
+   "mx-untracked-read-after-await-gen-sync-loop-x-tuple-handoff-member",
+   "mx-untracked-read-after-await-gen-sync-loop-x-tuple-handoff-assign",
+   "mx-untracked-read-after-await-gen-sync-loop-x-tuple-handoff-assign-param",
+   "mx-untracked-read-after-await-gen-sync-loop-x-tuple-forward-2",
+   "mx-untracked-read-after-await-gen-sync-loop-x-tuple-forward-13"
+  ],
+  "rediscovered": "by id in the sc VM, uncached Chrome: e57cc0dc5 70 false-clean (Chrome same on 70); ADR 0850 70 recall-gap. Whole cells gen-yield and gen-sync-loop (1,352): old 70 false-clean, new 0 (1,352 recall-gap); lg-recall UNTRACKED_READ_AFTER_AWAIT 5,642 unchanged, 0 false positives. Fixture reactive-ir/generator-hand-off holds the forms, with a drained sync generator and two plain-value twins that stay clean"
  }
 ]

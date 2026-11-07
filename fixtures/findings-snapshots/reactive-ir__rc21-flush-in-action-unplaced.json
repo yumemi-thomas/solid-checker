@@ -164,6 +164,17 @@
       "start": 965,
       "end": 970,
       "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-flush-in-action-unplaced/Forwarded.tsx",
+      "start": 465,
+      "end": 470,
+      "fixes": 0
     }
   ]
 }

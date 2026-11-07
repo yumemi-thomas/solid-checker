@@ -22,11 +22,12 @@ use crate::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::execution_role::{
-    RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
-    control_flow_execution_role, direct_control_flow_body_role, host_callback_timing,
-    missing_jsx_census, named_callback_execution_role, nested_literal_runs_during_body,
-    pending_accessor_probe, read_analysis_context, read_execution_role, semantic_execution_role,
-    semantic_write_execution_role, unclassified_callback_reaches_modelled_consumer,
+    RootBodyGuard, allowed_callback_spans, async_execution_role, async_read_placement,
+    callee_callback_timing, control_flow_execution_role, direct_control_flow_body_role,
+    host_callback_timing, missing_jsx_census, named_callback_execution_role,
+    nested_literal_runs_during_body, pending_accessor_probe, read_analysis_context,
+    read_execution_role, semantic_execution_role, semantic_write_execution_role,
+    unclassified_callback_reaches_modelled_consumer,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -2251,6 +2252,19 @@ impl LocalAccessContext<'_, '_> {
                 Arc::make_mut(read).callback_invocation_unproven = true;
             }
         }
+        // ADR 0835: a read whose call-attributed walk stopped at its bound,
+        // with no async row of its own anywhere in the file's rows, is
+        // unplaced, never silent.
+        let placed = result
+            .async_reads
+            .iter()
+            .map(|existing| existing.location.clone())
+            .collect::<Vec<_>>();
+        for row in std::mem::take(&mut result.bounded_async_reads) {
+            if !placed.contains(&row.location) {
+                result.async_reads.push(row);
+            }
+        }
         result
     }
 
@@ -2870,6 +2884,15 @@ impl LocalAccessContext<'_, '_> {
                 Some(false) => {}
                 None => return Some(ExecutionRole::Unknown),
             }
+        }
+        // A setter call in a named helper runs where the helper's callers do,
+        // and no summary carries a read written in the setter's callback (it
+        // is no layer the in-place climb crosses): unplaced, unless a named
+        // callback role places the helper.
+        if inside_non_component_function(file, setter_call.callee, self.lookup)
+            && named_callback_execution_role(file, setter_call.callee, self.lookup).is_none()
+        {
+            return Some(ExecutionRole::Unknown);
         }
         let role = read_execution_role(
             file,
@@ -5319,12 +5342,19 @@ impl LocalAccessContext<'_, '_> {
         // written before the site, so nothing there throws first.
         let mut sites = vec![(read.span, 0_usize, true, true)];
         let mut visited = HashSet::<solid_facts::core::Span>::default();
+        // ADR 0835: a walk cut at its bound proves no place; if it placed no
+        // row either, the read is unplaced, not silent.
+        let rows_before = result.async_reads.len();
+        let mut bounded = false;
         while let Some((site, depth, every, first)) = sites.pop() {
             let Some(function) = containing_ast_function(&file.ast, site) else {
                 continue;
             };
-            if depth >= CALL_ATTRIBUTED_DEPTH
-                || !visited.insert(function.span)
+            if depth >= CALL_ATTRIBUTED_DEPTH {
+                bounded = true;
+                continue;
+            }
+            if !visited.insert(function.span)
                 || function.generator
                 || self.lookup.function_may_be_component(file, function)
                 || !site_runs_during_local_call(file, function, site)
@@ -5438,7 +5468,8 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
-                let lexical = async_execution_role(file, position, execution);
+                let semantic = execution;
+                let lexical = async_read_placement(file, position, execution);
                 let execution = async_read_role(
                     file,
                     position,
@@ -5544,9 +5575,20 @@ impl LocalAccessContext<'_, '_> {
                     // ADR 0779: an anonymous function in a tracked position,
                     // which no binding climbs out of (`<K run={() => h()} />`):
                     // it may run there, past no boundary.
-                    if lexical == ExecutionRole::TrackedJsx
-                        && read_loading_cover(self.lookup, file, position, self.symbol_names)
-                            != LoadingCover::Covered
+                    // ADR 0836: so may one in a child function's closure, which
+                    // nothing places in a tracked insert (`async_execution_role`).
+                    // ADR 0837: and any position nothing places (an anonymous
+                    // closure handed on in a tracked insert): no binding climbs
+                    // out of it, so the walk would end with no row.
+                    let unplaced_child = lexical == ExecutionRole::Unknown
+                        && matches!(
+                            semantic,
+                            ExecutionRole::DeferredCallback | ExecutionRole::Unknown
+                        );
+                    if (unplaced_child
+                        || (lexical == ExecutionRole::TrackedJsx
+                            && read_loading_cover(self.lookup, file, position, self.symbol_names)
+                                != LoadingCover::Covered))
                         && function_binding_name(
                             file,
                             containing_ast_function(&file.ast, position).unwrap_or(function),
@@ -5617,6 +5659,11 @@ impl LocalAccessContext<'_, '_> {
                     invocation_context_unproven: under_untrack == ExecutionRole::Unknown,
                 }));
             }
+        }
+        if bounded && result.async_reads.len() == rows_before {
+            let mut held = LocalAccessResult::default();
+            self.push_unplaced_async_reads(file, read, name, declaration, &options, &mut held);
+            result.bounded_async_reads.extend(held.async_reads);
         }
     }
 
@@ -6483,7 +6530,7 @@ impl LocalAccessContext<'_, '_> {
             || async_options.server_rendering_unresolved)
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
-            let async_execution = async_execution_role(file, call.callee, execution);
+            let async_execution = async_read_placement(file, call.callee, execution);
             // ADR 0623: tracked, in a computation's own callback: it suspends.
             let computation_read = async_execution == ExecutionRole::TrackedJsx
                 && crate::execution_role::computation_read_suspends(
@@ -7155,7 +7202,7 @@ impl LocalAccessContext<'_, '_> {
                 || member_options.server_rendering_unresolved)
             && !pending_accessor_probe(file, member, self.lookup)
         {
-            let async_execution = async_execution_role(file, member, execution);
+            let async_execution = async_read_placement(file, member, execution);
             let async_execution =
                 if member_options.ssr_client_bare || member_options.server_rendering_unresolved {
                     async_execution
@@ -8081,6 +8128,9 @@ pub(crate) fn append_local_access_result(
     target
         .async_reads
         .extend(source.async_reads.iter().cloned());
+    target
+        .bounded_async_reads
+        .extend(source.bounded_async_reads.iter().cloned());
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations
@@ -8120,6 +8170,9 @@ pub(crate) fn append_local_access_result_owned(
     target.writes.extend(source.writes);
     target.action_invocations.extend(source.action_invocations);
     target.async_reads.extend(source.async_reads);
+    target
+        .bounded_async_reads
+        .extend(source.bounded_async_reads);
     target.strict_read_obligations += source.strict_read_obligations;
     target
         .write_action_obligations

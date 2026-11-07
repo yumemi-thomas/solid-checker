@@ -106,6 +106,9 @@ pub(crate) const VALUE_BOUND_HELD: &str = "value-bound-held";
 pub(crate) const VALUE_FORWARDED: &str = "value-forwarded";
 pub(crate) const VALUE_ROOT_IN_HELPER: &str = "value-root-in-helper";
 pub(crate) const VALUE_USE_UNCLASSIFIED: &str = "value-use-unclassified";
+/// Review item 10: a source that may be pending, a bare child of an element,
+/// which inserts and calls it: no row reads it there.
+pub(crate) const VALUE_PENDING_IN_JSX: &str = "value-pending-in-jsx";
 /// `export default` of a literal or a call: no binding names it, so no importer
 /// is walked (W's census review H1).
 pub(crate) const VALUE_EXPORTED_UNNAMED: &str = "value-exported-unnamed";

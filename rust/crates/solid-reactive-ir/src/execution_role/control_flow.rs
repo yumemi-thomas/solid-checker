@@ -40,6 +40,44 @@ pub(crate) fn assigned_member_function_contains(
     })
 }
 
+/// The body of the control-flow children callback around `span`, chosen as
+/// [`control_flow_execution_role`] chooses it: the innermost element that
+/// renders its children through a callback, and the outermost function
+/// written in one of its children with no other element between.
+pub(crate) fn flow_callback_body(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<Span> {
+    let element = file
+        .ast
+        .jsx_containing(span)
+        .filter(|element| {
+            jsx_primitive_name(file, element, entities, symbol_names, dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
+        })
+        .min_by_key(|element| element.span.end - element.span.start)?;
+    file.ast
+        .functions_body_containing(span)
+        .filter(|function| {
+            element.span.contains(function.span)
+                && element
+                    .children
+                    .iter()
+                    .any(|child| child.contains(function.span))
+                && !file
+                    .ast
+                    .jsx_containing(function.span)
+                    .any(|nested| nested.span != element.span && element.span.contains(nested.span))
+        })
+        .max_by_key(|function| function.body.end - function.body.start)
+        .map(|function| function.body)
+}
+
 pub(crate) fn control_flow_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,
