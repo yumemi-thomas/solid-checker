@@ -7031,5 +7031,6 @@
    "lg-reactive-write-in-owned-scope-iter-path-find-patched-signal-direct-none"
   ],
   "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE iter-path-find-patched, layers none (190 programs, origin judge): rf14 (5e5d3a307) 78 false-positive (Chrome-confirmed), this build 0 (128 uncertifiable, 62 not-legal). Fixtures handed-path-find-patched (V on 5e5d3a307, U here), handed-path-find-open-key (U on both), handed-path-find (proved V on both)"
- }
+ },
+ {"finding":"STRICT_READ_UNTRACKED in a listener registered in one file and delivered by a synchronous dispatchEvent in another: Chrome's frame is the dispatch, and listener-reach stood only at the registration, in the registering file (ADR 0815 limit)","found":"coordinator on 449d7bcb6 (the dispatch-row slice): a cross-file dispatch has no row at Chrome's frame; R3e two-file Chrome probe (scratch cases/listener-cross: positive fires, deferred and separate-target quiet)","fixed":"ADR 0896","outside":"the generator prints one source file per program (print.mjs), so a registration in one module and the dispatch in another cannot be generated; fixture rc21-listener-cross-file holds the positive, deferred, no-registration and open method-read forms"}
 ]

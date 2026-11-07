@@ -228,6 +228,9 @@
   "rust/crates/solid-reactive-ir/src/lib.rs": {
     "file_by_path": 2
   },
+  "rust/crates/solid-reactive-ir/src/listener_reach.rs": {
+    "files()": 1
+  },
   "rust/crates/solid-reactive-ir/src/literal_member_slots.rs": {
     "file_by_path": 1,
     "typescript-table": 1,

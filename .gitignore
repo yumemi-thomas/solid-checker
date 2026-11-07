@@ -1191,3 +1191,6 @@ packages/wasm/owned/
 !fixtures/reactive-ir/walk-depth-bound/node_modules/**
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/**
+
+!fixtures/reactive-ir/rc21-listener-cross-file/node_modules/
+!fixtures/reactive-ir/rc21-listener-cross-file/node_modules/**

@@ -220,6 +220,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 286,
+      "end": 307,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "prop-pending-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
@@ -247,6 +258,17 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
       "start": 655,
       "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 655,
+      "end": 676,
       "fixes": 0
     },
     {

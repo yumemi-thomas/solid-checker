@@ -90,10 +90,12 @@ pub(crate) enum Section {
     ProjectPrimitives,
     /// The classified flush veto (ADR 0613), read through its one answer.
     FlushVeto,
+    /// Project-wide registration/read reachability, fingerprinted as a boolean.
+    ListenerProjectReach,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 18] = [
+    pub(crate) const ALL: [Self; 19] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -112,6 +114,7 @@ impl Section {
         Self::ContextSymbols,
         Self::ProjectPrimitives,
         Self::FlushVeto,
+        Self::ListenerProjectReach,
     ];
 
     const fn bit(self) -> u32 {

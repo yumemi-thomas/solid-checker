@@ -330,6 +330,16 @@ impl SemanticLookup<'_> {
         self.dispatch_veto().3
     }
 
+    /// Per-build existential. Every consumer, including a false answer,
+    /// records the section. Its next-build fingerprint recomputes the whole
+    /// predicate with that build's file membership, symbols and call indexes.
+    pub(crate) fn listener_project_reach(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::ListenerProjectReach);
+        *self.listener_project_reach.get_or_init(|| {
+            crate::base::reads::suppress(|| crate::listener_reach::project_reaches(self))
+        })
+    }
+
     /// The veto answers, owner, read, flush and listener proofs
     /// ([`Self::synchronous_event_dispatch_present`],
     /// [`Self::synchronous_event_read_dispatch_present`],

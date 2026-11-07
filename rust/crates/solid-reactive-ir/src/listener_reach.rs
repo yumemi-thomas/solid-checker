@@ -104,60 +104,88 @@ fn push(file: &FileFacts, site: Span, defects: &mut Vec<StaticDefect>) {
     });
 }
 
+/// The existing registration predicate, over the whole analyzed project.
+/// Its boolean is a recorded section: no target or event relation is inferred.
+pub(crate) fn project_reaches(lookup: &SemanticLookup<'_>) -> bool {
+    lookup.files().iter().any(|file| {
+        file.ast
+            .calls
+            .iter()
+            .any(|call| registers(file, call.callee) && registration_reaches(file, call, lookup))
+            || file
+                .ast
+                .members
+                .iter()
+                .map(|member| member.span)
+                .chain(
+                    file.ast
+                        .identifiers
+                        .iter()
+                        .map(|identifier| identifier.span),
+                )
+                .any(|span| method_read(file, span))
+    })
+}
+
+fn method_read(file: &FileFacts, span: Span) -> bool {
+    registers(file, span)
+        && file.ast.calls_with_peeled_callee(span).next().is_none()
+        && !file
+            .ast
+            .members
+            .iter()
+            .any(|member| member.property == span)
+}
+
+fn registration_reaches(file: &FileFacts, call: &CallFact, lookup: &SemanticLookup<'_>) -> bool {
+    call.arguments
+        .iter()
+        .take(2)
+        .any(|argument| argument.spread)
+        || call
+            .arguments
+            .get(1)
+            .is_some_and(|listener| reaches_project_code(file, listener.span, lookup))
+}
+
 /// ADR 0645's obligations of one file.
 pub(crate) fn check_file(
     file: &FileFacts,
     lookup: &SemanticLookup<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
-    let ast = &file.ast;
-    let mut sites = ast
-        .calls
-        .iter()
-        .filter(|call| registers(file, call.callee))
-        .peekable();
-    let read_of_the_method =
-        |span: Span| registers(file, span) && ast.calls_with_peeled_callee(span).next().is_none();
-    let reads = ast
-        .members
-        .iter()
-        .map(|member| member.span)
-        .chain(ast.identifiers.iter().map(|identifier| identifier.span))
-        .filter(|span| read_of_the_method(*span))
-        .filter(|span| !ast.members.iter().any(|member| member.property == *span))
-        .collect::<Vec<_>>();
-    if (sites.peek().is_none() && reads.is_empty())
-        || !lookup.synchronous_listener_dispatch_present()
-    {
+    if !lookup.synchronous_listener_dispatch_present() {
         return;
     }
-    let mut reached = !reads.is_empty();
-    for call in sites {
-        let reaches = call
-            .arguments
-            .iter()
-            .take(2)
-            .any(|argument| argument.spread)
-            || call
-                .arguments
-                .get(1)
-                .is_some_and(|listener| reaches_project_code(file, listener.span, lookup));
-        if reaches {
-            reached = true;
+    for call in &file.ast.calls {
+        if registers(file, call.callee) && registration_reaches(file, call, lookup) {
             push(file, call.span, defects);
         }
     }
-    for read in reads {
-        push(file, read, defects);
+    for span in file
+        .ast
+        .members
+        .iter()
+        .map(|member| member.span)
+        .chain(
+            file.ast
+                .identifiers
+                .iter()
+                .map(|identifier| identifier.span),
+        )
+        .filter(|span| method_read(file, *span))
+    {
+        push(file, span, defects);
     }
-    // The stack a read runs on is the dispatch's: the same obligation stands at
-    // the call that delivers, in this file, where Chrome's frame is. A
-    // registration above says nothing about that position (ADR 0815).
-    if reached {
-        for site in lookup.event_dispatch_sites() {
-            if site.withholds_listener_proofs() && site.path == file.path.as_str() {
-                push(file, site.span, defects);
-            }
+    // The dispatch's own position needs an obligation even when its listener
+    // was registered in another analyzed file. The existential proves no
+    // target/event relationship; it can only add U, never V or a clean.
+    for site in lookup.event_dispatch_sites() {
+        if site.withholds_listener_proofs()
+            && site.path == file.path.as_str()
+            && lookup.listener_project_reach()
+        {
+            push(file, site.span, defects);
         }
     }
 }
