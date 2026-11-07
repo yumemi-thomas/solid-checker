@@ -49,7 +49,7 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
-      "start": 812,
+      "start": 819,
       "end": 820,
       "fixes": 0
     },
@@ -170,7 +170,7 @@
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
-      "start": 2179,
+      "start": 2186,
       "end": 2187,
       "fixes": 0
     },
@@ -203,7 +203,7 @@
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
-      "start": 2481,
+      "start": 2488,
       "end": 2489,
       "fixes": 0
     },

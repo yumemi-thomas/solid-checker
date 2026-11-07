@@ -1211,16 +1211,19 @@ impl<'f, 'a> Reach<'f, 'a> {
                 if !dominated && !may_follow {
                     continue;
                 }
-                let tracking = self.tracking(member, symbol);
-                if tracking == Tracking::Tracked {
-                    continue;
-                }
-                let exact = dominated
-                    && accessors.len() == references.len()
+                // ADR 0897 (review D31): silent only when every operand is a
+                // reference to the one tracked accessor and the callee total;
+                // a tracked first operand beside another is an obligation.
+                let same = accessors.len() == references.len()
                     && references.len()
                         == file.ast.composite_callee_operands(candidate.callee).len()
                     && accessors.iter().all(|other| *other == symbol)
                     && file.ast.composite_callee_total(candidate.callee);
+                let tracking = self.tracking(member, symbol);
+                if same && tracking == Tracking::Tracked {
+                    continue;
+                }
+                let exact = dominated && same;
                 let callee = location(file.path.shared(), candidate.callee);
                 if !walk.reported.insert((
                     callee.path.to_string(),
@@ -1240,7 +1243,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .then_some(AfterAwaitObligation::CalleeInexact)
                             .or_else(|| tracking_obligation(tracking)),
                     },
-                    location: callee,
+                    // ADR 0897: one accessor read is at its reference; V8's
+                    // frame for the call names the callee's last token.
+                    location: if same {
+                        location(file.path.shared(), references[references.len() - 1])
+                    } else {
+                        callee
+                    },
                     analysis_context: member.context.clone(),
                     fixes: vec![],
                     uncertain: !exact || tracking == Tracking::Possible,
@@ -2559,7 +2568,14 @@ impl<'f, 'a> Reach<'f, 'a> {
             u64::from(call.callee.start),
             u64::from(call.callee.end),
         );
-        let symbol = call_accessor_symbol(ctx, file, call);
+        // ADR 0897: the entity at a composite callee's span is its first
+        // token's (`(n.length > 5 ? n : plain)` answers `n`), not the value
+        // called: a composite is read through its operands below.
+        let symbol = if file.ast.composite_callee_operands(call.callee).is_empty() {
+            call_accessor_symbol(ctx, file, call)
+        } else {
+            None
+        };
         // ADR 0516: as on the dominance path (ADR 0509), a callee that is a
         // value a caller supplied (a prop, a context or hook member) may be an
         // accessor: after an implicit suspension its read is an obligation too.
@@ -2588,6 +2604,63 @@ impl<'f, 'a> Reach<'f, 'a> {
                 draft.push_defect(obligation);
             }
         };
+        // ADR 0897: a comma, conditional, logical or assignment callee
+        // (`(slot = r)()`) names no symbol. On this placed stack it reads the
+        // accessor its operands name, as the member's continuation does
+        // (ADR 0517's arm): exact when total and every operand is a reference
+        // to one accessor, which then answers as the symbol path does
+        // (`read_obligation` unchanged; the region's placement marks the row as
+        // it marks that path's). Any other mix with an accessor operand is an
+        // obligation at the read (review D31: never a tracked first operand's
+        // silence).
+        if symbol.is_none() {
+            let references = file.ast.composite_callee_references(call.callee);
+            let accessors = references
+                .iter()
+                .filter_map(|operand| ctx.entities.at(file.path.as_str(), *operand))
+                .filter(|symbol| ctx.accessors.contains_key(*symbol))
+                .collect::<Vec<_>>();
+            if let Some(&accessor) = accessors.first() {
+                let same = accessors.len() == references.len()
+                    && references.len() == file.ast.composite_callee_operands(call.callee).len()
+                    && accessors.iter().all(|other| *other == accessor)
+                    && file.ast.composite_callee_total(call.callee);
+                let tracking = self.tracking(walk.member, accessor);
+                if same && tracking == Tracking::Tracked {
+                    return;
+                }
+                if walk.reported.insert(key.clone()) {
+                    let obligation = if same {
+                        read_obligation(ctx, Some(accessor), tracking)
+                    } else {
+                        Some(AfterAwaitObligation::CalleeInexact)
+                    };
+                    let name = ctx
+                        .accessors
+                        .get(accessor)
+                        .map_or_else(|| accessor.to_string(), |(name, _)| name.to_string());
+                    let uncertain = obligation.is_some();
+                    draft.push_defect(StaticDefect {
+                        kind: StaticDefectKind::ReactiveReadAfterAwait {
+                            accessor: name,
+                            obligation,
+                        },
+                        location: location(
+                            file.path.shared(),
+                            if same {
+                                references[references.len() - 1]
+                            } else {
+                                call.callee
+                            },
+                        ),
+                        analysis_context: walk.member.context.clone(),
+                        fixes: vec![],
+                        uncertain,
+                    });
+                }
+                return;
+            }
+        }
         let Some(symbol) = symbol else {
             handed(walk, draft);
             if inexact_callee(ctx, file, call) && walk.reported.insert(key) {

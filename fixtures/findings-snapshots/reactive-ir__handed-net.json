@@ -244,14 +244,25 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/handed-net/c5.tsx",
       "start": 227,
       "end": 238,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c5.tsx",
+      "start": 227,
+      "end": 231,
       "fixes": 0
     },
     {
