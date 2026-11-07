@@ -679,6 +679,10 @@ pub(crate) enum Hazard {
     /// empty for a global): the call the types name may run the project's
     /// function. A collision only withholds another proof.
     StandardPatch(u32),
+    /// A file that is no module declares this `__` name (ADR 0803 step 2, review
+    /// D24; the key is a hash of the name): a classic script's top level is the
+    /// global object. Any depth counts; a collision only withholds a proof.
+    ClassicScriptDunder(u32),
     /// Some [`Self::StandardPatch`] in the file (value 0), so a call that
     /// meets none hashes nothing.
     AnyStandardPatch,
@@ -721,6 +725,11 @@ fn member_hash(container: &str, member: &str) -> u32 {
 
 fn standard_override(container: &str, member: &str) -> Hazard {
     Hazard::StandardOverride(member_hash(container, member))
+}
+
+/// [`Hazard::ClassicScriptDunder`] of `name`.
+pub(crate) fn classic_script_dunder(name: &str) -> Hazard {
+    Hazard::ClassicScriptDunder(member_hash("", name))
 }
 
 fn standard_patch(owner: &str, member: &str) -> Hazard {
@@ -1174,6 +1183,27 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     }
     if !file.ast.exports.is_empty() {
         entries.push((Hazard::Export, 0));
+    }
+    if !crate::execution_role::file_is_module(file) {
+        let declared = file
+            .ast
+            .functions
+            .iter()
+            .filter_map(|function| function.name.as_ref())
+            .chain(
+                file.ast
+                    .bindings
+                    .iter()
+                    .flat_map(|binding| binding.names.iter()),
+            );
+        for name in declared {
+            if let Some(text) = file
+                .source_text(name.span)
+                .filter(|text| text.starts_with("__"))
+            {
+                entries.push((classic_script_dunder(text), 0));
+            }
+        }
     }
     let (obtained, handed_calls) = crate::interproc::accessor_provenance::intrinsic_census(file);
     if obtained {

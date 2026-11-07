@@ -5672,5 +5672,23 @@
   "found": "R1f, all 128 uncertifiable on every iter-* context of a build with no such census",
   "fixed": "ADR 0803 step 2 (timer_runs_promise_settler), at the source: the idiom is proved, the judge and the entry are unchanged",
   "outside": "a harness property, no program shape. Control on rf8: cleanup-mount, handler-mount, arm-helper, 380 programs: 213 clean, 167 uncertifiable, 0 false positive"
+ },
+ {
+  "finding": "review D24: `(window as any).__k?.()` read as absent while a computed write on `Object.prototype` or a window prototype installed it; review of 37ce9020a: a subclass of `Event` keeps the event, whose `target` is the window after dispatch: SC2001 V where Chrome is quiet",
+  "found": "reviewer, on T1b and on 37ce9020a",
+  "fixed": "ADR 0803 step 2 (absent_window_member asks Object, Window and EventTarget owners; dispatched_event_stays_inline asks the global Event or CustomEvent by declaration); now uncertifiable",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-object-proto-member-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-event-subclass-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-object-proto-member, iter-event-subclass: an adf2e96c9 predecessor build rf9 (T1b before D24) 78 false-positive each (Chrome-confirmed), rf10 0. Fixtures handed-object-proto-computed, handed-window-proto-computed, handed-eventtarget-proto-computed, handed-event-subclass, handed-event-shadowed"
+ },
+ {
+  "finding": "review D24: other ways a `__` member exists with no member write: a definer through a parameter, a classic script's top-level declaration; and `valueOf`, `__defineGetter__`, any-cast `requestAnimationFrame` outside the `__` shape",
+  "found": "reviewer, on T1b",
+  "fixed": "ADR 0803 step 2 (absent_window_member, ClassicScriptDunder); now uncertifiable",
+  "outside": "iter-window-any-written is uncertifiable on rf9 already (128), since the member write withdraws; a classic script cannot be generated (each program is an ES module), and the definer and valueOf shapes are fixture cases: handed-definer-parameter, handed-classic-script-member, handed-window-valueof, handed-window-define-getter, handed-window-any-raf, handed-window-any-timer, handed-window-any-written. make ir-edit-fuzz family census adds a definer and a classic declaration to handed-window-absent-member: 0 mismatches"
  }
 ]

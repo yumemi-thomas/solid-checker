@@ -1216,27 +1216,7 @@ fn absent_window_member(
             .iter()
             .all(|owner| standard_member_intact(lookup, &format!("{owner}.{key}")))
         && !lookup.property_may_be_defined_reflectively_as(key)
-        && !classic_script_declares(lookup, key)
-}
-
-/// Whether an analyzed file that is no module declares `name`, which a classic
-/// script's top level makes a member of the global object. Any depth counts:
-/// this only withholds a proof.
-fn classic_script_declares(lookup: &SemanticLookup<'_>, name: &str) -> bool {
-    lookup.slot_entries(lookup.base_hazards()).any(|(file, _)| {
-        !crate::execution_role::file_is_module(file)
-            && (file.ast.functions.iter().any(|function| {
-                function
-                    .name
-                    .as_ref()
-                    .is_some_and(|fname| file.source_text(fname.span) == Some(name))
-            }) || file.ast.bindings.iter().any(|binding| {
-                binding
-                    .names
-                    .iter()
-                    .any(|bound| file.source_text(bound.span) == Some(name))
-            }))
-    })
+        && !lookup.hazard_present(crate::base::contributions::classic_script_dunder(key))
 }
 
 /// Review D21: the event `dispatchEvent` is given keeps `target`, the window,
