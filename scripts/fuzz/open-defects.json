@@ -967,17 +967,6 @@
     "STRICT_READ_UNTRACKED"
    ],
    "certified": false
-  },
-  {
-   "id": "flip/sync-memo-jsx-read",
-   "item": "R-fp: async-outside-loading-boundary at a read of createMemo(async, { sync: true }) in JSX; Chrome reports SYNC_NODE_RECEIVED_ASYNC only (found by Part 16's stacked-pair twins; owner R2h)",
-   "outcome": "false-positive",
-   "codes": [
-    "SYNC_NODE_RECEIVED_ASYNC"
-   ],
-   "rules": [
-    "async-outside-loading-boundary"
-   ]
   }
  ],
  "notGenerated": [
@@ -1012,12 +1001,11 @@
   "mx-census/mx-context-not-found-aw-helper-late-x-direct-none": "R3d",
   "mx-census/mx-resolve-in-reactive-scope-flush-read-stored-x-direct-none": "R3d",
   "mx-census/mx-until-in-reactive-scope-flush-read-stored-x-direct-none": "R3d",
-  "mx-census/mx-dynamic-static-promise-flush-read-stored-x-direct-none": "R3d",
-  "mx-recall/mx-primitive-in-forbidden-scope-tracked-root-alias-depth-17": "R5"
+  "mx-census/mx-dynamic-static-promise-flush-read-stored-x-direct-none": "R3d"
  },
  "ratchet": {
-  "certified": 5,
-  "certifiedF2": 56,
+  "certified": 4,
+  "certifiedF2": 0,
   "falsePositive": 4,
   "stackedClaim": 165,
   "stackedPairs": {
@@ -1040,14 +1028,14 @@
    "R-unjudged-unplaced": 14,
    "R-stacked": 164,
    "R-F1-open": 8,
-   "R-neighbour-U": 103,
-   "R-other": 43,
+   "R-neighbour-U": 107,
+   "R-other": 38,
    "R-misplaced": 43,
    "R-carrier": 191,
    "census": 96,
    "g2d named hand-off": 34,
    "R-alias-call": 236,
-   "R-F2-open": 178,
+   "R-alias-owner": 81,
    "R-stop-named-U": 493,
    "R-call-arg": 81,
    "R-placeless": 46,
