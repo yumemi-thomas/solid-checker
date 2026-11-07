@@ -3592,13 +3592,11 @@ export function sweepSet(directory, checker, typefacts, boundary = null) {
  * expected cause is one the case stands for. A violation case: every expected
  * violation is produced there. A clean case: its files hold no finding at all.
  */
-export function caseProblems(cases, classified, report) {
-  const problems = [];
-  const findingsIn = (entry) =>
-    (report.results.find((row) => row.app === entry.project)?.findings ?? []).filter((finding) =>
-      entry.files.includes(relative(join(report.results.find((row) => row.app === entry.project).root), finding.primaryLocation.path)),
-    );
+export function caseProblems(cases, classified, report, openWork = "") {
+  const problems = [...heldProblems(cases, report, openWork)];
+  const findingsIn = (entry) => caseFindings(entry, report);
   for (const entry of cases) {
+    if (entry.held) continue;
     if (entry.kind === "clean") {
       const found = findingsIn(entry);
       if (found.length) problems.push(`${entry.id}: a clean case has ${found.map((finding) => `${finding.kind} ${finding.id}`).join(", ")}`);
@@ -3641,6 +3639,49 @@ export function caseProblems(cases, classified, report) {
         );
       }
     }
+  }
+  return problems;
+}
+
+/** The findings of `report` in `entry`'s files. */
+function caseFindings(entry, report) {
+  const row = report.results.find((one) => one.app === entry.project);
+  return (row?.findings ?? []).filter((finding) => entry.files.includes(relative(join(row.root), finding.primaryLocation.path)));
+}
+
+/**
+ * How many cases are `held`, exactly (a ratchet). A held case is temporary: a broader
+ * blocker covers its files until a named later proof lands (ADR 0803 step 2:
+ * @solid-primitives/event-listener's optional-chain `.bind`). A new held case
+ * needs a reviewed raise here; the proof that restores them lowers it.
+ */
+export const HELD_CAP = 58;
+
+/**
+ * The problems of the held cases. A held case keeps its recorded `kind`,
+ * `causes` and `expect` (the proof restores them by deleting `held`); until
+ * then its files must produce exactly `held.expect` (kind, rule,
+ * analysis-context kind), stay uncertifiable (no violation, not clean), and
+ * the block must name its ADR and, as `restoredBy`, an item of
+ * docs/open-work.md (`openWork`, that file's text).
+ */
+export function heldProblems(cases, report, openWork, cap = HELD_CAP) {
+  const problems = [];
+  const held = cases.filter((entry) => entry.held);
+  if (held.length !== cap) problems.push(`${held.length} held cases, the cap is ${cap} (HELD_CAP): a new held case needs a reviewed raise, a restored one lowers the cap in the same commit`);
+  // The bold item titles of docs/open-work.md (`**Title:**`).
+  const titles = new Set([...openWork.matchAll(/^\*\*(.+?):\*\*/gm)].map((match) => match[1]));
+  for (const entry of held) {
+    const { adr, restoredBy, why, expect = [] } = entry.held;
+    if (!/^\d{4}$/.test(adr ?? "")) problems.push(`${entry.id}: a held case names no ADR`);
+    if (!restoredBy) problems.push(`${entry.id}: a held case names no restoredBy`);
+    else if (!titles.has(restoredBy)) problems.push(`${entry.id}: restoredBy "${restoredBy}" is not the exact title of an item of docs/open-work.md`);
+    const found = caseFindings(entry, report);
+    const key = (kind, rule, context) => `${kind} ${rule} [${context}]`;
+    const got = found.map((finding) => key(finding.kind, finding.id, contextKind(finding.analysisContext))).sort();
+    const want = expect.map((row) => key(row.kind, row.rule, row.context)).sort();
+    if (got.join("|") !== want.join("|")) problems.push(`${entry.id}: held (${why}) expects ${want.join(", ") || "nothing"}; found ${got.join(", ") || "nothing"}`);
+    if (!found.length || found.some((finding) => finding.kind !== "uncertifiable")) problems.push(`${entry.id}: a held case must stay uncertifiable`);
   }
   return problems;
 }
@@ -3750,7 +3791,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const classified = classifyReport(report, closed, !options.repro && options["noveto-report"] ? read(options["noveto-report"]) : null);
   const { covered, perCase, sitesPerCase } = printGroups(classified, table.cases, Number(options.samples), options.cause);
   const problems = [];
-  if (options.repro) problems.push(...caseProblems(table.cases, classified, report));
+  if (options.repro) problems.push(...caseProblems(table.cases, classified, report, readFileSync(join(repo, "docs/open-work.md"), "utf8")));
   else if (table.cases.length) {
     const allSites = new Set(classified.map(siteKey)).size;
     const uncertifiable = table.cases.filter((one) => one.kind === "uncertifiable");

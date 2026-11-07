@@ -98,6 +98,14 @@ fn plan_file(
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
     collect_argument_spans(dialect, file, &mut spans);
     collect_member_spans(file, &mut spans);
+    // ADR 0803 (review R12): whether a value the DOM may hand out as a window
+    // is one, by its type.
+    for span in file.window_valued_candidates() {
+        add_symbol_span(&mut spans.symbol_spans, span, false);
+        spans.library_type_spans.insert(span);
+        // Review D4: `any` or `unknown` there may be a window.
+        spans.runtime_value_domain_spans.insert(span);
+    }
     collect_chain_link_spans(dialect, file, &mut spans);
     collect_delete_spans(dialect, file, &mut spans);
     emit_span_demands(

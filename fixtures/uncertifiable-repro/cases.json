@@ -23,7 +23,54 @@
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-factory-member",
@@ -103,7 +150,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "condition"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "param-use-object",
@@ -2265,7 +2349,29 @@
      }
     ]
    },
-   "verifiedWeight": 63
+   "verifiedWeight": 63,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "callback-in-options-object",
@@ -2843,7 +2949,49 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "param-default",
@@ -4787,7 +4935,24 @@
      }
     ]
    },
-   "verifiedWeight": 58
+   "verifiedWeight": 58,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-object-for-package",
@@ -4883,7 +5048,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-memo-options",
@@ -4943,7 +5125,24 @@
      }
     ]
    },
-   "verifiedWeight": 3
+   "verifiedWeight": 3,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-store-member",
@@ -5763,7 +5962,64 @@
      }
     ]
    },
-   "verifiedWeight": 65
+   "verifiedWeight": 65,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-root-in-helper"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-merged-nested-helper",
@@ -5944,7 +6200,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "param-member-forwarded",
@@ -6580,7 +6863,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-context-value",
@@ -6658,7 +6958,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-returned-array",
@@ -6727,7 +7044,24 @@
      }
     ]
    },
-   "verifiedWeight": 4
+   "verifiedWeight": 4,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-pushed-object",
@@ -6778,7 +7112,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-view-transition",
@@ -6874,7 +7225,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-returned-closure",
@@ -6925,7 +7293,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-exported-object",
@@ -6976,7 +7361,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-assigned-handler",
@@ -7054,7 +7456,24 @@
      }
     ]
    },
-   "verifiedWeight": 6
+   "verifiedWeight": 6,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-returned-tuple",
@@ -7132,7 +7551,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "refresh-in-factory-member",
@@ -7216,7 +7652,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-promise-executor",
@@ -7258,7 +7711,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-class-options",
@@ -7309,7 +7779,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-parameter-default",
@@ -9000,7 +9487,44 @@
      }
     ]
    },
-   "verifiedWeight": 40
+   "verifiedWeight": 40,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-package-component-callback",
@@ -9500,7 +10024,24 @@
      }
     ]
    },
-   "verifiedWeight": 1
+   "verifiedWeight": 1,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-bound",
@@ -9560,7 +10101,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-called-after-await",
@@ -9602,7 +10170,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-called-from-two-arrows",
@@ -9653,7 +10238,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-forwarded-to-unresolved",
@@ -9763,7 +10375,59 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-handed-to-package-function",
@@ -9814,7 +10478,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-conditional-spread",
@@ -9874,7 +10555,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-handler-registry",
@@ -9916,7 +10614,24 @@
      }
     ]
    },
-   "verifiedWeight": 1
+   "verifiedWeight": 1,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-listener-registration",
@@ -9967,7 +10682,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-mixed-callers",
@@ -10036,7 +10768,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-presence-in-show",
@@ -10090,7 +10839,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-to-factory-component",
@@ -10141,7 +10927,29 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-typeof-guard-spread",
@@ -10189,7 +10997,34 @@
      }
     ]
    },
-   "verifiedWeight": 1
+   "verifiedWeight": 1,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-untracked-alias",
@@ -10274,7 +11109,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-via-tag-member",
@@ -10343,7 +11205,29 @@
      }
     ]
    },
-   "verifiedWeight": 4
+   "verifiedWeight": 4,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-view-escapes",
@@ -10421,7 +11305,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-component-body",
@@ -11048,7 +11954,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-reexported",
@@ -11128,7 +12056,24 @@
      }
     ]
    },
-   "verifiedWeight": 32
+   "verifiedWeight": 32,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-merged",
@@ -11224,7 +12169,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-local-object-this-text",
@@ -11320,7 +12282,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-object-handed-to-package",
@@ -11416,7 +12395,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-options-sibling-called",
@@ -11495,7 +12496,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-spread-onto-intrinsic",
@@ -11597,7 +12620,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-sibling-called",
@@ -11666,7 +12716,19 @@
      }
     ]
    },
-   "verifiedWeight": 4
+   "verifiedWeight": 4,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-omit-view",
@@ -11768,7 +12830,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "options-default-parameter",
@@ -12296,7 +13380,44 @@
      }
     ]
    },
-   "verifiedWeight": 19
+   "verifiedWeight": 19,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "parameter-use-unmodeled"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-sibling-mentions-this",
@@ -12399,7 +13520,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-accessor-and-memo",
@@ -12478,7 +13636,49 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "veto-handler-helper",
@@ -13732,7 +14932,54 @@
      }
     ]
    },
-   "verifiedWeight": 26
+   "verifiedWeight": 26,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "handler-spread-any-call-result",
@@ -14108,7 +15355,49 @@
     "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-copied-timer",
@@ -14124,7 +15413,29 @@
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
    "weight": 6,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-derived-signal-latest",
@@ -14140,7 +15451,44 @@
     "commit": "5e0d76c55e4b23909bcdcc8b6cbcf60b6cd7e06f"
    },
    "weight": 3,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5006",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-effect-interval-write",
@@ -14156,7 +15504,49 @@
     "commit": "b79162ad88a8069943bf2cd4cea9619b354c1106"
    },
    "weight": 2,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "async-provenance-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-interval-hook",
@@ -14172,7 +15562,29 @@
     "commit": "60823453a7e5e3aaa52179746d26abb46c7ff373"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "clean-ref-let-settled",
@@ -14188,7 +15600,24 @@
     "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
    },
    "weight": 3,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-run-unowned-store-write",
@@ -14204,7 +15633,34 @@
     "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Untyped `.bind` in dependency JS (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the .bind proof: ADR 0803 step 2: @solid-primitives/event-listener hands window to an optional-chain `.bind` that resolves with no declaration, so every tuple slot of this project is withdrawn (tuple-iteration-written); the later `.bind` proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-module-root-memo",

@@ -5572,5 +5572,16 @@
   "found": "independent review of a9fcbe8f1 (findings-a9fc.md item 7)",
   "fixed": "ADR 0803 (review a9fc, hold_withdrawn_static_rows); now uncertifiable",
   "outside": "no runtime code claims SC1005, so no grid judges it; fixture iteration-written-slots/uncalled-accessor (SC1005 V on 7788b7295 and 0228b92e3, uncertifiable here) and uncalled-accessor-intact (proved V)"
+ },
+ {
+  "finding": "review a9fc #1 step 2: the global object handed to code the checker does not see (a function stored on the global object, called with `window`) that patches iteration through its parameter left a primitive's own setter exact: SC2001 V where Chrome is quiet",
+  "found": "R1e, flip-read.mjs iter-global-unseen",
+  "fixed": "ADR 0803 step 2 (handed_to_unseen_code); now uncertifiable, not proved",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-global-unseen-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE iter-global-unseen, layers none (190 programs): 1c831d131 78 false-positive (Chrome-confirmed), this build 0. Fixtures iteration-written-slots handed-seen-listener (V), handed-unseen (U), handed-proto-writer (U)"
  }
 ]

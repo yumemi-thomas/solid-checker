@@ -23,6 +23,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-in-effect-apply.tsx",
+      "start": 451,
+      "end": 458,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -30,6 +41,28 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-in-effect-apply.tsx",
       "start": 480,
       "end": 489,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-in-effect-apply.tsx",
+      "start": 544,
+      "end": 548,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-in-effect-apply.tsx",
+      "start": 647,
+      "end": 652,
       "fixes": 0
     },
     {
@@ -51,6 +84,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/compiler-refused-reads.tsx",
       "start": 374,
       "end": 382,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/compiler-refused-reads.tsx",
+      "start": 374,
+      "end": 380,
       "fixes": 0
     },
     {
@@ -109,6 +153,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/compiler-refused-reads.tsx",
+      "start": 456,
+      "end": 462,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -117,6 +172,39 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/dynamic-import-holder.ts",
       "start": 520,
       "end": 593,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/dynamic-import-holder.ts",
+      "start": 532,
+      "end": 544,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/dynamic-import-holder.ts",
+      "start": 569,
+      "end": 581,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/dynamic-import-holder.ts",
+      "start": 605,
+      "end": 614,
       "fixes": 0
     },
     {
@@ -131,14 +219,47 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/effect-argument-shape.tsx",
+      "start": 467,
+      "end": 474,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
+      "start": 360,
+      "end": 364,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
+      "start": 382,
+      "end": 386,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
       "start": 412,
-      "end": 448,
+      "end": 419,
       "fixes": 0
     },
     {
@@ -153,6 +274,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
+      "start": 518,
+      "end": 522,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -163,25 +295,36 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
-      "start": 578,
-      "end": 596,
+      "start": 514,
+      "end": 522,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
+      "start": 578,
+      "end": 589,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
       "start": 736,
-      "end": 763,
+      "end": 745,
       "fixes": 0
     },
     {
@@ -193,6 +336,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
       "start": 746,
       "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
+      "start": 746,
+      "end": 752,
       "fixes": 0
     },
     {
@@ -218,6 +372,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-factory-member.tsx",
+      "start": 846,
+      "end": 852,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -229,14 +394,25 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
+      "start": 585,
+      "end": 590,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
       "start": 613,
-      "end": 634,
+      "end": 621,
       "fixes": 0
     },
     {
@@ -248,6 +424,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
       "start": 622,
       "end": 629,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-member.tsx",
+      "start": 622,
+      "end": 627,
       "fixes": 0
     },
     {
@@ -427,14 +614,14 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
       "start": 733,
-      "end": 749,
+      "end": 740,
       "fixes": 0
     },
     {
@@ -449,6 +636,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
+      "start": 742,
+      "end": 746,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
+      "start": 752,
+      "end": 756,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -493,36 +702,69 @@
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 512,
-      "end": 528,
+      "end": 524,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 534,
-      "end": 555,
+      "end": 549,
       "fixes": 0
     },
     {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 626,
-      "end": 646,
+      "end": 635,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 717,
+      "end": 723,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 783,
+      "end": 795,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 905,
+      "end": 914,
       "fixes": 0
     },
     {
@@ -551,11 +793,44 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-call-expression.ts",
+      "start": 492,
+      "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
       "start": 429,
       "end": 435,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
+      "start": 465,
+      "end": 473,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
+      "start": 511,
+      "end": 516,
       "fixes": 0
     },
     {
@@ -584,11 +859,44 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
+      "start": 420,
+      "end": 425,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
       "start": 502,
       "end": 514,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
+      "start": 544,
+      "end": 552,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
+      "start": 590,
+      "end": 595,
       "fixes": 0
     },
     {
@@ -686,6 +994,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
       "start": 449,
       "end": 461,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 479,
+      "end": 481,
       "fixes": 0
     },
     {

@@ -83,6 +83,30 @@ const ITER_PATCHES = {
   "iter-ctor-key": `const itAP: any = [].constructor.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
   "iter-global-alias": `const itG: any = globalThis; const itAP = itG.Array.prototype; const itKs: PropertyKey[] = [itG.Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
   "iter-gpo-destructure": `const { getPrototypeOf: itGp } = Object; const itAP: any = itGp([]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // Review a9fc #1 step 2: the global object handed to a callee with no declaration (a function stored on the global object), which
+  // patches iteration through its parameter.
+  "iter-global-unseen": `(globalThis as any).itSetU = (g: any, k: PropertyKey) => { const itO = g.Array.prototype[Symbol.iterator]; g.Array.prototype[k] = ${ITER_PAIR}; }; (globalThis as any).itSetU(window, Symbol.iterator);`,
+  // Reviews R2 and R7: a standard function that calls what it is given (`map(Function)`), `call` running a project function that
+  // writes through its parameter, the global object kept in an object or returned, an intrinsic kept in a `Map`.
+  "iter-map-function": `[${JSON.stringify(ITER_CODE)}].map(Function as unknown as (code: string) => () => void).forEach((f) => f());`,
+  "iter-call-patch": `const itPatch = (g: any) => { const itO = g.Array.prototype[Symbol.iterator]; const itKs: PropertyKey[] = [Symbol.iterator]; g.Array.prototype[itKs[0]] = ${ITER_PAIR}; }; itPatch.call(null, globalThis);`,
+  "iter-global-stored": `const itHolder = { g: globalThis as any }; const itAP = itHolder.g.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-global-returned": `const itRoot = (): any => globalThis; const itAP = itRoot().Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  // Review D1: the dialect's runtime hands back what it keeps.
+  "iter-signal-held": `const [itProto] = createSignal<any>(Array.prototype); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itProto()[itKs[0]]; itProto()[itKs[0]] = ${ITER_PAIR};`,
+  "iter-map-stored": `const itHeld = new Map<number, any>([[1, Array.prototype]]); const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itHeld.get(1)[itKs[0]]; itHeld.get(1)[itKs[0]] = ${ITER_PAIR};`,
+  // Review D3: a listener or an event handler runs with the window as `this` and an event whose `currentTarget` is the window;
+  // dispatched at once, so the patch lands before the body's pattern.
+  "iter-listener-this": `window.addEventListener("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); window.dispatchEvent(new Event("itx"));`,
+  "iter-listener-event": `window.addEventListener("itx", (e: any) => { e.currentTarget.Function(${JSON.stringify(ITER_CODE)})(); }); window.dispatchEvent(new Event("itx"));`,
+  "iter-bare-listener": `addEventListener("itx", function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }); dispatchEvent(new Event("itx"));`,
+  "iter-on-handler": `window.onresize = function (this: any) { this.Function(${JSON.stringify(ITER_CODE)})(); }; window.dispatchEvent(new Event("resize"));`,
+  // Review R12: a window by type, or by one of the window's names for itself.
+  "iter-default-view": `(document.defaultView as any).Function(${JSON.stringify(ITER_CODE)})();`,
+  "iter-window-top": `(window.top as any).Function(${JSON.stringify(ITER_CODE)})();`,
+  // Review D4: a window name read through `any`, and an object listener (no function literal to read).
+  "iter-any-default-view": `const itAP = (document as any).defaultView.Array.prototype; const itKs: PropertyKey[] = [Symbol.iterator]; const itO = itAP[itKs[0]]; itAP[itKs[0]] = ${ITER_PAIR};`,
+  "iter-object-listener": `window.addEventListener("itx", { handleEvent(e: any) { e.currentTarget.Function(${JSON.stringify(ITER_CODE)})(); } }); window.dispatchEvent(new Event("itx"));`,
 };
 
 export const FLIP_READ_CONTEXTS = {
@@ -108,7 +132,9 @@ export const FLIP_READ_LEGAL = {
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
-  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach"],
+  // Scout A.6: `Function.prototype.call` patched to defer, then `h.call(null)`: the read leaves the body (Chrome quiet). The proof read
+  // `CallableFunction.call`, whose patch keys a `Function.prototype.call` write never raised.
+  STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", "patch-call-late"],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(ITER_PATCHES)],
@@ -496,7 +522,12 @@ export function flipReadContext(context, stmts, kit) {
     return { body: [holder, root, ...(context === "cleanup-mount-mixed" ? [expr(domExpr(mount))] : [])], view: [button(b, [expr(domExpr(`${d}()`))])] };
   }
   const iterPatch = ITER_PATCHES[context] ?? ITER_SAME[context];
-  if (iterPatch) return { top: [expr(domExpr(iterPatch))], body: stmts, view: [] };
+  if (iterPatch) return { top: [expr(domExpr(iterPatch, undefined, iterPatch.includes("createSignal") ? ["createSignal"] : undefined))], body: stmts, view: [] };
+  if (context === "patch-call-late") {
+    const h = kit.name("f");
+    const patch = "Function.prototype.call = function (this: () => void) { const run = this; queueMicrotask(() => Reflect.apply(run, undefined, [])); } as any;";
+    return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${h}.call(null)`))], view: [] };
+  }
   if (context === "cast-late-foreach") {
     const t = kit.name("t");
     const h = kit.name("f");

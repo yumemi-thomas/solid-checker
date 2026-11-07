@@ -689,9 +689,18 @@ pub(crate) enum Hazard {
     /// Some export at all (value 0).
     Export,
     /// The file obtains an array intrinsic or code from a string as a value
-    /// (ADR 0801, [`crate::interproc::accessor_provenance::array_intrinsic_obtained`];
+    /// (ADR 0801, [`crate::interproc::accessor_provenance::intrinsic_census`];
     /// value 0).
     ArrayIntrinsicObtained,
+    /// A call receives an obtained value (review a9fc #1 step 2; the value
+    /// encodes the call's ordinal, the value's kind and the argument,
+    /// [`crate::interproc::accessor_provenance::intrinsic_census`]): the
+    /// project decides whether its callee is seen code.
+    IntrinsicHandedAtCall,
+    /// A span where a value may be a window (review R12; the value indexes
+    /// [`solid_facts::FileFacts::window_valued_candidates`]): the project
+    /// asks its type.
+    WindowValuedCandidate,
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -853,10 +862,12 @@ pub(crate) fn patch_veto(qualified_name: &str) -> [Hazard; 5] {
         .rsplit_once('.')
         .unwrap_or(("", qualified_name));
     let container = owner.strip_prefix("Readonly").unwrap_or(owner);
-    let container = if container == "PromiseLike" {
-        "Promise"
-    } else {
-        container
+    // A declaration's interface is not the global it patches: `then` of
+    // `PromiseLike` is `Promise`'s, `call` of `CallableFunction` `Function`'s.
+    let container = match container {
+        "PromiseLike" => "Promise",
+        "CallableFunction" | "NewableFunction" => "Function",
+        container => container,
     };
     [
         standard_patch(container, member),
@@ -1154,8 +1165,18 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     if !file.ast.exports.is_empty() {
         entries.push((Hazard::Export, 0));
     }
-    if crate::interproc::accessor_provenance::array_intrinsic_obtained(file) {
+    let (obtained, handed_calls) = crate::interproc::accessor_provenance::intrinsic_census(file);
+    if obtained {
         entries.push((Hazard::ArrayIntrinsicObtained, 0));
+    }
+    for call in handed_calls {
+        entries.push((Hazard::IntrinsicHandedAtCall, call));
+    }
+    for index in 0..file.window_valued_candidates().len() {
+        entries.push((
+            Hazard::WindowValuedCandidate,
+            u32::try_from(index).unwrap_or(u32::MAX),
+        ));
     }
     entries
 }

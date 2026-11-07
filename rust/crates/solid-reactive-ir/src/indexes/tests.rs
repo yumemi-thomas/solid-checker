@@ -1547,3 +1547,54 @@ fn a_summary_memo_answers_as_the_plain_walk_does_in_any_order() {
         }
     });
 }
+
+/// ADR 0803 step 2, reviews R2 and R7: each program hands the global object,
+/// `Function` or an array intrinsic to code the checker does not see (here
+/// nothing resolves, so every recorded call is unseen; the fixtures
+/// `iteration-written-slots/handed-*` cover the seen side with real
+/// resolution), and so withdraws a primitive's tuple slots.
+#[test]
+fn a_value_handed_to_unseen_code_withdraws_the_tuple_slots() {
+    let withdrawn = |source: &str| {
+        with_lookup(source, &[], |lookup| {
+            (
+                lookup.tuple_slot_iteration_may_be_mutated(),
+                crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
+            )
+        })
+    };
+    assert_eq!(withdrawn("export const answer = 1;"), (false, false));
+    assert_eq!(
+        withdrawn("'x' in globalThis; Object.keys(window);"),
+        (false, false)
+    );
+    for source in [
+        "[code].map(Function).forEach((f) => f());",
+        "patch.call(null, globalThis);",
+        "setTimeout(patch, 0, globalThis);",
+        "patch(globalThis);",
+        "unseen.bind(window)();",
+        // Review D3: the window as `this`, and a listener or a timer's
+        // callback that can reach it.
+        "window.open('x');",
+        "window.addEventListener('resize', (e) => go(e));",
+        "window.addEventListener('resize', function () { go(this); });",
+        "addEventListener('resize', function () { go(arguments); });",
+        "function tick() { go(this); } setTimeout(tick, 0);",
+        "function onResize(e) { go(e); } window.addEventListener('resize', onResize);",
+    ] {
+        assert_eq!(withdrawn(source), (true, true), "{source}");
+    }
+    // What is seen (a closed method, a listener or a timer's callback that
+    // reaches nothing) needs Type Facts, which this harness has none of: the
+    // iteration-written-slots fixtures pin it.
+    // Stored or returned: handed on in the file itself.
+    for source in [
+        "Reflect.apply(patch, null, [globalThis]);",
+        "new Map([[1, Array.prototype]]);",
+        "const o = { g: globalThis };",
+        "function root() { return globalThis; }",
+    ] {
+        assert!(withdrawn(source).0, "{source}");
+    }
+}

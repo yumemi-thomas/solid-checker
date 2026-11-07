@@ -436,116 +436,190 @@ fn returned_array_census_requires_every_exact_slot_to_be_a_closed_object() {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum Census {
+    Here,
+    AtCall,
+    None,
+}
+
 #[test]
 fn only_a_value_of_an_array_intrinsic_reaches_iteration() {
-    for (source, obtained) in [
-        ("const s = Array.prototype.slice.call(x);", false),
-        ("Array.isArray(x);", false),
-        ("new Array(3); Array(3);", false),
-        ("x instanceof Array;", false),
-        ("x.constructor === Array;", false),
-        ("x.constructor.name;", false),
-        ("setTimeout(() => 1, 0);", false),
-        ("Object.getPrototypeOf(x) === Object.prototype;", false),
-        ("table[key] = value; run(table);", false),
-        ("const x: Array<number> = [];", false),
-        ("function f(x: Array<number>, g: Function): void {}", false),
-        ("const y = x as Array<number>;", false),
-        ("type T = Function | Array<string>;", false),
-        ("const p = Array.prototype;", false),
-        ("Array.prototype[Symbol.iterator] = f;", true),
-        ("f(Array.prototype);", true),
-        ("const A = Array;", false),
-        ("f(Array);", true),
-        ("(globalThis as any).Array.prototype.x = 1;", false),
-        ("window[k];", false),
-        ("[].__proto__;", false),
-        ("Object.getPrototypeOf([]);", false),
-        ("Reflect.getPrototypeOf([]);", false),
-        ("const g = Object.getPrototypeOf;", false),
-        ("[].constructor.prototype;", false),
-        ("new Function('x');", true),
-        ("Function('x');", true),
-        ("(0, eval)('x');", true),
-        ("setTimeout('x', 0);", true),
+    use Census::{AtCall, Here, None};
+    // Here: obtained and handed on in the file. AtCall: handed to a call,
+    // recorded for the project's callee check (`handed_to_unseen_code`).
+    for (source, expected) in [
+        ("const s = Array.prototype.slice.call(x);", None),
+        ("Array.isArray(x);", None),
+        ("new Array(3); Array(3);", None),
+        ("x instanceof Array;", None),
+        ("x.constructor === Array;", None),
+        ("x.constructor.name;", None),
+        ("setTimeout(() => 1, 0);", None),
+        ("Object.getPrototypeOf(x) === Object.prototype;", None),
+        ("table[key] = value; run(table);", None),
+        ("const x: Array<number> = [];", None),
+        ("function f(x: Array<number>, g: Function): void {}", None),
+        ("const y = x as Array<number>;", None),
+        ("type T = Function | Array<string>;", None),
+        ("const p = Array.prototype;", None),
+        ("Array.prototype[Symbol.iterator] = f;", Here),
+        ("f(Array.prototype);", AtCall),
+        ("const A = Array;", None),
+        ("f(Array);", AtCall),
+        ("(globalThis as any).Array.prototype.x = 1;", None),
+        ("window[k];", None),
+        ("[].__proto__;", None),
+        ("Object.getPrototypeOf([]);", None),
+        ("Reflect.getPrototypeOf([]);", None),
+        ("const g = Object.getPrototypeOf;", None),
+        ("[].constructor.prototype;", None),
+        ("new Function('x');", Here),
+        ("Function('x');", Here),
+        ("(0, eval)('x');", Here),
+        ("setTimeout('x', 0);", Here),
         // ADR 0803 (item 3): obtained is not enough; the value must reach code
         // the checker does not see (exported, passed on, stored, returned), or
         // run a string. Each above that only obtains is no hand-out.
-        ("export const p = Array.prototype;", true),
-        ("const A = Array; f(A);", true),
-        ("f(Object.getPrototypeOf);", true),
-        ("const o = { p: [].constructor.prototype };", true),
-        ("function g() { return Object.getPrototypeOf([]); }", true),
-        ("run([].__proto__);", true),
-        ("const p = Object.getPrototypeOf(x); p[k] = f;", true),
-        ("window[k](s);", true),
-        ("globalThis[k].call(null, s);", true),
-        ("class L extends Array {}", false),
-        ("x.__proto__ = y;", false),
-        ("Object.keys(Array.prototype);", false),
+        ("export const p = Array.prototype;", Here),
+        ("const A = Array; f(A);", AtCall),
+        ("f(Object.getPrototypeOf);", AtCall),
+        ("const o = { p: [].constructor.prototype };", Here),
+        ("function g() { return Object.getPrototypeOf([]); }", Here),
+        ("run([].__proto__);", AtCall),
+        ("const p = Object.getPrototypeOf(x); p[k] = f;", Here),
+        ("window[k](s);", Here),
+        ("globalThis[k].call(null, s);", Here),
+        ("class L extends Array {}", None),
+        ("x.__proto__ = y;", None),
+        ("Object.keys(Array.prototype);", None),
         // Review a9fc #1: the global object through an alias, a pattern, or a
         // descriptor; what a global object read for a test does not hand on.
-        ("const g: any = globalThis; f(g.Array.prototype);", true),
-        ("const g: any = globalThis; g.Array.prototype[k] = f;", true),
-        ("globalThis.globalThis.Array.prototype[k] = f;", true),
-        ("const { getPrototypeOf } = Object;", true),
-        ("const { constructor: F } = () => {};", true),
-        ("const { Array: A } = globalThis;", true),
-        ("typeof window !== 'undefined';", false),
-        ("window.addEventListener('x', f);", false),
-        ("'ResizeObserver' in window;", false),
-        ("if ('x' in globalThis) f();", false),
-        // The global object passed to a call is the project-level census's.
-        ("bindEvent(window, 'scroll', f);", false),
+        ("const g: any = globalThis; f(g.Array.prototype);", AtCall),
+        ("const g: any = globalThis; g.Array.prototype[k] = f;", Here),
+        ("globalThis.globalThis.Array.prototype[k] = f;", Here),
+        ("const { getPrototypeOf } = Object;", Here),
+        ("const { constructor: F } = () => {};", Here),
+        ("const { Array: A } = globalThis;", Here),
+        ("typeof window !== 'undefined';", None),
+        // Review D3: the listener's `this` and event are the window.
+        ("window.addEventListener('x', f);", AtCall),
+        ("'ResizeObserver' in window;", None),
+        ("if ('x' in globalThis) f();", None),
+        // Recorded for the project's callee check (handed_to_unseen_code;
+        // fixture iteration-written-slots/handed-*).
+        ("bindEvent(window, 'scroll', f);", AtCall),
         // ADR 0803: a prototype held only to be compared or tested.
         (
             "function isPlainObject(obj) { let proto; return (obj != null && (!(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype)); }",
-            false,
+            None,
         ),
         (
             "const isDict = (value) => value != null && (value = Object.getPrototypeOf(value), value === Array.prototype || value === Object.prototype);",
-            false,
+            None,
         ),
         (
             "const p = Object.getPrototypeOf(x); if (p === q || !p) f();",
-            false,
+            None,
         ),
-        ("if (x === Array.prototype) f();", false),
+        ("if (x === Array.prototype) f();", None),
         // ADR 0803: a reflective mutator's discarded target; the visible
         // side decides its keys.
         (
             "Object.assign(Array.prototype, { zzz() { return 1; } });",
-            false,
+            None,
         ),
-        ("Reflect.set(Array.prototype, \"zzz\", 1);", false),
+        ("Reflect.set(Array.prototype, \"zzz\", 1);", None),
         (
             "const ok = Reflect.defineProperty(Array.prototype, \"zzz\", { value: 1 });",
-            false,
+            None,
         ),
         (
             "const AP = Object.assign(Array.prototype, { zzz() {} }); AP[Symbol.iterator] = f;",
-            true,
+            AtCall,
         ),
-        ("run(Object.assign(Array.prototype, { zzz() {} }));", true),
+        ("run(Object.assign(Array.prototype, { zzz() {} }));", AtCall),
         (
             "const g = () => Object.defineProperty(Array.prototype, \"zzz\", { value: 1 });",
-            true,
+            AtCall,
         ),
         // Written through, handed on, or used as a value: still obtained.
-        ("const p = Object.getPrototypeOf(x); p.next = f;", true),
-        ("const p = Object.getPrototypeOf(x); run(p);", true),
-        ("let p; (p = Object.getPrototypeOf(x), run(p));", true),
-        ("let p; run(p = Object.getPrototypeOf(x));", true),
+        ("const p = Object.getPrototypeOf(x); p.next = f;", Here),
+        ("const p = Object.getPrototypeOf(x); run(p);", AtCall),
+        ("let p; (p = Object.getPrototypeOf(x), run(p));", AtCall),
+        ("let p; run(p = Object.getPrototypeOf(x));", Here),
         (
             "let p; if (!(p = Object.getPrototypeOf(x))) {} p[k] = f;",
-            true,
+            Here,
+        ),
+        // Review D3: a timer calls a function with the window as `this`.
+        ("setTimeout(function () { return 1; }, 0);", None),
+        ("setTimeout(function () { this.Function(c)(); }, 0);", Here),
+        ("setTimeout(() => this, 0);", None),
+        ("setTimeout(tick, 0);", AtCall),
+        // A method called on the window runs with it as `this`.
+        ("window.scrollTo(0, 0);", AtCall),
+        ("window.innerWidth;", None),
+        ("window.addEventListener(\"x\", () => 1);", AtCall),
+        ("addEventListener(\"x\", () => 1);", AtCall),
+        // An event handler written on the window.
+        ("window.onresize = null;", None),
+        ("window.onresize = () => 1;", None),
+        ("window.onresize = (e) => e.view;", Here),
+        ("window.onresize = function () { this.x; };", Here),
+        ("window.onresize = function () { return arguments; };", Here),
+        ("window.onresize = handle;", Here),
+        ("window[k] = 1;", Here),
+        ("window.zzz = handle;", None),
+        ("onmessage = function () { this.x; };", Here),
+        ("onmessage = null;", None),
+        ("Object.assign(window, { onclick: f });", AtCall),
+        // The window's other names for itself.
+        ("top.Function(c)();", Here),
+        ("parent.Array.prototype[k] = f;", Here),
+        ("window.top.Function(c)();", Here),
+        ("const parent = node; parent.Function;", None),
+        // Review D4: `this` read through to a global's name, in any file.
+        ("export function f() { this.Array.prototype[k] = g; }", Here),
+        ("export function f() { return this.Function(c); }", Here),
+        ("function f() { this.name = 1; return this.values; }", None),
+        // Sloppy code only (a script with no "use strict", outside classes):
+        // a key no literal names, and `this` handed on.
+        ("function f() { return this[k]; }", Here),
+        ("export function f() { return this[k]; }", None),
+        ("'use strict'; function f() { return this[k]; }", None),
+        ("function f() { 'use strict'; return this[k]; }", None),
+        ("class C { m() { return this[k]; } }", None),
+        ("function f() { g.apply(this, arguments); }", Here),
+        ("function f() { return g.bind(this); }", Here),
+        ("function f() { g(this); }", AtCall),
+        ("export function f() { g.apply(this, arguments); }", None),
+        ("function f() { Object.keys(this); }", None),
+        // A never-reassigned alias of sloppy `this` is `this`.
+        ("function f() { var self = this; return self[k]; }", Here),
+        ("function f() { var self = this; return self.Array; }", Here),
+        (
+            "function f() { var self = this; g.apply(self, arguments); }",
+            Here,
+        ),
+        ("function f() { const self = this; g(self); }", AtCall),
+        ("function f() { var self = this; return self.name; }", None),
+        (
+            "function f() { var self = this; self = o; return self[k]; }",
+            None,
+        ),
+        (
+            "export function f() { const self = this; return self[k]; }",
+            None,
         ),
     ] {
-        assert_eq!(
-            array_intrinsic_obtained(&file(source)),
-            obtained,
-            "{source}"
-        );
+        let (here, calls) = intrinsic_census(&file(source));
+        let census = match (here, calls.is_empty()) {
+            (true, _) => Here,
+            (false, false) => AtCall,
+            (false, true) => None,
+        };
+        assert_eq!(census, expected, "{source}");
     }
 }
 
