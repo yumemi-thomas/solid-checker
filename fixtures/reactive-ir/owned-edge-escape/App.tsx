@@ -1,4 +1,4 @@
-import { onCleanup } from "solid-js";
+import { action, onCleanup } from "solid-js";
 
 const done = () => {};
 const items: (() => void)[] = [];
@@ -66,4 +66,13 @@ export function Inline() {
   const p = () => onCleanup(done);
   [1].forEach(p);
   return <i />;
+}
+// R29: `action` keeps its argument and steps it on the click; no owner edge follows.
+export function ActionKept() {
+  const q = () => {
+    onCleanup(done);
+  };
+  q();
+  const act = action(q as any);
+  return <button onClick={() => act()} />;
 }

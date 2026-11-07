@@ -9,3 +9,6 @@ JSX but no tag renders it, so it is a layer, not a component. `Removed` is
 uncertifiable too: nothing proves the receiver's `removeEventListener` drops the value.
 A function every reference of which is a direct call or an inline run in the body
 (`Twice`, `Inline`) stays proven owned.
+
+R29: a whole argument of a primitive is placed only where the dialect gives that
+argument an owner. `action(q)` keeps `q`, and the click steps it with no owner.

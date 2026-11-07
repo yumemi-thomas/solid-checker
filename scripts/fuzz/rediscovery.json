@@ -6597,5 +6597,16 @@
    "mx-strict-read-untracked-root-use-call-made-apart-wrapper-module-helper"
   ],
   "rediscovered": "the use-call-made-apart ids in the sc VM (54, Chrome confirmed): build a747fa28d 54 false clean; this tree 54 recall-gap at the site; legal twins (36) clean on both"
+ },
+ {
+  "finding": "ADR 0868's layer walk read every primitive's whole argument as placed: `f(); const act = action(f as any);` left the site silent while the click raises NO_OWNER_CLEANUP (reviewer's R29)",
+  "found": "the rolling review of a1e37776f",
+  "fixed": "ADR 0868, R29 amendment",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-owned-action-x-direct-none"
+  ],
+  "rediscovered": "flw-owned-action direct ids (35, Chrome confirmed): build r8 (a1e37776f plus the SC3001 fix) 35 false cleans; r9: 0, 35 uncertifiable"
  }
 ]
