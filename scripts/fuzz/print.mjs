@@ -626,9 +626,12 @@ function render(program, instrument) {
   const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
   if (usesContext) { used.add("createContext"); out.push("const Ctx = createContext(7);", ""); }
   const useList = [...uses.entries()];
+  // A use repeated in a copy of the site brings the same module line (`function wrapUse`), and the same context line: one serves both.
+  const moduleOnce = new Set();
+  const once = (line) => !moduleOnce.has(line) && moduleOnce.add(line);
   for (const [node, described] of useList) {
-    if (described.contextLine) { used.add("createContext"); out.push(described.contextLine, ""); }
-    for (const line of described.moduleLines) out.push(auxLine(node, line), "");
+    if (described.contextLine && once(described.contextLine)) { used.add("createContext"); out.push(described.contextLine, ""); }
+    for (const line of described.moduleLines) if (once(line)) out.push(auxLine(node, line), "");
   }
   const moduleSignals = program.moduleSignals ?? [];
   moduleSignals.forEach((sig) => out.push(signalLine(sig)));
@@ -657,7 +660,9 @@ function render(program, instrument) {
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) if (!hosted.has(sig.name) && !component.hoisted) out.push(`${INDENT}${signalLine(sig)}`);
       for (const line of sourcePrelude(component, signals, used)) out.push(`${INDENT}${line}`);
-      for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
+      // A use repeated in a copy of the site (`freshCopy`, the shared-helper contexts) brings the same prelude line: one declaration serves both.
+      const preluded = new Set();
+      for (const [node, described] of useList) for (const line of described.preludeLines) if (!preluded.has(line)) { preluded.add(line); out.push(`${INDENT}${auxLine(node, line)}`); }
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
       for (const item of component.view) out.push(...viewText(item, 3));

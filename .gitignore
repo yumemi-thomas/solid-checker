@@ -851,6 +851,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/boundary-in-effect-callback/node_modules/**
 !fixtures/reactive-ir/after-await-store-paths/node_modules/
 !fixtures/reactive-ir/after-await-store-paths/node_modules/**
+!fixtures/reactive-ir/after-await-rowless-ends/node_modules/
+!fixtures/reactive-ir/after-await-rowless-ends/node_modules/**
 !fixtures/reactive-ir/observer-callers/node_modules/
 !fixtures/reactive-ir/observer-callers/node_modules/**
 !fixtures/reactive-ir/observer-flush-drained/node_modules/

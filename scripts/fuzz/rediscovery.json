@@ -5897,4 +5897,68 @@
   ],
   "rediscovered": "jsx-loading and jsx-errored direct ids (28): build rmg7 (b2e910572) 5 Chrome-confirmed false positives; r2: 0, 28 clean"
  }
+ },
+ {
+  {
+   "finding": "A read after an await a branch may skip (`if`, `&&`, `||`, `??=`, `?:`, `switch` case, label, optional call, destructuring default) in a tracked async compute: certified, Chrome warns UNTRACKED_READ_AFTER_AWAIT; also a store read in a closure, helper or IIFE run past it",
+   "found": "scout-bind-afterawait B1 (R3c); store reads in layers by R3d on the g4 build",
+   "fixed": "ADR 0870; now uncertifiable (`suspension-unplaced`), no violation",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-if-x-direct-none",
+    "mx-untracked-read-after-await-aw-and-x-direct-none",
+    "mx-untracked-read-after-await-aw-dstr-x-direct-none",
+    "mx-untracked-read-after-await-aw-if-store-link-direct-closure"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (aw-mx, 336 ids): f1a8da6a4 216 false-clean in the 9 contexts, this commit 0 (216 uncertifiable); legal twins aw-else, aw-else-flip, aw-early 0 false positives"
+  },
+  {
+   "finding": "A helper two computations await was walked once, under the first one's windows: the second computation's read past the helper's await was silent",
+   "found": "scout-bind-afterawait B3 (R3c)",
+   "fixed": "ADR 0871; proved (violation)",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-shared-after-x-direct-none",
+    "mx-untracked-read-after-await-aw-shared-after-store-link-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (24 ids): f1a8da6a4 4 false-clean and 20 recall-gap in aw-shared-after, this commit 24 agree"
+  },
+  {
+   "finding": "A helper called past the computation's first await counted its own window as tracking: its prefix read was taken for a dependency",
+   "found": "scout-bind-afterawait B4 (R3c)",
+   "fixed": "ADR 0872; proved (violation)",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-helper-late-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (24 ids): f1a8da6a4 14 recall-gap and 10 agree in aw-helper-late, this commit 24 agree"
+  },
+  {
+   "finding": "An async compute handed to `createMemo` through a project wrapper's parameter (`(f) => createMemo(f)`, two wrappers deep): no row",
+   "found": "scout-bind-afterawait B2 (R3c)",
+   "fixed": "ADR 0873; proved (violation) where the wrapper's straight-line body hands it to the primitive",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-wrapper-x-direct-none",
+    "mx-untracked-read-after-await-aw-wrapper-2-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming: f1a8da6a4 48 false-clean, this commit 48 agree"
+  },
+  {
+   "finding": "A wrapper that runs its parameter in place but hands its result on (`(f) => f()`, `async (f) => await f()`) or runs it past its own await: the compute's flight carries the read",
+   "found": "review D12 on ADR 0873's in-place exemption (never built without it)",
+   "fixed": "ADR 0873 (D12): the exemption needs a discarded result in a synchronous wrapper",
+   "grid": "mx-recall",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "ids": [
+    "mx-untracked-read-after-await-aw-inplace-return-x-direct-none",
+    "mx-untracked-read-after-await-aw-inplace-await-x-direct-none",
+    "mx-untracked-read-after-await-aw-inplace-late-x-direct-none"
+   ],
+   "rediscovered": "matrix --recall by id, Chrome confirming (48 ids): f1a8da6a4 32 false-clean (return, await) and 16 recall-gap (late); this commit 48 uncertifiable; legal twin aw-inplace-stmt 0 false positives"
+  }
 ]

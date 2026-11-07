@@ -64,6 +64,24 @@ impl ProgramDraft {
     /// The identity is derived from the defect kind's family rather than
     /// passed in, so a caller cannot file a defect under another finding
     /// kind's identity and silently suppress it.
+    /// [`Self::push_defect`], where a proven row replaces an obligation at the
+    /// same site (ADR 0871): another walk of the function proved what this one
+    /// could not.
+    pub(crate) fn push_defect_or_strengthen(&mut self, defect: StaticDefect) {
+        if !defect.uncertain
+            && let Some(row) = self.static_defects.iter_mut().find(|row| {
+                row.uncertain
+                    && row.kind.dedup_identity() == defect.kind.dedup_identity()
+                    && row.location.path == defect.location.path
+                    && row.location.start_byte == defect.location.start_byte
+            })
+        {
+            *row = defect;
+            return;
+        }
+        self.push_defect(defect);
+    }
+
     pub(crate) fn push_defect(&mut self, defect: StaticDefect) {
         if self.seen_diagnostics.insert((
             defect.kind.dedup_identity(),
