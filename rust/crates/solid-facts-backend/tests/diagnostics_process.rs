@@ -1638,7 +1638,11 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("primitive-in-directive-application", 3),
             ],
         ),
-        ("owner-presence", &[("missing-owner", 14)]),
+        // ADR 0869: the three JSX `<Loading>`/`<Await>` boundaries (App.tsx
+        // lines 5, 6, 38) are no owner site. rc.21's dev `createComponent`
+        // runs every component under its own transparent root, and Chrome is
+        // quiet for each; the call form `Loading(props)` still warns.
+        ("owner-presence", &[("missing-owner", 11)]),
         (
             "async-boundary",
             &[
