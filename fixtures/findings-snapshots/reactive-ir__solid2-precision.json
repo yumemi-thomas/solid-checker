@@ -114,11 +114,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "function-call-target-unresolved",
+      "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 3909,
-      "end": 3953,
+      "start": 3895,
+      "end": 3908,
       "fixes": 0
     },
     {

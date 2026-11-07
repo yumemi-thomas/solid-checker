@@ -58,6 +58,9 @@ pub(super) fn dependency_value_obligations(
             let allowed = allowed.get_or_insert_with(|| allowed_callback_spans(file, lookup));
             semantic_execution_role(file, span, allowed, entities, symbol_names, lookup)
                 .reports_untracked_read()
+                // ADR 0874: an impostor may run a withheld call's callback
+                // untracked; its Get stays an obligation.
+                || crate::execution_role::runs_in_withheld_layer(file, span, lookup)
         };
         let targets = file
             .ast

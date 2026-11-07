@@ -1529,6 +1529,8 @@ impl<'f, 'a> Reach<'f, 'a> {
             | crate::execution_role::LayerRun::InPlaceAmongOthers(at) =
                 crate::execution_role::layer_run(file, callback, ctx.semantic_lookup)
                 && at == call.span
+                // ADR 0874: a withheld call proves no run of its callback.
+                && !ctx.semantic_lookup.impostor_withheld(file, call.callee)
                 && ctx
                     .semantic_lookup
                     .resolved_callee_call(file, call.callee)
@@ -2351,9 +2353,43 @@ impl<'f, 'a> Reach<'f, 'a> {
             }
             return;
         }
-        let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
-            return;
+        // ADR 0874: a call the census withholds is followed as the standard
+        // one would run its handlers, so their rows stand at their sites; its
+        // flight is unproven (as an aggregate's whose premise is withdrawn),
+        // so every handler there is an obligation, never a proof.
+        let (resolved, withheld) = match ctx.semantic_lookup.resolved_callee_call(file, call.callee)
+        {
+            Some(resolved) => (resolved, false),
+            None => {
+                if !ctx.semantic_lookup.impostor_withheld(file, call.callee) {
+                    return;
+                }
+                let Some(resolved) = ctx.semantic_lookup.placing_callee_call(file, call.callee)
+                else {
+                    return;
+                };
+                (resolved, true)
+            }
         };
+        let next = walk.unproven || withheld;
+        let previous = std::mem::replace(&mut walk.unproven, next);
+        self.expand_standard(draft, walk, queue, file, call, depth, resolved);
+        walk.unproven = previous;
+    }
+
+    /// [`Self::expand`]'s standard-library calls: a promise's handlers, and
+    /// the aggregates.
+    #[allow(clippy::too_many_arguments)]
+    fn expand_standard(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        call: &'f CallFact,
+        depth: usize,
+        resolved: &typefacts::ResolvedCall,
+    ) {
         let Some(name) = standard_call_name(resolved) else {
             return;
         };

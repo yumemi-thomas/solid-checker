@@ -698,6 +698,10 @@ pub(crate) enum Hazard {
     /// census): a value typed as a standard container may be that impostor.
     /// A collision only withholds another proof.
     StandardImpostor(u32),
+    /// ADR 0874: code may write this member (the same hash) of an object it
+    /// did not make here: a host global, which every spelling reaches, may be
+    /// that object.
+    StandardImpostorWrite(u32),
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -728,6 +732,10 @@ fn standard_impostor(member: &str) -> Hazard {
     Hazard::StandardImpostor(member_hash("", member))
 }
 
+fn standard_impostor_write(member: &str) -> Hazard {
+    Hazard::StandardImpostorWrite(member_hash("", member))
+}
+
 fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
     match root {
         StandardRoot::Global => patches.push(standard_patch("", member)),
@@ -735,6 +743,10 @@ fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
         StandardRoot::Constructor(name) => {
             patches.push(standard_patch(name, member));
             patches.push(standard_patch(&format!("{name}Constructor"), member));
+            // ADR 0874: `document` is the `Document` a qualified name says.
+            if name == "document" {
+                patches.push(standard_patch("Document", member));
+            }
         }
     }
 }
@@ -827,6 +839,12 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
         } else if argument.exact_object_literal {
             for key in &argument.property_names {
                 let key = file.source_text(*key).unwrap_or(ANY_MEMBER);
+                // ADR 0874: what `replace` dispatches through (`symbol_key`).
+                let key = if key.contains("Symbol.replace") {
+                    ANY_MEMBER
+                } else {
+                    key
+                };
                 push_patch(&root, key.trim_matches(['\'', '"', '`']), &mut patches);
             }
         } else {
@@ -837,15 +855,17 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
 }
 
 /// Whether a computed key is a symbol the global `Symbol` makes on the spot,
-/// which replaces no named member.
+/// which replaces no named member. `Symbol.replace` is not one: `replace` and
+/// `replaceAll` dispatch through it (ADR 0874).
 fn symbol_key(file: &FileFacts, key: Span) -> bool {
     let key = file.ast.peel_ts_sugar_span(key);
-    file.source_text(key)
-        .is_some_and(|text| text.starts_with("Symbol(") || text.starts_with("Symbol."))
-        && file
-            .ast
-            .reference_declaration(Span::new(key.start, key.start + 6))
-            .is_none()
+    file.source_text(key).is_some_and(|text| {
+        (text.starts_with("Symbol(") || text.starts_with("Symbol."))
+            && !text.starts_with("Symbol.replace")
+    }) && file
+        .ast
+        .reference_declaration(Span::new(key.start, key.start + 6))
+        .is_none()
 }
 
 fn constant_key(value: &typefacts::ConstantValue) -> Option<&str> {
@@ -858,7 +878,7 @@ fn constant_key(value: &typefacts::ConstantValue) -> Option<&str> {
 /// reads may be any function or constructor, and reaches a method only through
 /// a value that constructor made: that is the last entry's limit, and
 /// docs/open-work.md's.
-pub(crate) fn patch_veto(qualified_name: &str) -> [Hazard; 5] {
+pub(crate) fn patch_veto(qualified_name: &str) -> Vec<Hazard> {
     let (owner, member) = qualified_name
         .rsplit_once('.')
         .unwrap_or(("", qualified_name));
@@ -868,7 +888,7 @@ pub(crate) fn patch_veto(qualified_name: &str) -> [Hazard; 5] {
     } else {
         container
     };
-    [
+    let mut hazards = vec![
         standard_patch(container, member),
         standard_patch(container, ANY_MEMBER),
         standard_patch("", member),
@@ -881,8 +901,23 @@ pub(crate) fn patch_veto(qualified_name: &str) -> [Hazard; 5] {
         } else {
             standard_patch(container, ANY_MEMBER)
         },
-    ]
+    ];
+    // ADR 0874: a host object's member is its prototype chain's.
+    if EVENT_TARGETS.contains(&container) || container.ends_with("Element") {
+        hazards.extend(EVENT_TARGETS.map(|target| standard_patch(target, member)));
+    }
+    hazards
 }
+
+/// The interfaces a window, a document or an element takes a member from.
+const EVENT_TARGETS: [&str; 6] = [
+    "EventTarget",
+    "Node",
+    "Element",
+    "HTMLElement",
+    "Document",
+    "Window",
+];
 
 /// Whether a call's written type rests on an assertion nothing proves
 /// (ADR 0781): the value under it is no literal or `new` of the standard owner,
@@ -1082,6 +1117,7 @@ pub(crate) const IMPOSTOR_MEMBERS: [&str; 22] = [
 ];
 
 /// What a census site's key names.
+#[derive(Clone)]
 enum CensusKey {
     Named(String),
     /// A symbol, which names no census member.
@@ -1162,18 +1198,39 @@ fn spelled_callee(text: &str, name: &str) -> bool {
 /// `Reflect` held as a value). Copying keys (`Object.assign`, a spread) puts
 /// no function where none was. A definer under another spelling is the
 /// reflective-definer census's ([`definers`]), read beside this one.
+///
+/// ADR 0874: beside it, the writers: a site that writes a member of an object
+/// it did not make ([`fresh_object`]), which is the only way a host global
+/// gains one. `Object.assign` copies, so it is the impostor census's no site,
+/// but it writes its target.
 fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
     use solid_facts::ast::ClassElementKind;
     let ast = &file.ast;
     let mut members: Vec<&'static str> = Vec::new();
-    let mut note = |key: CensusKey| match key {
-        CensusKey::Named(name) => {
-            if let Some(member) = IMPOSTOR_MEMBERS.iter().find(|member| **member == name) {
-                members.push(member);
-            }
+    let mut writers: Vec<&'static str> = Vec::new();
+    let census_member = |key: CensusKey| match key {
+        CensusKey::Named(name) => IMPOSTOR_MEMBERS
+            .iter()
+            .find(|member| **member == name)
+            .copied(),
+        CensusKey::Unknown => Some(ANY_MEMBER),
+        CensusKey::Symbol => None,
+    };
+    // A `__proto__` write replaces every member at once; `self` and
+    // `globalThis` are themselves keys a host receiver stands on.
+    let writer_member = |key: CensusKey| match key {
+        CensusKey::Named(name) if name == "__proto__" => Some(ANY_MEMBER),
+        CensusKey::Named(name) if HOST_KEYS.contains(&name.as_str()) => {
+            HOST_KEYS.iter().find(|key| **key == name).copied()
         }
-        CensusKey::Unknown => members.push(ANY_MEMBER),
-        CensusKey::Symbol => {}
+        key => census_member(key),
+    };
+    let mut note = |key: CensusKey| members.extend(census_member(key));
+    let mut noted = Vec::new();
+    let mut write = |key: CensusKey, object: Span| {
+        if !fresh_object(file, object) {
+            writers.extend(writer_member(key));
+        }
     };
     for property in &ast.object_properties {
         if property.data && property.value_kind.is_proven_noncallable() {
@@ -1215,6 +1272,13 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
     for target in &ast.write_targets {
         let target = ast.peel_ts_sugar_span(*target);
         let Some(member) = ast.member_at(target) else {
+            // `self = fake`: the global's own key.
+            if ast.reference_declaration(target).is_none()
+                && let Some(name) = file.source_text(target).map(str::trim)
+                && HOST_KEYS.contains(&name)
+            {
+                write(CensusKey::Named(name.to_owned()), target);
+            }
             continue;
         };
         if assigned.get(&target).is_some_and(|assignment| {
@@ -1223,17 +1287,19 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
         }) {
             continue;
         }
-        if ast.computed_members.binary_search(&member.span).is_err() {
-            note(census_key(file, member.property, false));
+        let key = if ast.computed_members.binary_search(&member.span).is_err() {
+            census_key(file, member.property, false)
         } else if let Some(literal) = ast
             .literal_computed_members
             .iter()
             .find(|literal| literal.span == member.span)
         {
-            note(CensusKey::Named(literal.key.to_string()));
+            CensusKey::Named(literal.key.to_string())
         } else {
-            note(census_key(file, member.property, true));
-        }
+            census_key(file, member.property, true)
+        };
+        write(key.clone(), member.object);
+        note(key);
     }
     for call in &ast.calls {
         let Some(callee) = file
@@ -1254,25 +1320,63 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
             },
             None => CensusKey::Unknown,
         };
+        // The first argument, written by a definer. A spread may be anything.
+        let target = argument(0).map(|target| target.span);
+        let mut write_target = |key: CensusKey| match target {
+            Some(target) => write(key, target),
+            None => noted.push(key),
+        };
         if spelled_callee(callee, "Reflect.set") {
             if !argument(2).is_some_and(|value| noncallable_value(file, value.span)) {
+                write_target(argument_key(1));
                 note(argument_key(1));
             }
         } else if spelled_callee(callee, "Object.defineProperty")
             || spelled_callee(callee, "Reflect.defineProperty")
         {
+            write_target(argument_key(1));
             note(argument_key(1));
         } else if spelled_callee(callee, "Object.defineProperties")
             || spelled_callee(callee, "Object.create")
         {
+            // `Object.create`'s object is new.
+            let writes = spelled_callee(callee, "Object.defineProperties");
             match call.arguments.get(1) {
                 None => {}
                 Some(map) if !map.spread && map.exact_object_literal => {
                     for key in &map.property_names {
+                        if writes {
+                            write_target(census_key(file, *key, false));
+                        }
                         note(census_key(file, *key, false));
                     }
                 }
-                Some(_) => note(CensusKey::Unknown),
+                Some(_) => {
+                    if writes {
+                        write_target(CensusKey::Unknown);
+                    }
+                    note(CensusKey::Unknown);
+                }
+            }
+        } else if spelled_callee(callee, "Object.setPrototypeOf")
+            || spelled_callee(callee, "Reflect.setPrototypeOf")
+        {
+            write_target(CensusKey::Unknown);
+        } else if spelled_callee(callee, "Object.assign") {
+            if target.is_some_and(|target| fresh_object(file, target)) {
+                continue;
+            }
+            for source in call.arguments.iter().skip(1) {
+                if !source.spread && source.exact_object_literal {
+                    for key in &source.property_names {
+                        write_target(census_key(file, *key, false));
+                    }
+                } else {
+                    write_target(CensusKey::Unknown);
+                }
+            }
+            if call.arguments.first().is_some_and(|first| first.spread) {
+                write_target(CensusKey::Unknown);
             }
         } else if spelled_callee(callee, "Object.fromEntries") {
             note(CensusKey::Unknown);
@@ -1296,10 +1400,59 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
     }) {
         note(CensusKey::Unknown);
     }
+    writers.extend(noted.into_iter().filter_map(writer_member));
+    // `Symbol.replace` read at all: it may become a key of any object.
+    if ast.members.iter().any(|member| {
+        file.source_text(member.span).map(str::trim) == Some("Symbol.replace")
+            && ast
+                .reference_declaration(ast.peel_ts_sugar_span(member.object))
+                .is_none()
+    }) {
+        members.push(SYMBOL_REPLACE);
+    }
     members.sort_unstable();
     members.dedup();
-    members.into_iter().map(standard_impostor).collect()
+    writers.sort_unstable();
+    writers.dedup();
+    members
+        .into_iter()
+        .map(standard_impostor)
+        .chain(writers.into_iter().map(standard_impostor_write))
+        .collect()
 }
+
+/// Whether the object at `span` is one this file makes on the spot: exactly
+/// an array or object literal, or a `const` or never-written `let` bound to
+/// one. A write through it reaches that object, whatever holds it.
+fn fresh_object(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let literal = |span: Span| {
+        ast.array_literals.binary_search(&span).is_ok()
+            || (ast.member_at(span).is_none()
+                && ast.call_at(span).is_none()
+                && file
+                    .source_text(span)
+                    .map(str::trim)
+                    .is_some_and(|text| text.starts_with('{') && text.ends_with('}')))
+    };
+    let value = ast.peel_ts_sugar_span(span);
+    literal(value)
+        || ast.reference_declaration(value).is_some_and(|declaration| {
+            ast.identifier_binding(declaration).is_some_and(|binding| {
+                (binding.immutable
+                    || (binding.runtime_let && !crate::indexes::binding_written(file, declaration)))
+                    && binding
+                        .initializer
+                        .is_some_and(|initializer| literal(ast.peel_ts_sugar_span(initializer)))
+            })
+        })
+}
+
+/// The global's own keys a host receiver stands on: a program may replace
+/// `self` and `globalThis`, unlike `window` and `document`.
+const HOST_KEYS: [&str; 2] = ["self", "globalThis"];
+/// The census key of a read of `Symbol.replace` ([`primitive_dispatch_standard`]).
+const SYMBOL_REPLACE: &str = "@@replace";
 
 /// The array methods whose result is a new array of the receiver's species,
 /// and the promise methods whose result is a new promise.
@@ -1325,9 +1478,7 @@ const PROMISE_FRESH: [&str; 3] = ["catch", "finally", "then"];
 /// result of a standard method that makes a new one on such a value
 /// (`[a].map(f)`, `fetch(u).then(f)`), a call of a function of this file
 /// nothing rebinds whose every return is one ([`returned_made`]; an `async`
-/// one's is a promise), a host global (`window`, `document`,
-/// `globalThis`, `self`) or a node the document holds (`document.body`), or
-/// a string literal for a string's own. Each root is a global no declaration
+/// one's is a promise), or a string literal for a string's own. Each root is a global no declaration
 /// of this file shadows, and each function a patch may not have replaced
 /// (`patched`, ADR 0781).
 fn standard_made(
@@ -1373,7 +1524,10 @@ fn standard_made(
         !call.construct
             && ast.computed_members.binary_search(&link.span).is_err()
             && file.source_text(link.property).is_some_and(|member| {
-                fresh.contains(&member) && !patched(&format!("{owner}.{member}"))
+                // ADR 0874: the new value's kind is the receiver's species.
+                fresh.contains(&member)
+                    && !patched(&format!("{owner}.{member}"))
+                    && !patched(&format!("{owner}.constructor"))
             })
             && standard_made(
                 file,
@@ -1460,20 +1614,31 @@ fn standard_made(
                     .iter()
                     .any(|template| template.span == value)
         }
-        _ => {
-            ["window", "document", "globalThis", "self"]
-                .iter()
-                .any(|name| global(value, name))
-                || ast.member_at(value).is_some_and(|member| {
-                    global(ast.peel_ts_sugar_span(member.object), "document")
-                        && ast.computed_members.binary_search(&member.span).is_err()
-                        && matches!(
-                            file.source_text(member.property),
-                            Some("body" | "head" | "documentElement")
-                        )
-                })
-        }
+        _ => false,
     }
+}
+
+/// Whether `value` is a host global (`window`, `document`, `globalThis`,
+/// `self`) or a node the document holds (`document.body`), no declaration of
+/// this file shadowing it. Every spelling of the program reaches it, so
+/// nothing but the absence of a writer keeps it the host's own (ADR 0874).
+fn host_global(file: &FileFacts, value: Span) -> bool {
+    let ast = &file.ast;
+    let global = |span: Span, name: &str| {
+        file.source_text(span).map(str::trim) == Some(name)
+            && ast.reference_declaration(span).is_none()
+    };
+    ["window", "document", "globalThis", "self"]
+        .iter()
+        .any(|name| global(value, name))
+        || ast.member_at(value).is_some_and(|member| {
+            global(ast.peel_ts_sugar_span(member.object), "document")
+                && ast.computed_members.binary_search(&member.span).is_err()
+                && matches!(
+                    file.source_text(member.property),
+                    Some("body" | "head" | "documentElement")
+                )
+        })
 }
 
 /// Whether `value` is a call of a function this file declares and nothing
@@ -1559,7 +1724,11 @@ fn awaited_made(
 ) -> bool {
     let ast = &file.ast;
     let owner = owner.strip_prefix("Readonly").unwrap_or(owner);
-    if matches!(owner, "Promise" | "PromiseLike") || patched(&format!("{owner}.then")) {
+    // ADR 0874: `await` looks `then` up the whole prototype chain.
+    if matches!(owner, "Promise" | "PromiseLike")
+        || patched(&format!("{owner}.then"))
+        || patched("Object.then")
+    {
         return false;
     }
     let Some(text) = file.source_text(value) else {
@@ -1654,25 +1823,190 @@ fn function_returns(
     }
 }
 
-/// Whether the receiver of `callee` is, by a fact of this file, a value the
-/// standard library made ([`standard_made`]) or a primitive
-/// ([`primitive_value`]): on the spot, or held by a binding nothing rebinds
-/// (and, but for a primitive, nothing exports, every use of which is the
-/// receiver of a method call, so no code of the program holds it to put a
-/// member on it).
-fn standard_receiver(
+/// The members of a standard container that run no code of the program on
+/// their receiver: no callback, and no `this` but the library's (ADR 0874).
+fn hands_nothing_on(owner: &str, member: &str) -> bool {
+    match owner {
+        "Array" => matches!(
+            member,
+            "slice"
+                | "concat"
+                | "join"
+                | "indexOf"
+                | "lastIndexOf"
+                | "includes"
+                | "at"
+                | "push"
+                | "pop"
+                | "shift"
+                | "unshift"
+                | "reverse"
+                | "fill"
+                | "keys"
+                | "values"
+                | "entries"
+                | "flat"
+                | "toReversed"
+                | "toSpliced"
+                | "with"
+                | "splice"
+                | "copyWithin"
+                // A comparator gets two elements.
+                | "sort"
+                | "toSorted"
+        ),
+        "Map" | "Set" | "WeakMap" | "WeakSet" => matches!(
+            member,
+            "get" | "set" | "has" | "add" | "delete" | "clear" | "keys" | "values" | "entries"
+        ),
+        // A promise's callbacks get its value, never the promise.
+        "Promise" => matches!(member, "then" | "catch" | "finally"),
+        _ => false,
+    }
+}
+
+/// The parameter position at which a callback-taking member of a standard
+/// container hands the callback its receiver, 0-based.
+fn receiver_slot(owner: &str, member: &str) -> Option<usize> {
+    match (owner, member) {
+        (
+            "Array",
+            "forEach" | "map" | "filter" | "find" | "findIndex" | "findLast" | "findLastIndex"
+            | "some" | "every" | "flatMap",
+        )
+        | ("Map" | "Set", "forEach") => Some(2),
+        ("Array", "reduce" | "reduceRight") => Some(3),
+        _ => None,
+    }
+}
+
+/// Whether the use of a binding at `used`, the receiver of a call, leaves the
+/// program without its value (ADR 0874): the member hands nothing on, or it
+/// takes a function literal that stops short of the slot that holds the
+/// receiver and can reach it no other way.
+///
+/// The member must be the library's: a patch may run with the receiver as
+/// `this` (`Array.prototype.slice = function () { … }`). No impostor can be on
+/// the receiver itself: the first would need a use that hands it on.
+fn receiver_stays(
     file: &FileFacts,
-    callee: Span,
+    used: &solid_facts::ast::MemberFact,
     owner: &str,
     patched: &dyn Fn(&str) -> bool,
 ) -> bool {
     let ast = &file.ast;
+    if ast.computed_members.binary_search(&used.span).is_ok() {
+        return false;
+    }
+    let Some(member) = file.source_text(used.property).map(str::trim) else {
+        return false;
+    };
+    if patched(&format!("{owner}.{member}")) {
+        return false;
+    }
+    if hands_nothing_on(owner, member) {
+        return true;
+    }
+    let Some(slot) = receiver_slot(owner, member) else {
+        return false;
+    };
+    let Some(call) = ast.calls_with_peeled_callee(used.span).next() else {
+        return false;
+    };
+    call.arguments.first().is_some_and(|argument| {
+        let value = ast.peel_ts_sugar_span(argument.span);
+        !argument.spread
+            && ast
+                .functions
+                .iter()
+                .find(|function| function.span == value)
+                .is_some_and(|function| {
+                    function.parameters.len() <= slot
+                        && !function.rest_parameter
+                        && file.source_text(function.span).is_some_and(|text| {
+                            !text.contains("arguments")
+                                && !text.contains("eval")
+                                && (function.kind == solid_facts::ast::FunctionKind::Arrow
+                                    || !crate::execution_role::mentions_receiver(text))
+                        })
+                })
+    })
+}
+
+/// Whether a primitive receiver's `member` is the standard one's whatever the
+/// program holds: all but `replace` and `replaceAll`, which dispatch through
+/// their first argument's `Symbol.replace`, so that argument must be one with
+/// none of the program's: a primitive or a regular expression literal, on a
+/// prototype no patch reached (ADR 0874).
+fn primitive_dispatch_standard(
+    file: &FileFacts,
+    callee: Span,
+    member: &str,
+    patched: &dyn Fn(&str) -> bool,
+    replace_read: bool,
+) -> bool {
+    if !matches!(member, "replace" | "replaceAll") {
+        return true;
+    }
+    if replace_read {
+        return false;
+    }
+    let ast = &file.ast;
+    ast.calls_with_peeled_callee(ast.peel_ts_sugar_span(callee))
+        .next()
+        .is_some_and(|call| {
+            call.arguments.first().is_none_or(|argument| {
+                let value = ast.peel_ts_sugar_span(argument.span);
+                !argument.spread
+                    && !patched("String.replace")
+                    && !patched("Object.replace")
+                    && (primitive_value(file, value, patched)
+                        || (file
+                            .source_text(value)
+                            .is_some_and(|text| text.trim_start().starts_with('/'))
+                            && !patched("RegExp.replace")
+                            && !patched("RegExp.exec")))
+            })
+        })
+}
+
+/// Whether the receiver of `callee` is, by a fact of this file, a value the
+/// standard library made ([`standard_made`]), a primitive
+/// ([`primitive_value`]) or a host global no writer reached ([`host_global`],
+/// `written` answers for a member): on the spot, or held by a binding nothing rebinds (and,
+/// for a made value, nothing exports, every use of which leaves the program
+/// without it, [`receiver_stays`]).
+fn standard_receiver(
+    file: &FileFacts,
+    callee: Span,
+    qualified: (&str, &str),
+    patched: &dyn Fn(&str) -> bool,
+    written: &dyn Fn(&str) -> bool,
+    replace_read: bool,
+) -> bool {
+    let ast = &file.ast;
+    let (owner, member_name) = qualified;
     let Some(member) = ast.member_at(ast.peel_ts_sugar_span(callee)) else {
         return false;
     };
+    let container = matches!(
+        owner.strip_prefix("Readonly").unwrap_or(owner),
+        "Array" | "Map" | "Set" | "WeakMap" | "WeakSet" | "Promise" | "PromiseLike" | "String"
+    );
+    let host = |value: Span| {
+        !container
+            && !written(member_name)
+            && host_global(file, value)
+            && !HOST_KEYS
+                .iter()
+                .any(|key| written(key) && file.source_text(value).map(str::trim) == Some(*key))
+    };
+    let primitive = |value: Span| {
+        primitive_value(file, value, patched)
+            && primitive_dispatch_standard(file, callee, member_name, patched, replace_read)
+    };
     let receiver = ast.peel_ts_sugar_span(member.object);
-    if primitive_value(file, receiver, patched) || standard_made(file, receiver, owner, patched, 0)
-    {
+    if primitive(receiver) || host(receiver) || standard_made(file, receiver, owner, patched, 0) {
         return true;
     }
     let Some(declaration) = ast.reference_declaration(receiver) else {
@@ -1693,11 +2027,17 @@ fn standard_receiver(
     let initializer = binding
         .initializer
         .map(|initializer| ast.peel_ts_sugar_span(initializer));
-    // A primitive held is one, wherever the binding goes.
-    if unbound && initializer.is_some_and(|initializer| primitive_value(file, initializer, patched))
+    // A primitive held is one, wherever the binding goes; a host global too.
+    if unbound && initializer.is_some_and(|initializer| primitive(initializer) || host(initializer))
     {
         return true;
     }
+    let owner = owner.strip_prefix("Readonly").unwrap_or(owner);
+    let owner = if owner == "PromiseLike" {
+        "Promise"
+    } else {
+        owner
+    };
     unbound
         && !exported
         && initializer
@@ -1711,6 +2051,7 @@ fn standard_receiver(
                     .is_some_and(|used| {
                         ast.any_call_with_peeled_callee(used.span)
                             && !ast.any_write_target_containing(used.span)
+                            && receiver_stays(file, used, owner, patched)
                     })
             })
 }
@@ -1736,8 +2077,21 @@ pub(crate) fn impostor_veto(
         |name: &str| hazard(Hazard::AnyStandardPatch) && patch_veto(name).into_iter().any(&hazard);
     (hazard(standard_impostor(member))
         || hazard(standard_impostor(ANY_MEMBER))
-        || defined_reflectively(member))
-        && !standard_receiver(file, callee, owner, &patched)
+        || defined_reflectively(member)
+        || (matches!(member, "replace" | "replaceAll")
+            && hazard(standard_impostor(SYMBOL_REPLACE))))
+        && !standard_receiver(
+            file,
+            callee,
+            (owner, member),
+            &patched,
+            &|name| {
+                hazard(standard_impostor_write(name))
+                    || hazard(standard_impostor_write(ANY_MEMBER))
+                    || defined_reflectively(name)
+            },
+            hazard(standard_impostor(SYMBOL_REPLACE)),
+        )
 }
 
 pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {

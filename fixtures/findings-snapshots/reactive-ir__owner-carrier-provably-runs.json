@@ -118,6 +118,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-carrier-provably-runs/App.tsx",
+      "start": 1857,
+      "end": 1873,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -126,6 +137,17 @@
       "path": "fixtures/reactive-ir/owner-carrier-provably-runs/App.tsx",
       "start": 1994,
       "end": 2004,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-carrier-provably-runs/App.tsx",
+      "start": 2018,
+      "end": 2028,
       "fixes": 0
     },
     {

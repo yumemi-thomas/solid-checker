@@ -1883,6 +1883,13 @@ pub(super) fn semantic_write_execution_role_within(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // ADR 0874: nothing places code an impostor may run, or never run.
+    if !super::discarded_region_contains(file, span) && runs_in_withheld_layer(file, span, lookup) {
+        return role_arm!(
+            "write_roles.semantic_write_execution_role_within.withheld-callback",
+            ExecutionRole::Unknown
+        );
+    }
     let mut decided = false;
     let role = write_role_walk(
         file,
@@ -3211,7 +3218,7 @@ pub(crate) fn layer_run(
             file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
         })
         .find_map(|(call, index)| {
-            let resolved = lookup.resolved_callee_call(file, call.callee)?;
+            let resolved = lookup.placing_callee_call(file, call.callee)?;
             resolved
                 .declaration
                 .as_ref()
@@ -3221,8 +3228,25 @@ pub(crate) fn layer_run(
                 .entity_at(file.path.as_str(), call.arguments[index].span)
                 .and_then(|entity| entity.callability);
             crate::runtime_semantics::argument_behavior(resolved, callability, index)
-                .map(|behavior| (call.span, behavior))
+                .map(|behavior| (call, behavior))
         });
+    // ADR 0874: a call the census withholds places its inline callback's rows
+    // as a standard one would, for one run among others, never the sole run:
+    // a site there has no role (`runs_in_withheld_layer`), and a scheduler's
+    // fresh stack is no fact. Callers that take a run here as proof ask
+    // `impostor_withheld` themselves (after_await's ADR 0565 arm).
+    let withheld = behavior
+        .as_ref()
+        .is_some_and(|(call, _)| lookup.impostor_withheld(file, call.callee));
+    if withheld {
+        return match behavior {
+            Some((call, RuntimeArgumentBehavior::InlineCallback)) => {
+                LayerRun::InPlaceAmongOthers(call.span)
+            }
+            _ => LayerRun::Elsewhere,
+        };
+    }
+    let behavior = behavior.map(|(call, behavior)| (call.span, behavior));
     match (behavior, iife) {
         (Some((_, RuntimeArgumentBehavior::FreshStackCallback)), _) => LayerRun::FreshStack,
         (Some((call, RuntimeArgumentBehavior::InlineCallback)), _) => LayerRun::InPlace(call),
@@ -3234,6 +3258,77 @@ pub(crate) fn layer_run(
                 .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
         },
     }
+}
+
+/// ADR 0874: whether the site at `span` runs only as a function handed to a
+/// call the census withholds does: directly in that function, or in layers
+/// that run in place in it. A function a primitive runs, or a JSX expression
+/// the compiler wraps, between the two keeps its own role: it does not depend
+/// on who runs the function around it.
+pub(crate) fn runs_in_withheld_layer(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    withheld_layer_call(file, span, lookup).is_some()
+}
+
+/// [`runs_in_withheld_layer`]'s withheld call, by span: where the standard
+/// carrier would run the site, which only places a row and proves nothing.
+pub(crate) fn withheld_layer_call(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut at = span;
+    for _ in 0..32 {
+        let function = crate::owners::owning_function(&file.ast, at)?;
+        if let Some(call) = handed_to_withheld_call(file, function, lookup) {
+            return Some(call);
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) if call != at => {
+                if super::callee_roles::own_jsx_compiler_role(file, call).is_some() {
+                    return None;
+                }
+                at = call;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Whether the call nearest around `function` is a withheld one with the
+/// function in its arguments (under a condition or an assertion too), or a
+/// reference to the function's name is such an argument.
+fn handed_to_withheld_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let nearest = |span: Span| {
+        ast.arguments_containing(span)
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+    };
+    if let Some((call, _)) =
+        nearest(function.span).filter(|(call, _)| lookup.impostor_withheld(file, call.callee))
+    {
+        return Some(call.span);
+    }
+    let name = crate::owners::function_binding_name(file, function)?;
+    ast.references_to(name.span)
+        .iter()
+        .filter(|reference| **reference != name.span)
+        .find_map(|reference| {
+            nearest(*reference)
+                .filter(|(call, index)| {
+                    ast.peel_ts_sugar_span(call.arguments[*index].span) == *reference
+                        && lookup.impostor_withheld(file, call.callee)
+                })
+                .map(|(call, _)| call.span)
+        })
 }
 
 /// ADR 0479: the one call that runs a function bound to a name, when it is the

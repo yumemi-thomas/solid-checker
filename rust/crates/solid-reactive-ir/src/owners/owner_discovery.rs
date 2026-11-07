@@ -320,6 +320,24 @@ pub(crate) fn discover_owner_file(
                     kind,
                 });
             }
+            // ADR 0874: a withheld carrier's callback may run here, later with
+            // no owner, or never. As for a carrier that may run zero times
+            // (ADR 0563), the possible unowned bit alone: nothing proves a run,
+            // so what the callback does stays an obligation, never a violation.
+            for index in withheld_carrier_arguments(file, call, lookup) {
+                let argument = call.arguments[index].span;
+                if crate::owners::argument_may_be_generator(file, argument, lookup) {
+                    continue;
+                }
+                let Some(target) = callback_target(argument, false) else {
+                    continue;
+                };
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
+                });
+            }
         }
         // ADR 0516: a generator called in place whose iterator is stepped at
         // the call runs its body there, up to a `yield`, under the owner of

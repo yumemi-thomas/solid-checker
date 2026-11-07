@@ -408,6 +408,14 @@ pub(super) fn semantic_role_before_awaits(
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
         return role_arm!("callee_roles.returned-factory-callback", role);
     }
+    // ADR 0874: nothing places code an impostor may run, or never run. A JSX
+    // expression the compiler wraps keeps its own role (ADR 0470, below).
+    if (classifying.contains(&write_classification_marker())
+        || own_jsx_compiler_role(file, span).is_none())
+        && super::write_roles::runs_in_withheld_layer(file, span, lookup)
+    {
+        return role_arm!("callee_roles.withheld-layer", ExecutionRole::Unknown);
+    }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
         return role_arm!("callee_roles.inline-callback", role);
     }

@@ -1095,6 +1095,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-census-absent/node_modules/**
 !fixtures/reactive-ir/impostor-census-any-key/node_modules/
 !fixtures/reactive-ir/impostor-census-any-key/node_modules/**
+!fixtures/reactive-ir/impostor-receivers/node_modules/
+!fixtures/reactive-ir/impostor-receivers/node_modules/**
+!fixtures/reactive-ir/impostor-host-proto/node_modules/
+!fixtures/reactive-ir/impostor-host-proto/node_modules/**
+!fixtures/reactive-ir/impostor-host-intact/node_modules/
+!fixtures/reactive-ir/impostor-host-intact/node_modules/**
+!fixtures/reactive-ir/impostor-withheld-rows/node_modules/
+!fixtures/reactive-ir/impostor-withheld-rows/node_modules/**
 !fixtures/reactive-ir/standard-patches/node_modules/
 !fixtures/reactive-ir/standard-patches/node_modules/**
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/

@@ -497,8 +497,8 @@ fn iteration_receiver_of_parameter(
             .iter()
             .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == callback.span)
     })?;
-    t.lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0874: this only opens obligations.
+    t.lookup.placing_standard_declaration(file, call)?;
     file.ast
         .member_at(file.ast.peel_ts_sugar_span(call.callee))
         .map(|member| member.object)
@@ -605,9 +605,8 @@ fn handed_call(
         return true;
     }
     // F-B: a standard call hands on what it was given (`m.get("f")`).
-    t.lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        .is_some()
+    // ADR 0874: this only opens obligations.
+    t.lookup.placing_standard_declaration(file, call).is_some()
         && (handed_argument()
             || file
                 .ast
@@ -2008,6 +2007,11 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
             );
             if execution == ExecutionRole::DiscardedRendering {
+                continue;
+            }
+            // ADR 0874: a call an impostor may run, or never: not silent.
+            if crate::execution_role::runs_in_withheld_layer(file, call.span, self.lookup) {
+                retained_in_layer = true;
                 continue;
             }
             let candidates = self.lookup.callee_symbols(file, call.callee);

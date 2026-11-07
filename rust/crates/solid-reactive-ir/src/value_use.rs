@@ -865,7 +865,7 @@ impl<'l, 'a> Census<'l, 'a> {
                     .next()
                     .is_some_and(|call| {
                         self.lookup
-                            .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                            .placing_standard_declaration(file, call)
                             .is_some()
                             && call.arguments.first().is_none_or(|argument| {
                                 ast.function_at(ast.peel_ts_sugar_span(argument.span))

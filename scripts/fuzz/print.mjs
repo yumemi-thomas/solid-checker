@@ -692,6 +692,7 @@ function render(program, instrument) {
   for (const helper of moduleHelpers.filter((h) => h.via)) packageImports.push(helperImportLine(helper));
   for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
   packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
+  packageImports.push(...new Set(program.components.flatMap((component) => component.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
   // rc.21 declares these only in `solid-js/internal`.
   const internal = ["createErrorBoundary", "createLoadingBoundary", "createOwner"];
@@ -763,6 +764,8 @@ export function moduleFiles(program) {
   for (const component of program.components) {
     const seen = sourcedSignals(component, signals);
     for (const { node } of walk(component)) if (node.k === "use") Object.assign(extra, describeUse(node, seen).files ?? {});
+    // A context's own module (flip-read.mjs: the code it places in a second file).
+    Object.assign(extra, component.files ?? {});
   }
   if (!moduleHelpers.length && !sourced.length) return extra;
   const head = used.size ? `import { ${[...used].sort().join(", ")} } from "solid-js";\n\n` : "";

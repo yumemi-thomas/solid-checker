@@ -427,6 +427,41 @@ impl<'a> SemanticLookup<'a> {
         (!vetoed).then_some(resolved)
     }
 
+    /// ADR 0874: the call [`Self::resolved_callee_call`] answers for `callee`
+    /// but for the impostor census: what it would be were the receiver real.
+    /// It places a row, and proves nothing: a row placed through a withheld
+    /// call is uncertifiable.
+    pub(crate) fn placing_callee_call(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a ResolvedCall> {
+        self.resolved_callee_call(file, callee).or_else(|| {
+            self.impostor_withheld(file, callee)
+                .then(|| {
+                    resolved_callee_call_in(
+                        file,
+                        self.ast_indexes.get(file.path.as_str()),
+                        callee,
+                        |span| self.entity_at(file.path.as_str(), span),
+                    )
+                })
+                .flatten()
+        })
+    }
+
+    /// [`Self::standard_library_declaration`] by [`Self::placing_callee_call`].
+    pub(crate) fn placing_standard_declaration(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<&'a typefacts::ResolvedDeclaration> {
+        standard_library_declaration_of(
+            self.placing_callee_call(file, call.callee),
+            typefacts::CallKind::Call,
+        )
+    }
+
     /// ADR 0840: whether the impostor census withholds the standard call at
     /// `callee` ([`crate::base::contributions::impostor_veto`]).
     pub(crate) fn impostor_withheld(&self, file: &FileFacts, callee: Span) -> bool {
