@@ -574,14 +574,20 @@ pub(crate) fn collect_project<'facts>(
         .into_iter()
         .filter(|obligation| !covered(obligation))
         .collect::<Vec<_>>();
+    // A use before the escape speaks for its span only where its own row
+    // stands: one `covered` dropped leaves the escaped row there.
+    let kept = handed
+        .iter()
+        .map(|obligation| {
+            let at = &obligation.location;
+            (at.path.clone(), at.start_byte, at.end_byte)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
     let escaped_rows = escaped_rows
         .into_iter()
         .filter(|obligation| {
             let at = &obligation.location;
-            // A read row under the site need not be one the projection
-            // reports (a store setter's callback): only a use before the
-            // escape speaks for it; a duplicate beside a reported row is U.
-            !used.contains(&(at.path.clone(), at.start_byte, at.end_byte))
+            !kept.contains(&(at.path.clone(), at.start_byte, at.end_byte))
         })
         .collect::<Vec<_>>();
     for obligation in handed {
