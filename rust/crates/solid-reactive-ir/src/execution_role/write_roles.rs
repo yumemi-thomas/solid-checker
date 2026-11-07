@@ -2448,6 +2448,16 @@ pub(super) fn write_role_walk<'f>(
             ExecutionRole::Unreported
         );
     }
+    // ADR 0851: the same past a `yield` of a generator its async caller steps
+    // across one of that caller's suspensions (`for await`, or a loop that
+    // awaits): the step that runs the write is called from the continuation.
+    let generator_resumed = generator_step_resumption(file, span, lookup);
+    if generator_resumed == Some(true) {
+        return role_arm!(
+            "write_roles.write_role_walk.unreported-generator",
+            ExecutionRole::Unreported
+        );
+    }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`
@@ -2463,9 +2473,133 @@ pub(super) fn write_role_walk<'f>(
     // function is the same; and whatever role a position names (a named
     // tracked compute, an effect compute, the entries), only a permissive one
     // holds past a possible suspension.
-    let suspendable = may_follow_suspension(file, span) || layered_suspension == Some(false);
+    let suspendable = may_follow_suspension(file, span)
+        || layered_suspension == Some(false)
+        || generator_resumed == Some(false);
     if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
+    }
+    // ADR 0853: a named generator handed on as a value has unplaced steps.
+    // Its creation calls are not body entries, even if the lexical compute
+    // would reject a write. Primitive-stepped and inline generators keep
+    // their existing dedicated paths.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && crate::owners::function_binding_name(file, generator).is_some()
+        && crate::owners::generator_creations(file, generator, lookup).is_none()
+        && crate::owners::stepped_action_generator(file, generator, lookup).is_none()
+        && !allowed
+            .iter()
+            .any(|region| file.ast.peel_ts_sugar_span(*region) == generator.span)
+    {
+        *decided = true;
+        return role_arm!("write_roles.generator-steps-handed", ExecutionRole::Unknown);
+    }
+    // ADR 0851: a generator's entries are its steps, which the role at the
+    // site already took (`callee_roles.generator-steps`); a call of it runs
+    // none of its body, so the walk over its callers below does not apply.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && let Some(calls) = crate::owners::generator_creations(file, generator, lookup)
+    {
+        // The write walk at each step site, which knows the write
+        // adjustments the read role at the site does not: one role where
+        // every step agrees, none where they differ or a step is unplaced.
+        let key = (file.path.to_string(), generator.span);
+        // A step runs the site on its own stack only up to the generator's
+        // first suspension of its own (a `yield`, or an `await` of an async
+        // one), unless a sync generator is drained in place by every
+        // creation (a `for…of`, spread, pattern or `Array.from`), whose loop
+        // takes each later step on the same stack.
+        let own = |point: Span| {
+            generator.body.contains(point)
+                && crate::owners::containing_ast_function(&file.ast, point)
+                    .is_some_and(|owner| owner.span == generator.span)
+        };
+        let suspensions = file.ast.yields.iter().map(|fact| fact.span).chain(
+            generator
+                .r#async
+                .then(|| {
+                    file.ast
+                        .awaits
+                        .iter()
+                        .chain(&file.ast.implicit_suspensions)
+                        .copied()
+                })
+                .into_iter()
+                .flatten(),
+        );
+        let first_segment = !suspensions.filter(|point| own(*point)).any(|point| {
+            point.start < span.start
+                || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                    repeated.contains(span)
+                        && looped.contains(point)
+                        && generator.body.contains(looped)
+                })
+        });
+        let drained = !generator.r#async
+            && calls.iter().all(|call| {
+                file.ast.iterated_operands.contains(&call.span)
+                    || crate::owners::array_from_source(file, call.span, lookup)
+            });
+        if (first_segment || drained)
+            && !crate::owners::generator_exported(file, generator)
+            && visiting.insert(key.clone())
+        {
+            let mut sites = Vec::new();
+            let mut unplaced = false;
+            for call in calls {
+                match crate::owners::iterator_steps(file, call, lookup) {
+                    crate::owners::IteratorSteps::InPlace => sites.push(call.span),
+                    crate::owners::IteratorSteps::Held(steps) => sites.extend(steps),
+                    crate::owners::IteratorSteps::Unplaced => unplaced = true,
+                }
+            }
+            let mut role: Option<ExecutionRole> = None;
+            let mut differ = unplaced;
+            for site in sites {
+                if differ {
+                    break;
+                }
+                let at = semantic_write_execution_role_within(
+                    file,
+                    site,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                );
+                differ |= role.is_some_and(|role| role != at);
+                role = Some(at);
+            }
+            visiting.remove(&key);
+            match role {
+                // A step that may resume on the continuation (ADR 0851) holds
+                // only a permissive role there, as a possible await does.
+                Some(role)
+                    if !differ
+                        && role != ExecutionRole::Unknown
+                        && !(generator_resumed == Some(false)
+                            && role.reports_disallowed_write()) =>
+                {
+                    return role_arm!("write_roles.generator-steps-walked", role);
+                }
+                None if !differ => {
+                    return role_arm!(
+                        "write_roles.generator-never-stepped",
+                        ExecutionRole::Unreported
+                    );
+                }
+                _ => {}
+            }
+        }
+        return if direct == ExecutionRole::Unknown {
+            role_arm!("write_roles.generator-steps-unknown", unknown)
+        } else {
+            role_arm!("write_roles.generator-steps", direct)
+        };
     }
     // A site in a parameter list (a default value, a pattern, a function written
     // inside either) runs when its function is called without the argument:

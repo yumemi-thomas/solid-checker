@@ -21,6 +21,7 @@ import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
 import { FLIP_READ_CONTEXTS, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, flipReadContext, openSignal } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, flipWriteContext } from "./flip-write.mjs";
+import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -658,7 +659,7 @@ export const SPEC = {
   },
 };
 // The flip's shapes (flip-read.mjs, flip-write.mjs): one file per track, so neither edits this table.
-for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS]) {
+for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS, FLIP_GEN_CONTEXTS]) {
   for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
 }
 for (const [code, added] of Object.entries(FLIP_READ_LEGAL)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
@@ -1460,7 +1461,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);

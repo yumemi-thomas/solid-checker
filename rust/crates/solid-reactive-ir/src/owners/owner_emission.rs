@@ -305,12 +305,28 @@ pub(super) fn emit_file(
         let step_resumption = possible_site
             .filter(|_| !after_await && context != 0)
             .and_then(|site| action_step_resumption(file, site, lookup));
-        let after_yield = step_resumption == Some(StepResumption::Proven);
+        // ADR 0851: the same past a `yield` of a generator its async caller
+        // steps across one of its suspensions (`for await`, a loop that
+        // awaits): that step is called from the caller's continuation.
+        let generator_resumed = possible_site
+            .filter(|_| !after_await && context != 0 && step_resumption.is_none())
+            .and_then(|site| crate::execution_role::generator_step_resumption(file, site, lookup));
+        // ADR 0852: a throw in the step rejects the async caller's flight.
+        // Its owner context proves the guard, not propagation to an observed
+        // read or error boundary. Keep the context-read obligation open.
+        let flight_error_unobserved = candidate.operation == "context-read"
+            && generator_resumed.is_some()
+            && possible_site.is_some_and(|site| {
+                crate::execution_role::generator_flight_stepped(file, site, lookup)
+            });
+        let after_yield =
+            step_resumption == Some(StepResumption::Proven) || generator_resumed == Some(true);
         let after_await = after_await || after_yield;
         let possible_continuation = possible_site.filter(|_| !after_await).and_then(|site| {
             possible_await_continuation_context(file, site, context).or_else(|| {
-                (step_resumption == Some(StepResumption::Possible))
-                    .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
+                (step_resumption == Some(StepResumption::Possible)
+                    || generator_resumed == Some(false))
+                .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
             })
         });
         let context = if after_await {
@@ -577,7 +593,8 @@ pub(super) fn emit_file(
         let provider_open = provider && !inputs.lookup.program_closed;
         let default_unproven = provider && default_unproven;
         let unplaced_callback = unplaced_callback && !proven_unowned;
-        let uncertain = runtime_uncertain
+        let uncertain = flight_error_unobserved
+            || runtime_uncertain
             || conditional_owner
             || later_run_unowned
             || caller_uncertain
@@ -592,8 +609,11 @@ pub(super) fn emit_file(
             let default_unproven = provider_verdict == Some(false);
             let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                 || owner.is_some_and(|(node, _)| node.component_uncertain);
-            let uncertain =
-                runtime_uncertain || component_uncertain || provider_open || default_unproven;
+            let uncertain = flight_error_unobserved
+                || runtime_uncertain
+                || component_uncertain
+                || provider_open
+                || default_unproven;
             crate::role_log::owner(
                 "context-provider",
                 path,
@@ -609,6 +629,7 @@ pub(super) fn emit_file(
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
+                    flight_error_unobserved,
                     uncertain,
                     runtime_uncertain,
                     caller_uncertain: false,
@@ -648,6 +669,7 @@ pub(super) fn emit_file(
             file,
             candidate.operation_span,
             OwnerRequirementStatus {
+                flight_error_unobserved,
                 uncertain,
                 runtime_uncertain,
                 caller_uncertain,
