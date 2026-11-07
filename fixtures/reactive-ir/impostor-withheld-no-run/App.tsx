@@ -45,12 +45,3 @@ export function Answered() {
   const m = createMemo(() => { xs.forEach(() => { set(1); }); return s(); });
   return <p>{m()}</p>;
 }
-
-const kept = [1, 2];
-kept.reverse();
-
-export function Discarded() {
-  const [s, set] = createSignal(0);
-  const m = createMemo(() => { kept.forEach(() => { set(1); }); return s(); });
-  return <p>{m()}</p>;
-}

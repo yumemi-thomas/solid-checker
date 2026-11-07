@@ -409,10 +409,9 @@ impl<'a> SemanticLookup<'a> {
                 hazards
                     .into_iter()
                     .any(|hazard| self.hazard_present(hazard))
-            }) || (self.hazard_present(crate::base::Hazard::AnyStandardPatch)
-                && crate::base::contributions::patch_veto(name)
-                    .into_iter()
-                    .any(|hazard| self.hazard_present(hazard)))
+            }) || crate::base::contributions::patch_vetoed(name, &|hazard| {
+                self.hazard_present(hazard)
+            })
                 || crate::base::contributions::unproven_assertion(file, callee, name, |span| {
                     self.entity_at(file.path.as_str(), span)
                 })
@@ -437,7 +436,7 @@ impl<'a> SemanticLookup<'a> {
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
         self.resolved_callee_call(file, callee).or_else(|| {
-            self.impostor_withheld(file, callee)
+            self.standard_call_withheld(file, callee)
                 .then(|| {
                     resolved_callee_call_in(
                         file,
@@ -460,6 +459,30 @@ impl<'a> SemanticLookup<'a> {
             self.placing_callee_call(file, call.callee),
             typefacts::CallKind::Call,
         )
+    }
+
+    /// ADR 0874, ADR 0876: whether the standard call at `callee` keeps no
+    /// resolution for a reason that may be false of it: the census withholds
+    /// it, or a write some chain reaches may have replaced any member. Either
+    /// way its rows stand at their sites, uncertain; only the first has an
+    /// impostor's row. A patch that names this member is ADR 0781's.
+    pub(crate) fn standard_call_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee)
+    }
+
+    /// ADR 0876: whether a write some chain reaches may have replaced the
+    /// standard call at `callee`.
+    pub(crate) fn reached_patch_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )
+        .and_then(crate::runtime_semantics::standard_call_name)
+        .is_some_and(|name| {
+            crate::base::contributions::reached_patch(name, &|hazard| self.hazard_present(hazard))
+        })
     }
 
     /// ADR 0840: whether the impostor census withholds the standard call at

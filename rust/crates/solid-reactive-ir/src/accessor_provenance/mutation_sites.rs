@@ -298,7 +298,8 @@ pub(super) fn tuple_mutation_method<'a>(
 ) -> Option<&'a str> {
     // A library signature on an alias is insufficient to certify the runtime
     // callee, but is sufficient to retain a possible mutation as a veto.
-    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0876: so is a withheld call's: this only vetoes.
+    let declaration = lookup.placing_standard_declaration(file, call)?;
     let (method, library) = match declaration.qualified_name.as_ref() {
         "ObjectConstructor.assign" => ("assign", "lib.es2015.core.d.ts"),
         "ObjectConstructor.defineProperty" => ("defineProperty", "lib.es5.d.ts"),
@@ -1799,7 +1800,8 @@ pub(crate) fn mutation_builtin<'a>(
     call: &ast::CallFact,
     lookup: &'a SemanticLookup<'_>,
 ) -> Option<&'a str> {
-    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    // ADR 0876: this only vetoes, so a withheld call stays a possible mutation.
+    let declaration = lookup.placing_standard_declaration(file, call)?;
     let (global, property, library) =
         mutation_builtin_spelling(declaration.qualified_name.as_ref())?;
     let member = file.ast.members.iter().find(|member| {

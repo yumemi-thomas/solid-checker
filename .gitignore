@@ -1099,6 +1099,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-census-any-key/node_modules/**
 !fixtures/reactive-ir/impostor-receivers/node_modules/
 !fixtures/reactive-ir/impostor-receivers/node_modules/**
+!fixtures/reactive-ir/host-call-member-write/node_modules/
+!fixtures/reactive-ir/host-call-member-write/node_modules/**
+!fixtures/reactive-ir/impostor-prototype-reach/node_modules/
+!fixtures/reactive-ir/impostor-prototype-reach/node_modules/**
+!fixtures/reactive-ir/impostor-prototype-own/node_modules/
+!fixtures/reactive-ir/impostor-prototype-own/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/**
 !fixtures/reactive-ir/impostor-symbol-key/node_modules/
@@ -1113,6 +1119,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-host-intact/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-rows/node_modules/
 !fixtures/reactive-ir/impostor-withheld-rows/node_modules/**
+!fixtures/reactive-ir/impostor-withheld-mutation/node_modules/
+!fixtures/reactive-ir/impostor-withheld-mutation/node_modules/**
 !fixtures/reactive-ir/standard-patches/node_modules/
 !fixtures/reactive-ir/standard-patches/node_modules/**
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/

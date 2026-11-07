@@ -361,6 +361,9 @@ pub(crate) struct Census<'l, 'a> {
     /// The uses a walk ended at, past the reference it started from: the
     /// obligation sits at the use too, so each has a row of its own.
     uses: Vec<(Location, &'static str)>,
+    /// ADR 0876: the calls a withheld member heads, walked on after every
+    /// other walk: this walk's memo and budget decide those walks' rows.
+    past_withheld: Vec<(&'a FileFacts, &'a solid_facts::ast::CallFact, Mode)>,
     /// ADR 0860: the open positions this reference's walk goes on from.
     escapes: Vec<Escape<'a>>,
     /// ADR 0860: the rows the walks past an escape placed. They come after
@@ -407,6 +410,7 @@ impl<'l, 'a> Census<'l, 'a> {
             hop_starts: HashSet::default(),
             async_walk: true,
             uses: Vec::new(),
+            past_withheld: Vec::new(),
             escapes: Vec::new(),
             escaped_uses: Vec::new(),
             allowed: HashMap::default(),
@@ -551,6 +555,28 @@ impl<'l, 'a> Census<'l, 'a> {
         self.escapes.clear();
         let escaped = self.uses.split_off(before);
         self.escaped_uses.extend(escaped);
+        self.run_past_withheld();
+    }
+
+    /// ADR 0876: what a withheld call may hand on, by a walk of its own that
+    /// only adds rows.
+    fn run_past_withheld(&mut self) {
+        if self.past_withheld.is_empty() {
+            return;
+        }
+        let walked = std::mem::take(&mut self.walked);
+        let before = self.uses.len();
+        self.steps = 0;
+        while let Some((file, call, mode)) = self.past_withheld.pop() {
+            self.parameter_hops = 0;
+            self.return_hops = 0;
+            self.position(file, call.span, mode);
+            self.callback_parameters(file, call, mode);
+        }
+        self.escapes.clear();
+        let past = self.uses.split_off(before);
+        self.escaped_uses.extend(past);
+        self.walked = walked;
     }
 
     /// ADR 0860: an open position past which the walk goes on as an escaped
@@ -1150,6 +1176,12 @@ impl<'l, 'a> Census<'l, 'a> {
                 self.position(file, call.span, mode);
                 self.callback_parameters(file, call, mode);
                 return Position::Followed;
+            }
+            // ADR 0876: a call a reached patch withholds may hand it on just
+            // the same. Its row stands at the member below; this only opens
+            // further rows.
+            if self.lookup.reached_patch_withheld(file, call.callee) {
+                self.past_withheld.push((file, call, mode));
             }
         }
         let span = member.span;

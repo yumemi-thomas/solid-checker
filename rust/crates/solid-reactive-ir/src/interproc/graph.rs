@@ -1323,7 +1323,7 @@ fn record_runtime_argument_behavior(
         // stand at their sites), with no inline timing (as a thenable's).
         .or_else(|| {
             lookup
-                .impostor_withheld(file, call.callee)
+                .standard_call_withheld(file, call.callee)
                 .then(|| lookup.placing_callee_call(file, call.callee))
                 .flatten()
                 .and_then(|placing| {

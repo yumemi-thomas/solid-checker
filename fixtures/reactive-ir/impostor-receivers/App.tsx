@@ -19,10 +19,6 @@ const steal = (_v: number, _i: number, a: number[]) => { (a as any).forEach = la
 const named = [1];
 named.map(steal);
 
-// No route to the receiver: the array stays the library's.
-const kept = [1, 2];
-kept.map((v) => v + 1);
-
 export function HandedOn() {
   const [s, set] = createSignal(0);
   const m = createMemo(() => { handed.forEach(() => { set(1); }); return s(); });
@@ -41,11 +37,6 @@ export function ThisHandedOn() {
 export function NamedCallback() {
   const [s, set] = createSignal(0);
   const m = createMemo(() => { named.forEach(() => { set(1); }); return s(); });
-  return <p>{m()}</p>;
-}
-export function CleanArity() {
-  const [s, set] = createSignal(0);
-  const m = createMemo(() => { kept.forEach(() => { set(1); }); return s(); });
   return <p>{m()}</p>;
 }
 

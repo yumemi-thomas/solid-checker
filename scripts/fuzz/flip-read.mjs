@@ -57,6 +57,37 @@ const PATCHES = {
   "patch-getproto": [`const gp = Object.getPrototypeOf(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
   "patch-assign-key-proto": [`${PATCH_KEYS} Object.assign((globalThis as any)[pk].prototype, { [pm]: ${SYNC_PROTO} });`, "Promise.resolve().then"],
   "patch-key-alias": [`${PATCH_KEYS} const gC = (globalThis as any)[pk]; gC.prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  // ADR 0876, review of tier A: the write's own chain reaches a standard prototype, by each spelling.
+  "patch-dunder-then": [`(Promise.resolve() as any).__proto__.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-ctor-proto": [`(Promise.resolve() as any).constructor.prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-define-getproto": [`Object.defineProperty(Object.getPrototypeOf(Promise.resolve()), "then", { value: ${SYNC_PROTO}, configurable: true, writable: true });`, "Promise.resolve().then"],
+  "patch-reflect-set-proto": [`Reflect.set(Reflect.getPrototypeOf(Promise.resolve()) as object, "then", ${SYNC_PROTO});`, "Promise.resolve().then"],
+  "patch-descriptor-proto": [`Object.defineProperties(Object.getPrototypeOf(Promise.resolve()), { then: { value: ${SYNC_PROTO}, configurable: true, writable: true } });`, "Promise.resolve().then"],
+  "patch-destructure-proto": [`const { getPrototypeOf: gpo } = Object; const gp = gpo(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-let-getproto": [`let gp: any; gp = Object.getPrototypeOf(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-const-getproto": [`const gpo = Object.getPrototypeOf; const gp = gpo(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-call-getproto": [`const gp = Object.getPrototypeOf.call(null, Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-apply-getproto": [`const gp = Object.getPrototypeOf.apply(null, [Promise.resolve()]); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-bind-getproto": [`const gp = Object.getPrototypeOf.bind(null)(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-bracket-getproto": [`const gp = (Object as any)["getPrototypeOf"](Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-comma-getproto": [`const gp = (0, Object.getPrototypeOf)(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-owner-rebound": [`function Foo() {} (Foo as any).prototype = Promise.prototype; (Foo as any).prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-owner-member": [`function Foo() {} (Foo as any).prototype.x = Promise.prototype; (Foo as any).prototype.x.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-handed-proto": [`const put = (o: any) => { o.then = ${SYNC_PROTO}; }; put(Promise.prototype);`, "Promise.resolve().then"],
+  "patch-each-proto": [`[Promise.prototype].forEach((p: any) => { p.then = ${SYNC_PROTO}; });`, "Promise.resolve().then"],
+  "patch-return-proto": [`const of = (): any => Promise.prototype; of().then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  // Review R45, R46: `prototype` written by a shape definer; a `let` whose assignment reaches, under a key no fact names.
+  "patch-owner-assign": [`function Foo() {} Object.assign(Foo, { prototype: Promise.prototype }); (Foo as any).prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-owner-defines": [`function Foo() {} Object.defineProperties(Foo, { prototype: { value: Promise.prototype, writable: true } }); (Foo as any).prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-owner-opaque": [`function Foo() {} const pSrc: any = { prototype: Promise.prototype }; Object.assign(Foo, pSrc); (Foo as any).prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  // ADR 0876: a key no fact names reaches a prototype, so `bind` is withheld: `f.bind(x)()` keeps its row.
+  "patch-key-bind": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `${h}.bind(null)()`],
+  // ADR 0876: a withheld mutator stays a possible mutation, and a value's walk goes on past a withheld call.
+  "patch-key-assign": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO}; const mk = (x: () => void) => { const t = new Map<number, () => void>(); const on = () => { t.set(1, x); }; return { f: () => {}, on } as const; };`, (h) => `(() => { const o = mk(${h}); const src: any = { f: ${h} }; Object.assign(o, src); o.on(); o.f(); })()`],
+  "patch-key-from": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `Array.from([${h}]).forEach((g) => { g(); })`],
+  "patch-key-spread": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `[...[${h}]].map((g) => g())`],
+  "patch-key-get": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, (h) => `new Map([[1, ${h}]]).get(1)!()`],
+  "patch-let-assigned-key": [`${PATCH_KEYS} let gp: any = {}; gp = Object.getPrototypeOf(Promise.resolve()); gp[pm] = ${SYNC_PROTO};`, "Promise.resolve().then"],
   "patch-key-ctor": [`${PATCH_KEYS} let gA = false; const gR = (globalThis as any)[pk]; (globalThis as any)[pk] = class extends gR { static resolve(v?: unknown) { return gA ? ((gA = false), { then(f: () => void) { f(); } }) : gR.resolve(v); } };`, "(gA = true, Promise.resolve()).then"],
 };
 // ADR 0840: the impostor away from the receiver (a parameter, a field, a return, a generic, a member), and with no assertion at all
@@ -77,6 +108,12 @@ const CASTS = {
   "cast-instance": (t) => ({ held: [decl(t, domExpr("Promise.resolve()")), expr(domExpr(`Object.assign(${t}, { then: (f: () => void) => { f(); } })`))], callee: `${t}.then` }),
 };
 const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
+// ADR 0876: quiet in Chrome, and the proof stands: a project class's own prototype, a prototype only compared, one only read.
+const PROTO_LEGAL = {
+  "proto-own-class": (h) => [`class Foo { then() {} } Foo.prototype.then = () => {};`, `setTimeout(${h}, 0)`],
+  "proto-compared": (h) => [`const isPlain = (v: object) => { const gp = Object.getPrototypeOf(v); return gp === null || gp === Object.prototype; }; isPlain({});`, `Promise.resolve().then(${h})`],
+  "proto-read-walk": (h) => [`let walked: object | null = []; while (walked) walked = Object.getPrototypeOf(walked);`, `Promise.resolve().then(${h})`],
+};
 // ADR 0874: a receiver the census took for the standard library's, with the program's own member on it. Each runs the callback at once
 // on the caller's stack. The event type names the program's own: the runtime's listeners keep the built-in.
 const ADD_SYNC = 'function (this: any, t: string, cb: any, ...r: any[]) { if (t === "x-sync") cb(); else (hO as any).call(this, t, cb, ...r); }';
@@ -257,10 +294,10 @@ export const FLIP_READ_LEGAL = {
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   // ADR 0874, review R30-R32: a withheld call's callback proves no run: the program's own `forEach` queues it.
   FLUSH_IN_ACTION: ["wh-action-late"],
-  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS)],
+  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL)],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(ITER_PATCHES)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
   RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
   UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late"],
@@ -804,10 +841,15 @@ export function flipReadContext(context, stmts, kit) {
     const h = kit.name("f");
     return { hoisted, body: [...held, decl(h, fn(stmts)), expr(domExpr(run ? run(h) : `${callee}(${h})`))], view: [], ...(files ? { files, importLines } : {}) };
   }
+  if (PROTO_LEGAL[context]) {
+    const h = kit.name("f");
+    const [patch, run] = PROTO_LEGAL[context](h);
+    return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(run))], view: [] };
+  }
   if (PATCHES[context]) {
     const [patch, callee] = PATCHES[context];
     const h = kit.name("f");
-    return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
+    return { hoisted: [expr(domExpr(patch))], body: [decl(h, fn(stmts)), expr(domExpr(typeof callee === "function" ? callee(h) : `${callee}(${h})`))], view: [] };
   }
   if (context === "cleanup-mount" || context === "cleanup-mount-mixed" || context === "handler-mount") {
     const [k, d, b] = [kit.name("K"), kit.name("f"), kit.name("b")];

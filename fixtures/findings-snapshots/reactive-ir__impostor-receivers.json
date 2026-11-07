@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "reactive-dispatch-unresolved",
@@ -74,8 +74,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 910,
-      "end": 924,
+      "start": 804,
+      "end": 818,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 933,
-      "end": 939,
+      "start": 827,
+      "end": 833,
       "fixes": 0
     },
     {
@@ -96,8 +96,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1088,
-      "end": 1103,
+      "start": 982,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1112,
-      "end": 1118,
+      "start": 1006,
+      "end": 1012,
       "fixes": 0
     },
     {
@@ -118,8 +118,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1265,
-      "end": 1277,
+      "start": 1159,
+      "end": 1171,
       "fixes": 0
     },
     {
@@ -129,8 +129,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1286,
-      "end": 1292,
+      "start": 1180,
+      "end": 1186,
       "fixes": 0
     },
     {
@@ -140,8 +140,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1440,
-      "end": 1453,
+      "start": 1334,
+      "end": 1347,
       "fixes": 0
     },
     {
@@ -151,18 +151,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1462,
-      "end": 1468,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 1634,
-      "end": 1640,
+      "start": 1356,
+      "end": 1362,
       "fixes": 0
     },
     {
@@ -172,8 +162,8 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 2064,
-      "end": 2078,
+      "start": 1786,
+      "end": 1800,
       "fixes": 0
     },
     {
@@ -183,8 +173,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
-      "start": 2087,
-      "end": 2093,
+      "start": 1809,
+      "end": 1815,
       "fixes": 0
     },
     {
@@ -287,9 +277,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 795,
+      "end": 806,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 824,
@@ -297,9 +299,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 848,
+      "end": 859,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 873,
@@ -307,9 +321,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 900,
+      "end": 911,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 925,
