@@ -1145,3 +1145,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/settled-unresolved-call/node_modules/**
 !fixtures/reactive-ir/owner-probe-provider/node_modules/
 !fixtures/reactive-ir/owner-probe-provider/node_modules/**
+!fixtures/reactive-ir/owned-edge-escape/node_modules/
+!fixtures/reactive-ir/owned-edge-escape/node_modules/**
+!fixtures/reactive-ir/leaf-iife-placement/node_modules/
+!fixtures/reactive-ir/leaf-iife-placement/node_modules/**

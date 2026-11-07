@@ -137,10 +137,11 @@ const GUARDED_LEGAL = { "flw-guard-early": guardedAsync("guard-early"), "flw-gua
  * somewhere a later click runs it with no owner. Chrome (rc.21): the site's NO_OWNER_* code on the click. The build before read the owned
  * edge as every entry. `flw-owned-twice` and `flw-owned-removed` are legal: every run is on the body's stack.
  */
-const ownedAnd = (place) => (stmts, kit) => {
+const ownedAnd = (place, { jsx: returnsJsx = false } = {}) => (stmts, kit) => {
   const f = kit.name("f");
   const { before = [], after, fires } = place(f, kit);
-  return { body: [decl(f, fn(stmts)), expr(call(ref(f))), ...before, ...(after ?? [])], view: [button(kit.name("b"), [expr(domExpr(fires))])] };
+  const body = returnsJsx ? [...stmts, ret(domExpr("<li />"))] : stmts;
+  return { body: [decl(f, fn(body)), expr(call(ref(f))), ...before, ...(after ?? [])], view: [button(kit.name("b"), [expr(domExpr(fires))])] };
 };
 const ESCAPES = {
   "flw-owned-assigned": ownedAnd((f, kit) => {
@@ -163,6 +164,38 @@ const ESCAPES = {
     const [reg, on] = [kit.name("reg"), kit.name("on")];
     return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(on, domExpr(`(cb: () => void) => { ${reg}.push(cb); }`)), expr(domExpr(`${on}(${f})`))], fires: `${reg}[0]()` };
   }),
+  // Reviewer D13 on ADR 0868: each premise of the first cut, broken.
+  // 1: a Value reference beside a run the census must see.
+  "flw-owned-value-foreach": ownedAnd((f) => ({ before: [expr(domExpr(`document.body.removeEventListener("click", ${f})`))], fires: `[1].forEach(${f})` })),
+  // 2: a value-only argument that keeps the function (`this`, an `object` parameter).
+  "flw-owned-keep-this": ownedAnd((f, kit) => {
+    const [reg, keep] = [kit.name("reg"), kit.name("keep")];
+    return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(keep, domExpr(`function (this: () => void) { ${reg}.push(this); }`)), expr(domExpr(`${keep}.call(${f})`))], fires: `${reg}[0]()` };
+  }),
+  "flw-owned-keep-object": ownedAnd((f, kit) => {
+    const [reg, keep] = [kit.name("reg"), kit.name("keep")];
+    return { before: [decl(reg, domExpr("[] as object[]")), decl(keep, domExpr(`(o: object) => { ${reg}.push(o); }`)), expr(domExpr(`${keep}(${f})`))], fires: `(${reg}[0] as () => void)()` };
+  }),
+  // 3: an EventTarget whose removeEventListener keeps the listener.
+  "flw-owned-remove-impostor": ownedAnd((f, kit) => {
+    const [reg, t] = [kit.name("reg"), kit.name("t")];
+    return { before: [decl(reg, domExpr("[] as (() => void)[]")), decl(t, domExpr(`new (class extends EventTarget { override removeEventListener(_t: string, cb: any) { ${reg}.push(cb); } })() as EventTarget`)), expr(domExpr(`${t}.removeEventListener("x", ${f})`))], fires: `${reg}[0]()` };
+  }),
+  // 4: an unnamed layer held by an object slot, called in the body and assigned to a handler.
+  "flw-owned-slot": (stmts, kit) => {
+    const [o, el] = [kit.name("o"), kit.name("el")];
+    return { body: [decl(o, obj([["run", fn(stmts)]])), expr(call(member(ref(o), "run"))), decl(el, domExpr('document.createElement("button")')), expr(domExpr(`${el}.onclick = ${o}.run`))], view: [button(kit.name("b"), [expr(domExpr(`${el}.click()`))])] };
+  },
+  // 5: a layer that returns JSX, so it may be a component, never rendered as one.
+  "flw-owned-jsx-layer": ownedAnd((f, kit) => {
+    const el = kit.name("el");
+    return { before: [decl(el, domExpr('document.createElement("button")')), expr(domExpr(`${el}.onclick = () => { ${f}(); }`))], fires: `${el}.click()` };
+  }, { jsx: true }),
+  // 6: `eval` reaches the binding by name.
+  "flw-owned-eval": ownedAnd((f, kit) => {
+    const g = kit.name("g");
+    return { before: [decl(g, domExpr(`eval("${f}") as () => void`))], fires: `${g}()` };
+  }),
   "flw-owned-returned": (stmts, kit) => {
     const [f, u, g] = [kit.name("f"), kit.name("u"), kit.name("g")];
     return { body: [decl(u, fn([decl(f, fn(stmts)), expr(call(ref(f))), ret(ref(f))])), decl(g, call(ref(u)))], view: [button(kit.name("b"), [expr(call(ref(g)))])] };
@@ -172,6 +205,10 @@ const ESCAPES_LEGAL = {
   "flw-owned-twice": (stmts, kit) => {
     const f = kit.name("f");
     return { body: [decl(f, fn(stmts)), expr(call(ref(f))), expr(call(ref(f)))], view: [] };
+  },
+  "flw-owned-slot-called": (stmts, kit) => {
+    const o = kit.name("o");
+    return { body: [decl(o, obj([["run", fn(stmts)]])), expr(call(member(ref(o), "run"))), expr(call(member(ref(o), "run")))], view: [] };
   },
   "flw-owned-removed": (stmts, kit) => {
     const f = kit.name("f");

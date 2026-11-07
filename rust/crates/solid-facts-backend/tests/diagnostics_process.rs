@@ -1642,7 +1642,9 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         // lines 5, 6, 38) are no owner site. rc.21's dev `createComponent`
         // runs every component under its own transparent root, and Chrome is
         // quiet for each; the call form `Loading(props)` still warns.
-        ("owner-presence", &[("missing-owner", 11)]),
+        // ADR 0868: `directRootHelper`'s two operations (lines 23-24) are
+        // uncertifiable: its census is not proven closed.
+        ("owner-presence", &[("missing-owner", 13)]),
         (
             "async-boundary",
             &[

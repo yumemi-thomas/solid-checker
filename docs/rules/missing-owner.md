@@ -92,6 +92,12 @@ through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
 later calls it. The owner walk does not follow the returned value to those
 calls, so an owner operation in it is uncertifiable, never certified (ADR 0472).
 
+An owned context is the edges the owner graph holds. A function the body calls and
+also assigns to a handler, stores, hands to a value-only argument, or writes to a
+member has another entry with no edge, so an owner operation in it is uncertifiable
+(`owner-callers-unenumerated`, ADR 0868). Only direct calls, inline runs and
+primitive positions, each from placed code, keep the proof.
+
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
 `createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a

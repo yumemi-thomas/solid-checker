@@ -5892,6 +5892,30 @@
   "rediscovered": "flw-guard-* direct ids over the five owner codes (105, Chrome confirmed): build rmg7 (b2e910572) 70 false cleans; r2: 0 (76 uncertifiable, 29 agree); legal twins 80 clean on both"
  },
  {
+  "finding": "SC3001 placed a forbidden call inside IIFEs a leaf callback runs (onSettled, a tracked compute) at the IIFE's line; rc.21 raises the code from the call's own line, so the strict judge read the V as off-site (Part 16, 13 rows)",
+  "found": "Part 16's strict judge (0a656082c, claude/flip-stacked)",
+  "fixed": "R5's SC3001 IIFE placement",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-tracked-signal-fn-wrapper-iife",
+   "mx-primitive-in-forbidden-scope-settled-effect-reexport-iife"
+  ],
+  "rediscovered": "the 13 rows' programs replayed (Chrome confirmed the code each time): build r7 V on the IIFE line in 13 of 13; r8 V on the forbidden call's line in 13 of 13 (each row's region). Part 16's judge confirms on merge"
+ },
+ {
+  "finding": "an owned edge hid another entry: `f(); el.onclick = f` (stored, a member, a map, a library registry, returned) certified the site, and Chrome raised NO_OWNER_* on the click (ADR 0868)",
+  "found": "the owner/scope scout (F2)",
+  "fixed": "ADR 0868",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-owned-assigned-x-direct-none",
+   "mx-no-owner-cleanup-flw-owned-stored-x-direct-none"
+  ],
+  "rediscovered": "flw-owned-* direct ids over the five owner codes (210, Chrome confirmed): build rmg7 (b2e910572) 140 false cleans; r7: 0 (210 uncertifiable); legal twins 84: 0 false positives. Reviewer D13 shapes (147): bbd9bfbf3 35 false cleans; r7 0 (126 uncertifiable, 21 agree); an array element and a class field have no generator node (model.mjs has no array or class literal holding a function)"
+ },
+ {
   "finding": "the `cleanup-unresolved-call` arm dropped an `onSettled` whose callback has no proof and whose call has no Valid fact, also where the call simply has no resolved fact (ADR 0867)",
   "found": "the owner/scope scout (F8)",
   "fixed": "ADR 0867",

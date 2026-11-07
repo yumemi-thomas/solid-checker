@@ -3109,10 +3109,22 @@ fn named_effect_compute_runs(
 /// the census must be bounded at all: a method is entered by member access
 /// through any receiver holding it, and an export by modules this build may
 /// not see (an open program, or a module whose namespace escapes unnamed).
-pub(super) fn entry_census_complete(
+pub(crate) fn entry_census_complete(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
+) -> bool {
+    entry_census_complete_except(file, function, lookup, &[])
+}
+
+/// [`entry_census_complete`], with the same-file references at `accounted`
+/// taken as entries the caller accounts for itself (ADR 0868: a run inline
+/// on a carrier whose own placement the caller checks).
+pub(crate) fn entry_census_complete_except(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    accounted_here: &[Span],
 ) -> bool {
     if function.method_name.is_some() {
         return false;
@@ -3182,7 +3194,8 @@ pub(super) fn entry_census_complete(
             return false;
         }
         let at = Span::new(start, end);
-        bindings.iter().any(|binding| at == binding.span)
+        accounted_here.contains(&at)
+            || bindings.iter().any(|binding| at == binding.span)
             || file.ast.type_queries.iter().any(|query| query.contains(at))
             || positions.iter().any(|position| {
                 position.contains(at)
