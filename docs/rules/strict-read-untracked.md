@@ -26,6 +26,12 @@ raw value where a project uses `markRaw` or a shallow store (ADR 0634).
 holds an object or array there (ADR 0629). A labelled `untrack(fn, "name")` opens a
 window wherever it runs (ADR 0628).
 
+A read through an escaped reactive value carries an SC9012 at the read site
+(ADR 0860), with the blocker from its escape: a carrier, logical expression,
+unresolved member, primitive callback return or forwarded value. A proven
+tracked role discharges that read. A package-installed global function gets
+`dependency-global-read` at its call (ADR 0862). These rows prove no violation.
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top

@@ -302,6 +302,28 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 875,
+      "end": 961,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 887,
+      "end": 960,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
@@ -959,6 +981,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
+      "start": 783,
+      "end": 791,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -1165,6 +1198,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
       "start": 498,
       "end": 503,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
+      "start": 382,
+      "end": 571,
       "fixes": 0
     },
     {

@@ -8,8 +8,30 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 321,
+      "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
       "start": 443,
       "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 683,
+      "end": 684,
       "fixes": 0
     },
     {

@@ -226,6 +226,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-local-merge.tsx",
+      "start": 201,
+      "end": 213,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -311,6 +322,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-tracked-destructure.tsx",
       "start": 157,
       "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-tracked-destructure.tsx",
+      "start": 184,
+      "end": 191,
       "fixes": 0
     },
     {

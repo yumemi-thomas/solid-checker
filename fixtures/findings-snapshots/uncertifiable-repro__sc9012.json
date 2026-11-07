@@ -27,6 +27,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/computed-call.tsx",
+      "start": 324,
+      "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "computed-call-target-unresolved",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/computed-call.tsx",
@@ -450,6 +461,28 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-member.tsx",
       "start": 690,
       "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-callee.ts",
+      "start": 417,
+      "end": 437,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-callee.ts",
+      "start": 425,
+      "end": 428,
       "fixes": 0
     },
     {

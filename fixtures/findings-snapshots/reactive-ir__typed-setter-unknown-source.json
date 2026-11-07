@@ -13,10 +13,32 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/typed-setter-unknown-source/App.tsx",
+      "start": 392,
+      "end": 403,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
+      "path": "fixtures/reactive-ir/typed-setter-unknown-source/App.tsx",
+      "start": 493,
+      "end": 504,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/typed-setter-unknown-source/App.tsx",
       "start": 493,
       "end": 504,
@@ -33,11 +55,33 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/typed-setter-unknown-source/App.tsx",
+      "start": 586,
+      "end": 602,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "error",
+      "path": "fixtures/reactive-ir/typed-setter-unknown-source/App.tsx",
+      "start": 786,
+      "end": 802,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/typed-setter-unknown-source/App.tsx",
       "start": 786,
       "end": 802,

@@ -231,6 +231,9 @@ export const ABSENT_GUARD = {
 const SUB_WRITE = { kind: "store-nested", contexts: ["handler", "timer"] };
 const SUB_IDS = "const swId = <T,>(x: T): T => x; const swOuter = <T,>(y: T): T => swId(y);";
 export const SUB_VALUE_WRITES = {
+  // ADR 0860: the store escapes at module scope, and the site writes through what holds it.
+  "sw-map-apart": { ...SUB_WRITE, imports: ["createStore"], importLines: ["const [swm] = createStore({ v: 1 });", 'const swmm = new Map([["s", swm]]);'], text: (o) => `void ${o}; swmm.get("s")!.v = 7;` },
+  "sw-nullish-apart": { ...SUB_WRITE, imports: ["createStore"], importLines: ["const [swn] = createStore({ v: 1 });", "const swn2 = ((): typeof swn | null => null)() ?? swn;"], text: (o) => `void ${o}; swn2.v = 7;` },
   "sw-loop-pattern": { ...SUB_WRITE, text: (o) => `for (const { a } of [${o}]) a.v = 7;` },
   "sw-decl-pattern": { ...SUB_WRITE, text: (o) => `const { a } = ${o}; a.v = 7;` },
   "sw-nested-identity": { ...SUB_WRITE, text: (o) => `${SUB_IDS} swOuter(${o}).v = 7;` },
@@ -462,6 +465,24 @@ export const VALUE_USES = {
   "use-hook-store-member": { ...USE_READ, imports: ["createStore"], importLines: ['const [hsm] = createStore({ v: 1 });', 'const useHsm = () => hsm;'], text: (o) => `void ${o}; void useHsm().v;` },
   // The hook is App's own export and another module reads through it, so the obligation lands in App.tsx, the file the grid judge reads.
   "use-hook-store-module": { ...USE_READ, imports: ["createStore"], importLines: ['const [hse] = createStore({ v: 1 });', 'export function useHse() { return hse; }', 'import { readHse } from "./hse";'], files: { "hse.ts": 'import { useHse } from "./App";\nexport const readHse = () => useHse().v;\n' }, text: (o) => `void ${o}; void readHse();` },
+  // ADR 0860: the source escapes at module scope, on a line of its own, and the site reads it in the body. The escape's row is no row
+  // at the read: the old build's only SC9012 stood on the escape's line, so a judge that keeps the site saw the read clean.
+  "use-map-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [emc] = createSignal(1);", 'const emm = new Map([["k", emc]]);'], text: (o) => `void ${o}; void emm.get("k")!();` },
+  "use-logical-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [elc] = createSignal(1);", "const elh = ((): (() => number) | null => null)() ?? elc;"], text: (o) => `void ${o}; void elh();` },
+  "use-assign-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [eac] = createSignal(1);", "const eao = Object.assign({}, { c: eac });"], text: (o) => `void ${o}; void eao.c();` },
+  "use-each-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [eec] = createSignal(1);", "const eef = [{ run: (): number => 0 }];", "Object.assign(eef, [{ run: eec }]);"], text: (o) => `void ${o}; eef.forEach((f) => void f.run());` },
+  "use-global-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [egc] = createSignal(1);", "(globalThis as any).__egc = egc;"], text: (o) => `void ${o}; void (globalThis as any).__egc();` },
+  "use-untrack-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["untrack"], importLines: ["const [euc] = createSignal(1);", "const euh = untrack(() => euc);"], text: (o) => `void ${o}; void euh();` },
+  "use-self-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ["const [esc] = createSignal(1);", "const esx = { read: (): number => 0, self: function (this: unknown) { return this; } };", "const esy: any = esx.self();", 'esy[String("read")] = esc;'], text: (o) => `void ${o}; void esx.read();` },
+  "use-store-map-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["createStore"], importLines: ["const [esm] = createStore({ v: 1 });", 'const esmm = new Map([["s", esm]]);'], text: (o) => `void ${o}; void esmm.get("s")!.v;` },
+  "use-store-nullish-apart": { ...USE_READ, legal: ["memo", "effect-compute"], imports: ["createStore"], importLines: ["const [esn] = createStore({ v: 1 });", "const esn2 = ((): typeof esn | null => null)() ?? esn;"], text: (o) => `void ${o}; void esn2.v;` },
+  "use-hook-module-apart": { ...USE_READ, legal: ["memo", "effect-compute"], importLines: ['import { useEhs } from "./ehm";'], files: { "ehm.ts": 'import { createStore } from "solid-js";\nconst [ehs] = createStore({ v: 1 });\nexport function useEhs() { return ehs; }\n' }, text: (o) => `void ${o}; void useEhs().v;` },
+  // W3 (review of 7c0eff2d9): a write into a call's result (`ecb().v = ecc`), and an escaped read in a store setter's callback (run on
+  // the caller's stack, though its role is a deferred callback).
+  "use-call-target-apart": { ...USE_READ, imports: ["createStore"], legal: ["memo", "effect-compute"], importLines: ["const [ect] = createStore({ a: 1 });", "const ech: any = {};", "const ecb = () => ech;", "ecb().s = ect;"], text: (o) => `void ${o}; void ech.s.a;` },
+  // W5 (R19a): the written call's callee is a call's result, which `function_called_at` does not follow.
+  "use-call-made-apart": { ...USE_READ, imports: ["createStore"], legal: ["memo", "effect-compute"], importLines: ["const [ecm] = createStore({ a: 1 });", "const ecmh: any = {};", "const ecmk = (f: () => number) => { void f; return () => ecmh; };", "const ecmb = ecmk(() => 0);", "ecmb().s = ecm;"], text: (o) => `void ${o}; void ecmh.s.a;` },
+  "use-setter-apart": { ...USE_READ, contexts: ["body"], importLines: ['import { setSw2 } from "./sw2";', "const [esp] = createSignal(1);", "const esph = ((): (() => number) | null => null)() ?? esp;"], files: SETTER_STORE.files, text: (o) => `void ${o}; setSw2((d) => { d.n = esph(); });` },
   "use-export-let": { ...USE_READ, importLines: ['const [elc] = createSignal(1);', 'export let elRead = elc;', 'import { readEl } from "./el";'], files: { "el.ts": 'import { elRead } from "./App";\nexport const readEl = () => elRead();\n' }, text: (o) => `void ${o}; void readEl();` },
 };
 const USE_WRITE = { ...HOST, contexts: ["body", "memo"] };
@@ -527,7 +548,14 @@ const SLOT_WRITES = Object.fromEntries(Object.entries(SLOT_HOLDERS).flatMap(([na
   ...(holder.held ? [[`wd-${name}-held-write`, { ...slotHost(holder), text: () => `${holder.held} ${holder.heldWrite};` }]] : []),
 ]));
 
+// Reviewer's W3 gap: a read past an await in an async compute, through a holder the census follows (`[n]`), was cleared by the
+// compute's role.
+export const AWAIT_USES = {
+  "use-await-apart": { kind: "plain", contexts: ["memo-async", "effect-async"], importLines: ["const [eaw] = createSignal(1);", "const eawf = [eaw];"], text: (o) => `void ${o}; void eawf[0]();` },
+};
+
 export const FLIP_READ_VARIANTS = {
+  UNTRACKED_READ_AFTER_AWAIT: AWAIT_USES,
   MISSING_EFFECT_FN: SUPPRESSED_EFFECTS,
   PENDING_ASYNC_UNTRACKED_READ: { "open-any": { kind: "open-any", contexts: ["body", "root"] }, "open-notready": { kind: "open-notready", contexts: ["body", "root"] } },
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },

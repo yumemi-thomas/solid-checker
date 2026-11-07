@@ -460,6 +460,9 @@ pub(crate) fn collect_project<'facts>(
     // reference's row stays where it was.
     let mut use_rows = Vec::new();
     let mut used = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
+    // ADR 0860: the rows past an escape, after every other.
+    let mut escaped_rows = Vec::new();
+    let mut escaped_seen = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
@@ -482,6 +485,15 @@ pub(crate) fn collect_project<'facts>(
                     location.end_byte,
                 )) {
                     use_rows.push(census_obligation(&callee, location, blocker));
+                }
+            }
+            for (location, blocker) in census.take_escaped_uses() {
+                if escaped_seen.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    escaped_rows.push(census_obligation(&callee, location, blocker));
                 }
             }
             let Some(blocker) = open else {
@@ -512,6 +524,15 @@ pub(crate) fn collect_project<'facts>(
                     location.end_byte,
                 )) {
                     use_rows.push(census_obligation("this value", location, blocker));
+                }
+            }
+            for (location, blocker) in census.take_escaped_uses() {
+                if escaped_seen.insert((
+                    location.path.clone(),
+                    location.start_byte,
+                    location.end_byte,
+                )) {
+                    escaped_rows.push(census_obligation("this value", location, blocker));
                 }
             }
             let Some(blocker) = open else {
@@ -556,9 +577,26 @@ pub(crate) fn collect_project<'facts>(
         .into_iter()
         .filter(|obligation| !covered(obligation))
         .collect::<Vec<_>>();
+    // A use before the escape speaks for its span only where its own row
+    // stands: one `covered` dropped leaves the escaped row there.
+    let kept = handed
+        .iter()
+        .map(|obligation| {
+            let at = &obligation.location;
+            (at.path.clone(), at.start_byte, at.end_byte)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let escaped_rows = escaped_rows
+        .into_iter()
+        .filter(|obligation| {
+            let at = &obligation.location;
+            !kept.contains(&(at.path.clone(), at.start_byte, at.end_byte))
+        })
+        .collect::<Vec<_>>();
     for obligation in handed {
         draft.push_defect(obligation);
     }
+    draft.deferred_defects.extend(escaped_rows);
     // ADR 0509: a reported read of a proven async source with no async row
     // (a transported read, a module source read in another file) may meet the
     // source pending; give it the row the projection opens it with

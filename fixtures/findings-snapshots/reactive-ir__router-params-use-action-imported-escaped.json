@@ -48,6 +48,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-escaped/App.tsx",
+      "start": 744,
+      "end": 763,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-escaped/register.ts",

@@ -43,6 +43,17 @@
       "start": 652,
       "end": 656,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-reexported/App.tsx",
+      "start": 691,
+      "end": 710,
+      "fixes": 0
     }
   ]
 }

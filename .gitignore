@@ -1097,6 +1097,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
+!fixtures/reactive-ir/value-use-escaped/node_modules/
+!fixtures/reactive-ir/value-use-escaped/node_modules/**
 !fixtures/reactive-ir/generator-stepped/node_modules/
 !fixtures/reactive-ir/generator-stepped/node_modules/**
 !fixtures/reactive-ir/generator-hand-off/node_modules/
