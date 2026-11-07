@@ -281,6 +281,8 @@ export const FLIP_WRITE_CONTEXTS = {
 };
 
 for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES), ...Object.keys(FLOW_VALUES), ...Object.keys(APPLY_AND_TIMER)];
+// The async child's Promise crashes `insert` and halts the reactive system, so `onSettled`'s callback never runs: this code cannot fire there.
+FLIP_WRITE_CONTEXTS.SETTLED_CLEANUP_UNOWNED = FLIP_WRITE_CONTEXTS.SETTLED_CLEANUP_UNOWNED.filter((context) => context !== "flw-flow-for-async");
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];

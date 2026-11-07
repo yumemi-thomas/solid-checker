@@ -269,10 +269,9 @@ pub(crate) fn runs_as_child(
     !function.generator
         && match run {
             solid_dialect::FunctionChildRun::Always => true,
-            solid_dialect::FunctionChildRun::WithParameter => function
-                .parameters
-                .first()
-                .is_some_and(|parameter| parameter.initializer.is_none()),
+            solid_dialect::FunctionChildRun::WithParameter => {
+                crate::execution_role::function_length(function) > 0
+            }
         }
 }
 

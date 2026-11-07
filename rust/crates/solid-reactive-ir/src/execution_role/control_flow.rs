@@ -144,18 +144,7 @@ pub(crate) fn control_flow_execution_role(
     // default on the first) is inserted as an ordinary child and runs in the
     // insert's tracked effect (review round 4). Only the child's own body:
     // a function nested in it keeps its own role (review round 5).
-    let length = callback
-        .parameters
-        .iter()
-        .take_while(|parameter| parameter.initializer.is_none())
-        .count()
-        .min(
-            callback
-                .parameters
-                .len()
-                .saturating_sub(usize::from(callback.rest_parameter)),
-        );
-    if length == 0
+    if super::named_callbacks::function_length(callback) == 0
         && jsx_primitive_name(file, element, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)

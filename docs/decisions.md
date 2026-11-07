@@ -2163,6 +2163,8 @@ Control flow: the owner's rule is that U stands only where no compile-time fact 
 
 Owner's direction: no render-prop placement proof for the flip. An unplaced site is a named U (open-work). F4 ids (306, Chrome confirmed): 276 false cleans before, 0 after, 140 proved, 166 uncertifiable; legal 996: 0 false positives, as before. The `flow-*` legal ids (168): 150 uncertifiable before the control-flow edge, 0 after, 0 false positives. Corpus: +181/-1 SC4001 U rows on 170 distinct sites (164 `function-run-unplaced`, 3 `owner-callers-unenumerated`, 3 others), 0 V added. Without the edge it was +5,015 rows on 3,379 sites.
 
+Named `Show`/`Match` children follow the inline child's runtime `length` rule: length 0 supplies a value and proves no invocation. Their reads stay unknown unless another entry proves a role.
+
 <a id="adr-0884"></a>
 ## ADR 0884 — A call the compiler resolves to a primitive is never unseen
 The primitive rules read names, so `const held = box.m; held(f)` or `const { Errored: E = S.Errored } = S; E(p)` left the operation with one SC9012 `primitive-value` at the binding and nothing at the call. Where the compiler's resolved declaration is a dialect primitive in a package the dialect declares primitives in, the call now gets SC9012 `primitive-alias-call` at its callee. A code with no site line is covered only by its own rule's row, so the call also gets a U of each rule that primitive answers to: SC2006 and SC2008 for `flush`, SC6002 for creating calls, SC7002 for computations, and an `onSettled` alias goes through the owner pass, which owns SC4001. A U, not a proof: the declaration comes from the types, and a cast can say anything (ADR 0781).

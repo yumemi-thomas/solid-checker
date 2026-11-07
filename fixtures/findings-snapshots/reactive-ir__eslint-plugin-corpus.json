@@ -1139,7 +1139,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
       "start": 498,

@@ -5908,5 +5908,17 @@
    "mx-no-owner-effect-flw-guard-loop-effect-ns-member-none"
   ],
   "rediscovered": "alias ids (319, Chrome confirmed, origin's judge): r22 319 false cleans; r27 63 false cleans, 256 uncertifiable. The 63 stay open"
+ },
+ {
+  "finding": "A named Show or Match child of length 0 got the rendering role, so its read was a violation on a run neither tag makes: 6 false positives in mx-census",
+  "found": "the integrator's census on 2e009e800",
+  "fixed": "named value child",
+  "grid": "mx-census",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-flw-flow-show-value-memo-direct-none",
+   "mx-strict-read-untracked-flw-flow-show-value-signal-direct-none"
+  ],
+  "rediscovered": "the 6 ids, judge at 72e9b2ff6: rk1 6 false positives; fp40 0, 6 not fired. Twin: a value run in the body keeps a U"
  }
 ]
