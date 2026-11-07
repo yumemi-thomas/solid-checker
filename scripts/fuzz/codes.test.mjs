@@ -94,6 +94,10 @@ describe("a logged or uncaught error's code (Part 16, R3e)", () => {
     expect(stripErrorClass("ContextNotFoundError: no provider")).toBe("no provider");
     expect(stripErrorClass("Uncaught Error: x")).toBe("Uncaught Error: x");
     expect(codeOfUncaught("NoOwnerError: Context can only be accessed under a reactive root")).toBe("NO_OWNER_CONTEXT");
+    expect(codeOfLogged("ContextNotFoundError: Context has no provider above this read and no default value.")).toBe("CONTEXT_NOT_FOUND");
+    // A prefix that is not the error's own class (the runner's "render failed" note) is read as text, so nothing is coded.
+    expect(codeOfLogged("render failed C1 NoOwnerError: Context can only be accessed under a reactive root.")).toBe(null);
+    expect(codeOfLogged(undefined)).toBe(null);
   });
 });
 

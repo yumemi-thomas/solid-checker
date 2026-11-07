@@ -861,6 +861,9 @@ async function runCase(id, slot) {
     id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
     unattributed: (report.execution?.diagnostics ?? []).filter((row) => !caseFile(row.site?.location?.path)).map((row) => row.code),
     pageErrors: (report.execution?.pageErrors ?? []).map((error) => error.message.slice(0, 200)),
+    // What the page logged as an error (R3e, Part 16): a user effect logs the throw of its compute or of a computation it read
+    // (`NoOwnerError: …`), and an `<Errored>` boundary logs what it caught. Solid reported them, though no error reached the window.
+    consoleErrors: (report.execution?.consoleDiagnostics ?? []).filter((row) => row.severity === "error").map((row) => String(row.message).slice(0, 200)),
   };
 }
 

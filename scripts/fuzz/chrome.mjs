@@ -56,6 +56,8 @@ export function chromeRuntime(row, checkpoints, sites) {
     quiescent: counted && reads.length >= 2 ? reads.at(-1).text === reads.at(-2).text : null,
     diagnostics: chromeDiagnostics(row),
     errors: (row.pageErrors ?? []).map((message) => ({ kind: "page-error", message, positions: [] })),
+    // Solid's logged errors (runtime-oracle.mjs `consoleErrors`), read as the grid host's are (matrix.mjs `judge`, codes.mjs codeOfLogged).
+    consoleErrors: (row.consoleErrors ?? []).map(String),
     // Codes of diagnostics Chrome saw but could not place in the case file (the oracle's `unattributed`). The comparator
     // treats them as a disturbance: a candidate false positive is never confirmed past one.
     unattributed: (row.unattributed ?? []).map(String),
