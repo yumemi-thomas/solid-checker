@@ -299,7 +299,7 @@
   },
   "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
     "facts.files": 1,
-    "files()": 2,
+    "files()": 3,
     "file_by_path": 4
   },
   "rust/crates/solid-reactive-ir/src/route_components.rs": {

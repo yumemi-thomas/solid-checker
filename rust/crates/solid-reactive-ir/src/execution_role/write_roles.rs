@@ -3158,8 +3158,10 @@ pub(crate) enum LayerRun {
     /// ADR 0874: an argument a call the census withholds would run inline were
     /// it the standard one. It proves no run at all: an impostor may run it
     /// anywhere, or never. Every reader takes this as [`LayerRun::Elsewhere`]
-    /// but [`withheld_layer_call`], which only places a row. Matched by name,
-    /// so that a new reader decides.
+    /// but [`withheld_layer_call`], which only places a row, and a summary
+    /// that crosses it undecided ([`in_place_run_site_placing`]). A reader that
+    /// matches every arm names this one; one that asks for
+    /// [`LayerRun::InPlace`] alone (`if let`, `matches!`) refuses it by that.
     Withheld(Span),
 }
 
