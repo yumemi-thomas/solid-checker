@@ -215,6 +215,13 @@ const THEN_HANDLERS = {
   "aw-then-async": (h) => `Promise.resolve(1).then(${h})`,
   "aw-then-cast": (h) => `(Promise.resolve(1) as unknown as Promise<number>).then(${h})`,
   "aw-then-any": (h) => `(Promise.resolve(1) as any).then(${h})`,
+  // Review residual on ADR 0882: a computed `"then"` key on a receiver with no standard declaration names the same chain call.
+  "aw-then-computed": (h) => `(Promise.resolve(1) as any)["then"](${h})`,
+  // Review on 1332bede2: an open computed key on a chain: the receiver's links are still walked.
+  "aw-then-computed-open": (h) => `(Promise.resolve(1).then(${h}) as any)[String("then")](() => 1)`,
+  // Awaited in an async compute: the typed `Promise.then` arm dropped these handlers with no row.
+  "aw-then-computed-await": (h) => `(Promise.resolve(1) as any)["then"](${h})`,
+  "aw-then-computed-await-open": (h) => `(Promise.resolve(1).then(${h}) as any)[String("then")](() => 1)`,
   // Legal (review, D-R3d-2): a sync handler that calls an async function and drops nothing it awaits; Chrome (rc.21) is silent at the
   // read past that function's own await, on 16 of 16 ids.
   "aw-then-calls-async": (h) => `Promise.resolve(1).then(() => ${h}())`,
@@ -281,11 +288,15 @@ const STORED_SITES = {
   "st-slot-try": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const o = kit.name("o"); return { body: [held, decl(o, domExpr(`{ run: ${h} }`)), expr(solid(`createEffect(() => { try { return ${o}.run(); } catch { return 0; } }, () => {});`, "createEffect"))], view: [] }; },
   "st-queue-try": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const q = kit.name("q"); return { body: [held, decl(q, domExpr("[] as (() => number)[]")), expr(domExpr(`${q}.push(${h});`)), expr(solid(`createEffect(() => { try { return ${q}[0]?.(); } catch { return 0; } }, () => {});`, "createEffect"))], view: [] }; },
   "st-hold-errored": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`(p: { run: () => number }) => <Errored ${HANDLED}><i>{p.run()}</i></Errored>`, "Errored"))], view: [mounted(kit.name("v"), domExpr(`<${k} run={${h}} />`))] }; },
+  // R47: a `ref` runs during the render, so the boundary above takes its throw.
+  "st-hold-ref-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`(p: { run: () => void }) => <Errored ${HANDLED}><div ref={p.run}></div></Errored>`, "Errored"))], view: [mounted(kit.name("v"), domExpr(`<${k} run={${h}} />`))] }; },
   "st-hold-ispending": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`(p: { run: () => number }) => { createEffect(() => isPending(p.run), () => {}); return <i></i>; }`, "createEffect", "isPending"))], view: [mounted(kit.name("v"), domExpr(`<${k} run={${h}} />`))] }; },
   "st-hold-memo": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, solid(`(p: { run: () => number }) => { const r = createMemo(p.run); void r; return <i></i>; }`, "createMemo"))], view: [mounted(kit.name("v"), domExpr(`<${k} run={${h}} />`))] }; },
   "st-hold-then-catch": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const t = kit.name("t"); return { body: [held, decl(t, domExpr("(g: () => number) => { void Promise.resolve(1).then(g).catch(() => {}); }")), expr(domExpr(`${t}(${h});`))], view: [] }; },
   "st-hold-unresolved": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const a = kit.name("a"); const t = kit.name("t"); return { body: [held, decl(a, domExpr("((g: () => unknown) => { try { g(); } catch { } }) as any")), decl(t, domExpr(`(f: () => number) => { ${a}(f); }`)), effectReading(`(${t}(${h}), 1)`)], view: [] }; },
   "st-post-task": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(domExpr(`void (window as any).scheduler.postTask(${h}).catch(() => {});`))], view: [] }; },
+  // R44: a function kept in a handler's body is not the handler: its slot is caught there.
+  "st-handler-slot-try": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held], view: [button(kit.name("b"), [expr(domExpr(`{ const o = { f: ${h} }; try { o.f(); } catch { } }`))])] }; },
   "st-then-unheld": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(domExpr(`Promise.resolve(1).then(${h});`))], view: [] }; },
   "st-then-finally": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(domExpr(`void Promise.resolve(1).then(${h}).finally(() => {});`))], view: [] }; },
   "st-then-catch": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held, expr(domExpr(`void Promise.resolve(1).then(${h}).catch(() => {});`))], view: [] }; },
@@ -304,6 +315,12 @@ const STORED_SITES = {
   "st-jsx-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held], view: [mounted(kit.name("v"), under(HANDLED, `<i>{${h}()}</i>`))] }; },
   "st-jsx-logged": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); return { body: [held], view: [mounted(kit.name("v"), under(LOGGED, `<i>{${h}()}</i>`))] }; },
   "st-body-handled": (stmts, kit) => { const k = kit.name("K"); return { body: [decl(k, fn([...stmts, ret(domExpr("<i></i>"))]))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
+  // D26: a boundary past the walk's bound, and a component mounted only as a value: neither proves the throw reaches a report.
+  "st-boundary-far": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const names = [0, 1, 2, 3, 4, 5].map(() => kit.name("K")); return { body: [held, decl(names[0], domExpr(`() => <i>{${h}()}</i>`)), ...names.slice(1).map((k, i) => decl(k, domExpr(`() => <${names[i]} />`)))], view: [mounted(kit.name("v"), under(HANDLED, `<${names[5]} />`))] }; },
+  "st-dynamic-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); return { body: [held, decl(k, domExpr(`() => <i>{${h}()}</i>`))], view: [mounted(kit.name("v"), domExpr(`<Errored ${HANDLED}><Dynamic component={${k}} /></Errored>`, ["Dynamic"], ["Errored"]))] }; },
+  "st-route-table": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); const r = kit.name("r"); const c = kit.name("C"); return { body: [held, decl(k, domExpr(`() => <i>{${h}()}</i>`)), decl(r, domExpr(`[{ view: ${k} }]`)), decl(c, domExpr(`${r}[0].view`))], view: [mounted(kit.name("v"), under(HANDLED, `<${c} />`))] }; },
+  // R49: a prop holding a component is no mount but `Dynamic`'s: the holder may run it under its own boundary.
+  "st-prop-component-handled": (stmts, kit) => { const [h, held] = helperOf(stmts, kit); const k = kit.name("K"); const f = kit.name("F"); return { body: [held, decl(k, domExpr(`() => <i>{${h}()}</i>`)), decl(f, solid(`(p: { component: () => unknown }) => <Errored ${HANDLED}><b>{String(p.component())}</b></Errored>`, "Errored"))], view: [mounted(kit.name("v"), domExpr(`<${f} component={${k}} />`))] }; },
   "st-child-memo-handled": (stmts, kit) => { const k = kit.name("K"); const m = kit.name("m"); return { body: [decl(k, fn([decl(m, prim("memo", fn([...stmts, ret(num(1))]))), ret(domExpr(`<i>{${m}()}</i>`))]))], view: [mounted(kit.name("v"), under(HANDLED, `<${k} />`))] }; },
 };
 const STORED_ASYNC = {
@@ -339,7 +356,7 @@ export const FLIP_READ_CONTEXTS = {
 // ADR 0893, measured on rc.21 Chrome over every code here: silent with the error stored unread, in a `try`, under a handling boundary, an effect's
 // `error` arm or `isPending`. `st-helper-body` throws in the body for a code that throws on every run; `resolve` and `until` need an observer.
 const STORED_SILENT = ["st-unread", "st-chain-unread", "st-read-try", "st-read-caller-try", "st-read-ispending", "st-read-err-arm", "st-read-errored-handled", "st-read-getter-ignored", "st-read-show-false",
-  "st-read-then-catch", "st-prop-catch", "st-slot-try", "st-queue-try", "st-hold-errored", "st-hold-ispending", "st-hold-memo", "st-hold-then-catch", "st-hold-unresolved", "st-post-task", "st-ref-only", "st-handed-catch", "st-then-catch", "st-then-await-try", "st-render-handled", "st-tracked-handled", "st-alias-unread", "st-try-site", "st-try-caller", "st-effect-err-arm", "st-helper-err-arm", "st-jsx-handled", "st-body-handled", "st-child-memo-handled", ...Object.keys(STORED_FORMS).map((form) => `${form}-unread`)];
+  "st-read-then-catch", "st-prop-catch", "st-handler-slot-try", "st-slot-try", "st-queue-try", "st-hold-errored", "st-hold-ref-handled", "st-hold-ispending", "st-hold-memo", "st-hold-then-catch", "st-hold-unresolved", "st-post-task", "st-ref-only", "st-handed-catch", "st-then-catch", "st-then-await-try", "st-render-handled", "st-tracked-handled", "st-alias-unread", "st-try-site", "st-try-caller", "st-effect-err-arm", "st-helper-err-arm", "st-jsx-handled", "st-boundary-far", "st-prop-component-handled", "st-dynamic-handled", "st-route-table", "st-body-handled", "st-child-memo-handled", ...Object.keys(STORED_FORMS).map((form) => `${form}-unread`)];
 const observerOnly = (code) => code === "RESOLVE_IN_REACTIVE_SCOPE" || code === "UNTIL_IN_REACTIVE_SCOPE";
 // A promise handler runs with no owner and no observer: `resolve` and `until` do not throw there, and `useContext` throws NO_OWNER_CONTEXT, its own row.
 const HANDLER_THROWS = ["st-then-unheld", "st-then-finally"];
@@ -855,7 +872,11 @@ export function flipReadContext(context, stmts, kit) {
     const holder = decl(o, domExpr(`{ fmt: ${h} }`));
     const flight = context === "aw-catch-member" ? `Promise.resolve(1).catch(${o}.fmt)` : THEN_HANDLERS[context](h, o);
     const watch = expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
-    return { body: [handler, holder, decl(m, prim("memo", fn([ret(domExpr(flight))]))), watch], view: [] };
+    const awaited = context.startsWith("aw-then-computed-await");
+    const compute = awaited ? fn([expr(domExpr(`await ${flight};`)), ret(num(1))], { async: true }) : fn([ret(domExpr(flight))]);
+    // Only a form that names the slot holds the handler in one: an unused slot gave the function a U of its own at the read, which hid a certified read.
+    const held = context === "aw-catch-member" || THEN_HANDLERS[context]?.length >= 2;
+    return { body: [handler, ...(held ? [holder] : []), decl(m, prim("memo", compute)), watch], view: [] };
   }
   if (ENTRY_CHAINS[context] || context === "entry-chain-handler") {
     const [n, calls] = ENTRY_CHAINS[context] ?? [5, 2];

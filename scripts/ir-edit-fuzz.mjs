@@ -17,6 +17,8 @@
 //       Callee body edits that retype a caller whose text is unchanged
 //       (`retype-return`): the retained build must name a caller in its Type
 //       Facts delta (`SOLID_CHECKER_IR_DELTA_LOG`) and answer as a fresh run.
+//   bun scripts/ir-edit-fuzz.mjs --fixtures --family mount [--steps 8]
+//       A value mount or its boundary edited in another file (`value-mount`).
 //   bun scripts/ir-edit-fuzz.mjs --project <tsconfig.json> --steps 30 --seed 7
 //       The long manual budget, on any project (the rc17 corpus: app-game
 //       apps/web, solid-groove, compass-ui apps/ui). Edits happen in place.
@@ -77,6 +79,12 @@ export const RETYPE_FIXTURE_PROJECTS = [
   "reactive-ir/summary-direct-read",
   "reactive-ir/accessor-provenance"
 ];
+
+/**
+ * The `mount` family (`--fixtures --family mount`): a component mounted as a value from another file, whose throw
+ * `handled_above` (ADR 0893) answers from that file: the edit adds or removes the value mount or the boundary over it.
+ */
+export const MOUNT_FIXTURE_PROJECTS = ["reactive-ir/stored-throw-value-mount"];
 
 /** Mulberry32: a seeded generator, so a failing run replays from its seed. */
 export function seededRandom(seed) {
@@ -154,6 +162,16 @@ export const EDIT_KINDS = {
     return isJsx(path)
       ? `${text}\nexport function FzComp${serial}(props: { v: number }) {\n  return <div>{props.v}</div>;\n}\n`
       : `${text}\nexport function fzHelper${serial}(value: number) {\n  return value + 1;\n}\n`;
+  },
+  "value-mount"({ text, rand }) {
+    const forms = [
+      ["<Dynamic component={Reported} />", "<Errored fallback={(e) => <i>{String(e())}</i>}><Dynamic component={Reported} /></Errored>"],
+      ["<Errored fallback={(e) => <i>{String(e())}</i>}><Dynamic component={Handled} /></Errored>", "<Dynamic component={Handled} />"],
+      ["<Dynamic component={Handled} />", "<i></i>"],
+    ].filter(([from, to]) => text.includes(from) || text.includes(to));
+    if (!forms.length) return null;
+    const [from, to] = forms[rand(forms.length)];
+    return text.includes(to) ? text.replace(to, from) : text.replace(from, to);
   },
   "retype-return"({ text, path, others, rand }) {
     // A callee body edit that changes its callers' inferred types, their text
@@ -389,8 +407,8 @@ function parseArguments(argv) {
     else throw new Error(`unknown argument ${flag}`);
   }
   if (options.family !== undefined) {
-    if (options.family !== "retype") throw new Error(`unknown family ${options.family}`);
-    options.kinds = ["retype-return"];
+    if (options.family !== "retype" && options.family !== "mount") throw new Error(`unknown family ${options.family}`);
+    options.kinds = options.family === "mount" ? ["value-mount"] : ["retype-return"];
   }
   for (const kind of options.kinds) {
     if (!(kind in EDIT_KINDS)) throw new Error(`unknown edit kind ${kind}`);
@@ -662,7 +680,7 @@ async function main() {
   let total = 0;
   let mismatches = 0;
   if (options.fixtures) {
-    const projects = options.family === "retype" ? RETYPE_FIXTURE_PROJECTS : FIXTURE_PROJECTS;
+    const projects = options.family === "retype" ? RETYPE_FIXTURE_PROJECTS : options.family === "mount" ? MOUNT_FIXTURE_PROJECTS : FIXTURE_PROJECTS;
     const results = await mapPool(projects, async (id, index) => {
       // A copy: the fixture tree is never edited in place.
       const copy = mkdtempSync(join(tmpdir(), "ir-edit-fuzz-fixture-"));

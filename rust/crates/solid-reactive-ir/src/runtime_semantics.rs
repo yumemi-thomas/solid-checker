@@ -389,6 +389,19 @@ pub(super) fn scheduler_throw_reaches_host(call: &ResolvedCall) -> bool {
     })
 }
 
+/// ADR 0893: a default-library `addEventListener`, whatever DOM interface
+/// redeclares it.
+pub(super) fn add_event_listener_call(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && declaration
+                .qualified_name
+                .rsplit('.')
+                .next()
+                .is_some_and(|member| member == "addEventListener")
+    })
+}
+
 /// ADR 0893: a standard `Promise` `then`, `catch` or `finally`: its callback's
 /// throw rejects the promise the call returns.
 pub(super) fn promise_handler_call(call: &ResolvedCall) -> bool {

@@ -1173,3 +1173,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/declared-served-closure/node_modules/**
 !fixtures/reactive-ir/closed-two-file-caller/node_modules/
 !fixtures/reactive-ir/closed-two-file-caller/node_modules/**
+!fixtures/reactive-ir/stored-throw-value-mount/node_modules/
+!fixtures/reactive-ir/stored-throw-value-mount/node_modules/**
