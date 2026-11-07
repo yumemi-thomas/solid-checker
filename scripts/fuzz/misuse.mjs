@@ -417,9 +417,10 @@ const JSX_SITES = {
   "jsx-spread": () => "<div {...jsxRest1} />",
   "jsx-array": () => "<p>{[() => 1]}</p>",
   "jsx-fragment": () => "<>{String(Math.random())}</>",
+  "jsx-and": () => "<p>{1 && jsxFn1}</p>",
 };
 const jsxSite = (variant) => (JSX_SITES[variant] ? member("", JSX_SITES[variant]) : undefined);
-const jsxLine = (variant) => (variant === "jsx-component" ? "function JsxComp1() { return <i />; }" : variant === "jsx-spread" ? 'const jsxRest1 = { class: "x" };' : undefined);
+const jsxLine = (variant) => (variant === "jsx-component" ? "function JsxComp1() { return <i />; }" : variant === "jsx-spread" ? 'const jsxRest1 = { class: "x" };' : variant === "jsx-and" ? "const jsxFn1: any = () => 1;" : undefined);
 const jsxBindings = (variant, bindings) => (variant?.startsWith("jsx-") ? ["direct"] : bindings);
 const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }"), render: api("render", '() => null, document.createElement("div")', { module: "@solidjs/web" }) };
 
@@ -526,10 +527,10 @@ export const SPEC = {
   // there, so every `track1()` warns, wherever it is called. `reaction-track-owned` (legal only): the tracker the component (or its
   // parent, or a hook the body calls) creates, owned there, so a call anywhere is legal.
   NO_OWNER_EFFECT: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL,
-    variants: ["effect", "render"], gridVariants: ["reaction-track"], recallVariants: ["reaction-track-hook", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array"], legalVariants: ["effect", "render", "reaction-track-owned"],
+    variants: ["effect", "render"], gridVariants: ["reaction-track"], recallVariants: ["reaction-track-hook", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array", "jsx-and"], legalVariants: ["effect", "render", "reaction-track-owned"],
     recallLegalVariants: ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-component", "jsx-static", "jsx-fragment"],
     legalVariantContexts: { "jsx-component": [...UNOWNED, ...ASYNC_CONTROL], "jsx-static": [...UNOWNED, ...ASYNC_CONTROL], "jsx-fragment": [...UNOWNED, ...ASYNC_CONTROL] },
-    variantContexts: { "reaction-track-hook": UNOWNED, "jsx-insert": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-attr": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-spread": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-array": [...UNOWNED, ...ASYNC_CONTROL] },
+    variantContexts: { "reaction-track-hook": UNOWNED, "jsx-insert": [...UNOWNED, ...ASYNC_CONTROL, "body", "root", "flw-apply-and-timer", "flw-named-apply-and-timer"], "jsx-attr": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-spread": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-array": [...UNOWNED, ...ASYNC_CONTROL], "jsx-and": [...UNOWNED, ...ASYNC_CONTROL] },
     contextLine: jsxLine,
     variantSources: { "reaction-track": ["module", "module-barrel"],
       "reaction-track-owned": ["local", ...SOURCE_AXES.props.filter((source) => source !== "prop-value"), ...SOURCE_AXES.context, "module-hook", "module-hook-member"] },
@@ -1067,7 +1068,7 @@ for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOP
   const spec = SPEC[code];
   spec.recallVariantsNotIn ??= {};
   for (const context of new Set([...SPEC.NO_OWNER_EFFECT.contexts, ...SPEC.NO_OWNER_EFFECT.recallContexts])) {
-    spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array"])];
+    spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array", "jsx-and"])];
   }
 }
 // A legal variant whose legal places include contexts where the code's other variants are misuses (`legalVariantContexts`): those

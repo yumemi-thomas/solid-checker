@@ -1141,3 +1141,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/closed-two-file-caller/node_modules/**
 !fixtures/reactive-ir/jsx-creation-sites/node_modules/
 !fixtures/reactive-ir/jsx-creation-sites/node_modules/**
+!fixtures/reactive-ir/walk-depth-bound/node_modules/
+!fixtures/reactive-ir/walk-depth-bound/node_modules/**

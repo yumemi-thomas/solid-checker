@@ -82,16 +82,47 @@ fn cannot_hold_function(
     let Some(text) = file.source_text(span) else {
         return false;
     };
-    let literal = text.starts_with(['"', '\'', '`', '<'])
-        || text.starts_with(|c: char| c.is_ascii_digit())
-        || matches!(text, "null" | "undefined" | "true" | "false");
+    let element = file
+        .ast
+        .jsx_elements
+        .iter()
+        .any(|element| element.span == span)
+        || file.ast.jsx_fragments.contains(&span);
     let identifier = text
         .chars()
         .all(|c| c.is_alphanumeric() || c == '_' || c == '$');
-    literal
+    element
+        || literal_text(text)
         || (identifier
             && lookup.smallest_contained_callability(file.path.as_str(), span)
                 == Some(typefacts::Callability::NonCallable))
+}
+
+/// Whether the whole of `text` is one literal: `1 && f` starts like one.
+fn literal_text(text: &str) -> bool {
+    if matches!(text, "null" | "undefined" | "true" | "false") {
+        return true;
+    }
+    if let Some(quote) = text
+        .chars()
+        .next()
+        .filter(|c| matches!(c, '"' | '\'' | '`'))
+    {
+        let body = &text[1..];
+        let Some(inner) = body.strip_suffix(quote) else {
+            return false;
+        };
+        let mut escaped = false;
+        return inner.chars().all(|c| {
+            let closes = !escaped && (c == quote || (quote == '`' && c == '$'));
+            escaped = !escaped && c == '\\';
+            !closes
+        });
+    }
+    text.starts_with(|c: char| c.is_ascii_digit())
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
 }
 
 pub(crate) fn jsx_sites(

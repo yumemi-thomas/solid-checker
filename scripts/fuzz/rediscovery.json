@@ -5872,5 +5872,17 @@
   "found": "the review of the F4 design, D25",
   "fixed": "ADR 0883, control-flow children",
   "outside": "the false edge landed uncertifiable, not silent: flw-flow-show-kid is 35 uncertifiable on r21 and r22, so no build fails it. The shape stays in the generator, and fixture jsx-creation-sites pins it"
+ },
+ {
+  "finding": "ADR 0883 dropped the SC4001 row at every JSX site SC6002 placed, V or U: a helper or a named apply also run from a timer raised NO_OWNER_EFFECT with only an SC6002 row (reviewer's R50)",
+  "found": "the review of 33ad17deb",
+  "fixed": "ADR 0883, R50",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-flw-apply-and-timer-jsx-insert-direct-none",
+   "mx-no-owner-effect-flw-named-apply-and-timer-jsx-insert-direct-none"
+  ],
+  "rediscovered": "both contexts, direct binding (6 judged, Chrome confirmed): r22 (33ad17deb) 6 false cleans; r24 0, 6 uncertifiable"
  }
 ]

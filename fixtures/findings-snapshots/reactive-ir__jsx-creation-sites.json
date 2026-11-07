@@ -2,14 +2,36 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-allocation-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 223,
+      "end": 230,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 223,
+      "end": 230,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "blocker": "prop-pending-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 276,
-      "end": 290,
+      "start": 329,
+      "end": 343,
       "fixes": 0
     },
     {
@@ -18,8 +40,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 375,
-      "end": 382,
+      "start": 428,
+      "end": 435,
       "fixes": 0
     },
     {
@@ -28,8 +50,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 450,
-      "end": 457,
+      "start": 503,
+      "end": 510,
       "fixes": 0
     },
     {
@@ -38,8 +60,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 485,
-      "end": 500,
+      "start": 538,
+      "end": 553,
       "fixes": 0
     },
     {
@@ -48,8 +70,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 522,
-      "end": 531,
+      "start": 575,
+      "end": 584,
       "fixes": 0
     },
     {
@@ -59,8 +81,8 @@
       "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 526,
-      "end": 530,
+      "start": 579,
+      "end": 583,
       "fixes": 0
     },
     {
@@ -70,36 +92,14 @@
       "blocker": "component-identity-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 641,
-      "end": 648,
+      "start": 694,
+      "end": 701,
       "fixes": 0
     },
     {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 812,
-      "end": 819,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-owner-unproven",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 839,
-      "end": 847,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 865,
@@ -107,13 +107,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "violation",
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 925,
-      "end": 932,
+      "start": 892,
+      "end": 900,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 918,
+      "end": 925,
       "fixes": 0
     },
     {
@@ -122,8 +134,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 950,
-      "end": 958,
+      "start": 978,
+      "end": 985,
       "fixes": 0
     },
     {
@@ -132,8 +144,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 974,
-      "end": 981,
+      "start": 1003,
+      "end": 1011,
       "fixes": 0
     },
     {
@@ -142,8 +154,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 1013,
-      "end": 1021,
+      "start": 1027,
+      "end": 1034,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 1066,
+      "end": 1074,
       "fixes": 0
     },
     {
@@ -153,8 +175,8 @@
       "blocker": "owner-allocation-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 1225,
-      "end": 1227,
+      "start": 1278,
+      "end": 1280,
       "fixes": 0
     },
     {
@@ -164,8 +186,8 @@
       "blocker": "owner-allocation-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 1249,
-      "end": 1253,
+      "start": 1302,
+      "end": 1306,
       "fixes": 0
     },
     {
@@ -175,8 +197,8 @@
       "blocker": "owner-allocation-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 1281,
-      "end": 1288,
+      "start": 1334,
+      "end": 1341,
       "fixes": 0
     },
     {
@@ -186,8 +208,8 @@
       "blocker": "owner-allocation-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 1568,
-      "end": 1572,
+      "start": 1621,
+      "end": 1625,
       "fixes": 0
     },
     {
@@ -197,8 +219,8 @@
       "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 1976,
-      "end": 1987,
+      "start": 2029,
+      "end": 2040,
       "fixes": 0
     },
     {
@@ -208,8 +230,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 2734,
-      "end": 2745,
+      "start": 2787,
+      "end": 2798,
       "fixes": 0
     },
     {
@@ -219,8 +241,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 2870,
-      "end": 2877,
+      "start": 2923,
+      "end": 2930,
       "fixes": 0
     },
     {
@@ -230,8 +252,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 2950,
-      "end": 2961,
+      "start": 3003,
+      "end": 3014,
       "fixes": 0
     },
     {
@@ -241,8 +263,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 3032,
-      "end": 3043,
+      "start": 3085,
+      "end": 3096,
       "fixes": 0
     },
     {
@@ -252,8 +274,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 3097,
-      "end": 3118,
+      "start": 3150,
+      "end": 3171,
       "fixes": 0
     },
     {
@@ -263,8 +285,19 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
-      "start": 3156,
-      "end": 3163,
+      "start": 3209,
+      "end": 3216,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-allocation-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+      "start": 3553,
+      "end": 3560,
       "fixes": 0
     },
     {

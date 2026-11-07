@@ -23,8 +23,9 @@ pub(super) struct StaticDirectiveFileResult {
     pub(super) violations: Vec<StaticViolation>,
     pub(super) writes: Vec<ReactiveWrite>,
     pub(super) write_action_obligations: Vec<(&'static str, String, u64, u64)>,
-    /// ADR 0883: JSX SC6002 places on an apply's stack.
-    pub(super) jsx_phase_sites: Vec<Location>,
+    /// ADR 0883: JSX SC6002 places on an apply's stack, and whether its proof
+    /// answers for every run: `pipeline` reads that for the SC4001 row.
+    pub(super) jsx_phase_sites: Vec<(Location, bool)>,
 }
 
 /// Runs the project-level static API stage and merges its independent file
@@ -1088,9 +1089,18 @@ impl StaticApiContext<'_> {
                             && other.span.end <= site.span.start
                             && !other.span.contains(site.span)
                     }));
-            result
-                .jsx_phase_sites
-                .push(location(file.path.shared(), site.span));
+            // No client root in sight: which build runs the apply is open.
+            let uncertain = earlier_call
+                || origin.mixed
+                || !self.client_build
+                || self.lookup.flush_drains_under_owner();
+            // Written in the apply, a proved throw is every run of the site. In
+            // a helper another entry may run it with no window (a timer), and
+            // an uncertain throw may pass the guard: NO_OWNER_EFFECT stays open.
+            result.jsx_phase_sites.push((
+                location(file.path.shared(), site.span),
+                !uncertain && origin.helper_calls == 0 && origin.undecided.is_none(),
+            ));
             result.violations.push(StaticViolation {
                 id: "SC6002".into(),
                 rule: "primitive-in-effect-callback".into(),
@@ -1102,11 +1112,7 @@ impl StaticApiContext<'_> {
                 location: location(file.path.shared(), site.span),
                 analysis_context: origin.undecided.unwrap_or_default().into(),
                 fixes: vec![],
-                // No client root in sight: which build runs the apply is open.
-                uncertain: earlier_call
-                    || origin.mixed
-                    || !self.client_build
-                    || self.lookup.flush_drains_under_owner(),
+                uncertain,
             });
         }
     }

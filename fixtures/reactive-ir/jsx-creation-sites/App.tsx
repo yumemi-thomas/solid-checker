@@ -3,6 +3,9 @@ import { createEffect, createSignal, For, Match, onSettled, Repeat, Show, Switch
 const [count] = createSignal(0);
 const rest = { class: "x" };
 const fn: any = () => 1;
+function shared() {
+  return <div>{count()}</div>;
+}
 const text = "t" as string;
 function Comp(props: { children?: unknown }) {
   return <i>{props.children as any}</i>;
@@ -110,3 +113,20 @@ export function FlowOpen() {
     </>
   );
 }
+
+// A helper run from an apply and from a timer: the timer's run has no apply window,
+// so both rows are open. Starting like a literal proves nothing.
+export function Shared() {
+  createEffect(
+    () => 1,
+    () => {
+      shared();
+    },
+  );
+  setTimeout(shared, 0);
+  setTimeout(() => {
+    void (<p>{1 && fn}</p>);
+  }, 0);
+  return <i />;
+}
+

@@ -232,6 +232,18 @@ const ESCAPES_LEGAL = {
  * ADR 0883: the function children a control-flow tag does not run under its owner (Chrome, rc.21: the site's NO_OWNER_* code). A `Show` child
  * of length 0 is handed back as a value, and a click calls it; a local `For` runs its child on a timer.
  */
+/** Reviewer's R50: the site's function run from an apply and, with no window, from a timer: Chrome's NO_OWNER_* code fires on the timer. */
+const APPLY_AND_TIMER = {
+  // A named apply is entered by the timer too: the walk must not read it as written in place.
+  "flw-named-apply-and-timer": (stmts, kit) => {
+    const h = kit.name("h");
+    return { body: [decl(h, fn(stmts)), expr(domExpr(`createEffect(() => 1, ${h})`, undefined, ["createEffect"])), expr(domExpr(`setTimeout(${h}, 0)`))], view: [] };
+  },
+  "flw-apply-and-timer": (stmts, kit) => {
+    const h = kit.name("h");
+    return { body: [decl(h, fn(stmts)), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(h)))]) })), expr(domExpr(`setTimeout(${h}, 0)`))], view: [] };
+  },
+};
 const FLOW_VALUES = {
   "flw-flow-show-value": (stmts, kit) => {
     const [g, el] = [kit.name("g"), kit.name("el")];
@@ -268,10 +280,10 @@ export const FLIP_WRITE_CONTEXTS = {
   PRIMITIVE_IN_EFFECT_CALLBACK: Object.keys(UNPLACED_APPLIES),
 };
 
-for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES), ...Object.keys(FLOW_VALUES)];
+for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES), ...Object.keys(FLOW_VALUES), ...Object.keys(APPLY_AND_TIMER)];
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
+  return (APPLY_AND_TIMER[context] ?? FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }
