@@ -509,6 +509,20 @@ pub(crate) fn collect_project<'facts>(
             ));
         }
     }
+    // ADR 0840: a standard call the impostor census withholds may run any
+    // function the program puts at that member, a setter or an accessor as
+    // well as a method: the call is the use, and its row names the census.
+    for file in ctx.semantic_lookup.files() {
+        for call in file.ast.calls.iter().filter(|call| !call.construct) {
+            if ctx.semantic_lookup.impostor_withheld(file, call.callee) {
+                handed.push(census_obligation(
+                    file.source_text(call.callee).unwrap_or("this call"),
+                    call.callee.location(file.path.as_str()),
+                    crate::blockers::STANDARD_MEMBER_IMPOSTOR,
+                ));
+            }
+        }
+    }
     handed.extend(use_rows);
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.

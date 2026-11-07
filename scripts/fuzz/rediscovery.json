@@ -5563,5 +5563,41 @@
    "mx-reactive-write-in-owned-scope-iter-same-wd-class-write-direct-none"
   ],
   "rediscovered": "flip-read.mjs wd-* (iter-same, 288 programs, Chrome warns on each): build mg1 (3d1518d6a, the census merged into flip-r2) 60 false-clean, certified (wd-iife-read, wd-iife-write, wd-class-read, wd-class-write, wd-let-read, 12 each); ADR 0831 0 false-clean (252 recall-gap, 36 agree). Fixture reactive-ir/value-use-census HeldSlots.ts and HeldUses.tsx hold the forms, with a handler write and a tracked read that keep no row"
+ },
+ {
+  "finding": "A lying cast or impostor away from the receiver: `run(t as any)` into a `Promise<void>` parameter, a field or return holding the cast (p3-cast-*), `const t: any`, an array's covariance, `coerce<T>`, a cast literal's member, `Object.assign(p, { then })` on a real promise, and a global `Promise` replaced under a key no fact names whose `resolve` hands back a thenable (g2): `then` resolved to Promise.then from the written type, a write in the callback certified, Chrome warns (research-w-lying-casts.md c1-c4, c7, g2)",
+  "found": "research-w-lying-casts.md (Q1, Q2), patterns types/p3-cast-* and types/lc-*",
+  "fixed": "ADR 0840",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-cast-param-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-field-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-return-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-any-param-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-covariance-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-generic-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-nested-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-cast-instance-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-patch-key-ctor-signal-direct-none"
+  ],
+  "rediscovered": "flip-read.mjs cast-* and patch-key-ctor (matrix --recall --grid --layers none, the sc VM, one generator for both): e57cc0dc5 720 false-clean in REACTIVE_WRITE (80 per context; cast-guard 0, the base already open there), ADR 0840 0 (recall-gap)"
+ },
+ {
+  "finding": "The same impostors around a read: certified, Chrome warns",
+  "found": "the fuzzer, this slice's own shapes",
+  "fixed": "ADR 0840",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-cast-field-signal-direct-none",
+   "mx-strict-read-untracked-cast-return-signal-direct-none",
+   "mx-strict-read-untracked-cast-covariance-signal-direct-none",
+   "mx-strict-read-untracked-cast-generic-signal-direct-none",
+   "mx-strict-read-untracked-cast-nested-signal-direct-none",
+   "mx-strict-read-untracked-cast-instance-signal-direct-none",
+   "mx-strict-read-untracked-patch-key-ctor-signal-direct-none"
+  ],
+  "rediscovered": "the same run: e57cc0dc5 413 false-clean in STRICT_READ (59 per context; cast-param, cast-any-param and cast-guard 0 there), ADR 0840 0. Both codes: 1,133 false cleans (994 cast, 139 patch-key-ctor), 1,267 of the old build's false cleans in the 14 contexts had no uncertifiable finding. patch-getproto (139) and patch-key-proto, patch-key-alias, patch-assign-key-proto (15 each) stay false-clean on both builds: Q2's"
  }
 ]

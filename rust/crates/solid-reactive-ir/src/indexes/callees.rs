@@ -405,8 +405,7 @@ impl<'a> SemanticLookup<'a> {
         // ADR 0683: a method a project subclass may have replaced is not the
         // standard one: no proof reads it. ADR 0781: nor is one a patch
         // replaced, or an assertion alone says the receiver has.
-        let vetoed =
-            crate::base::contributions::subclass_veto(file, callee, name).is_some_and(|hazards| {
+        let vetoed = crate::base::contributions::subclass_veto(file, callee, name).is_some_and(|hazards| {
                 hazards
                     .into_iter()
                     .any(|hazard| self.hazard_present(hazard))
@@ -416,8 +415,37 @@ impl<'a> SemanticLookup<'a> {
                     .any(|hazard| self.hazard_present(hazard)))
                 || crate::base::contributions::unproven_assertion(file, callee, name, |span| {
                     self.entity_at(file.path.as_str(), span)
-                });
+                })
+                // ADR 0840: nor is one an object of the program's own may be.
+                || crate::base::contributions::impostor_veto(
+                    file,
+                    callee,
+                    name,
+                    |hazard| self.hazard_present(hazard),
+                    |member| self.property_may_be_defined_reflectively_as(member),
+                );
         (!vetoed).then_some(resolved)
+    }
+
+    /// ADR 0840: whether the impostor census withholds the standard call at
+    /// `callee` ([`crate::base::contributions::impostor_veto`]).
+    pub(crate) fn impostor_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )
+        .and_then(crate::runtime_semantics::standard_call_name)
+        .is_some_and(|name| {
+            crate::base::contributions::impostor_veto(
+                file,
+                callee,
+                name,
+                |hazard| self.hazard_present(hazard),
+                |member| self.property_may_be_defined_reflectively_as(member),
+            )
+        })
     }
 
     pub(crate) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {

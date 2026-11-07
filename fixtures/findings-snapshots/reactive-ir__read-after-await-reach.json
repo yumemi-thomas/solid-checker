@@ -777,6 +777,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 9326,
+      "end": 9339,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -796,6 +807,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 9372,
       "end": 9378,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 9525,
+      "end": 9542,
       "fixes": 0
     },
     {
@@ -3387,6 +3409,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 43174,
+      "end": 43212,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -3395,17 +3428,6 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 43219,
       "end": 43226,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "handed-read-after-await",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 43219,
-      "end": 43224,
       "fixes": 0
     },
     {

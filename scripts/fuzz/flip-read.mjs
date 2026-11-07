@@ -33,17 +33,37 @@ export const STORE_DESTRUCTURES = {
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.
 const SYNC_THEN = "{ then(f: () => void) { f(); } }";
+const SYNC_PROTO = "function (this: any, f: any) { f(); return this; }";
+const PATCH_KEYS = 'const pk = ["Pro", "mise"].join(""), pm = ["th", "en"].join("");';
 const PATCHES = {
   "patch-global": ["(globalThis as any).setTimeout = (f: () => void) => { f(); return 0; };", "setTimeout"],
   "patch-window": ["window.setTimeout = ((f: () => void) => { f(); return 0; }) as any;", "setTimeout"],
   "patch-define": ['Object.defineProperty(globalThis, "setTimeout", { value: (f: () => void) => { f(); return 0; } });', "setTimeout"],
   "patch-proto": ["Promise.prototype.then = function (this: any, f: any) { f(); return this; } as any;", "Promise.resolve().then"],
   "patch-proto-alias": ["const proto = Promise.prototype; proto.then = function (this: any, f: any) { f(); return this; } as any;", "Promise.resolve().then"],
+  // ADR 0841: the prototype or the global reached by a key no fact names, or by `Object.getPrototypeOf`.
+  "patch-key-proto": [`${PATCH_KEYS} (globalThis as any)[pk].prototype[pm] = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-getproto": [`const gp = Object.getPrototypeOf(Promise.resolve()); gp.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-assign-key-proto": [`${PATCH_KEYS} Object.assign((globalThis as any)[pk].prototype, { [pm]: ${SYNC_PROTO} });`, "Promise.resolve().then"],
+  "patch-key-alias": [`${PATCH_KEYS} const gC = (globalThis as any)[pk]; gC.prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  "patch-key-ctor": [`${PATCH_KEYS} let gA = false; const gR = (globalThis as any)[pk]; (globalThis as any)[pk] = class extends gR { static resolve(v?: unknown) { return gA ? ((gA = false), { then(f: () => void) { f(); } }) : gR.resolve(v); } };`, "(gA = true, Promise.resolve()).then"],
 };
+// ADR 0840: the impostor away from the receiver (a parameter, a field, a return, a generic, a member), and with no assertion at all
+// (`any`, an array's covariance, a type guard, an own `then` put on a real promise). Each `then` runs the callback on the caller's stack.
+const RUN_THEN = "(p: Promise<void>, f: () => void) => { p.then(f); }";
 const CASTS = {
   "cast-then": (t) => ({ held: [decl(t, domExpr(SYNC_THEN))], callee: `(${t} as unknown as Promise<void>).then` }),
   "cast-any-then": (t) => ({ held: [decl(t, domExpr(`${SYNC_THEN} as any`))], callee: `(${t} as Promise<void>).then` }),
   "cast-held-then": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(`${t} as unknown as Promise<void>`))], callee: `${q}.then` }),
+  "cast-param": (t, q) => ({ held: [decl(t, domExpr(SYNC_THEN)), decl(q, domExpr(RUN_THEN))], call: (h) => `${q}(${t} as any, ${h})` }),
+  "cast-field": (t, q) => ({ hoisted: [expr(domExpr(`class ${q} { p = ${SYNC_THEN} as unknown as Promise<void>; }`))], held: [], callee: `new ${q}().p.then` }),
+  "cast-return": (t) => ({ held: [decl(t, domExpr(`(): Promise<void> => (${SYNC_THEN}) as unknown as Promise<void>`))], callee: `${t}().then` }),
+  "cast-generic": (t, q) => ({ hoisted: [expr(domExpr(`function ${q}<T>(x: unknown): T { return x as T; }`))], held: [decl(t, domExpr(`${q}<Promise<void>>(${SYNC_THEN})`))], callee: `${t}.then` }),
+  "cast-nested": (t) => ({ held: [decl(t, domExpr(`{ p: ${SYNC_THEN} } as unknown as { p: Promise<void> }`))], callee: `${t}.p.then` }),
+  "cast-any-param": (t, q) => ({ held: [expr(domExpr(`const ${t}: any = ${SYNC_THEN}`)), decl(q, domExpr(RUN_THEN))], call: (h) => `${q}(${t}, ${h})` }),
+  "cast-covariance": (t, q) => ({ hoisted: [expr(domExpr(`const ${t}: Promise<void>[] = []; const ${q}: (Promise<void> | { then(f: () => void): void })[] = ${t}; ${q}.push(${SYNC_THEN})`))], held: [], callee: `${t}[0].then` }),
+  "cast-guard": (t, q) => ({ hoisted: [expr(domExpr(`function ${q}(x: unknown): x is Promise<void> { return typeof x === "object" && x !== null && "then" in x; }`))], held: [expr(domExpr(`const ${t}: unknown = ${SYNC_THEN}`))], call: (h) => `if (${q}(${t})) ${t}.then(${h})` }),
+  "cast-instance": (t) => ({ held: [decl(t, domExpr("Promise.resolve()")), expr(domExpr(`Object.assign(${t}, { then: (f: () => void) => { f(); } })`))], callee: `${t}.then` }),
 };
 const LYING = [...Object.keys(CASTS), ...Object.keys(PATCHES)];
 // ADR 0803: the iterator written back unchanged. The tripwires fire and the write still runs (Chrome warns): never a silent clean.
@@ -464,9 +484,9 @@ export function flipReadContext(context, stmts, kit) {
     }
   }
   if (CASTS[context]) {
-    const { held, callee } = CASTS[context](kit.name("t"), kit.name("q"));
+    const { hoisted = [], held, callee, call: run } = CASTS[context](kit.name("t"), kit.name("q"));
     const h = kit.name("f");
-    return { body: [...held, decl(h, fn(stmts)), expr(domExpr(`${callee}(${h})`))], view: [] };
+    return { hoisted, body: [...held, decl(h, fn(stmts)), expr(domExpr(run ? run(h) : `${callee}(${h})`))], view: [] };
   }
   if (PATCHES[context]) {
     const [patch, callee] = PATCHES[context];

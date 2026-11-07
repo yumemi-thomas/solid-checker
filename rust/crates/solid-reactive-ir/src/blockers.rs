@@ -287,6 +287,11 @@ pub(crate) fn for_rule(code: &str) -> &'static str {
     }
 }
 
+/// ADR 0840: a standard method of a census member on a receiver no fact
+/// proves real, while the program may put a function at that member of an
+/// object of its own.
+pub(crate) const STANDARD_MEMBER_IMPOSTOR: &str = "standard-member-impostor";
+
 #[cfg(test)]
 mod tests {
     use super::named;

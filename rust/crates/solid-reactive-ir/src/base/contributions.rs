@@ -692,6 +692,12 @@ pub(crate) enum Hazard {
     /// (ADR 0801, [`crate::interproc::accessor_provenance::array_intrinsic_obtained`];
     /// value 0).
     ArrayIntrinsicObtained,
+    /// Code may put a function at this member of an object no standard
+    /// constructor made (ADR 0840; the key is a hash of the member, `*` for a
+    /// key no fact names; the value is the site's ordinal in the file's
+    /// census): a value typed as a standard container may be that impostor.
+    /// A collision only withholds another proof.
+    StandardImpostor(u32),
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -716,6 +722,10 @@ fn standard_override(container: &str, member: &str) -> Hazard {
 
 fn standard_patch(owner: &str, member: &str) -> Hazard {
     Hazard::StandardPatch(member_hash(owner, member))
+}
+
+fn standard_impostor(member: &str) -> Hazard {
+    Hazard::StandardImpostor(member_hash("", member))
 }
 
 fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
@@ -1041,6 +1051,695 @@ pub(crate) fn subclass_veto(
     })
 }
 
+/// ADR 0840: the standard members whose identity a proof reads for when a
+/// callback runs (the [`crate::runtime_semantics`] timing table), and
+/// `slice`. The standard method is not what runs on a value no fact proves a
+/// real instance while the program may put a function at that member of an
+/// object of its own. The other members are docs/open-work.md's.
+pub(crate) const IMPOSTOR_MEMBERS: [&str; 22] = [
+    "addEventListener",
+    "addListener",
+    "catch",
+    "every",
+    "filter",
+    "finally",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "flatMap",
+    "forEach",
+    "map",
+    "reduce",
+    "reduceRight",
+    "replace",
+    "replaceAll",
+    "setActionHandler",
+    "slice",
+    "some",
+    "sort",
+    "then",
+];
+
+/// What a census site's key names.
+enum CensusKey {
+    Named(String),
+    /// A symbol, which names no census member.
+    Symbol,
+    /// A key no fact names: any member.
+    Unknown,
+}
+
+/// The key a property key at `key` names: written, quoted, a literal under
+/// brackets, a `const` bound to a string literal, or a symbol.
+fn census_key(file: &FileFacts, key: Span, computed: bool) -> CensusKey {
+    let peeled = file.ast.peel_ts_sugar_span(key);
+    let Some(text) = file.source_text(peeled).map(str::trim) else {
+        return CensusKey::Unknown;
+    };
+    let quoted = text
+        .strip_prefix(['\'', '"'])
+        .and_then(|inner| inner.strip_suffix(['\'', '"']))
+        .or_else(|| {
+            text.strip_prefix('`')
+                .and_then(|inner| inner.strip_suffix('`'))
+                .filter(|inner| !inner.contains("${"))
+        });
+    if let Some(inner) = quoted {
+        return if inner.contains('\\') {
+            CensusKey::Unknown
+        } else {
+            CensusKey::Named(inner.to_owned())
+        };
+    }
+    if !computed || text.starts_with(|c: char| c.is_ascii_digit()) {
+        return CensusKey::Named(text.to_owned());
+    }
+    if symbol_key(file, peeled) {
+        return CensusKey::Symbol;
+    }
+    crate::indexes::constant_string_key(file, peeled).map_or(CensusKey::Unknown, CensusKey::Named)
+}
+
+/// Whether the value at `span` is no function, by its syntax: a primitive,
+/// object or array literal, an operator whose result is primitive, or the
+/// global `undefined`.
+fn noncallable_value(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let value = ast.peel_ts_sugar_span(span);
+    if ast.array_literals.binary_search(&value).is_ok()
+        || ast.primitive_results.binary_search(&value).is_ok()
+        || ast
+            .template_literals
+            .iter()
+            .any(|template| template.span == value)
+    {
+        return true;
+    }
+    let Some(text) = file.source_text(value).map(str::trim) else {
+        return false;
+    };
+    text.starts_with(['\'', '"', '{'])
+        || text.starts_with(|c: char| c.is_ascii_digit())
+        || matches!(text, "true" | "false" | "null")
+        || (text == "undefined" && ast.reference_declaration(value).is_none())
+}
+
+/// Whether `callee`, past its TypeScript wrappers, is spelled `name` or a
+/// member ending in it (`globalThis.Reflect.set`).
+fn spelled_callee(text: &str, name: &str) -> bool {
+    text == name
+        || text
+            .strip_suffix(name)
+            .is_some_and(|rest| rest.ends_with('.'))
+}
+
+/// ADR 0840: the census members the file's code may put a function at, on an
+/// object it makes or one it writes: an object literal's member that is not a
+/// data literal, a class element, an export (a module namespace), a member
+/// write, `Reflect.set`, a `defineProperty`, a descriptor map, and the makers
+/// of keys no fact names (`Object.fromEntries`, a `Proxy` with a `get` trap,
+/// `Reflect` held as a value). Copying keys (`Object.assign`, a spread) puts
+/// no function where none was. A definer under another spelling is the
+/// reflective-definer census's ([`definers`]), read beside this one.
+fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
+    use solid_facts::ast::ClassElementKind;
+    let ast = &file.ast;
+    let mut members: Vec<&'static str> = Vec::new();
+    let mut note = |key: CensusKey| match key {
+        CensusKey::Named(name) => {
+            if let Some(member) = IMPOSTOR_MEMBERS.iter().find(|member| **member == name) {
+                members.push(member);
+            }
+        }
+        CensusKey::Unknown => members.push(ANY_MEMBER),
+        CensusKey::Symbol => {}
+    };
+    for property in &ast.object_properties {
+        if property.data && property.value_kind.is_proven_noncallable() {
+            continue;
+        }
+        note(census_key(file, property.key, property.computed));
+    }
+    for element in ast.classes.iter().flat_map(|class| &class.elements) {
+        match element.kind {
+            ClassElementKind::Method | ClassElementKind::Getter | ClassElementKind::Setter => {}
+            ClassElementKind::Field => {
+                if element
+                    .value
+                    .is_none_or(|value| noncallable_value(file, value))
+                {
+                    continue;
+                }
+            }
+            _ => continue,
+        }
+        if element.computed {
+            note(CensusKey::Unknown);
+        } else if let Some(key) = element.key {
+            note(census_key(file, key, false));
+        }
+    }
+    for export in ast.exports.iter().filter(|export| !export.type_only) {
+        for specifier in export.specifiers.iter().chain(&export.declarations) {
+            if !specifier.type_only {
+                note(CensusKey::Named(specifier.exported.to_string()));
+            }
+        }
+    }
+    let assigned = ast
+        .assignments
+        .iter()
+        .map(|assignment| (ast.peel_ts_sugar_span(assignment.target), assignment))
+        .collect::<HashMap<_, _>>();
+    for target in &ast.write_targets {
+        let target = ast.peel_ts_sugar_span(*target);
+        let Some(member) = ast.member_at(target) else {
+            continue;
+        };
+        if assigned.get(&target).is_some_and(|assignment| {
+            (assignment.reads_target && assignment.logical.is_none())
+                || (!assignment.reads_target && noncallable_value(file, assignment.value_span))
+        }) {
+            continue;
+        }
+        if ast.computed_members.binary_search(&member.span).is_err() {
+            note(census_key(file, member.property, false));
+        } else if let Some(literal) = ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == member.span)
+        {
+            note(CensusKey::Named(literal.key.to_string()));
+        } else {
+            note(census_key(file, member.property, true));
+        }
+    }
+    for call in &ast.calls {
+        let Some(callee) = file
+            .source_text(ast.peel_ts_sugar_span(call.callee))
+            .map(str::trim)
+        else {
+            continue;
+        };
+        let argument = |index: usize| {
+            call.arguments
+                .get(index)
+                .filter(|argument| !argument.spread)
+        };
+        let argument_key = |index: usize| match argument(index) {
+            Some(key) => match &key.literal_value {
+                ArgumentLiteralFact::String(name) => CensusKey::Named(name.to_string()),
+                _ => census_key(file, key.span, true),
+            },
+            None => CensusKey::Unknown,
+        };
+        if spelled_callee(callee, "Reflect.set") {
+            if !argument(2).is_some_and(|value| noncallable_value(file, value.span)) {
+                note(argument_key(1));
+            }
+        } else if spelled_callee(callee, "Object.defineProperty")
+            || spelled_callee(callee, "Reflect.defineProperty")
+        {
+            note(argument_key(1));
+        } else if spelled_callee(callee, "Object.defineProperties")
+            || spelled_callee(callee, "Object.create")
+        {
+            match call.arguments.get(1) {
+                None => {}
+                Some(map) if !map.spread && map.exact_object_literal => {
+                    for key in &map.property_names {
+                        note(census_key(file, *key, false));
+                    }
+                }
+                Some(_) => note(CensusKey::Unknown),
+            }
+        } else if spelled_callee(callee, "Object.fromEntries") {
+            note(CensusKey::Unknown);
+        } else if call.construct && spelled_callee(callee, "Proxy") {
+            let traps_get = argument(1).is_none_or(|handler| {
+                !handler.exact_object_literal
+                    || handler
+                        .property_names
+                        .iter()
+                        .any(|key| file.source_text(*key).map(str::trim) == Some("get"))
+            });
+            if traps_get {
+                note(CensusKey::Unknown);
+            }
+        }
+    }
+    if ast.identifiers.iter().any(|identifier| {
+        file.source_text(identifier.span) == Some("Reflect")
+            && ast.reference_declaration(identifier.span).is_none()
+            && !ast.any_member_with_object(identifier.span)
+    }) {
+        note(CensusKey::Unknown);
+    }
+    members.sort_unstable();
+    members.dedup();
+    members.into_iter().map(standard_impostor).collect()
+}
+
+/// The array methods whose result is a new array of the receiver's species,
+/// and the promise methods whose result is a new promise.
+const ARRAY_FRESH: [&str; 10] = [
+    "concat",
+    "filter",
+    "flat",
+    "flatMap",
+    "map",
+    "slice",
+    "toReversed",
+    "toSorted",
+    "toSpliced",
+    "with",
+];
+const PROMISE_FRESH: [&str; 3] = ["catch", "finally", "then"];
+
+/// Whether the value at `value` is one the standard library made for
+/// `owner`, by a fact of this file: an array literal, a `new` of the global
+/// container, `Array.from`, `Array.of`, `Object.entries`, `keys` or `values`,
+/// a promise from the global `Promise`'s own factories (a resolve of nothing
+/// or of a value no promise can be, which adopts no instance), a `fetch`, the
+/// result of a standard method that makes a new one on such a value
+/// (`[a].map(f)`, `fetch(u).then(f)`), a call of a function of this file
+/// nothing rebinds whose every return is one ([`returned_made`]; an `async`
+/// one's is a promise), a host global (`window`, `document`,
+/// `globalThis`, `self`) or a node the document holds (`document.body`), or
+/// a string literal for a string's own. Each root is a global no declaration
+/// of this file shadows, and each function a patch may not have replaced
+/// (`patched`, ADR 0781).
+fn standard_made(
+    file: &FileFacts,
+    value: Span,
+    owner: &str,
+    patched: &dyn Fn(&str) -> bool,
+    depth: u8,
+) -> bool {
+    let ast = &file.ast;
+    if depth > 8 {
+        return false;
+    }
+    let global = |span: Span, name: &str| {
+        file.source_text(span).map(str::trim) == Some(name)
+            && ast.reference_declaration(span).is_none()
+    };
+    let root_global = |span: Span| {
+        let mut root = ast.peel_ts_sugar_span(span);
+        while let Some(member) = ast.member_at(root) {
+            root = ast.peel_ts_sugar_span(member.object);
+        }
+        ast.reference_declaration(root).is_none()
+    };
+    let owner = owner.strip_prefix("Readonly").unwrap_or(owner);
+    let owner = if owner == "PromiseLike" {
+        "Promise"
+    } else {
+        owner
+    };
+    let text = file.source_text(value).map(str::trim).unwrap_or_default();
+    // `R.m(…)` for a method that makes a new value of `R`'s kind.
+    let chained = ast.call_at(value).is_some_and(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let Some(link) = ast.member_at(callee) else {
+            return false;
+        };
+        let fresh: &[&str] = match owner {
+            "Array" => &ARRAY_FRESH,
+            "Promise" => &PROMISE_FRESH,
+            _ => &[],
+        };
+        !call.construct
+            && ast.computed_members.binary_search(&link.span).is_err()
+            && file.source_text(link.property).is_some_and(|member| {
+                fresh.contains(&member) && !patched(&format!("{owner}.{member}"))
+            })
+            && standard_made(
+                file,
+                ast.peel_ts_sugar_span(link.object),
+                owner,
+                patched,
+                depth + 1,
+            )
+    });
+    if chained
+        || returned_made(file, value, owner, patched, depth)
+        || awaited_made(file, value, owner, patched, depth)
+    {
+        return true;
+    }
+    // A call of the global function `name`, which no patch replaced.
+    let factory = |name: &str, qualified: &str| {
+        ast.call_at(value).is_some_and(|call| {
+            let callee = ast.peel_ts_sugar_span(call.callee);
+            root_global(callee)
+                && file.source_text(callee).map(str::trim) == Some(name)
+                && !patched(qualified)
+        })
+    };
+    let constructed = |name: &str| {
+        ast.call_at(value).is_some_and(|call| {
+            call.construct
+                && global(ast.peel_ts_sugar_span(call.callee), name)
+                && !patched(&format!("{name}Constructor.construct"))
+        })
+    };
+    match owner {
+        "Array" => {
+            ast.array_literals.binary_search(&value).is_ok()
+                || constructed("Array")
+                || [
+                    ("Array.from", "ArrayConstructor.from"),
+                    ("Array.of", "ArrayConstructor.of"),
+                    ("Object.entries", "ObjectConstructor.entries"),
+                    ("Object.keys", "ObjectConstructor.keys"),
+                    ("Object.values", "ObjectConstructor.values"),
+                ]
+                .iter()
+                .any(|(name, qualified)| {
+                    ast.call_at(value).is_some_and(|call| !call.construct)
+                        && factory(name, qualified)
+                })
+        }
+        "Map" | "Set" | "WeakMap" | "WeakSet" => constructed(owner),
+        "Promise" => {
+            constructed("Promise")
+                || ast.call_at(value).is_some_and(|call| {
+                    // `Promise.resolve(p)` hands back `p` itself when `p` is
+                    // a promise: only a value no promise can be makes a new one.
+                    !call.construct
+                        && (factory("Promise.resolve", "PromiseConstructor.resolve")
+                            && call.arguments.first().is_none_or(|argument| {
+                                !argument.spread
+                                    && (matches!(
+                                        argument.literal_value,
+                                        ArgumentLiteralFact::Null
+                                            | ArgumentLiteralFact::Boolean(_)
+                                            | ArgumentLiteralFact::Integer(_)
+                                            | ArgumentLiteralFact::String(_)
+                                    ) || noncallable_value(file, argument.span))
+                            })
+                            || ["reject", "all", "allSettled", "race", "any"]
+                                .iter()
+                                .any(|name| {
+                                    factory(
+                                        &format!("Promise.{name}"),
+                                        &format!("PromiseConstructor.{name}"),
+                                    )
+                                })
+                            || ["fetch", "window.fetch", "globalThis.fetch"]
+                                .iter()
+                                .any(|name| factory(name, "fetch")))
+                })
+        }
+        "String" => {
+            text.starts_with(['\'', '"'])
+                || ast
+                    .template_literals
+                    .iter()
+                    .any(|template| template.span == value)
+        }
+        _ => {
+            ["window", "document", "globalThis", "self"]
+                .iter()
+                .any(|name| global(value, name))
+                || ast.member_at(value).is_some_and(|member| {
+                    global(ast.peel_ts_sugar_span(member.object), "document")
+                        && ast.computed_members.binary_search(&member.span).is_err()
+                        && matches!(
+                            file.source_text(member.property),
+                            Some("body" | "head" | "documentElement")
+                        )
+                })
+        }
+    }
+}
+
+/// Whether `value` is a call of a function this file declares and nothing
+/// rebinds (a declaration, or a `const` bound to a function), whose every
+/// `return` hands back a value [`standard_made`] proves for `owner`: a native
+/// promise for an `async` one.
+fn returned_made(
+    file: &FileFacts,
+    value: Span,
+    owner: &str,
+    patched: &dyn Fn(&str) -> bool,
+    depth: u8,
+) -> bool {
+    let ast = &file.ast;
+    let Some(call) = ast.call_at(value).filter(|call| !call.construct) else {
+        return false;
+    };
+    let function = local_function(file, ast.peel_ts_sugar_span(call.callee));
+    let Some(function) = function.filter(|function| !function.generator) else {
+        return false;
+    };
+    if function.r#async {
+        return matches!(owner, "Promise" | "PromiseLike");
+    }
+    let returns = function_returns(file, function);
+    !returns.is_empty()
+        && returns.into_iter().all(|returned| {
+            returned.is_some_and(|returned| {
+                standard_made(
+                    file,
+                    ast.peel_ts_sugar_span(returned),
+                    owner,
+                    patched,
+                    depth + 1,
+                )
+            })
+        })
+}
+
+/// Whether the value at `value` is a primitive by a fact of this file: a
+/// literal, a template, an operator whose result is primitive, or a call of
+/// the global `String`, `Number`, `Boolean` or `BigInt` no patch replaced. A
+/// member of a primitive is its wrapper prototype's, which only a patch
+/// replaces (ADR 0781): no object of the program's is it.
+fn primitive_value(file: &FileFacts, value: Span, patched: &dyn Fn(&str) -> bool) -> bool {
+    let ast = &file.ast;
+    if ast.primitive_results.binary_search(&value).is_ok()
+        || ast
+            .template_literals
+            .iter()
+            .any(|template| template.span == value)
+    {
+        return true;
+    }
+    let text = file.source_text(value).map(str::trim).unwrap_or_default();
+    text.starts_with(['\'', '"'])
+        || text.starts_with(|c: char| c.is_ascii_digit())
+        || matches!(text, "true" | "false")
+        || ast.call_at(value).is_some_and(|call| {
+            let callee = ast.peel_ts_sugar_span(call.callee);
+            !call.construct
+                && ast.reference_declaration(callee).is_none()
+                && ["String", "Number", "Boolean", "BigInt"]
+                    .iter()
+                    .any(|name| {
+                        file.source_text(callee).map(str::trim) == Some(name)
+                            && !patched(&format!("{name}Constructor.call"))
+                    })
+        })
+}
+
+/// Whether `value` is `await x` where `x` is a value [`standard_made`] proves
+/// for `owner` (not a promise, so `await` hands it back), or a call of a
+/// function this file declares, `async` and nothing rebinds, whose every
+/// `return` is one: its promise fulfils with that value, which no patch made
+/// thenable (`owner.then`, ADR 0781).
+fn awaited_made(
+    file: &FileFacts,
+    value: Span,
+    owner: &str,
+    patched: &dyn Fn(&str) -> bool,
+    depth: u8,
+) -> bool {
+    let ast = &file.ast;
+    let owner = owner.strip_prefix("Readonly").unwrap_or(owner);
+    if matches!(owner, "Promise" | "PromiseLike") || patched(&format!("{owner}.then")) {
+        return false;
+    }
+    let Some(text) = file.source_text(value) else {
+        return false;
+    };
+    let Some(rest) = text.strip_prefix("await") else {
+        return false;
+    };
+    if !rest.starts_with(|c: char| c.is_whitespace() || c == '(') {
+        return false;
+    }
+    let skipped = text.len() - rest.trim_start().len();
+    let Ok(skipped) = u32::try_from(skipped) else {
+        return false;
+    };
+    let operand = ast.peel_ts_sugar_span(Span::new(value.start + skipped, value.end));
+    if standard_made(file, operand, owner, patched, depth + 1) {
+        return true;
+    }
+    let Some(function) = ast
+        .call_at(operand)
+        .filter(|call| !call.construct)
+        .and_then(|call| local_function(file, ast.peel_ts_sugar_span(call.callee)))
+        .filter(|function| function.r#async && !function.generator)
+    else {
+        return false;
+    };
+    let returns = function_returns(file, function);
+    !returns.is_empty()
+        && returns.into_iter().all(|returned| {
+            returned.is_some_and(|returned| {
+                standard_made(
+                    file,
+                    ast.peel_ts_sugar_span(returned),
+                    owner,
+                    patched,
+                    depth + 1,
+                )
+            })
+        })
+}
+
+/// The function a callee names when this file declares it and nothing
+/// rebinds it: a declaration, or a `const` bound to a function.
+fn local_function(file: &FileFacts, callee: Span) -> Option<&solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let declaration = ast.reference_declaration(callee)?;
+    ast.functions
+        .iter()
+        .find(|function| {
+            function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+                && !crate::indexes::binding_written(file, declaration)
+        })
+        .or_else(|| {
+            let binding = ast.identifier_binding(declaration)?;
+            let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+            binding
+                .immutable
+                .then(|| {
+                    ast.functions
+                        .iter()
+                        .find(|function| function.span == initializer)
+                })
+                .flatten()
+        })
+}
+
+/// What each `return` of `function` hands back (its expression body's value
+/// for an arrow), `None` for a bare `return`.
+fn function_returns(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Vec<Option<Span>> {
+    let ast = &file.ast;
+    if function.expression_body {
+        function
+            .expression_return
+            .iter()
+            .map(|returned| returned.argument)
+            .collect()
+    } else {
+        ast.returns_within(function.body)
+            .filter(|returned| {
+                ast.innermost_function_owning(returned.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            })
+            .map(|returned| returned.argument)
+            .collect()
+    }
+}
+
+/// Whether the receiver of `callee` is, by a fact of this file, a value the
+/// standard library made ([`standard_made`]) or a primitive
+/// ([`primitive_value`]): on the spot, or held by a binding nothing rebinds
+/// (and, but for a primitive, nothing exports, every use of which is the
+/// receiver of a method call, so no code of the program holds it to put a
+/// member on it).
+fn standard_receiver(
+    file: &FileFacts,
+    callee: Span,
+    owner: &str,
+    patched: &dyn Fn(&str) -> bool,
+) -> bool {
+    let ast = &file.ast;
+    let Some(member) = ast.member_at(ast.peel_ts_sugar_span(callee)) else {
+        return false;
+    };
+    let receiver = ast.peel_ts_sugar_span(member.object);
+    if primitive_value(file, receiver, patched) || standard_made(file, receiver, owner, patched, 0)
+    {
+        return true;
+    }
+    let Some(declaration) = ast.reference_declaration(receiver) else {
+        return false;
+    };
+    let Some(binding) = ast.identifier_binding(declaration) else {
+        return false;
+    };
+    let exported = ast.exports.iter().any(|export| {
+        export
+            .specifiers
+            .iter()
+            .chain(&export.declarations)
+            .any(|specifier| specifier.local.span == declaration)
+    });
+    let unbound = binding.immutable
+        || (binding.runtime_let && !crate::indexes::binding_written(file, declaration));
+    let initializer = binding
+        .initializer
+        .map(|initializer| ast.peel_ts_sugar_span(initializer));
+    // A primitive held is one, wherever the binding goes.
+    if unbound && initializer.is_some_and(|initializer| primitive_value(file, initializer, patched))
+    {
+        return true;
+    }
+    unbound
+        && !exported
+        && initializer
+            .is_some_and(|initializer| standard_made(file, initializer, owner, patched, 0))
+        && ast
+            .references_to(declaration)
+            .iter()
+            .filter(|reference| **reference != declaration)
+            .all(|reference| {
+                ast.member_with_peeled_object(*reference)
+                    .is_some_and(|used| {
+                        ast.any_call_with_peeled_callee(used.span)
+                            && !ast.any_write_target_containing(used.span)
+                    })
+            })
+}
+
+/// ADR 0840: whether the standard `qualified_name` at `callee` is withheld:
+/// it is a census member, the program may hold an impostor of it
+/// ([`Hazard::StandardImpostor`] for it or for any key, or a reflective
+/// definer of it), and no fact proves the receiver a real instance.
+pub(crate) fn impostor_veto(
+    file: &FileFacts,
+    callee: Span,
+    qualified_name: &str,
+    hazard: impl Fn(Hazard) -> bool,
+    defined_reflectively: impl Fn(&str) -> bool,
+) -> bool {
+    let Some((owner, member)) = qualified_name.rsplit_once('.') else {
+        return false;
+    };
+    if owner.is_empty() || !IMPOSTOR_MEMBERS.contains(&member) {
+        return false;
+    }
+    let patched =
+        |name: &str| hazard(Hazard::AnyStandardPatch) && patch_veto(name).into_iter().any(&hazard);
+    (hazard(standard_impostor(member))
+        || hazard(standard_impostor(ANY_MEMBER))
+        || defined_reflectively(member))
+        && !standard_receiver(file, callee, owner, &patched)
+}
+
 pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
     let file = view.file;
     let mut entries = Vec::new();
@@ -1103,6 +1802,9 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     }
     for (index, patch) in patches.into_iter().enumerate() {
         entries.push((patch, ordinal(index)));
+    }
+    for (index, impostor) in impostor_census(file).into_iter().enumerate() {
+        entries.push((impostor, ordinal(index)));
     }
     for write in writes {
         match write {

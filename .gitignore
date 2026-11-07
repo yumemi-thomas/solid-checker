@@ -1089,6 +1089,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/control-flow-denied-handler/node_modules/**
 !fixtures/reactive-ir/lying-assertion/node_modules/
 !fixtures/reactive-ir/lying-assertion/node_modules/**
+!fixtures/reactive-ir/impostor-census/node_modules/
+!fixtures/reactive-ir/impostor-census/node_modules/**
+!fixtures/reactive-ir/impostor-census-absent/node_modules/
+!fixtures/reactive-ir/impostor-census-absent/node_modules/**
+!fixtures/reactive-ir/impostor-census-any-key/node_modules/
+!fixtures/reactive-ir/impostor-census-any-key/node_modules/**
 !fixtures/reactive-ir/standard-patches/node_modules/
 !fixtures/reactive-ir/standard-patches/node_modules/**
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/

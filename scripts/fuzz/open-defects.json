@@ -37,33 +37,6 @@
  ],
  "patterns": [
   {
-   "id": "types/p3-cast-field",
-   "item": "R2 P3 residual: the assertion is away from the receiver",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/p3-cast-param",
-   "item": "R2 P3 residual: the assertion is away from the receiver",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
-   "id": "types/p3-cast-return",
-   "item": "R2 P3 residual: the assertion is away from the receiver",
-   "outcome": "false-clean",
-   "codes": [
-    "REACTIVE_WRITE_IN_OWNED_SCOPE"
-   ],
-   "certified": true
-  },
-  {
    "id": "types/s02-setter-slot-function-escaped",
    "item": "R1c: ADR 0282's census misses a Function held in a parameter and called with a string that patches iteration; a hook's setter slot is then taken as exact (same on 0818e258a)",
    "outcome": "false-positive",
