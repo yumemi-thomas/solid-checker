@@ -1597,8 +1597,15 @@ fn closed_parameter_seen(
                 .span
         }
     };
+    // Only a module-level binding can be exported: an exported function's
+    // span contains every local of its body.
+    let module_level = !file
+        .ast
+        .functions
+        .iter()
+        .any(|outer| outer.body.contains(name));
     let exported = file.ast.exports.iter().any(|export| {
-        export.span.contains(name)
+        (module_level && export.span.contains(name))
             || export
                 .specifiers
                 .iter()

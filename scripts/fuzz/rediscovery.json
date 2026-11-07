@@ -5690,5 +5690,18 @@
   "found": "reviewer, on T1b",
   "fixed": "ADR 0803 step 2 (absent_window_member, ClassicScriptDunder); now uncertifiable",
   "outside": "iter-window-any-written is uncertifiable on rf9 already (128), since the member write withdraws; a classic script cannot be generated (each program is an ES module), and the definer and valueOf shapes are fixture cases: handed-definer-parameter, handed-classic-script-member, handed-window-valueof, handed-window-define-getter, handed-window-any-raf, handed-window-any-timer, handed-window-any-written. make ir-edit-fuzz family census adds a definer and a classic declaration to handed-window-absent-member: 0 mismatches"
+ },
+ {
+  "finding": "reviews R51, R52, R53, tagged templates: the callback reader took an arrow's expression body for no return, a named function expression's own name for no entry, and a listed event value for a read when it was called, with the event as `this`: SC2001 V where Chrome is quiet",
+  "found": "reviewer, on f05a66ccb, 3e0c6eae5 and cc2f990f9",
+  "fixed": "ADR 0803 step 2 follow-up (call_result_seen, closed_parameter_seen, event_only_read); now uncertifiable",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-iter-returned-expression-body-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-named-expression-param-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-iter-event-value-called-signal-direct-none"
+  ],
+  "rediscovered": "lg-recall REACTIVE_WRITE_IN_OWNED_SCOPE, layers none (190 programs each): iter-returned-expression-body, iter-named-expression-param: rf11 78 false-positive each; iter-event-value-called: rf12 78; rf13 0. iter-event-value-tagged is the tagged twin. Fixtures handed-returned-expression-body, handed-timer-param-named, handed-event-value-called, handed-event-value-tagged, handed-window-method-tagged"
  }
 ]
