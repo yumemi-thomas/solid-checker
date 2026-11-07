@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
 import { registrationPositions } from "./registration.mjs";
-import { partlySilentRules, besideCode, codeOfThrown, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { partlySilentRules, besideCode, codeOfLogged, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { hitCount } from "./hits.mjs";
@@ -141,7 +141,7 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // A thrown code an `<Errored>` boundary caught: the boundary logs it (`console.error(err())`, solid-js rc.17 `solid.dev.js:1647-1652`)
   // instead of rethrowing it, with no position, so it judges as unplaced.
   const loggedTags = (runtime.consoleErrors ?? []).flatMap((text) => {
-    const logged = codeOfThrown(String(text).replace(/^Error: /, ""));
+    const logged = codeOfLogged(text);
     return logged ? [{ code: logged, source: "thrown", positions: [] }] : [];
   });
   // ADR 0858: an uncaught throw that names a Solid code is the program's own runtime result, where Chrome placed it; a page halted by one (a

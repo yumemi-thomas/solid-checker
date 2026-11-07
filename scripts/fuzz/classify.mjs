@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { withholdingRules, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
+import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { registrationLines } from "./registration.mjs";
@@ -140,7 +140,7 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
   const events = runtimeEvents(runtime);
   // An `<Errored>` boundary logs a thrown code instead of rethrowing it (matrix.mjs `judge`): reported, with no position.
   for (const text of runtime.consoleErrors ?? []) {
-    const code = codeOfThrown(String(text).replace(/^Error: /, ""));
+    const code = codeOfLogged(text);
     if (code) events.push({ code, source: "thrown", positions: [] });
   }
   const disturbed = disturbances(runtime, plan ?? { clicks: [] });
