@@ -71,6 +71,9 @@ pub(crate) const COMPONENT_IDENTITY_UNPROVEN: &str = "component-identity-unprove
 pub(crate) const OWNER_ALLOCATION_UNPROVEN: &str = "owner-allocation-unproven";
 pub(crate) const OWNER_UNPROVEN: &str = "owner-unproven";
 pub(crate) const ASYNC_OPTIONS_OPAQUE: &str = "async-options-opaque";
+/// ADR 0838: a pending rule's claim at a read no producer accounted for: no
+/// row of that rule, no SC9012 at the read, no recorded reason.
+pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";
 pub(crate) const ASYNC_READ_CAUGHT: &str = "async-read-caught";
 pub(crate) const ASYNC_COMPONENT_PROP: &str = "async-component-prop";
 pub(crate) const DECLARED_LOADING_VALUE: &str = "declared-loading-value";
@@ -242,7 +245,9 @@ pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static
 }
 
 pub(crate) const fn for_async_read(read: &crate::AsyncRead) -> &'static str {
-    if read.options_opaque {
+    if read.unaccounted {
+        ASYNC_READ_UNACCOUNTED
+    } else if read.options_opaque {
         ASYNC_OPTIONS_OPAQUE
     } else if read.caught {
         ASYNC_READ_CAUGHT

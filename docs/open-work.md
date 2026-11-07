@@ -156,6 +156,8 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - `leaf-owner-forbidden-call` (SC3001), recall lost: a primitive created under `untrack(() => …)` in a leaf body is not reported, though the runtime gives `PRIMITIVE_IN_FORBIDDEN_SCOPE`.
 - `leaf-owner-forbidden-call` (SC3001), SC9012 obligations (ADR 0439; 561 in the rc.17 corpus): members of fields or call results, packages with no source, parameter or destructured functions, inherited methods, project constructors and DOM dispatchers (about 25) stay open. A std-library call without arguments in an imported helper or method has no resolved call (ADR 0192); demanding it everywhere cleared 7 and moved other rules. The plain `canvas.getContext("webgl")` is trusted though it fires an event.
 - A pending read through a hook's returned member in `createTrackedEffect` (`vals.a1()`, PENDING_ASYNC_FORBIDDEN_SCOPE, 10 `mx-combo` rows): rc.17 reports it, SC5001 is an obligation on main too. The smoke manifest of 2026-10-30 still held it proven; which change lost it is not known.
+- ADR 0838 accounts SC5001, SC5003 and SC5008 only: SC1002's walks (`after_await.rs` `report_helper_reads`, `visit_call`, `report_call_read`, `expand`/`expand_mapped`, `follow_generators`) can still end with no row (ADRs 0850-0854).
+- `sync-memo-jsx-read` (patterns/flip): `createMemo(async () => 1, { sync: true })` read in JSX is an SC5003 violation; Chrome rc.21 reports only SYNC_NODE_RECEIVED_ASYNC (false positive, open).
 
 ## 2. Decisions not to build
 
@@ -268,8 +270,10 @@ Known false-positive shapes left open (fire today, wanted gone):
 - SC5003 of a read in tracked JSX: the 690 programs of ADR 0668 are closed (ADRs 0774-0776, 0779). An alias, a literal member, a hook's value and an unplaced read are uncertifiable, and only a carrier's named function is proved. Later proof: a never-rewritten `let` or a closed literal over an async source.
 
 - SC5001 of a pending getter handed through a member tag (`<ui.C a={a()} />`) has no row (71 programs, `open-defects.json`). SC1003 of a store destructure in a `ref` in a row, by name or from a factory certifies (152, ADR 0670). SC1002 of a named handler reading an accessor held by assignment has no row (20, ADR 0669). SC1002 `c05`, a `Map`-held accessor, is now uncertifiable through the census (ADR 0692).
+- ADR 0838, V → U: a walk cut on a path with no binding (an IIFE in the body) leaves its read an unplaced SC5001 row, and that row reopens the strict read even for a declared `loadingValue` served on the creating pass (ADR 0632): `rc21-declared-first-pass` `Layers` SC1001. Corpus: 1,241 of ADR 0838's rows are one ai-memory-ui source over a generated, absent module (`~/paraglide/runtime`); their blocker names the read, not the missing module.
 
 ## 4. Open questions and live approximations
+- The fuzz judge files a violation of another rule the runtime does not report as `wrong-rule`, not a false positive: 64 SC5003 rows on R3's handed-flush ids passed every judged set that way (ADR 0838). Part 16's judge rechecks.
 
 - Dynamic-only component bodies returned directly from an inline source of an exact rc.17 non-static factory have the unwindowed role (ADR 0530): a stale snapshot, deliberately reported like unnamed map reads (ADR 0443), with no runtime-warning promise. Mixed entries remain obligations. Not followed: block-bodied sources, aliases and wrappers; a dynamic-only mount through those forms retains the old component-placement uncertainty. The 12 store `pos-flush-fn` wrapper programs now have SC2003 at the closure's write (ADR 0571); their SC1001 rows stay stale snapshots rc.17 does not warn.
 

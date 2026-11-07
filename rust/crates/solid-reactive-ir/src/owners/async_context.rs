@@ -1318,7 +1318,10 @@ pub(crate) fn tracked_computation_read(
             .is_some_and(|primitive| {
                 // ADR 0614: an effect's apply, or a cleanup it returns, is no
                 // render either, whichever JSX its effect is written in.
-                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                // An inline callback runs in its caller's pass (`latest`,
+                // `isPending`, Chrome rc.21: the boundary claim stands).
+                callback_execution_at_call(file, call, primitive, index, lookup)
+                    .is_some_and(|execution| execution != solid_dialect::Execution::Inline)
                     && !dialect.computation_read_is_render(primitive)
             })
             // A JSX region written inside the computation is a render again.

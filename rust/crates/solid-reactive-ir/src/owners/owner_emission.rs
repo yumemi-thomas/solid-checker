@@ -506,6 +506,7 @@ pub(super) fn emit_file(
                         owned_run_throws: false,
                         after_await: false,
                         after_yield: false,
+                        flight_error_unobserved: false,
                         report: true,
                     },
                     lookup,

@@ -239,6 +239,9 @@ fn catalog_capabilities_gate_whole_program_tables() {
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            walk_cut: false,
         }],
         ..Program::default()
     };
@@ -294,6 +297,9 @@ fn a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit() {
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            walk_cut: false,
         }],
         ..Program::default()
     };
@@ -358,6 +364,9 @@ fn selection_filters_safe_rows_before_the_catalog_seam() {
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            walk_cut: false,
         }],
         ..Program::default()
     };

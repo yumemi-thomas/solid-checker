@@ -154,8 +154,12 @@ export const FLIP_READ_CONTEXTS = {
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["dyn-jsx-body", "portal-jsx", "portal-dyn", ...HANDED_FLUSH],
   RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH, ...Object.keys(ENTRY_CHAINS), ASYNC_ENTRY],
   UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH, ...Object.keys(ENTRY_CHAINS), ASYNC_ENTRY],
-  CAUGHT_REACTIVE_READ: HANDED_FLUSH,
-  PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed"],
+  // ADR 0838 (R2h): "jsx", a caught read a carrier runs in tracked JSX (CAUGHT_HANDED_READS only).
+  CAUGHT_REACTIVE_READ: [...HANDED_FLUSH, "jsx"],
+  PENDING_ASYNC_UNTRACKED_READ: ["portal-body", "dyn-jsx-mixed", "apply-placed-twin"],
+  // ADR 0835 review R1/R6: a helper's read placed at one call (tracked, under `<Loading>`) and cut on another path (a chain past the walk's
+  // bound in `onSettled`): the cut path's claim needs a row of its own.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
   UNTRACKED_READ_AFTER_AWAIT: ["then-named", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
@@ -172,6 +176,8 @@ export const FLIP_READ_LEGAL = {
   UNTRACKED_READ_AFTER_AWAIT: ["gen-prefix", "gen-drain", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
+  // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["handler-chain-placed", "export-placed-l"],
   // ADR 0678: `render(Local, el)` calls `Local` under a root, with no strict window. ADR 0677: a client build never runs a helper only `isServer` reaches.
   // ADR 0781: `cast-late-foreach` hands the callback to a microtask, whatever the assertion says.
   STRICT_READ_UNTRACKED: ["mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL],
@@ -342,6 +348,34 @@ export const SETTLED_SLOTS = {
   "settled-slot-writer": { ...SETTLED_SLOT, ...nowHook("createSignal, onSettled", "onSettled(() => { const t = setInterval(() => setNow(new Date()), interval); return () => clearInterval(t); });") },
 };
 // ADR 0801: the same slot over a pending source is a proved read of it.
+// Review R18: a probe reads the source too; a first load throws from `latest`/`isPending` to the surrounding boundary (legal under `<Loading>`).
+export const PROBE_READS = {
+  "probe-latest": { ...PEEK, contexts: ["jsx"], imports: ["latest"], text: (o) => `void latest(() => ${o}());` },
+  "probe-is-pending": { ...PEEK, contexts: ["jsx"], imports: ["isPending"], text: (o) => `void isPending(() => ${o}());` },
+};
+// ADR 0838 (R2h): a pending read in a `try` whose catch swallows the throw, in a function a carrier runs. The boundary never sees the throw
+// (Chrome rc.21: CAUGHT only); the carrier's position was the only place the `try` was looked for.
+const CAUGHT_HANDED = { kind: "async", only: true, contexts: ["jsx"] };
+export const CAUGHT_HANDED_READS = {
+  "caught-handed-foreach": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; [1].forEach(hf);` },
+  "caught-handed-map": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; void [1].map(hf);` },
+  "caught-handed-call": { ...CAUGHT_HANDED, text: (o) => `const hf = () => { try { void ${o}(); } catch {} }; hf.call(undefined);` },
+};
+// Review R17: an exported helper holds the read, one local call is placed (tracked, under `<Loading>`), and another module calls it: no walk here sees
+// that caller. `other` runs it in `onSettled` (Chrome: PENDING_ASYNC_FORBIDDEN_SCOPE) or in a handler never clicked. The source is module-level, so only this variant takes these contexts.
+const exportedHelperFile = (run) => ({ "eo.tsx": `import { onSettled } from "solid-js";\nimport { eRead } from "./App";\nexport function EO() {\n  ${run}\n}\n` });
+export const EXPORT_READS = {
+  "export-read": {
+    kind: "async", only: true, bindings: ["direct", "alias"], contexts: ["export-placed"], imports: ["createMemo"], text: () => "eA()",
+    importLines: ['const eA = createMemo(async () => { await new Promise((r) => setTimeout(r, 10)); return 1; });', 'import { EO } from "./eo";'],
+    files: exportedHelperFile("onSettled(() => { eRead(); });\n  return null;"),
+  },
+  "export-read-handler": {
+    kind: "async", only: true, bindings: ["direct", "alias"], contexts: [], legal: ["export-placed-l"], imports: ["createMemo"], text: () => "eA()",
+    importLines: ['const eA = createMemo(async () => { await new Promise((r) => setTimeout(r, 10)); return 1; });', 'import { EO } from "./eo";'],
+    files: exportedHelperFile('void onSettled;\n  return <button onClick={() => eRead()}>x</button>;'),
+  },
+};
 export const PENDING_SLOTS = {
   "pending-slot": { ...PEEK, text: (o) => `const useM = () => [${o}] as const; const [m] = useM(); void m();` },
 };
@@ -499,8 +533,9 @@ export const FLIP_READ_VARIANTS = {
   STRICT_READ_UNTRACKED: { ...HANDED_READS, ...CREATED_READS, ...ABSENT_GUARD, ...NET_READS, ...STAR_AS_READS, ...SETTER_READS, ...VALUE_USES, ...EXPORT_COPY_READS, ...SLOT_READS },
   REACTIVE_WRITE_IN_OWNED_SCOPE: { ...NET_WRITES, ...VALUE_WRITES, ...SLOT_WRITES },
   ACTION_CALLED_IN_OWNED_SCOPE: NET_ACTIONS,
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS },
-  CAUGHT_REACTIVE_READ: CAUGHT_CHAINS,
+  PENDING_ASYNC_FORBIDDEN_SCOPE: EXPORT_READS,
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { ...NET_PENDING, ...OPEN_COMPUTES, ...SETTLED_SLOTS, ...PENDING_SLOTS, ...PROBE_READS },
+  CAUGHT_REACTIVE_READ: { ...CAUGHT_CHAINS, ...CAUGHT_HANDED_READS },
   STORE_WRITE_OUTSIDE_SETTER: { ...NET_STORE_CALLS, ...STAR_AS_WRITES, ...SUB_VALUE_WRITES, ...EXPORT_COPY_WRITES },
 };
 export const openSignal = (name, kind) => apiSignal(name, 0, kind, "src");
@@ -612,6 +647,25 @@ export function flipReadContext(context, stmts, kit) {
     if (context === "handed-flush-tag") return { body: [held], view: [mounted(kit.name("v"), domExpr(`<${k} />`))] };
     if (context === "handed-flush-handler") return { body: [held], view: [button(kit.name("b"), [expr(domExpr(entry))])] };
     return { body: [held], view: [child(kit.name("v"), iife(fn([expr(domExpr(entry)), ret(num(1))])))] };
+  }
+  // ADR 0835 review R1/R6: the helper `u` holds the site; one call of it is placed (tracked, under `<Loading>`), the other path is cut
+  // (a chain of five past the walk's bound in `onSettled`, a guarded effect apply, a handler).
+  if (context === "export-placed" || context === "export-placed-l") {
+    const placed = mounted(kit.name("v"), domExpr('<Loading fallback={0}><i>{(eRead(), "x")}</i></Loading>', undefined, ["Loading"]));
+    return { hoisted: [decl("eRead", fn(stmts)), expr(domExpr("export { eRead }"))], body: [], view: [placed, mounted(kit.name("w"), domExpr("<EO />"))] };
+  }
+  if (["settled-chain-placed", "apply-placed-twin", "handler-chain-placed"].includes(context)) {
+    const u = kit.name("u");
+    const hc = Array.from({ length: 5 }, () => kit.name("hc"));
+    const chain = hc.map((name, i) => decl(name, fn([expr(call(ref(i === 0 ? u : hc[i - 1])))])));
+    const placed = mounted(kit.name("v"), domExpr(`<Loading fallback={0}><i>{(${u}(), "x")}</i></Loading>`, undefined, ["Loading"]));
+    const other = {
+      "settled-chain-placed": [...chain, expr(prim("settled", fn([expr(call(ref(hc[4])))])))],
+      "apply-placed-twin": [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(u)))]) }))],
+      "handler-chain-placed": chain,
+    }[context];
+    const view = context === "handler-chain-placed" ? [button(kit.name("b"), [expr(call(ref(hc[4])))]), placed] : [placed];
+    return { body: [decl(u, fn(stmts)), ...other], view };
   }
   if (context === "mount-named") {
     const h = kit.name("f");

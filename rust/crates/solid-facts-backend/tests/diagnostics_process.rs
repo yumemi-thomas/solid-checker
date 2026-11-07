@@ -1412,6 +1412,16 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
         fn held(row: &serde_json::Value, context: &str) -> bool {
             row["id"] == "SC9012" && row["analysisContext"] == context
         }
+        // ADR 0838: the accessor's source is not proved synchronous, so its
+        // read carries accounting rows of its own; they claim nothing.
+        let (accounted, read): (Vec<_>, Vec<_>) = read
+            .into_iter()
+            .partition(|row| row["analysisContext"] == "async-read-unaccounted");
+        assert!(
+            accounted.iter().all(|row| row["kind"] == "uncertifiable"),
+            "{}: {accounted:#?}",
+            case["name"]
+        );
         let (slot, read): (Vec<_>, Vec<_>) = read.into_iter().partition(|row| {
             kept && (held(row, "returned-callable-outside-source-universe")
                 || held(row, "tuple-iteration-written"))

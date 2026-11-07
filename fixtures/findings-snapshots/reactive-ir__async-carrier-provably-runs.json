@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 403,
+      "end": 409,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -131,6 +142,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 1404,
+      "end": 1410,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -147,6 +169,17 @@
       "kind": "uncertifiable",
       "blocker": "carrier-run-unproven",
       "severity": "error",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 1549,
+      "end": 1555,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
       "start": 1549,
       "end": 1555,
@@ -186,6 +219,17 @@
       "fixes": 0
     },
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 2063,
+      "end": 2069,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "violation",
@@ -193,6 +237,17 @@
       "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
       "start": 2063,
       "end": 2069,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-carrier-provably-runs/App.tsx",
+      "start": 2198,
+      "end": 2204,
       "fixes": 0
     },
     {

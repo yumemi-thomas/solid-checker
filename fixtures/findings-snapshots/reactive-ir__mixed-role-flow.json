@@ -68,6 +68,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1141,
+      "end": 1148,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
@@ -128,6 +139,17 @@
       "kind": "uncertifiable",
       "blocker": "source-pending-unproven",
       "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1877,
+      "end": 1884,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
       "start": 1877,
       "end": 1884,

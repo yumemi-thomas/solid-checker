@@ -6383,5 +6383,64 @@
     "mx-untracked-read-after-await-aw-then-any-x-direct-none"
    ],
    "rediscovered": "matrix --recall by id, Chrome confirming (16 ids): 0140ec6fb 16 false-clean, this commit 16 uncertifiable; aw-then-cast 16 agree on both"
+  },
+  {
+   "finding": "a helper's pending read placed at one call (tracked, under `<Loading>`) and cut on another path (a chain past the walk's bound in `onSettled`, an effect apply) certified while Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE / PENDING_ASYNC_UNTRACKED_READ: the placed call's row spoke for every path (review R1, R6)",
+   "found": "review R1/R6 of ADR 0835 (review/findings-rolling.md)",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+   "ids": [
+    "mx-pending-async-forbidden-scope-settled-chain-placed-x-direct-none"
+   ],
+   "rediscovered": "contexts settled-chain-placed, apply-placed-twin (1,316, Chrome confirmed): build mg2 (3aa2b4e3f) 70 false cleans; ADR 0838 (pa11) 0, all uncertifiable; legal twins handler-chain-placed 0 false positives. Fixture reactive-ir/pending-read-accounted MixedBoundPath, TwoCallers"
+  },
+  {
+   "finding": "an exported helper's pending read placed at its one local call certified while another module calls it in `onSettled` (Chrome: PENDING_ASYNC_FORBIDDEN_SCOPE): the walk took the local calls for all of them (review R17)",
+   "found": "review R17 (review/findings-rolling.md)",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+   "ids": [
+    "mx-pending-async-forbidden-scope-export-placed-export-read-direct-none"
+   ],
+   "rediscovered": "work/mx-r17.json (12, Chrome confirmed): build mg2 10 false cleans; ADR 0838 0, all uncertifiable; legal twins export-placed-l 12 uncertifiable, 0 false positives. Fixture reactive-ir/pending-read-accounted ExportedHelper, ShorthandReference"
+  },
+  {
+   "finding": "a probe (`latest(() => a1())`, `isPending(() => a1())`) with no `<Loading>` above it certified while Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY: a probe position was taken to rule out every pending rule (review R18)",
+   "found": "review R18 (review/findings-rolling.md)",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "ids": [
+    "mx-async-outside-loading-boundary-jsx-probe-latest-direct-none",
+    "mx-async-outside-loading-boundary-jsx-probe-is-pending-direct-none"
+   ],
+   "rediscovered": "work/mx-r17r18.json (36, Chrome confirmed): build mg2 36 false cleans; ADR 0838 0, all uncertifiable. Fixture reactive-ir/pending-read-accounted BareProbe, HelperBareProbe"
+  },
+  {
+   "finding": "a pending read in a `try` whose catch swallows it, in a function a carrier runs in tracked JSX (`[1].forEach(hf)`, `hf.call()`, `flush(() => ...)`), proved SC5003 while Chrome rc.21 reports CAUGHT_REACTIVE_READ only: the `try` was looked for at the carrier's position, not the read's",
+   "found": "R2h reading R3's handed-flush ids on pa6 (64 wrong-rule, the extra rule static-only in Chrome); the plain carrier form was already on mg2",
+   "fixed": "ADR 0838",
+   "grid": "mx-recall",
+   "code": "CAUGHT_REACTIVE_READ",
+   "ids": [
+    "mx-caught-reactive-read-jsx-caught-handed-foreach-direct-none"
+   ],
+   "rediscovered": "CAUGHT_REACTIVE_READ jsx caught-handed-* (layers none, helper; 18, Chrome confirmed): builds mg2 and pa6 12 wrong-rule (SC5003 violation Chrome does not report), mg2 also 6 false cleans; ADR 0838 (pa11) 18 uncertifiable. R3's ids: pa6 64 wrong-rule, pa11 0. Fixture reactive-ir/caught-handed-read (twin HandedRead keeps its violation)"
+  },
+  {
+   "finding": "R3's handed-flush ids (`[1].forEach(K1)` where `K1` runs `flush(() => a1())` and returns JSX; a store root read whole by `Object.keys`; a getter read by `held.v` in a `try`) certified while Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY / CAUGHT_REACTIVE_READ: an escaped component's body role ruled SC5003 out, a store root handed on whole was no site, and a getter's caught claim was never raised",
+   "found": "R3c's handed-flush grids (flip-r3c/ids/mx-ca.json), handed to R2g",
+   "fixed": "ADR 0838",
+   "outside": "the handed-flush contexts (handed-flush-each/-call, named-flush-call, flush-iife) are flip-r3c's generator (ADRs 0857, 0859), not on this branch: the ids below are pinned there at the merge",
+   "grid": "mx-recall",
+   "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+   "ids": [
+    "mx-async-outside-loading-boundary-handed-flush-each-x-direct-none",
+    "mx-caught-reactive-read-handed-flush-each-store-keys-direct-none",
+    "mx-caught-reactive-read-handed-flush-each-get-literal-direct-none"
+   ],
+   "rediscovered": "flip-r3c/ids/mx-ca.json (4,232, Chrome confirmed, run from r3c's generator): build mg2 1,641 false cleans, pa2 638, pa6 510 (+64 wrong-rule), pa9 24; ADR 0838 (pa11) 0 false cleans, 0 wrong-rule, 524 violations Chrome agrees with. Fixture reactive-ir/pending-read-accounted EscapedComponentFlush, StoreKeysCaught, GetterCaught"
   }
 ]

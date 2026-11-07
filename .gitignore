@@ -1149,3 +1149,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owned-edge-escape/node_modules/**
 !fixtures/reactive-ir/leaf-iife-placement/node_modules/
 !fixtures/reactive-ir/leaf-iife-placement/node_modules/**
+!fixtures/reactive-ir/pending-read-accounted/node_modules/
+!fixtures/reactive-ir/pending-read-accounted/node_modules/**
