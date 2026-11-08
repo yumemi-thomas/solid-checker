@@ -73,6 +73,8 @@ pub(crate) const OWNER_LATER_RUN_UNOWNED: &str = "owner-later-run-unowned";
 pub(crate) const COMPONENT_IDENTITY_UNPROVEN: &str = "component-identity-unproven";
 pub(crate) const OWNER_ALLOCATION_UNPROVEN: &str = "owner-allocation-unproven";
 pub(crate) const OWNER_UNPROVEN: &str = "owner-unproven";
+/// ADR 0886: no row and no named proof ended the site's execution context.
+pub(crate) const EXECUTION_CONTEXT_UNACCOUNTED: &str = "execution-context-unaccounted";
 pub(crate) const ASYNC_OPTIONS_OPAQUE: &str = "async-options-opaque";
 /// ADR 0838: a pending rule's claim at a read no producer accounted for: no
 /// row of that rule, no SC9012 at the read, no recorded reason.
@@ -237,6 +239,8 @@ pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static
         ASYNC_FLIGHT_ERROR_UNOBSERVED
     } else if requirement.computation_error_unobserved {
         COMPUTATION_ERROR_UNOBSERVED
+    } else if requirement.context_unaccounted {
+        EXECUTION_CONTEXT_UNACCOUNTED
     } else if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
     } else if requirement.owner_varies_by_caller {

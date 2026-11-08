@@ -1366,6 +1366,10 @@ pub struct OwnerRequirement {
     /// whatever owner the action was called under.
     #[serde(default, skip_serializing_if = "is_false")]
     pub after_yield: bool,
+    /// ADR 0886: no row and no named proof ended this site's execution
+    /// context: the check-once pass makes it an obligation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub context_unaccounted: bool,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted

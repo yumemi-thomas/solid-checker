@@ -421,6 +421,7 @@ pub(crate) fn attribute_dependency_requirements(
                 owned_run_throws: requirement.owned_run_throws,
                 after_await: false,
                 after_yield: false,
+                context_unaccounted: false,
                 report: true,
             },
             lookup,

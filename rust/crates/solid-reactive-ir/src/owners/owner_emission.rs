@@ -36,6 +36,30 @@ pub(crate) struct Emission {
     pub(super) static_violations: Vec<crate::StaticViolation>,
     /// Each `onSettled` cleanup's resolved callback node and its file's hash.
     pub(super) callbacks: Vec<(OwnerTarget, Option<NodeId>, Option<SourceHash>)>,
+    /// ADR 0886: each silent site and the closed proof that ended it, for
+    /// the check-once pass (`unaccounted_owner_sites`).
+    pub(super) accounted: Vec<(Span, ContextProof)>,
+}
+
+/// ADR 0886: why an owner-requiring site is silent. Each names a reviewed
+/// premise; a silent site with none is `execution-context-unaccounted`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ContextProof {
+    /// ADR 0458's never-runs proof (`SiteReach`), or a dormant export under
+    /// ADR 0347's closed-program census.
+    NeverRuns,
+    /// ADR 0534: a providing region answers, its chain proven to run in it.
+    SynchronousRegion,
+    /// Every edge into the site's function is owned (the context holds no
+    /// unowned bit; ADR 0868 closed the entries).
+    OwnedContext,
+    /// An owned context whose only other bit is a leaf: the site runs under
+    /// a leaf owner, SC3001's claim, not an unowned run (ADR 0347 amendment).
+    LeafOwned,
+    /// ADR 0867: the settled callback is proven to return no cleanup.
+    NoCleanupReturned,
+    /// ADR 0867: tsc rejects the call; nothing runs.
+    TscRejectedCall,
 }
 
 pub(super) struct EmissionInputs<'a, 'f, 'i> {
@@ -157,6 +181,9 @@ pub(super) fn emit_file(
                     leaf_gate_decision(owner),
                 ));
             }
+            emission
+                .accounted
+                .push((candidate.operation_span, ContextProof::NeverRuns));
             continue;
         }
         // The role log's answer for this candidate (ADR 0533): which arm set
@@ -513,15 +540,31 @@ pub(super) fn emit_file(
                         after_await: false,
                         after_yield: false,
                         flight_error_unobserved: false,
+                        context_unaccounted: false,
                         report: true,
                     },
                     lookup,
                 );
+            } else {
+                emission
+                    .accounted
+                    .push((candidate.operation_span, ContextProof::SynchronousRegion));
             }
             continue;
         }
         if provider {
             arm = arm_id!("owner_emission.provider-free-read");
+            // ADR 0886: SC4002 takes this read because an owner is proven
+            // current on every run of it; that is SC4001's proof too, not
+            // SC4002's row (reviewer D34 keys on the rule).
+            emission.accounted.push((
+                candidate.operation_span,
+                if root_owned {
+                    ContextProof::SynchronousRegion
+                } else {
+                    ContextProof::OwnedContext
+                },
+            ));
         }
         let (operation, report_hit) = if provider {
             ("context-provider", true)
@@ -583,6 +626,9 @@ pub(super) fn emit_file(
             match cleanup_proof.unwrap_or(CleanupReturnProof::Unresolved) {
                 CleanupReturnProof::NoFunction => {
                     cleanup_skipped(arm_id!("owner_emission.cleanup-no-function"));
+                    emission
+                        .accounted
+                        .push((candidate.operation_span, ContextProof::NoCleanupReturned));
                     continue;
                 }
                 CleanupReturnProof::Function => {}
@@ -593,6 +639,9 @@ pub(super) fn emit_file(
                 CleanupReturnProof::Unresolved if !settled_call_rejected => {}
                 CleanupReturnProof::Unresolved => {
                     cleanup_skipped(arm_id!("owner_emission.cleanup-unresolved-call"));
+                    emission
+                        .accounted
+                        .push((candidate.operation_span, ContextProof::TscRejectedCall));
                     continue;
                 }
             }
@@ -698,6 +747,7 @@ pub(super) fn emit_file(
                     owned_run_throws: false,
                     after_await: false,
                     after_yield: false,
+                    context_unaccounted: false,
                     report: true,
                 },
                 lookup,
@@ -743,6 +793,35 @@ pub(super) fn emit_file(
         let unplaced_callback = unplaced_callback || later_step;
         let uncertain = uncertain || later_step;
         let report = report || later_step;
+        // ADR 0886: a silent end names its proof. Context zero is one only
+        // where SiteReach proves the function never runs (reviewer D34). An
+        // unreported site is silent whatever else is unproven about it (an
+        // owned `onSettled`'s cleanup return), so the context decides.
+        if !report {
+            // Owned only: an owned bit beside any other (unowned, a later
+            // run, a resumption, a leaf, an uncertain component) is no proof
+            // (reviewer on the step 1 WIP).
+            let owned = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0;
+            let owned_only =
+                owned && context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0;
+            // A leaf is an owner too: there the runtime raises the forbidden
+            // scope code, SC3001's claim (ADR 0347 amendment), never NO_OWNER_*.
+            let leaf_owned = owned
+                && context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED | OWNER_CONTEXT_LEAF)
+                    == 0;
+            let proof = if owned_only {
+                Some(ContextProof::OwnedContext)
+            } else if leaf_owned {
+                Some(ContextProof::LeafOwned)
+            } else if context == 0 && candidate.owner.is_some_and(|span| unreached(&span)) {
+                Some(ContextProof::NeverRuns)
+            } else {
+                None
+            };
+            if let Some(proof) = proof {
+                emission.accounted.push((candidate.operation_span, proof));
+            }
+        }
         crate::role_log::owner(
             operation,
             path,
@@ -772,6 +851,7 @@ pub(super) fn emit_file(
                 owned_run_throws,
                 after_await: after_await && !after_yield,
                 after_yield,
+                context_unaccounted: false,
                 report,
             },
             lookup,
@@ -1047,4 +1127,64 @@ fn later_generator_step(
     std::iter::once(span)
         .chain(climbed)
         .any(|at| crate::owners::past_generator_yield(file, at, lookup))
+}
+
+/// ADR 0886's ratchet: every arm of [`emit_file`], and how a site leaving
+/// through it ends. `Row` arms end in a reported requirement or an
+/// obligation; the others name the [`ContextProof`] recorded there (`"final"`:
+/// the final push decides between `OwnedContext`, `LeafOwned` and `NeverRuns`, else the
+/// check-once pass gives U). A new arm must be added here, with its ending.
+#[cfg(test)]
+const ARM_ENDINGS: &[(&str, &str)] = &[
+    ("owner_emission.no-owner-node", "final"),
+    ("owner_emission.region-context", "final"),
+    ("owner_emission.context-0", "final"),
+    ("owner_emission.parameter-list", "row"),
+    ("owner_emission.returned-unplaced", "row"),
+    ("owner_emission.after-yield", "row"),
+    ("owner_emission.after-await", "row"),
+    ("owner_emission.possible-continuation", "final"),
+    ("owner_emission.root-owned", "SynchronousRegion"),
+    ("owner_emission.root-owned-entry-open", "row"),
+    (
+        "owner_emission.provider-free-read",
+        "OwnedContext|SynchronousRegion",
+    ),
+    ("owner_emission.cleanup-no-function", "NoCleanupReturned"),
+    ("owner_emission.cleanup-unresolved-call", "TscRejectedCall"),
+    ("owner_emission.owned-run-throws", "row"),
+    ("owner_emission.named-layer-entry-open", "row"),
+    ("owner_emission.later-generator-step", "row"),
+];
+
+#[cfg(test)]
+mod arm_ratchet {
+    /// Every `owner_emission.*` arm the source names has an ending in
+    /// [`super::ARM_ENDINGS`], and every listed arm still exists.
+    #[test]
+    fn every_emission_arm_names_its_ending() {
+        let source = include_str!("owner_emission.rs");
+        let mut arms = std::collections::BTreeSet::new();
+        let marker = "arm_id!(";
+        let mut rest = source;
+        while let Some(at) = rest.find(marker) {
+            rest = &rest[at + marker.len()..];
+            let Some(open) = rest.find('"') else { break };
+            let after = &rest[open + 1..];
+            let Some(close) = after.find('"') else { break };
+            let name = &after[..close];
+            if name.starts_with("owner_emission.") {
+                arms.insert(name.to_owned());
+            }
+            rest = &after[close..];
+        }
+        let listed = super::ARM_ENDINGS
+            .iter()
+            .map(|(arm, _)| (*arm).to_owned())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            arms, listed,
+            "an emission arm with no ending in ARM_ENDINGS, or a listed arm that is gone"
+        );
+    }
 }
