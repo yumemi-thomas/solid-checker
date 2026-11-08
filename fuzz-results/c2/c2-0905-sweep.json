@@ -1,0 +1,3528 @@
+{
+ "request": "c2-0905-sweep",
+ "agent": "c2",
+ "branch": "claude/flip-wip-c2",
+ "state": "done",
+ "tool": "sweep",
+ "commit": "50e46e1517c74d8d0bb000c003ffc72912a3482f",
+ "baseline": "6653b144bdf707625a95ea714f399a535a6d7182",
+ "judgeRev": "50e46e1517c74d8d0bb000c003ffc72912a3482f",
+ "args": [
+  "--jobs",
+  "8",
+  "--manifest",
+  "scripts/corpus/rc21-manifest.json"
+ ],
+ "secondPath": true,
+ "corpus": {
+  "appsRoot": "/Users/thomas.guehenneux/EDF/Yumemi/GitHub/solid-checker-rc21-frozen/apps",
+  "manifest": "scripts/corpus/rc21-manifest.json at judgeRev",
+  "note": "this machine's frozen rc.21 corpus: the manifest's 23 apps at their commits (34 projects); its installs were made here (2026-11-05), so totals compare with sweeps on this machine only (at flip-base 895fbf806 it read 182 uncertifiable fewer than the other machine's, all in jandibat-web and app-game; violations equal rule by rule)"
+ },
+ "secondRoot": "/Users/thomas.guehenneux/EDF/tmp/flipw/rolling/req/second-root-c2-0905-sweep-x/rc21-apps-relocated-copy",
+ "ranBy": "Track W grids agent (Claude), macOS release builds, shared heavy lock, 12 GB single-process guard",
+ "finished": "2026-11-08T04:21:46.271Z",
+ "counts": {
+  "commit": {
+   "sha": "50e46e1517c74d8d0bb000c003ffc72912a3482f",
+   "appsRoot": "/Users/thomas.guehenneux/EDF/Yumemi/GitHub/solid-checker-rc21-frozen/apps",
+   "projects": 34,
+   "findings": 74812,
+   "byKind": {
+    "uncertifiable": 74603,
+    "violation": 209
+   },
+   "exitErrors": 0,
+   "parseErrors": 0,
+   "checkerSha256": "e9176628f132056fe1881ac9d5e4fbce9501895ec0c7631ce50853241d5bba9e",
+   "producerSha256": "c9205321b37905eaab1ca78bd34c4b820f3979a4d909b0c42ea53b76f42259f8",
+   "manifestSha256": "c681a13c5ff50281f9bfb0afe3a5390fccf69588a3c521e095d3666da63b08b5",
+   "byRule": {
+    "SC8003 jsx-no-duplicate-props uncertifiable": 224,
+    "SC4001 missing-owner uncertifiable": 912,
+    "SC1001 strict-read-untracked uncertifiable": 5413,
+    "SC9012 reactive-dispatch-unresolved uncertifiable": 59217,
+    "SC1007 reactive-handler-frozen uncertifiable": 60,
+    "SC5003 async-outside-loading-boundary uncertifiable": 2346,
+    "SC2003 no-store-mutation-outside-setter uncertifiable": 3047,
+    "SC8014 prefer-for uncertifiable": 45,
+    "SC4002 missing-context-provider uncertifiable": 48,
+    "SC5001 pending-async-unsuspendable-read uncertifiable": 1281,
+    "SC1001 strict-read-untracked violation": 74,
+    "SC5008 caught-reactive-read uncertifiable": 582,
+    "SC1002 reactive-read-after-await uncertifiable": 180,
+    "SC1004 components-return-once uncertifiable": 40,
+    "SC8015 prefer-show violation": 117,
+    "SC2006 flush-in-action uncertifiable": 20,
+    "SC2008 flush-in-effect-callback uncertifiable": 237,
+    "SC1003 no-destructure uncertifiable": 140,
+    "SC7001 missing-effect-function uncertifiable": 2,
+    "SC6002 primitive-in-effect-callback uncertifiable": 72,
+    "SC8015 prefer-show uncertifiable": 329,
+    "SC2001 no-write-in-pure-computation uncertifiable": 6,
+    "SC7002 sync-computation-received-async uncertifiable": 1,
+    "SC1004 components-return-once violation": 2,
+    "SC4001 missing-owner violation": 10,
+    "SC9015 compiler-refused-source violation": 2,
+    "SC9015 compiler-refused-source uncertifiable": 1,
+    "SC2009 optimistic-write-before-load uncertifiable": 393,
+    "SC9005 package-behavior-unavailable uncertifiable": 1,
+    "SC1005 uncalled-accessor uncertifiable": 1,
+    "SC5006 loading-on-outside-hold uncertifiable": 2,
+    "SC2002 action-called-in-owned-scope uncertifiable": 1,
+    "SC5007 loading-on-accessor violation": 1,
+    "SC6001 primitive-in-directive-application violation": 1,
+    "SC7007 server-function-rich-argument uncertifiable": 2,
+    "SC3001 leaf-owner-forbidden-call violation": 2
+   }
+  },
+  "baseline": {
+   "sha": "6653b144bdf707625a95ea714f399a535a6d7182",
+   "appsRoot": "/Users/thomas.guehenneux/EDF/Yumemi/GitHub/solid-checker-rc21-frozen/apps",
+   "projects": 34,
+   "findings": 74812,
+   "byKind": {
+    "uncertifiable": 74603,
+    "violation": 209
+   },
+   "exitErrors": 0,
+   "parseErrors": 0,
+   "checkerSha256": "273797a3aa1f42dd392954b22eca8b7c1732d747ce7efd4192eda4939c429236",
+   "producerSha256": "c9205321b37905eaab1ca78bd34c4b820f3979a4d909b0c42ea53b76f42259f8",
+   "manifestSha256": "c681a13c5ff50281f9bfb0afe3a5390fccf69588a3c521e095d3666da63b08b5",
+   "byRule": {
+    "SC8003 jsx-no-duplicate-props uncertifiable": 224,
+    "SC4001 missing-owner uncertifiable": 912,
+    "SC1001 strict-read-untracked uncertifiable": 5413,
+    "SC9012 reactive-dispatch-unresolved uncertifiable": 59217,
+    "SC1007 reactive-handler-frozen uncertifiable": 60,
+    "SC5003 async-outside-loading-boundary uncertifiable": 2346,
+    "SC2003 no-store-mutation-outside-setter uncertifiable": 3047,
+    "SC8014 prefer-for uncertifiable": 45,
+    "SC4002 missing-context-provider uncertifiable": 48,
+    "SC5001 pending-async-unsuspendable-read uncertifiable": 1281,
+    "SC1001 strict-read-untracked violation": 74,
+    "SC5008 caught-reactive-read uncertifiable": 582,
+    "SC1002 reactive-read-after-await uncertifiable": 180,
+    "SC1004 components-return-once uncertifiable": 40,
+    "SC8015 prefer-show violation": 117,
+    "SC2006 flush-in-action uncertifiable": 20,
+    "SC2008 flush-in-effect-callback uncertifiable": 237,
+    "SC1003 no-destructure uncertifiable": 140,
+    "SC7001 missing-effect-function uncertifiable": 2,
+    "SC6002 primitive-in-effect-callback uncertifiable": 72,
+    "SC8015 prefer-show uncertifiable": 329,
+    "SC2001 no-write-in-pure-computation uncertifiable": 6,
+    "SC7002 sync-computation-received-async uncertifiable": 1,
+    "SC1004 components-return-once violation": 2,
+    "SC4001 missing-owner violation": 10,
+    "SC9015 compiler-refused-source violation": 2,
+    "SC9015 compiler-refused-source uncertifiable": 1,
+    "SC2009 optimistic-write-before-load uncertifiable": 393,
+    "SC9005 package-behavior-unavailable uncertifiable": 1,
+    "SC1005 uncalled-accessor uncertifiable": 1,
+    "SC5006 loading-on-outside-hold uncertifiable": 2,
+    "SC2002 action-called-in-owned-scope uncertifiable": 1,
+    "SC5007 loading-on-accessor violation": 1,
+    "SC6001 primitive-in-directive-application violation": 1,
+    "SC7007 server-function-rich-argument uncertifiable": 2,
+    "SC3001 leaf-owner-forbidden-call violation": 2
+   }
+  },
+  "second": {
+   "sha": "50e46e1517c74d8d0bb000c003ffc72912a3482f",
+   "appsRoot": "/Users/thomas.guehenneux/EDF/tmp/flipw/rolling/req/second-root-c2-0905-sweep-x/rc21-apps-relocated-copy",
+   "projects": 34,
+   "findings": 74812,
+   "byKind": {
+    "uncertifiable": 74603,
+    "violation": 209
+   },
+   "exitErrors": 0,
+   "parseErrors": 0,
+   "checkerSha256": "e9176628f132056fe1881ac9d5e4fbce9501895ec0c7631ce50853241d5bba9e",
+   "producerSha256": "c9205321b37905eaab1ca78bd34c4b820f3979a4d909b0c42ea53b76f42259f8",
+   "manifestSha256": "c681a13c5ff50281f9bfb0afe3a5390fccf69588a3c521e095d3666da63b08b5",
+   "byRule": {
+    "SC8003 jsx-no-duplicate-props uncertifiable": 224,
+    "SC4001 missing-owner uncertifiable": 912,
+    "SC1001 strict-read-untracked uncertifiable": 5413,
+    "SC9012 reactive-dispatch-unresolved uncertifiable": 59217,
+    "SC1007 reactive-handler-frozen uncertifiable": 60,
+    "SC5003 async-outside-loading-boundary uncertifiable": 2346,
+    "SC2003 no-store-mutation-outside-setter uncertifiable": 3047,
+    "SC8014 prefer-for uncertifiable": 45,
+    "SC4002 missing-context-provider uncertifiable": 48,
+    "SC5001 pending-async-unsuspendable-read uncertifiable": 1281,
+    "SC1001 strict-read-untracked violation": 74,
+    "SC5008 caught-reactive-read uncertifiable": 582,
+    "SC1002 reactive-read-after-await uncertifiable": 180,
+    "SC1004 components-return-once uncertifiable": 40,
+    "SC8015 prefer-show violation": 117,
+    "SC2006 flush-in-action uncertifiable": 20,
+    "SC2008 flush-in-effect-callback uncertifiable": 237,
+    "SC1003 no-destructure uncertifiable": 140,
+    "SC7001 missing-effect-function uncertifiable": 2,
+    "SC6002 primitive-in-effect-callback uncertifiable": 72,
+    "SC8015 prefer-show uncertifiable": 329,
+    "SC2001 no-write-in-pure-computation uncertifiable": 6,
+    "SC7002 sync-computation-received-async uncertifiable": 1,
+    "SC1004 components-return-once violation": 2,
+    "SC4001 missing-owner violation": 10,
+    "SC9015 compiler-refused-source violation": 2,
+    "SC9015 compiler-refused-source uncertifiable": 1,
+    "SC2009 optimistic-write-before-load uncertifiable": 393,
+    "SC9005 package-behavior-unavailable uncertifiable": 1,
+    "SC1005 uncalled-accessor uncertifiable": 1,
+    "SC5006 loading-on-outside-hold uncertifiable": 2,
+    "SC2002 action-called-in-owned-scope uncertifiable": 1,
+    "SC5007 loading-on-accessor violation": 1,
+    "SC6001 primitive-in-directive-application violation": 1,
+    "SC7007 server-function-rich-argument uncertifiable": 2,
+    "SC3001 leaf-owner-forbidden-call violation": 2
+   }
+  }
+ },
+ "moved": {
+  "total": 166,
+  "groups": {
+   "new SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee": 12,
+   "new SC9012 reactive-dispatch-unresolved uncertifiable:value-use-unclassified": 2,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-through-logical -> uncertifiable:value-in-carrier": 12,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-through-new -> uncertifiable:value-in-carrier": 2,
+   "new SC9012 reactive-dispatch-unresolved uncertifiable:value-in-carrier": 9,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee -> uncertifiable:value-through-new": 5,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee -> uncertifiable:value-in-carrier": 66,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-in-carrier -> uncertifiable:value-forwarded": 15,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:leaf-callback-opaque -> uncertifiable:leaf-callback-opaque+uncertifiable:value-from-primitive-callback": 1,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee -> uncertifiable:value-root-in-helper": 1,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee+uncertifiable:listener-reach -> uncertifiable:value-in-carrier+uncertifiable:listener-reach": 7,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee -> uncertifiable:value-forwarded": 9,
+   "moved SC9012 reactive-dispatch-unresolved uncertifiable:value-through-await -> uncertifiable:value-in-carrier": 1,
+   "gone SC9012 reactive-dispatch-unresolved uncertifiable:value-to-unresolved-callee": 21,
+   "gone SC9012 reactive-dispatch-unresolved uncertifiable:value-in-carrier": 1,
+   "gone SC9012 reactive-dispatch-unresolved uncertifiable:value-forwarded": 2
+  },
+  "rows": [
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 172,
+    "column": 19,
+    "span": "6296-6313"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 177,
+    "column": 19,
+    "span": "6458-6475"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 182,
+    "column": 19,
+    "span": "6689-6706"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 187,
+    "column": 19,
+    "span": "6932-6949"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 187,
+    "column": 66,
+    "span": "6979-6991"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 192,
+    "column": 19,
+    "span": "7191-7208"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/preview-appearance.ts",
+    "line": 14,
+    "column": 41,
+    "span": "413-424"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-use-unclassified",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/preview-appearance.ts",
+    "line": 15,
+    "column": 35,
+    "span": "465-471"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 1816,
+    "column": 13,
+    "span": "64953-64979",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 1817,
+    "column": 7,
+    "span": "64987-65031",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 1818,
+    "column": 62,
+    "span": "65094-65108",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 1834,
+    "column": 30,
+    "span": "65576-65599",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 2022,
+    "column": 7,
+    "span": "71747-71791",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 2036,
+    "column": 30,
+    "span": "72226-72253",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/App.tsx",
+    "line": 2200,
+    "column": 13,
+    "span": "78014-78080",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/explorer/files.ts",
+    "line": 52,
+    "column": 24,
+    "span": "1867-1887",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/explorer/files.ts",
+    "line": 166,
+    "column": 20,
+    "span": "6245-6257",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/explorer/files.ts",
+    "line": 166,
+    "column": 20,
+    "span": "6245-6301",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/tree-view/createTreeView.ts",
+    "line": 91,
+    "column": 11,
+    "span": "3799-3814",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/browser-atlas/src/tree-view/createTreeView.ts",
+    "line": 94,
+    "column": 7,
+    "span": "3896-3911",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-logical"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/grease-pencil-typegpu/src/app/useGreaseRenderer.ts",
+    "line": 60,
+    "column": 19,
+    "span": "2365-2386",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/grease-pencil-typegpu/src/app/useStoredDocument.ts",
+    "line": 11,
+    "column": 5,
+    "span": "309-334"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-use-unclassified",
+    "path": "<apps>/app-game/apps/grease-pencil-typegpu/src/features/interaction/pointSelectionInteraction.ts",
+    "line": 99,
+    "column": 5,
+    "span": "3287-3293"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-through-new",
+    "path": "<apps>/app-game/apps/solid-svg-editor/src/editor/capabilities.ts",
+    "line": 68,
+    "column": 26,
+    "span": "2421-2484",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/solid-svg-editor/src/editor/geometry.ts",
+    "line": 86,
+    "column": 23,
+    "span": "2320-2352",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/solid-svg-editor/src/editor/handles.ts",
+    "line": 43,
+    "column": 25,
+    "span": "2034-2109",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 57,
+    "column": 46,
+    "span": "3397-3431",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 104,
+    "column": 49,
+    "span": "5664-5698",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 127,
+    "column": 50,
+    "span": "6688-6709",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-through-new",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 466,
+    "column": 7,
+    "span": "20298-20408",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-through-new",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 476,
+    "column": 28,
+    "span": "20698-20709",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-through-new",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 481,
+    "column": 27,
+    "span": "20843-20893",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-through-new",
+    "path": "<apps>/app-game/packages/card-stack/src/createCardStack.ts",
+    "line": 507,
+    "column": 7,
+    "span": "22112-22207",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/card-stack/src/layout.ts",
+    "line": 31,
+    "column": 28,
+    "span": "1362-1382",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/film-annotation-player/App.tsx",
+    "line": 208,
+    "column": 36,
+    "span": "6255-6294",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/math-examples/img-onload-test/createRootMapPool.ts",
+    "line": 102,
+    "column": 24,
+    "span": "2975-2988",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/math-examples/tree-struct/ImageCache.tsx",
+    "line": 65,
+    "column": 13,
+    "span": "1980-1995",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlip.ts",
+    "line": 233,
+    "column": 5,
+    "span": "7401-7588",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlip.ts",
+    "line": 233,
+    "column": 5,
+    "span": "7401-7689",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlip.ts",
+    "line": 233,
+    "column": 17,
+    "span": "7413-7468",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlip.ts",
+    "line": 256,
+    "column": 5,
+    "span": "7923-7939",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 20,
+    "column": 18,
+    "span": "600-621",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 81,
+    "column": 29,
+    "span": "2430-2477",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 99,
+    "column": 18,
+    "span": "3283-3304",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 118,
+    "column": 7,
+    "span": "3917-4280",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 132,
+    "column": 21,
+    "span": "4360-4385",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 133,
+    "column": 23,
+    "span": "4409-4431",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 134,
+    "column": 22,
+    "span": "4454-4475",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 150,
+    "column": 21,
+    "span": "4970-5053",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 170,
+    "column": 5,
+    "span": "5449-5511",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-dnd/src/primitives/createFlipAnimations.ts",
+    "line": 170,
+    "column": 26,
+    "span": "5470-5510",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/solid-nest/src/calculateTransitionStyles.ts",
+    "line": 54,
+    "column": 27,
+    "span": "2149-2166",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/solid-nest/src/calculateTransitionStyles.ts",
+    "line": 69,
+    "column": 29,
+    "span": "2541-2558",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/solid-nest/src/calculateTransitionStyles.ts",
+    "line": 102,
+    "column": 31,
+    "span": "3411-3429"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/solid-nest/src/measure.ts",
+    "line": 12,
+    "column": 3,
+    "span": "333-349"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "leaf-callback-opaque",
+    "path": "<apps>/app-game/packages/solid-utils/toObservable.ts",
+    "line": 12,
+    "column": 35,
+    "span": "422-437",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/svg-editor/use-virtual-tree.tsx",
+    "line": 23,
+    "column": 5,
+    "span": "865-872"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/svg-editor/use-virtual-tree.tsx",
+    "line": 45,
+    "column": 7,
+    "span": "1453-1463"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-root-in-helper",
+    "path": "<apps>/app-game/packages/ui-components-examples/docking/index.tsx",
+    "line": 109,
+    "column": 56,
+    "span": "2913-2932",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 66,
+    "column": 19,
+    "span": "2155-2166",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 87,
+    "column": 3,
+    "span": "2556-2573"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 96,
+    "column": 9,
+    "span": "2791-2808"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 118,
+    "column": 9,
+    "span": "3300-3325",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 155,
+    "column": 26,
+    "span": "4456-4470"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 160,
+    "column": 7,
+    "span": "4681-4695"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 185,
+    "column": 17,
+    "span": "5498-5507"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/context.tsx",
+    "line": 69,
+    "column": 49,
+    "span": "2535-2552"
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/global-api.ts",
+    "line": 21,
+    "column": 17,
+    "span": "540-557"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/App.test.tsx",
+    "line": 301,
+    "column": 3,
+    "span": "14113-14252",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/App.test.tsx",
+    "line": 312,
+    "column": 3,
+    "span": "14314-14433",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 109,
+    "column": 22,
+    "span": "3998-4019",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 111,
+    "column": 10,
+    "span": "4047-4100"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 122,
+    "column": 2,
+    "span": "4454-4496",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 124,
+    "column": 2,
+    "span": "4548-4594",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 127,
+    "column": 2,
+    "span": "4683-4721",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 129,
+    "column": 2,
+    "span": "4769-4800",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 130,
+    "column": 2,
+    "span": "4803-4831",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 145,
+    "column": 3,
+    "span": "5415-5457",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 148,
+    "column": 3,
+    "span": "5512-5558",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 149,
+    "column": 3,
+    "span": "5562-5586",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 152,
+    "column": 3,
+    "span": "5639-5683",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 153,
+    "column": 3,
+    "span": "5687-5710",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 159,
+    "column": 3,
+    "span": "5934-5954",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 166,
+    "column": 3,
+    "span": "6151-6171",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 172,
+    "column": 3,
+    "span": "6333-6354",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 199,
+    "column": 9,
+    "span": "7215-7239",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 199,
+    "column": 9,
+    "span": "7215-7572",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 202,
+    "column": 7,
+    "span": "7300-7353",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 214,
+    "column": 3,
+    "span": "7626-7654",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/Bridge.test.tsx",
+    "line": 333,
+    "column": 2,
+    "span": "14375-14402",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/MarkdownText.tsx",
+    "line": 71,
+    "column": 2,
+    "span": "3393-3443",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.activitybar.test.tsx",
+    "line": 47,
+    "column": 19,
+    "span": "1981-2012",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.activitybar.test.tsx",
+    "line": 48,
+    "column": 18,
+    "span": "2032-2063",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.activitybar.test.tsx",
+    "line": 89,
+    "column": 3,
+    "span": "4056-4193",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.fleetpane.test.tsx",
+    "line": 95,
+    "column": 19,
+    "span": "4625-4656",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.fleetpane.test.tsx",
+    "line": 96,
+    "column": 18,
+    "span": "4676-4707",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.fleetpane.test.tsx",
+    "line": 246,
+    "column": 3,
+    "span": "11694-11831",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.prpane.test.tsx",
+    "line": 69,
+    "column": 19,
+    "span": "2771-2802",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.prpane.test.tsx",
+    "line": 70,
+    "column": 18,
+    "span": "2822-2853",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.test.ts",
+    "line": 130,
+    "column": 3,
+    "span": "4173-4247",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/components/RightSidebar.test.ts",
+    "line": 144,
+    "column": 3,
+    "span": "4523-4597",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/keyboard-e2e.test.tsx",
+    "line": 28,
+    "column": 2,
+    "span": "1146-1173",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/keyboard/dispatch.ts",
+    "line": 286,
+    "column": 2,
+    "span": "12326-12369",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/keyboard/dispatch.ts",
+    "line": 288,
+    "column": 3,
+    "span": "12389-12435",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/palette-e2e.test.tsx",
+    "line": 21,
+    "column": 2,
+    "span": "958-985",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/shell-globals.test.ts",
+    "line": 23,
+    "column": 3,
+    "span": "855-889",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/shell-globals.test.ts",
+    "line": 28,
+    "column": 3,
+    "span": "1030-1065",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/compass-ui/apps/ui/src/shell-globals.test.ts",
+    "line": 34,
+    "column": 3,
+    "span": "1209-1245",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 133,
+    "column": 43,
+    "span": "3542-3549",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 146,
+    "column": 32,
+    "span": "3892-3899",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 324,
+    "column": 7,
+    "span": "9334-9376",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 346,
+    "column": 5,
+    "span": "9878-9920",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 582,
+    "column": 5,
+    "span": "17219-17261",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 583,
+    "column": 5,
+    "span": "17267-17310",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 643,
+    "column": 5,
+    "span": "19252-19294",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/expenses-app/src/lib/convex.test.ts",
+    "line": 649,
+    "column": 5,
+    "span": "19522-19564",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/app/pwa/create-pwa-controller.ts",
+    "line": 17,
+    "column": 5,
+    "span": "465-489",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/app/shell/App.tsx",
+    "line": 34,
+    "column": 18,
+    "span": "1345-1369",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/pages/briefing/lib/create-shrink-progress.ts",
+    "line": 121,
+    "column": 7,
+    "span": "5146-5212",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/pages/briefing/lib/create-shrink-progress.ts",
+    "line": 126,
+    "column": 9,
+    "span": "5333-5383",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/pages/briefing/lib/create-shrink-progress.ts",
+    "line": 159,
+    "column": 3,
+    "span": "6576-6647",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/pages/briefing/lib/create-shrink-progress.ts",
+    "line": 164,
+    "column": 5,
+    "span": "6776-6831",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/pages/briefing/ui/board/BriefingPage.tsx",
+    "line": 156,
+    "column": 24,
+    "span": "4844-4899",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/pages/briefing/ui/board/BriefingPage.tsx",
+    "line": 157,
+    "column": 18,
+    "span": "4917-4953",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-cached-query.ts",
+    "line": 239,
+    "column": 5,
+    "span": "7315-7357",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-media-query.ts",
+    "line": 31,
+    "column": 70,
+    "span": "1069-1093",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-media-query.ts",
+    "line": 36,
+    "column": 18,
+    "span": "1195-1211",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-online-status.ts",
+    "line": 10,
+    "column": 7,
+    "span": "331-368",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-online-status.ts",
+    "line": 11,
+    "column": 7,
+    "span": "375-413",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-online-status.ts",
+    "line": 14,
+    "column": 9,
+    "span": "444-484",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/lib/create-online-status.ts",
+    "line": 15,
+    "column": 9,
+    "span": "493-534",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/ui/tooltip/index.tsx",
+    "line": 248,
+    "column": 3,
+    "span": "8688-8762",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/ui/tooltip/index.tsx",
+    "line": 249,
+    "column": 3,
+    "span": "8765-8805",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "blocker": "listener-reach"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/ui/tooltip/index.tsx",
+    "line": 254,
+    "column": 5,
+    "span": "8954-9016",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/ui/tooltip/index.tsx",
+    "line": 255,
+    "column": 5,
+    "span": "9021-9064",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/hoxxes-briefing/apps/web/src/shared/ui/tooltip/index.tsx",
+    "line": 262,
+    "column": 10,
+    "span": "9244-9278",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/kui/frontend/packages/shell/src/data/appearance.ts",
+    "line": 110,
+    "column": 26,
+    "span": "3389-3500",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-await"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/oscartbeaumont-website/src/routes/invoicer/util.ts",
+    "line": 49,
+    "column": 22,
+    "span": "1493-1498",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-through-new"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/skyjtx-website/apps/skyjt-website/src/components/Background/Background.tsx",
+    "line": 99,
+    "column": 5,
+    "span": "2944-2974",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/skyjtx-website/apps/skyjt-website/src/components/Background/Background.tsx",
+    "line": 197,
+    "column": 7,
+    "span": "5777-5804",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier"
+     }
+    ]
+   },
+   {
+    "change": "new",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/solid-groove/src/editor/useEditorShortcuts.ts",
+    "line": 174,
+    "column": 9,
+    "span": "8306-8327"
+   },
+   {
+    "change": "moved",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/spotify-desk-thing/src/components/PlayerControls/PlayerControls.tsx",
+    "line": 22,
+    "column": 3,
+    "span": "655-804",
+    "baseline": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee"
+     }
+    ],
+    "commit": [
+     {
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded"
+     }
+    ]
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 172,
+    "column": 19,
+    "span": "6296-6326"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 177,
+    "column": 19,
+    "span": "6458-6512"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 182,
+    "column": 19,
+    "span": "6689-6743"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 187,
+    "column": 19,
+    "span": "6932-7002"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 187,
+    "column": 66,
+    "span": "6979-7001"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/components/panel-components/BrushPreviewCanvas.tsx",
+    "line": 192,
+    "column": 19,
+    "span": "7191-7245"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/preview-appearance.ts",
+    "line": 14,
+    "column": 41,
+    "span": "413-429"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/apps/abr-viewer/src/features/brush-detail/preview-appearance.ts",
+    "line": 15,
+    "column": 35,
+    "span": "465-476"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-in-carrier",
+    "path": "<apps>/app-game/apps/grease-pencil-typegpu/src/app/useStoredDocument.ts",
+    "line": 11,
+    "column": 5,
+    "span": "309-361"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/apps/grease-pencil-typegpu/src/features/interaction/pointSelectionInteraction.ts",
+    "line": 99,
+    "column": 5,
+    "span": "3287-3460"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/solid-nest/src/calculateTransitionStyles.ts",
+    "line": 102,
+    "column": 31,
+    "span": "3411-3438"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/solid-nest/src/measure.ts",
+    "line": 12,
+    "column": 3,
+    "span": "333-394"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-forwarded",
+    "path": "<apps>/app-game/packages/solid-utils/toObservable.ts",
+    "line": 12,
+    "column": 35,
+    "span": "422-446"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/svg-editor/use-virtual-tree.tsx",
+    "line": 23,
+    "column": 5,
+    "span": "865-1422"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/svg-editor/use-virtual-tree.tsx",
+    "line": 45,
+    "column": 7,
+    "span": "1453-1475"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 87,
+    "column": 3,
+    "span": "2556-2592"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 96,
+    "column": 9,
+    "span": "2791-2815"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 155,
+    "column": 26,
+    "span": "4456-4503"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 160,
+    "column": 7,
+    "span": "4681-4710"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/DockPanel.tsx",
+    "line": 185,
+    "column": 17,
+    "span": "5498-5515"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/context.tsx",
+    "line": 69,
+    "column": 49,
+    "span": "2535-2559"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/app-game/packages/ui-components/solid-dockview/global-api.ts",
+    "line": 21,
+    "column": 17,
+    "span": "540-564"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/compass-ui/apps/ui/src/boot-native.ts",
+    "line": 111,
+    "column": 10,
+    "span": "4047-4110"
+   },
+   {
+    "change": "gone",
+    "code": "SC9012",
+    "rule": "reactive-dispatch-unresolved",
+    "kind": "uncertifiable",
+    "blocker": "value-to-unresolved-callee",
+    "path": "<apps>/solid-groove/src/editor/useEditorShortcuts.ts",
+    "line": 174,
+    "column": 9,
+    "span": "8306-8383"
+   }
+  ]
+ },
+ "pathDependent": {
+  "compared": true,
+  "total": 0,
+  "rows": []
+ }
+}
