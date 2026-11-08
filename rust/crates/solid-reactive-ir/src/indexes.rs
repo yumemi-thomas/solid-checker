@@ -911,8 +911,9 @@ pub(super) struct SemanticLookup<'a> {
     intrinsics: crate::base::reads::Recorded<intrinsics::Intrinsics>,
     /// ADR 0351: each member read that names a closed object literal's function.
     closed_members: crate::base::reads::Recorded<HashMap<(&'a str, Span), Span>>,
-    descriptors_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, &'a TypeDescriptor>>,
-    callability_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, Callability>>,
+    /// Every entity naming a symbol, in table order (`descriptor_by_symbol`,
+    /// `callability_by_symbol`).
+    entities_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, Vec<&'a EntityFact>>>,
     symbols_by_id:
         crate::base::reads::Recorded<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
     context_symbols: crate::base::reads::Recorded<HashSet<&'a str>>,
@@ -1284,8 +1285,7 @@ impl<'a> SemanticLookup<'a> {
             invocation_answers: returned_invocations::State::default(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
-            descriptors_by_symbol: crate::base::reads::Recorded::new(),
-            callability_by_symbol: crate::base::reads::Recorded::new(),
+            entities_by_symbol: crate::base::reads::Recorded::new(),
             symbols_by_id: crate::base::reads::Recorded::new(),
             context_symbols: crate::base::reads::Recorded::new(),
             declaration_symbols: crate::base::reads::Recorded::new(),

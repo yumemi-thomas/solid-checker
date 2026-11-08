@@ -134,7 +134,7 @@
     "files()": 2,
     "file_by_path": 2,
     "symbols_by_id": 1,
-    "typescript-table": 4
+    "typescript-table": 3
   },
   "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
     "facts.files": 1,
