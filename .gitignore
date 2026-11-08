@@ -1211,3 +1211,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/walk-depth-bound/node_modules/**
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/**
+!fixtures/reactive-ir/classic-script-global-function/node_modules/
+!fixtures/reactive-ir/classic-script-global-function/node_modules/**
+!fixtures/reactive-ir/classic-script-global-let/node_modules/
+!fixtures/reactive-ir/classic-script-global-let/node_modules/**
+!fixtures/reactive-ir/classic-script-global-module/node_modules/
+!fixtures/reactive-ir/classic-script-global-module/node_modules/**

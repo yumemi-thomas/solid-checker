@@ -947,6 +947,52 @@ const KEY_DEFINERS: [&str; 3] = [
 ];
 const SHAPE_DEFINERS: [&str; 2] = ["Object.defineProperties", "Object.assign"];
 
+/// ADR 0904: the names a classic script (no import or export) declares at its
+/// top level: a `var` or function becomes the global object's property, a
+/// `let`, `const` or class the global lexical binding every module resolves
+/// through, so each may replace a standard global. A declaration file and a
+/// `declare global` block run nothing. A name a block or a class expression
+/// scopes is counted too: a patch more, never one less.
+fn classic_script_globals(file: &FileFacts) -> Vec<&str> {
+    let path = file.path.as_str();
+    if crate::execution_role::file_is_module(file)
+        || [".d.ts", ".d.mts", ".d.cts"]
+            .iter()
+            .any(|suffix| path.ends_with(suffix))
+    {
+        return Vec::new();
+    }
+    let ast = &file.ast;
+    let top = |span: Span| {
+        // A function's own name is in its span, and outside its scope.
+        ast.functions_containing(span)
+            .all(|function| function.name.as_ref().is_some_and(|name| name.span == span))
+            && !ast.module_blocks.iter().any(|block| block.contains(span))
+    };
+    let mut names = ast
+        .function_declarations
+        .iter()
+        .filter(|declaration| declaration.has_body)
+        .map(|declaration| declaration.name.span)
+        .chain(
+            ast.classes
+                .iter()
+                .filter_map(|class| class.name.as_ref().map(|name| name.span)),
+        )
+        .chain(
+            ast.bindings
+                .iter()
+                .flat_map(|binding| binding.names.iter().map(|name| name.span)),
+        )
+        .chain(ast.namespace_declarations.iter().map(|name| name.span))
+        .filter(|span| top(*span))
+        .filter_map(|span| file.source_text(span).map(str::trim))
+        .collect::<Vec<_>>();
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
 /// Every write to a standard global, prototype or constructor member in the
 /// file: an assignment, or a definer's call on one.
 fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Hazard> {
@@ -973,6 +1019,14 @@ fn standard_patches(view: &FileView<'_>, writes: &[AssignmentWrite]) -> Vec<Haza
     }
     // `scrollTo = f`: the global's own binding.
     patches.extend(written_global_identifiers(file).map(|name| standard_patch("", name)));
+    // ADR 0904: `var Math`, `function parseInt`, `let Map` at a classic
+    // script's top level: the global's own binding, for every script and
+    // module.
+    patches.extend(
+        classic_script_globals(file)
+            .into_iter()
+            .map(|name| standard_patch("", name)),
+    );
     // `globalThis[key] = f`: a key no fact reads.
     for assignment in &ast.assignments {
         let target = ast.peel_ts_sugar_span(assignment.target);
