@@ -1,0 +1,27 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "primitive-value",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-namespace-aliases/variants/eval-box/App.tsx",
+      "start": 240,
+      "end": 247,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-namespace-aliases/variants/eval-box/App.tsx",
+      "start": 415,
+      "end": 417,
+      "fixes": 0
+    }
+  ]
+}

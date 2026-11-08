@@ -117,7 +117,7 @@ Forwarded sources (ADR 0370) are SC9012 `forwarded-to-undescribed-callee` only: 
 
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 
-- Found only through a named or namespace import. Not followed: a stored or aliased namespace object (`const NS = Solid; NS.createEffect(…)`), a computed member (`S["createEffect"]`), an `import S = require(…)` member. Fix: a census where every TypeFacts reference of a primitive's symbol that is not a primitive callee is an obligation. No corpus site has these shapes.
+- Found through a named or namespace import, or a binding that exactly holds one (ADR 0901). Not named (SC9012 at the call; the recall judge counts a call with no row of the primitive's rule as a false clean): a written `let`, an exported `const` of a named import, a holder that escapes or is written, a default naming another value, a member of an object that is no namespace, and until their slice `refresh.bind(…)(…)`, `.call`/`.apply` and `(slot ||= f)(…)`. Not followed: a stored or aliased namespace object (`const NS = Solid; NS.createEffect(…)`), a computed member (`S["createEffect"]`), an `import S = require(…)` member. Fix: a census where every TypeFacts reference of a primitive's symbol that is not a primitive callee is an obligation. No corpus site has these shapes.
 
 `runWithOwner` with a disposed owner (`RUN_WITH_DISPOSED_OWNER`, rc.13 `dist/dev-shared.js:6919-6932`) is claimed by no rule. Proof needs an owner written once from `getOwner()` in a `createRoot` body that disposes it unconditionally, and every `runWithOwner` using it running after that body. Not built: no corpus site has one.
 

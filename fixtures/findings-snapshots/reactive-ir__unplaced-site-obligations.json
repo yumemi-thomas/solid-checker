@@ -154,25 +154,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "primitive-value",
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
-      "start": 706,
-      "end": 718,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
-      "start": 733,
-      "end": 740,
+      "start": 720,
+      "end": 726,
       "fixes": 0
     },
     {

@@ -7226,5 +7226,35 @@
    "mx-strict-read-untracked-flw-flow-show-kid-calls-children-signal-direct-none"
   ],
   "rediscovered": "fixture show-named-child-length ComponentParent and HeldFragment: 8f07d4b92 no row at the read; r62 SC1001 U there; IntrinsicParent and ReturnedFragment stay tracked. The census twins (4, Chrome confirmed) are recall gaps on both builds: the kid twin's read already had a U, the held-fragment twin's U sits off the read's lines"
+ },
+ {
+  "finding": "A Solid primitive called through a namespace default, a namespace member or an extracted member kept only another rule's SC9012 (ADR 0884's U where the compiler resolved it, `package-callee` or `primitive-value` elsewhere), no row of the primitive's rule: uncertified false cleans (R-call-arg)",
+  "found": "the coordinator's R-call-arg (80 rows in mx-recall), re-measured on o1 ad8cc68bd",
+  "fixed": "ADR 0901",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-root-memo-ns-default-none",
+   "mx-sync-node-received-async-untrack-memo-ns-member-module-helper",
+   "mx-sync-node-received-async-memo-memo-extracted-closure"
+  ],
+  "rediscovered": "the 52 o1 left open, origin's judge, Chrome confirmed: o1 52 false cleans; rn3 12 (the bind, call and or-assign bindings, still open), 17 agree, 23 recall-gap. Over all 529 alias ids on rn2: o1 65 false cleans, rn2 12, 268 agree, 0 false positives"
+ },
+ {
+  "finding": "A non-exported `const` alias of a named Solid import (`const r = refresh; r(m)`) named no primitive, the shape of R-call-arg the generator lacked",
+  "found": "review D36",
+  "fixed": "ADR 0901 (binding alias-const added to the recall grid)",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-untrack-memo-alias-const-module-helper"
+  ],
+  "rediscovered": "alias-const ids (126, Chrome confirmed, origin's judge): 4f4a7e33c 126 false cleans; o1 13 false cleans, 113 recall gaps; rn2 0 false cleans, 70 agree, 56 recall gaps"
+ },
+ {
+  "finding": "Review D36: a direct `eval`, or a `with` statement, can write a holder's object with no reference the census sees, so ADR 0481's member alias and ADR 0901's closed-holder alias read a value that may have changed",
+  "found": "review D36",
+  "fixed": "ADR 0901 (facts schema 92)",
+  "outside": "the generator emits no eval or with; solid-facts unit test local_alias_members_need_no_direct_eval_and_a_module and fixture primitive-namespace-aliases/variants/eval-box hold it"
  }
 ]

@@ -3220,6 +3220,85 @@ fn namespace_member_bindings_record_only_exact_unwritten_slots_of_an_import_name
     );
 }
 
+/// Review D36 (facts schema 92): `const local = S.key` and a slot whose
+/// default is exactly the same namespace's `key` hold the export, as an ADR
+/// 0459 slot does; every other member or default stays unrecorded.
+#[test]
+fn namespace_member_bindings_record_exact_member_reads_and_defaults() {
+    let source = concat!(
+        "import * as S from \"solid-js\";\n",
+        "import { flush } from \"solid-js\";\n",
+        "const key = \"onCleanup\";\n",
+        "const a = S.onCleanup;\n",
+        "const b = (S.flush as typeof S.flush);\n",
+        "const c = S[\"createMemo\"];\n",
+        "const d = S?.onCleanup;\n",
+        "const e = S[key];\n",
+        "const S2 = S;\n",
+        "const f = S2.onCleanup;\n",
+        "const { onCleanup: g = S.onCleanup } = S;\n",
+        "const { onCleanup: h = S.flush } = S;\n",
+        "const { onCleanup: i = S2.onCleanup } = S;\n",
+        "const { onCleanup: j = flush } = S;\n",
+        "let k = S.onCleanup;\n",
+        "let l = S.onCleanup;\n",
+        "l = () => {};\n",
+        "const m = flush.name;\n",
+        "function shadow(S: any) { const n = S.onCleanup; return n; }\n",
+    );
+    let facts = extract("members.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .namespace_member_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.key.as_str(), text(fact.namespace)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded,
+        [
+            ("a", "onCleanup", "S"),
+            ("b", "flush", "S"),
+            ("c", "createMemo", "S"),
+            ("f", "onCleanup", "S"),
+            ("g", "onCleanup", "S"),
+            ("k", "onCleanup", "S"),
+        ]
+    );
+}
+
+/// Review D36: a direct `eval` in the file, or a classic script's `with`, can
+/// write an ADR 0481 holder's object with no reference the census sees.
+#[test]
+fn local_alias_members_need_no_direct_eval_and_a_module() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "const make = () => ({ set: r });\n",
+        "const thing = make();\n",
+        "thing.set;\n",
+    );
+    assert_eq!(
+        extract("members.ts", source)
+            .unwrap()
+            .local_alias_members
+            .len(),
+        1
+    );
+    let with_eval = format!("{source}eval(\"thing.set = () => 2\");\n");
+    assert!(
+        extract("members.ts", &with_eval)
+            .unwrap()
+            .local_alias_members
+            .is_empty()
+    );
+    let with_statement = format!("{source}with (thing) {{ set = () => 2; }}\n");
+    assert!(
+        extract("members.cjs", &with_statement)
+            .unwrap()
+            .local_alias_members
+            .is_empty()
+    );
+}
+
 /// ADR 0458 (facts schema 77): the regions no execution reaches, from the
 /// syntax alone, and the live code around them.
 #[test]

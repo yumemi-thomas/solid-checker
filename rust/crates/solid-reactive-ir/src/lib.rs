@@ -2581,7 +2581,9 @@ fn referenced_primitive(
     if let Some(declaration) = ast.reference_declaration(span) {
         // `const { onCleanup: cleanup } = Solid` (ADR 0459): the slot's
         // symbol carries the member's name (`add_solid_import_names`).
-        if ast.namespace_member_binding(declaration).is_some() {
+        if ast.namespace_member_binding(declaration).is_some()
+            || crate::symbols::import_alias_source(file, declaration).is_some()
+        {
             return known(primitive_name(
                 file.path.as_str(),
                 declaration,

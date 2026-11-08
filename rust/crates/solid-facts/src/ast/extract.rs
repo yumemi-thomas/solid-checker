@@ -146,6 +146,9 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) switch_case_declarators: Vec<Span>,
     pub(super) ambient_module_depth: usize,
     pub(super) ambient_variable: bool,
+    /// Review D36: the file holds a `with` statement, which can write an
+    /// object through a bare name (a classic script; a module rejects it).
+    pub(super) with_statement: bool,
     pub(super) identifiers: Vec<IdentifierFact>,
     pub(super) reference_declarations: Vec<(Span, Span)>,
     pub(super) awaits: Vec<Span>,
@@ -401,6 +404,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             switch_case_declarators: Vec::new(),
             ambient_module_depth: 0,
             ambient_variable: false,
+            with_statement: false,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -660,7 +664,19 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     .or_default()
                     .push((member, key, optional));
             }
+            // Review D36: a direct `eval` in this file (`eval("thing.k = f")`),
+            // or a `with` in a classic script (`with (thing) { k = f; }`), can
+            // write the holder's object with no reference the census sees, so
+            // no holder's member is exact there. A module rejects `with`.
+            let file_has_eval = self.with_statement
+                || self
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ModuleHazardKind::Eval);
             for (holder, arrow) in std::mem::take(&mut self.member_holders) {
+                if file_has_eval {
+                    continue;
+                }
                 let (Some(values), Some(holder_reads)) =
                     (object_arrows.get(&arrow), reads.get(&holder))
                 else {

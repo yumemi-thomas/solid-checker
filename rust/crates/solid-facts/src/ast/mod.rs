@@ -48,7 +48,10 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 91;
+/// 92 (review D36): `const local = S.key` and a slot whose default is exactly
+/// `S.key` are namespace member bindings; no ADR 0481 member alias in a file
+/// with a direct `eval` or a `with` statement.
+pub const AST_FACTS_SCHEMA: u32 = 92;
 
 mod argument_completion;
 mod completion_call_cover;

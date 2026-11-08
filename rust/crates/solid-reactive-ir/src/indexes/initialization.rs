@@ -476,13 +476,18 @@ impl<'a> SemanticLookup<'a> {
     /// slot is in its own file: a directly exported slot is not a fact, and a
     /// value that escapes otherwise is no reference to the slot's symbol.
     pub(crate) fn namespace_slot_mention_withheld(&self, file: &FileFacts, span: Span) -> bool {
-        if file.ast.namespace_member_bindings.is_empty() {
+        if file.ast.namespace_member_bindings.is_empty() && file.ast.imports.is_empty() {
             return false;
         }
         let span = file.ast.peel_ts_sugar_span(span);
+        // Review D36: an import alias that names a primitive
+        // (`crate::symbols::import_alias_source`) is withheld the same way.
         file.ast
             .reference_declaration(span)
-            .is_some_and(|declaration| file.ast.namespace_member_binding(declaration).is_some())
+            .is_some_and(|declaration| {
+                file.ast.namespace_member_binding(declaration).is_some()
+                    || crate::symbols::import_alias_source(file, declaration).is_some()
+            })
             && self.may_precede_initialization(file.path.as_str(), span)
     }
 

@@ -381,7 +381,7 @@ fn solid_getter_length(
 /// …`), or an export specifier naming it (`export { v }`,
 /// `export { v as default }`). A declaration nested in a function or class
 /// the export contains belongs to that body, not to the module.
-fn binding_is_exported(
+pub(crate) fn binding_is_exported(
     file: &FileFacts,
     binding: &solid_facts::ast::BindingFact,
     declaration: Span,

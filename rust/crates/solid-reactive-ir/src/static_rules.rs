@@ -280,6 +280,7 @@ fn primitive_value_references(
                 || ast.type_queries.iter().any(|query| query.contains(span))
                 || ast.type_names.iter().any(|name| name.contains(span))
                 || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+                || crate::symbols::copied_into_primitive_binding(file, span)
                 || !seen.insert(span)
             {
                 continue;
@@ -301,15 +302,15 @@ fn primitive_value_references(
                 .iter()
                 .find(|member| member.property == span)
                 .map_or(span, |member| member.span);
-            let proven = ast
-                .reference_declaration(span)
-                .is_some_and(|declaration| ast.namespace_member_binding(declaration).is_some())
-                || crate::cleanup::primitive_identity_proven_at(
-                    ctx.dialect,
-                    file,
-                    value,
-                    &primitive,
-                );
+            let proven = ast.reference_declaration(span).is_some_and(|declaration| {
+                ast.namespace_member_binding(declaration).is_some()
+                    || crate::symbols::import_alias_source(file, declaration).is_some()
+            }) || crate::cleanup::primitive_identity_proven_at(
+                ctx.dialect,
+                file,
+                value,
+                &primitive,
+            );
             let (callee, context) = if proven {
                 (primitive.to_string(), crate::PRIMITIVE_VALUE)
             } else {

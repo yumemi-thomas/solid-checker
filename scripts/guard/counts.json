@@ -8,7 +8,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1128,
+  "SC1001 function-run-unplaced": 1127,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -33,7 +33,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 445,
+  "SC2001 function-run-unplaced": 456,
   "SC2001 function-unentered": 2,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 3,
@@ -76,7 +76,7 @@
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 58,
-  "SC4001 owner-allocation-unproven": 24,
+  "SC4001 owner-allocation-unproven": 23,
   "SC4001 owner-callers-unenumerated": 149,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 7,
@@ -166,16 +166,16 @@
   "SC9012 installed-member": 53,
   "SC9012 leaf-callback-opaque": 122,
   "SC9012 listener-reach": 52,
-  "SC9012 package-callee": 14,
+  "SC9012 package-callee": 23,
   "SC9012 parameter-call-argument-unproven": 46,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 20,
   "SC9012 parameter-member-target-unresolved": 141,
   "SC9012 parameter-member-targets-diverge": 11,
   "SC9012 parameter-use-unmodeled": 117,
-  "SC9012 primitive-alias-call": 4,
+  "SC9012 primitive-alias-call": 2,
   "SC9012 primitive-result-method": 8,
-  "SC9012 primitive-value": 16,
+  "SC9012 primitive-value": 19,
   "SC9012 prop-pending-unproven": 48,
   "SC9012 result-access-callback-body-unresolved": 1,
   "SC9012 result-access-callback-opaque-call": 1,
@@ -195,7 +195,7 @@
   "SC9012 value-from-primitive-callback": 23,
   "SC9012 value-held-in-binding": 109,
   "SC9012 value-held-in-member": 24,
-  "SC9012 value-in-carrier": 328,
+  "SC9012 value-in-carrier": 339,
   "SC9012 value-in-class-field": 12,
   "SC9012 value-pending-in-jsx": 1,
   "SC9012 value-read-under-untrack": 1,
@@ -1326,6 +1326,71 @@
     "open": "reactive-ir/impostor-withheld-rows"
    },
    "note": "no proof: the fixture gains its @solidjs/signals and @solidjs/web stubs (Part 16's report on cca25ed17), so dialect detection no longer notes the missing runtime packages"
+  },
+  {
+   "fixture": "reactive-ir/primitive-alias-call",
+   "key": "SC4001 owner-allocation-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::push_namespace_slots",
+   "fixtures": {
+    "proved": "reactive-ir/primitive-alias-call",
+    "open": "reactive-ir/callback-ts-sugar-identity"
+   },
+   "note": "`const { onSettled: settled = S.onSettled } = S`: the default is the same member, so `settled` is `onSettled`; its callback returns no cleanup, so the timer's unowned call reports nothing, as the direct `onSettled` in a timer (probe) and missing-owner.md say"
+  },
+  {
+   "fixture": "reactive-ir/primitive-alias-call",
+   "key": "SC9012 primitive-alias-call",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::import_alias_source",
+   "fixtures": {
+    "proved": "reactive-ir/primitive-alias-call",
+    "open": "reactive-ir/rc9-reexport-gap-import-equals"
+   },
+   "note": "`held` (closed holder `{ m: onCleanup }`) and `settled` (namespace slot with the same member as default, visitor.rs::push_namespace_slots) name their primitive: `held(…)` in the timer is SC4001's violation as the direct call is; `later` (`flush.bind`) keeps the row"
+  },
+  {
+   "fixture": "reactive-ir/primitive-alias-call",
+   "key": "SC9012 primitive-value",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::copied_into_primitive_binding",
+   "fixtures": {
+    "proved": "reactive-ir/primitive-alias-call",
+    "open": "reactive-ir/primitive-namespace-aliases"
+   },
+   "note": "the values copied into those two exact bindings are no value use; `flush` handed to `bind` keeps its row"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC1001 function-run-unplaced",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::import_alias_source",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/after-await-handoff"
+   },
+   "note": "`const effect = createEffect; effect(() => count(), …)`: the compute is `createEffect`'s, tracked, as the direct control's is (no row there); the module-scope call is SC4001's violation like the control"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC9012 primitive-value",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::copied_into_primitive_binding",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/primitive-namespace-aliases"
+   },
+   "note": "`const effect = createEffect` is an exact alias, no value use; the exported `Solid.createEffect` keeps its row (an importer's mention resolves nothing)"
   }
  ],
  "renames": []
