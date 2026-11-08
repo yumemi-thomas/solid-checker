@@ -73,7 +73,7 @@
   "SC4001 async-flight-error-unobserved": 4,
   "SC4001 component-identity-unproven": 14,
   "SC4001 computation-error-unobserved": 1,
-  "SC4001 function-run-unplaced": 217,
+  "SC4001 function-run-unplaced": 219,
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 58,
