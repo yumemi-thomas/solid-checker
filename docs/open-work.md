@@ -332,3 +332,5 @@ ADR 0659 limits: `--rendering hydrated` resolves packages as the client, so depe
 - Named `Show`/`Match` value children (`length` 0): their child position gives no invocation proof. Unknown callers keep reads uncertifiable; a positive-length callback retains its untracked rendering role.
 
 - ADR 0643 (installed objects), open: an access through an alias (`const p = o; p.v`), a destructuring (`const { v } = o`), a callee's body reading an object handed to it, and an access in another file keep only the install's obligation, with no row at the access.
+
+- ADR 0886 step 1 limit: the check-once universe leaves out dependency source. A dependency's owner primitive (`onCleanup` in a package's `createX`) reaches the project only through `missing_owners`' propagation to a project caller, which has silent ends (`created`, no completing call). Later step: dependency sites accounted by a proof, a reported row at the project call the requirement reached, or SiteReach's never-reached; else U at the project call that reaches it.

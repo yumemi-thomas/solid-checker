@@ -730,6 +730,7 @@ pub(crate) fn push_owner_requirement(
             owned_run_throws: status.owned_run_throws,
             after_await: status.after_await,
             after_yield: status.after_yield,
+            context_unaccounted: status.context_unaccounted,
             missing_jsx_census,
             through_dependency: None,
             report: status.report,

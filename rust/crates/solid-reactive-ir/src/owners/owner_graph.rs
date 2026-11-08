@@ -518,6 +518,8 @@ pub(crate) struct OwnerRequirementStatus {
     /// The operation runs after a promise-yielding `yield` of its action body
     /// ([`action_step_resumption`]).
     pub(crate) after_yield: bool,
+    /// ADR 0886: the check-once pass found no row and no named proof.
+    pub(crate) context_unaccounted: bool,
     pub(crate) report: bool,
 }
 

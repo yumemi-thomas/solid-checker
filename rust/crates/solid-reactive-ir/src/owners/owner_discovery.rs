@@ -1052,6 +1052,9 @@ pub(crate) fn find_missing_owners_incremental(
             settled_gates.extend(emission.gates.iter().cloned());
         }
     }
+    // ADR 0886: check once, over a universe built from the calls, not from
+    // the candidates emission chose to see (reviewer D34).
+    unaccounted_owner_sites(&files, &order, emissions, &mut requirements, lookup);
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);
         attribute_dependency_requirements(
@@ -1185,4 +1188,98 @@ fn returned_function_escapes(
         }
     }
     false
+}
+
+/// ADR 0886: every call this build resolves to an owner-requiring primitive
+/// (outside dependency source, whose sites are attributed to the project's
+/// calls) is one site of SC4001. A site ends with a reported row, a named
+/// proof its file's emission recorded ([`super::owner_emission::ContextProof`]),
+/// the compiler's discard, an owner probe, or an effect call proven to
+/// register nothing. Anything else, a file the graph has no entry for
+/// included, gets `execution-context-unaccounted`. A call through an alias is
+/// ADR 0884's, which claims the rule at the call.
+fn unaccounted_owner_sites(
+    files: &[&solid_facts::FileFacts],
+    order: &[super::owner_state::PathId],
+    emissions: &HashMap<super::owner_state::PathId, super::owner_emission::Emission>,
+    requirements: &mut Vec<OwnerRequirement>,
+    lookup: &SemanticLookup<'_>,
+) {
+    let rows = requirements
+        .iter()
+        .filter(|row| {
+            row.report && row.operation != crate::OwnerRequirementOperation::ContextProvider
+        })
+        .map(|row| {
+            (
+                row.location.path.to_string(),
+                row.location.start_byte,
+                row.location.end_byte,
+            )
+        })
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::default();
+    for (file, pid) in files.iter().zip(order) {
+        let path = file.path.as_str();
+        if lookup.in_dependency_source(path) {
+            continue;
+        }
+        let accounted = emissions.get(pid).map(|emission| &emission.accounted);
+        for call in &file.ast.calls {
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            let Some(role) = lookup.dialect.owner_requirement_role(primitive) else {
+                continue;
+            };
+            let (operation, site) = match role {
+                OwnerRequirementRole::Effect => ("effect", call.callee),
+                OwnerRequirementRole::Cleanup => ("cleanup", call.callee),
+                OwnerRequirementRole::SettledCleanup => (
+                    "settled-cleanup",
+                    call.arguments
+                        .first()
+                        .map_or(call.callee, |argument| argument.span),
+                ),
+                OwnerRequirementRole::ContextRead => ("context-read", call.callee),
+                OwnerRequirementRole::Boundary => ("boundary-call", call.callee),
+            };
+            if rows.contains(&(path.to_owned(), u64::from(site.start), u64::from(site.end)))
+                || accounted.is_some_and(|proofs| proofs.iter().any(|(span, _)| *span == site))
+                || crate::execution_role::discarded_region_contains(file, site)
+                || guarded_by_owner_probe(file, site, lookup)
+                || (role == OwnerRequirementRole::Effect
+                    && crate::effect_api::classify_effect_call(file, call, primitive, lookup)
+                        .owner_registration
+                        == ProofStatus::No)
+            {
+                continue;
+            }
+            push_owner_requirement(
+                requirements,
+                &mut seen,
+                operation,
+                file,
+                site,
+                OwnerRequirementStatus {
+                    uncertain: true,
+                    runtime_uncertain: false,
+                    caller_uncertain: false,
+                    unplaced_callback: false,
+                    conditional_owner: false,
+                    owner_varies_by_caller: false,
+                    later_run_unowned: false,
+                    component_uncertain: false,
+                    provider_open: false,
+                    default_unproven: false,
+                    owned_run_throws: false,
+                    after_await: false,
+                    after_yield: false,
+                    context_unaccounted: true,
+                    report: true,
+                },
+                lookup,
+            );
+        }
+    }
 }

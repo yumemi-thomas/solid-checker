@@ -362,3 +362,5 @@ A package function whose same-operation creation calls cover every exit between 
   a violation in a timer.
 
 A generator's body runs where its iterator is stepped. An owner operation after a `yield` of the generator around it runs on a later step, which the owner walk does not follow: uncertifiable, whatever owner the generator's call had (ADR 0866).
+
+Every owner-requiring call ends in a finding or a named proof that its owner context is settled: an owned-only context, a providing region, code that never runs, or a callback proven to return no cleanup. A call with neither is uncertifiable (`execution-context-unaccounted`, ADR 0886).

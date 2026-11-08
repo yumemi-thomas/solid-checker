@@ -109,6 +109,7 @@ fn catalog_prose_program() -> Program {
             unplaced_callback: false,
             after_await: false,
             after_yield: false,
+            context_unaccounted: false,
             missing_jsx_census: false,
             provider_open: false,
             default_unproven: false,

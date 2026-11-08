@@ -227,7 +227,8 @@ impl Finding {
                 && !missing_jsx_census
                 && !provider_open
                 && !default_unproven
-                && !owned_run_throws);
+                && !owned_run_throws
+                && !requirement.context_unaccounted);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
         if missing_jsx_census {
@@ -391,6 +392,11 @@ impl Finding {
             );
             hint.push_str(
                 " If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+            );
+        }
+        if requirement.context_unaccounted {
+            message.push_str(
+                "; no fact solid-checker holds ends this operation's owner context, as a proven owner, a proven absence of one or a named obligation, so whether it runs with an owner cannot be proven",
             );
         }
         if unplaced_callback {

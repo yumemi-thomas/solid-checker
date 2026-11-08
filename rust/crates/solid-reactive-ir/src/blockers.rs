@@ -66,6 +66,8 @@ pub(crate) const OWNER_LATER_RUN_UNOWNED: &str = "owner-later-run-unowned";
 pub(crate) const COMPONENT_IDENTITY_UNPROVEN: &str = "component-identity-unproven";
 pub(crate) const OWNER_ALLOCATION_UNPROVEN: &str = "owner-allocation-unproven";
 pub(crate) const OWNER_UNPROVEN: &str = "owner-unproven";
+/// ADR 0886: no row and no named proof ended the site's execution context.
+pub(crate) const EXECUTION_CONTEXT_UNACCOUNTED: &str = "execution-context-unaccounted";
 pub(crate) const ASYNC_OPTIONS_OPAQUE: &str = "async-options-opaque";
 pub(crate) const ASYNC_READ_CAUGHT: &str = "async-read-caught";
 pub(crate) const ASYNC_COMPONENT_PROP: &str = "async-component-prop";
@@ -219,7 +221,9 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 }
 
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
-    if requirement.unplaced_callback {
+    if requirement.context_unaccounted {
+        EXECUTION_CONTEXT_UNACCOUNTED
+    } else if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
     } else if requirement.owner_varies_by_caller {
         OWNER_VARIES_BY_CALLER
