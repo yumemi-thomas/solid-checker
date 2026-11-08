@@ -1345,44 +1345,106 @@ fn analyzed_file<'c>(ctx: &AnalysisContext<'c>, path: &str) -> Option<&'c solid_
 fn project_imports_of(ctx: &AnalysisContext<'_>, package: &str) -> Vec<typefacts::Location> {
     let lookup = ctx.semantic_lookup;
     let files = lookup.files();
-    // Every non-type import that lands in a dependency package: who imports it,
-    // the importer's package (None in the project), the landed package.
+    // Every non-type import, re-export and module load (`import()`,
+    // `require`) that lands in a dependency package: who loads it, the
+    // loader's package (None in the project), the landed package. A load with
+    // no literal specifier may land anywhere: an edge to every package.
+    let land = |file: &solid_facts::FileFacts, span: solid_facts::core::Span, module: &str| {
+        let attested = lookup.resolved_imports().and_then(|imports| {
+            match imports.specifier(file.path.as_str(), span, module) {
+                solid_facts::SpecifierAttestation::Attested(row)
+                    if !row.resolved_path.is_empty() =>
+                {
+                    Some(if row.included_path.is_empty() {
+                        row.resolved_path.to_string()
+                    } else {
+                        row.included_path.to_string()
+                    })
+                }
+                _ => None,
+            }
+        });
+        // A load the compiler did not attest (a module load, often) may
+        // still be a relative path to an analyzed file.
+        attested.or_else(|| {
+            solid_facts::resolve_relative_module_path(
+                file.path.as_str(),
+                module,
+                files.iter().map(|file| file.path.as_str()),
+            )
+            .map(|path| path.to_string())
+        })
+    };
     let mut edges = Vec::new();
+    let mut open_loads = Vec::new();
     for file in files {
         let from = ctx.facts.dependency_source_root(file.path.as_str());
-        for import in file.ast.imports.iter().filter(|import| !import.type_only) {
-            let landing = match lookup.resolved_imports() {
-                Some(imports) => {
-                    match imports.specifier(file.path.as_str(), import.span, &import.module) {
-                        solid_facts::SpecifierAttestation::Attested(row)
-                            if !row.resolved_path.is_empty() =>
-                        {
-                            Some(if row.included_path.is_empty() {
-                                row.resolved_path.to_string()
-                            } else {
-                                row.included_path.to_string()
-                            })
-                        }
-                        _ => None,
-                    }
-                }
-                None => solid_facts::resolve_relative_module_path(
-                    file.path.as_str(),
-                    &import.module,
-                    files.iter().map(|file| file.path.as_str()),
-                )
-                .map(|path| path.to_string()),
+        let loads = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| (import.span, Some(import.module.as_str()), false))
+            .chain(
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|export| !export.type_only)
+                    .filter_map(|export| {
+                        export
+                            .module
+                            .as_deref()
+                            .map(|module| (export.span, Some(module), false))
+                    }),
+            )
+            .chain(
+                file.ast
+                    .module_loads
+                    .iter()
+                    // A load's resolution is joined to its literal's span.
+                    .map(|load| {
+                        (
+                            load.specifier_span.unwrap_or(load.span),
+                            load.specifier.as_deref(),
+                            true,
+                        )
+                    }),
+            );
+        for (span, module, dynamic) in loads {
+            let Some(module) = module else {
+                open_loads.push((from, span.location(file.path.as_str())));
+                continue;
             };
-            let Some(landed) = landing
+            let landing = land(file, span, module);
+            let landed = landing
                 .as_deref()
-                .and_then(|landing| ctx.facts.dependency_source_root(landing))
-            else {
+                .and_then(|landing| ctx.facts.dependency_source_root(landing));
+            // A dynamic load nothing places in a selected package's source or
+            // in the project's own files (no attested resolution, or one to a
+            // package's types) may land in any package.
+            let Some(landed) = landed else {
+                let in_project = landing.as_deref().is_some_and(|landing| {
+                    files.iter().any(|other| {
+                        other.path.as_str() == landing
+                            && ctx.facts.dependency_source_root(landing).is_none()
+                    })
+                });
+                if dynamic && !in_project {
+                    open_loads.push((from, span.location(file.path.as_str())));
+                }
                 continue;
             };
             if from == Some(landed) {
                 continue;
             }
-            edges.push((from, landed, import.span.location(file.path.as_str())));
+            edges.push((from, landed, span.location(file.path.as_str())));
+        }
+    }
+    for (from, location) in open_loads {
+        for package in &ctx.facts.dependency_source_roots {
+            if from != Some(package.as_str()) {
+                edges.push((from, package.as_str(), location.clone()));
+            }
         }
     }
     let mut reached = vec![package];
@@ -1408,6 +1470,20 @@ fn project_imports_of(ctx: &AnalysisContext<'_>, package: &str) -> Vec<typefacts
             .filter(|(from, _, _)| from.is_none())
             .map(|(_, _, location)| location.clone())
             .collect();
+    }
+    // Review D33: no project load names a selected package at all; the row
+    // still stands in the project, at the start of its first file.
+    if found.is_empty()
+        && let Some(file) = files
+            .iter()
+            .filter(|file| {
+                ctx.facts
+                    .dependency_source_root(file.path.as_str())
+                    .is_none()
+            })
+            .min_by(|a, b| a.path.as_str().cmp(b.path.as_str()))
+    {
+        found.push(solid_facts::core::Span::new(0, 0).location(file.path.as_str()));
     }
     found
 }

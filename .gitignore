@@ -1125,6 +1125,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/value-walk-budget/node_modules/**
 !fixtures/reactive-ir/value-walk-budget-transitive/node_modules/
 !fixtures/reactive-ir/value-walk-budget-transitive/node_modules/**
+!fixtures/reactive-ir/value-walk-budget-reexport/node_modules/
+!fixtures/reactive-ir/value-walk-budget-reexport/node_modules/**
+!fixtures/reactive-ir/value-walk-budget-dynamic/node_modules/
+!fixtures/reactive-ir/value-walk-budget-dynamic/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-mutation/node_modules/
 !fixtures/reactive-ir/impostor-withheld-mutation/node_modules/**
 !fixtures/reactive-ir/symbol-key-const/node_modules/
