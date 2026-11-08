@@ -32,6 +32,7 @@ describe("judge", () => {
     const own = (frames) => run([], { consoleErrors: ["NoOwnerError: Context can only be accessed under a reactive root."], consoleErrorPositions: [frames], consoleErrorCauses: [{ message: "Cannot call resolve inside a reactive scope", positions: [{ file: "App.tsx", line: 10, column: 1 }] }] });
     expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: own([{ file: "helpers.ts" }]) }).outcome).toBe("unplaced");
     expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: own([]) }).outcome).toBe("agree");
+    for (const file of ["helpers.js", "sub/helpers.ts"]) expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: own([{ file }]) }).outcome).toBe("unplaced");
     // No frame: unplaced, as before.
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(null) }).outcome).toBe("unplaced");
   });

@@ -38,6 +38,24 @@ function servedFrames(stack: string) {
   return rows;
 }
 
+/**
+ * Review R66 follow-up (ADR 0907): a logged error's frames of the program under test: any file under the case's own `/cases/<id>/` but
+ * its `node_modules`, at any depth and extension (App.tsx with its served position, which chrome-host.mjs maps; any other by path only).
+ * Only the logged errors read this; diagnostics and thrown errors keep `servedFrames` (their stack depths, R20).
+ */
+function caseFrames(stack: string) {
+  const rows: ({ file: string, line: number, column: number } | { file: string })[] = [];
+  const prefix = `/cases/${id}/`;
+  for (const text of String(stack ?? '').split('\n')) {
+    const at = text.indexOf(prefix);
+    if (at < 0) continue;
+    const match = /^([^:?\s)]+?)(?:\?[^:\s)]*)?:(\d+):(\d+)/.exec(text.slice(at + prefix.length));
+    if (!match || match[1].startsWith('node_modules/')) continue;
+    rows.push(match[1] === 'App.tsx' ? { file: 'App.tsx', line: Number(match[2]), column: Number(match[3]) } : { file: match[1] });
+  }
+  return rows;
+}
+
 function events() {
   return [
     ...['click', 'dblclick', 'mousedown', 'mouseup', 'mouseover', 'mouseout', 'pointerdown', 'pointerup', 'contextmenu']
@@ -215,8 +233,8 @@ async function runCase() {
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...servedFrames(e.stack), ...servedFrames(e.cause?.stack)] })),
       consoleErrors: consoleErrors.slice(0, 20).map(row => row.text),
-      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => servedFrames(row.error?.stack ?? '')),
-      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: servedFrames(row.error.cause.stack) } : null), artifactCount,
+      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => caseFrames(row.error?.stack ?? '')),
+      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: caseFrames(row.error.cause.stack) } : null), artifactCount,
     });
   }
 }
