@@ -352,7 +352,11 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
         if entry.state.load(Ordering::Acquire) != CLEAN {
             return None;
         }
-        if entry.used_at.swap(revision, Ordering::AcqRel) != revision
+        // Read before writing: every proof check of a build asks the same
+        // popular entries, and a write per check bounces their cache line
+        // between the workers. Only the first asker of the revision swaps.
+        if entry.used_at.load(Ordering::Acquire) != revision
+            && entry.used_at.swap(revision, Ordering::AcqRel) != revision
             && entry.computed_at != revision
         {
             AtomicStats::bump(&self.stats.reused);

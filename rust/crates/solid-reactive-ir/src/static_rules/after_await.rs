@@ -159,6 +159,10 @@ struct Reach<'f, 'a> {
     /// Whether any function of the project is a generator: only then may a
     /// computation step one (ADR 0820).
     has_generators: bool,
+    /// Each function's [`Self::generator_calls`], once per build: the walk
+    /// over the functions it calls is a function of the build alone, and a
+    /// function is asked once per member walk and once by the run's filter.
+    generator_calls: std::cell::RefCell<crate::HashMap<(&'f str, Span), Vec<GeneratorCall<'f>>>>,
 }
 
 pub(super) fn run<'a>(
@@ -216,6 +220,7 @@ pub(super) fn run<'a>(
             .files
             .iter()
             .any(|file| file.ast.functions.iter().any(|function| function.generator)),
+        generator_calls: std::cell::RefCell::default(),
     };
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
@@ -1656,6 +1661,20 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// The generators `function` calls and keeps the iterator of, there or in
     /// a function it calls exactly, each call with the function it is in.
     fn generator_calls(
+        &self,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) -> Vec<GeneratorCall<'f>> {
+        let key = (file.path.as_str(), function.span);
+        if let Some(calls) = self.generator_calls.borrow().get(&key) {
+            return calls.clone();
+        }
+        let calls = self.generator_calls_uncached(file, function);
+        self.generator_calls.borrow_mut().insert(key, calls.clone());
+        calls
+    }
+
+    fn generator_calls_uncached(
         &self,
         file: &'f FileFacts,
         function: &'f FunctionFact,
