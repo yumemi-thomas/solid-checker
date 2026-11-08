@@ -3315,9 +3315,12 @@ pub(crate) enum LayerRun {
 /// layer's call follows an await on every path, `Some(false)` on some path,
 /// `None` when none does. Only [`follows_dominating_await`]'s proof counts, not
 /// the climb's own `suspended`: code past an await may still run later under
-/// an owner (JSX, an instance field), which that proof excludes. A helper that
-/// also hands its callback on, or a climb cut short, proves nothing about the
-/// runs it did not follow.
+/// an owner (JSX, an instance field), which that proof excludes. A climb cut
+/// short proves nothing about the runs it did not follow.
+/// ADR 0899: nor does a helper that also hands its callback on, about those
+/// other runs; but its in-place run, the one a violation would read, is still
+/// past a layer call's await: `Some(false)`, a suspension on some path, so no
+/// role that rejects stands (`await p; w(() => set(1))` with a recursive `w`).
 pub(crate) fn suspension_through_in_place_layers(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -3325,13 +3328,13 @@ pub(crate) fn suspension_through_in_place_layers(
 ) -> Option<bool> {
     let mut calls = Vec::new();
     let climb = climb_in_place_layers_recording(file, span, lookup, false, None, &mut calls)?;
-    if climb.among_others || climb.exhausted {
+    if climb.exhausted {
         return None;
     }
     let mut answer = None;
     for call in calls {
         if follows_dominating_await(file, call) || follows_try_head_await(file, call, lookup) {
-            return Some(true);
+            return Some(!climb.among_others);
         }
         if may_follow_suspension(file, call) {
             answer = Some(false);
