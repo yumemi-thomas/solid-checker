@@ -59,7 +59,7 @@ use solid_facts::ast::{
 };
 use solid_facts::core::Span;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use typefacts::AsyncFunctionFact;
 
 /// Nesting limit for callbacks inside callbacks and for chained promises.
@@ -80,11 +80,11 @@ const MAX_WALKS_PER_FUNCTION: usize = 16;
 /// the computation itself, or a helper its returned promise awaits.
 #[derive(Clone)]
 struct Member {
-    function: Rc<AsyncFunctionFact>,
+    function: Arc<AsyncFunctionFact>,
     context: String,
     /// The functions whose own tracking window a source read may already
     /// have entered: the computation, every helper down to this one.
-    windows: Vec<Rc<AsyncFunctionFact>>,
+    windows: Vec<Arc<AsyncFunctionFact>>,
     /// The member's continuation may run before anything holds a reaction on
     /// its promise: an `async` function returned, not awaited, whose first
     /// await is on a promise not proven still pending. Its reads, and the
@@ -165,63 +165,72 @@ struct Reach<'f, 'a> {
     generator_calls: std::cell::RefCell<crate::HashMap<(&'f str, Span), Vec<GeneratorCall<'f>>>>,
 }
 
+impl<'f, 'a> Reach<'f, 'a> {
+    fn new(ctx: &'f AnalysisContext<'a>) -> Self {
+        Reach {
+            ctx,
+            files: ctx
+                .facts
+                .files
+                .iter()
+                .map(|file| (file.path.as_str(), file))
+                .collect(),
+            facts: ctx
+                .facts
+                .typescript
+                .files()
+                .flat_map(|file| file.async_functions.iter())
+                .map(|function| {
+                    (
+                        (
+                            function.expression.path.as_ref(),
+                            function.expression.start_byte,
+                            function.expression.end_byte,
+                        ),
+                        function,
+                    )
+                })
+                .collect(),
+            facts_by_end: {
+                let mut by_end: HashMap<(&str, u64), Vec<&AsyncFunctionFact>> = HashMap::new();
+                for function in ctx
+                    .facts
+                    .typescript
+                    .files()
+                    .flat_map(|file| file.async_functions.iter())
+                {
+                    by_end
+                        .entry((
+                            function.expression.path.as_ref(),
+                            function.expression.end_byte,
+                        ))
+                        .or_default()
+                        .push(function);
+                }
+                by_end
+            },
+            done: HashSet::default(),
+            walks: HashMap::new(),
+            pre: PreAwait::new(ctx),
+            has_generators: ctx
+                .facts
+                .files
+                .iter()
+                .any(|file| file.ast.functions.iter().any(|function| function.generator)),
+            generator_calls: std::cell::RefCell::default(),
+        }
+    }
+}
+
 pub(super) fn run<'a>(
     ctx: &AnalysisContext<'a>,
     computations: &SharedAsyncComputations<'a>,
     draft: &mut ProgramDraft,
 ) {
-    let mut reach = Reach {
-        ctx,
-        files: ctx
-            .facts
-            .files
-            .iter()
-            .map(|file| (file.path.as_str(), file))
-            .collect(),
-        facts: ctx
-            .facts
-            .typescript
-            .files()
-            .flat_map(|file| file.async_functions.iter())
-            .map(|function| {
-                (
-                    (
-                        function.expression.path.as_ref(),
-                        function.expression.start_byte,
-                        function.expression.end_byte,
-                    ),
-                    function,
-                )
-            })
-            .collect(),
-        facts_by_end: {
-            let mut by_end: HashMap<(&str, u64), Vec<&AsyncFunctionFact>> = HashMap::new();
-            for function in ctx
-                .facts
-                .typescript
-                .files()
-                .flat_map(|file| file.async_functions.iter())
-            {
-                by_end
-                    .entry((
-                        function.expression.path.as_ref(),
-                        function.expression.end_byte,
-                    ))
-                    .or_default()
-                    .push(function);
-            }
-            by_end
-        },
-        done: HashSet::default(),
-        walks: HashMap::new(),
-        pre: PreAwait::new(ctx),
-        has_generators: ctx
-            .facts
-            .files
-            .iter()
-            .any(|file| file.ast.functions.iter().any(|function| function.generator)),
-        generator_calls: std::cell::RefCell::default(),
-    };
+    let mut reach = Reach::new(ctx);
+    // The members each function starts with, in order. Building one reads
+    // the build alone, never the walks' state.
+    let mut starts = Vec::new();
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
             let member_site = ctx
@@ -263,7 +272,7 @@ pub(super) fn run<'a>(
             let blocker = handed
                 .is_some()
                 .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
-            let function = Rc::new(function.clone());
+            let function = Arc::new(function.clone());
             // An owner a `dispose` function can reach may be gone when the
             // continuation resumes: the runtime then reads in a disposed
             // computation and stays silent, so every read is an obligation.
@@ -276,21 +285,46 @@ pub(super) fn run<'a>(
             {
                 Vec::new()
             } else {
-                vec![Rc::clone(&function)]
+                vec![Arc::clone(&function)]
             };
-            let mut queue = vec![Member {
+            starts.push(Member {
                 function,
                 context,
                 windows,
                 conditional,
                 blocker,
-            }];
-            while let Some(member) = queue.pop() {
-                reach.report_member(draft, &member, &mut queue);
-            }
+            });
+        }
+    }
+    // ADR 0909: a member's walk is a function of the member and the build;
+    // only the rows' span dedup reads the draft (`ProgramDraft::spans_agree`)
+    // and only the queue's bound reads the walks so far
+    // (`Reach::bounded`). So each starting member is walked speculatively on
+    // the workers, and the driver below, unchanged in order, files a
+    // speculative walk where its span answers agree and walks it again in
+    // place otherwise.
+    let speculated = crate::pipeline::parallel_balanced_with_state(
+        &starts,
+        || (Reach::new(ctx), draft.speculative()),
+        |(reach, template), member| reach.speculate(template, member),
+    );
+    for (member, speculated) in starts.into_iter().zip(speculated) {
+        let mut speculated = Some(speculated);
+        let mut queue = vec![member];
+        while let Some(member) = queue.pop() {
+            reach.report_member(draft, &member, &mut queue, speculated.take());
         }
     }
     unlisted_async_computations(ctx, &reach, draft);
+}
+
+/// A member's walk done ahead of the driver ([`Reach::speculate`]).
+struct Speculated {
+    rows: Vec<StaticDefect>,
+    /// The members it queued, before [`Reach::bounded`].
+    queued: Vec<Member>,
+    spans: crate::HashSet<crate::pipeline::SpanKey>,
+    span_log: Vec<(crate::pipeline::SpanKey, bool)>,
 }
 
 /// ADR 0879 (B5): a callee that names no exact symbol (`fns[0]()`,
@@ -971,22 +1005,69 @@ impl<'f, 'a> Reach<'f, 'a> {
         draft: &mut ProgramDraft,
         member: &Member,
         queue: &mut Vec<Member>,
+        speculated: Option<Speculated>,
     ) {
         if !self.done.insert(Self::walk_key(member)) {
             return;
         }
         *self.walks.entry(Self::key(&member.function)).or_default() += 1;
-        let earlier = std::mem::take(&mut draft.static_defects);
-        let seen = std::mem::take(&mut draft.seen_diagnostics);
-        self.report(draft, member, queue);
-        draft.seen_diagnostics = seen;
-        let rows = std::mem::replace(&mut draft.static_defects, earlier);
+        let (rows, next) = match speculated.filter(|walk| draft.spans_agree(&walk.span_log)) {
+            Some(walk) => {
+                draft.add_seen_spans(walk.spans);
+                (walk.rows, walk.queued)
+            }
+            None => {
+                let earlier = std::mem::take(&mut draft.static_defects);
+                let seen = std::mem::take(&mut draft.seen_diagnostics);
+                let mut next = Vec::new();
+                self.report(draft, member, &mut next);
+                draft.seen_diagnostics = seen;
+                let rows = std::mem::replace(&mut draft.static_defects, earlier);
+                (rows, next)
+            }
+        };
         for mut row in rows {
             if let Some(blocker) = member.blocker.filter(|_| row.uncertain) {
                 row.analysis_context = blocker.into();
             }
             draft.push_defect_or_strengthen(row);
         }
+        // The bound reads the walks so far, which the walk itself never
+        // changes: applied here, it sees what it saw inside the walk.
+        queue.extend(next.into_iter().map(|member| self.bounded(member)));
+    }
+
+    /// ADR 0909: `member`'s walk on a draft of its own
+    /// ([`ProgramDraft::speculative`]), for [`Self::report_member`].
+    fn speculate(&mut self, template: &ProgramDraft, member: &Member) -> Speculated {
+        let mut draft = template.speculative();
+        let mut queued = Vec::new();
+        self.report(&mut draft, member, &mut queued);
+        let (spans, span_log) = draft.take_spans();
+        Speculated {
+            rows: draft.static_defects,
+            queued,
+            spans,
+            span_log,
+        }
+    }
+
+    /// ADR 0871: an unseen window set past the bound: one last walk with no
+    /// window and every row an obligation.
+    fn bounded(&self, mut member: Member) -> Member {
+        if !self.done.contains(&Self::walk_key(&member))
+            && self
+                .walks
+                .get(&Self::key(&member.function))
+                .copied()
+                .unwrap_or(0)
+                >= MAX_WALKS_PER_FUNCTION
+        {
+            member.windows = Vec::new();
+            member.conditional = Some(AfterAwaitObligation::SuspensionUnplaced);
+            member.blocker = Some(crate::blockers::SEARCH_DEPTH_LIMIT);
+        }
+        member
     }
 
     fn report(&mut self, draft: &mut ProgramDraft, member: &Member, queue: &mut Vec<Member>) {
@@ -3292,12 +3373,12 @@ impl<'f, 'a> Reach<'f, 'a> {
             |fact| (*fact).clone(),
         );
         walk.queued.insert((file.path.to_string(), function.span));
-        let fact = Rc::new(fact);
+        let fact = Arc::new(fact);
         let mut windows = walk.member.windows.clone();
         // ADR 0872: a helper's own window tracks only while the computation
         // has not suspended: past that its prefix runs with no observer.
         if !walk.untracked && !walk.past_suspension {
-            windows.push(Rc::clone(&fact));
+            windows.push(Arc::clone(&fact));
         }
         // An `async` function returned without `await` is adopted by its
         // caller one job after the call returns. Its own continuation, queued
@@ -3320,28 +3401,14 @@ impl<'f, 'a> Reach<'f, 'a> {
                 walk.past_on_some_path
                     .then_some(AfterAwaitObligation::SuspensionUnplaced)
             });
-        let mut member = Member {
+        // ADR 0871's bound is the driver's ([`Self::bounded`]).
+        queue.push(Member {
             function: fact,
             context: walk.member.context.clone(),
             windows,
             conditional,
             blocker: walk.member.blocker,
-        };
-        // ADR 0871: an unseen window set past the bound: one last walk with no
-        // window and every row an obligation.
-        if !self.done.contains(&Self::walk_key(&member))
-            && self
-                .walks
-                .get(&Self::key(&member.function))
-                .copied()
-                .unwrap_or(0)
-                >= MAX_WALKS_PER_FUNCTION
-        {
-            member.windows = Vec::new();
-            member.conditional = Some(AfterAwaitObligation::SuspensionUnplaced);
-            member.blocker = Some(crate::blockers::SEARCH_DEPTH_LIMIT);
-        }
-        queue.push(member);
+        });
     }
 
     /// The producer's fact of `function` (ADR 0351): the fact at its span, or an

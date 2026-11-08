@@ -28,6 +28,9 @@ use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
 
+/// A filed row's exact span key ([`ProgramDraft::push_defect`]).
+pub(crate) type SpanKey = (&'static str, Arc<str>, u64, u64);
+
 /// The program under assembly: every table and obligation counter the
 /// pipeline's stages fill, owned in one place so a stage's writes are part
 /// of its signature rather than ambient mutation of a shared function body.
@@ -64,6 +67,9 @@ pub(crate) struct ProgramDraft {
     /// in a withheld call's start (`t.slice(0, i).trim()` in `t.slice`)
     /// keeps its row.
     seen_spans: HashSet<(&'static str, Arc<str>, u64, u64)>,
+    /// ADR 0909: while a speculative walk files rows, each `seen_spans`
+    /// answer that decided whether a row was kept, with the answer.
+    span_log: Option<Vec<(SpanKey, bool)>>,
     /// ADR 0874: where a call the impostor census withholds starts, by path.
     pub(crate) withheld_starts: HashSet<(Arc<str>, u64)>,
     /// ADR 0874: each withheld call's callee span, by path. A row there is
@@ -83,6 +89,38 @@ impl ProgramDraft {
     /// [`Self::push_defect`], where a proven row replaces an obligation at the
     /// same site (ADR 0871): another walk of the function proved what this one
     /// could not.
+    /// ADR 0909: an empty draft for a speculative walk: it files rows as
+    /// this draft would after taking its rows and seen starts, minus the
+    /// spans this one has seen, whose answers it logs ([`Self::spans_agree`]).
+    pub(crate) fn speculative(&self) -> Self {
+        Self {
+            withheld_starts: self.withheld_starts.clone(),
+            span_log: Some(Vec::new()),
+            ..Self::default()
+        }
+    }
+
+    /// Whether a speculative walk's span answers are this draft's: each span
+    /// it found unseen is unseen here too (one it had seen, it had filed
+    /// itself, so it is seen here as well once its spans are added).
+    pub(crate) fn spans_agree(&self, log: &[(SpanKey, bool)]) -> bool {
+        log.iter()
+            .all(|(key, unseen)| !*unseen || !self.seen_spans.contains(key))
+    }
+
+    /// A speculative walk's spans and span log, taken out of its draft.
+    pub(crate) fn take_spans(&mut self) -> (HashSet<SpanKey>, Vec<(SpanKey, bool)>) {
+        (
+            std::mem::take(&mut self.seen_spans),
+            self.span_log.take().unwrap_or_default(),
+        )
+    }
+
+    /// Adds the spans a walk filed, as filing them here would have.
+    pub(crate) fn add_seen_spans(&mut self, spans: HashSet<SpanKey>) {
+        self.seen_spans.extend(spans);
+    }
+
     pub(crate) fn push_defect_or_strengthen(&mut self, defect: StaticDefect) {
         if !defect.uncertain
             && let Some(row) = self.static_defects.iter_mut().find(|row| {
@@ -125,13 +163,23 @@ impl ProgramDraft {
         // A violation keeps one row per start. At a withheld call's start,
         // an uncertain row names its own use (the call's row stands beside
         // the use it starts), so only its exact span deduplicates it.
-        if first_at_start
-            || (defect.uncertain
-                && first_at_span
-                && self
-                    .withheld_starts
-                    .contains(&(defect.location.path.clone(), defect.location.start_byte)))
-        {
+        let at_withheld = !first_at_start
+            && defect.uncertain
+            && self
+                .withheld_starts
+                .contains(&(defect.location.path.clone(), defect.location.start_byte));
+        if at_withheld && let Some(log) = &mut self.span_log {
+            log.push((
+                (
+                    identity,
+                    defect.location.path.clone(),
+                    defect.location.start_byte,
+                    defect.location.end_byte,
+                ),
+                first_at_span,
+            ));
+        }
+        if first_at_start || (at_withheld && first_at_span) {
             self.static_defects.push(defect);
         }
     }
