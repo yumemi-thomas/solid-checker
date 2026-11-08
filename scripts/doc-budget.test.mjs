@@ -1,24 +1,46 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "vitest";
 
-import { FILE_BUDGETS, FIXTURE_README_MAX, ROOT, measuredSizes, report, violations } from "./doc-budget.mjs";
+import {
+  FILE_BUDGETS,
+  FIXTURE_README_MAX,
+  RAISES,
+  ROOT,
+  baseSource,
+  currentLimits,
+  limitsOf,
+  measuredSizes,
+  raiseRowsOf,
+  ratchetViolations,
+  violations,
+} from "./doc-budget.mjs";
 
-// Suspended during the flip (scripts/doc-budget.mjs): this stood as `violations(measuredSizes())` equals `[]`, and returns before #173 merges.
-test("a run reports the measured sizes and everything over a limit, and does not fail", () => {
-  const sizes = measuredSizes();
-  const lines = report(sizes).join("\n");
-  for (const path of Object.keys(FILE_BUDGETS)) assert.match(lines, new RegExp(`${path.replaceAll(".", "\\.")}: ${sizes[path] ?? 0} of ${FILE_BUDGETS[path]} bytes`));
-  for (const found of violations(sizes)) assert.ok(lines.includes(found), found);
-  const run = spawnSync("bun", [join(ROOT, "scripts/doc-budget.mjs")], { encoding: "utf8" });
-  assert.equal(run.status, 0, run.stderr);
-  assert.match(run.stdout, /doc-budget \(suspended\)/);
+test("the repository is within its documentation budget", () => {
+  assert.deepEqual(violations(measuredSizes()), []);
 });
 
-test("the report names what is over, and says when nothing is", () => {
-  assert.match(report({ "AGENTS.md": FILE_BUDGETS["AGENTS.md"] + 1 }).join("\n"), /1 over, suspended[^\n]*\n {2}AGENTS\.md is/);
-  assert.ok(report({}).includes("nothing over"));
+// The ratchet (owner ruling, 2026-11-08): a limit rises only with a RAISES row naming the ruling.
+test("no limit rose against the base without its owner ruling", () => {
+  const base = baseSource();
+  if (!base) return;
+  const source = readFileSync(join(ROOT, "scripts/doc-budget.mjs"), "utf8");
+  assert.deepEqual(ratchetViolations(currentLimits(), limitsOf(base.text), RAISES, raiseRowsOf(base.text), raiseRowsOf(source)), []);
+});
+
+test("the limits read from the source are the limits in force", () => {
+  assert.deepEqual(limitsOf(readFileSync(join(ROOT, "scripts/doc-budget.mjs"), "utf8")), currentLimits());
+});
+
+test("a rise needs its exact row; a fall needs none; base rows stay", () => {
+  const base = { "docs/decisions.md": 100, "docs/": 200 };
+  assert.equal(ratchetViolations({ "docs/decisions.md": 101, "docs/": 200 }, base, []).length, 1);
+  assert.equal(ratchetViolations({ "docs/decisions.md": 101 }, base, [{ limit: "docs/decisions.md", from: 100, to: 102, ruling: "x" }]).length, 1);
+  assert.equal(ratchetViolations({ "docs/decisions.md": 101 }, base, [{ limit: "docs/decisions.md", from: 100, to: 101 }]).length, 1);
+  assert.deepEqual(ratchetViolations({ "docs/decisions.md": 101 }, base, [{ limit: "docs/decisions.md", from: 100, to: 101, ruling: "owner" }]), []);
+  assert.deepEqual(ratchetViolations({ "docs/decisions.md": 90, "docs/": 150 }, base, []), []);
+  assert.equal(ratchetViolations({}, base, [], ["{ a }"], []).length, 1);
 });
 
 test("an oversized instruction file is reported", () => {
