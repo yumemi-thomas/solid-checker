@@ -27,6 +27,12 @@ describe("judge", () => {
     const owner = { ok: true, findings: [finding("missing-owner", "violation")] };
     expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: caused("Cannot call resolve inside a reactive scope") }).outcome).toBe("not-fired");
     expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: caused("Context can only be accessed under a reactive root.") }).outcome).not.toBe("not-fired");
+    // Review R66: an own frame in another module of the program (helpers.ts, recorded with no line) is the program's: the other code's cause
+    // does not place it, and with no placed frame it is unplaced; with no own frame at all the cause places it.
+    const own = (frames) => run([], { consoleErrors: ["NoOwnerError: Context can only be accessed under a reactive root."], consoleErrorPositions: [frames], consoleErrorCauses: [{ message: "Cannot call resolve inside a reactive scope", positions: [{ file: "App.tsx", line: 10, column: 1 }] }] });
+    expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: own([{ file: "helpers.ts" }]) }).outcome).toBe("unplaced");
+    expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: own([]) }).outcome).toBe("agree");
+    for (const file of ["helpers.js", "sub/helpers.ts"]) expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: own([{ file }]) }).outcome).toBe("unplaced");
     // No frame: unplaced, as before.
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(null) }).outcome).toBe("unplaced");
   });

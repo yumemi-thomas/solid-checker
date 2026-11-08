@@ -14,7 +14,7 @@ import { OBSERVE, flush } from 'solid-js';
 import { render } from '@solidjs/web';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { appFrames } from './frames.mjs';
+import { appFrames, programFrames } from './frames.mjs';
 import { installVirtualClock } from './virtual-clock.mjs';
 
 // `--virtual-clock` (FUZZ_VIRTUAL_CLOCK=1): the program's timers and the runner's own waits run on a virtual clock (virtual-clock.mjs),
@@ -183,8 +183,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...appFrames(id, e.stack), ...appFrames(id, e.cause?.stack)] })),
       consoleErrors: consoleErrors.slice(0, 20).map(row => row.text),
-      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => appFrames(id, row.error?.stack ?? '')),
-      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: appFrames(id, row.error.cause.stack) } : null), artifactCount,
+      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => programFrames(id, row.error?.stack ?? '')),
+      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: programFrames(id, row.error.cause.stack) } : null), artifactCount,
     };
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, `${id}.json`), JSON.stringify(record));
