@@ -17,6 +17,14 @@ describe("judge", () => {
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-context-provider", "violation")] }, runtime: logged }).outcome).toBe("unplaced");
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: run([], { consoleErrors: ["unrelated"] }) }).outcome).toBe("not-fired");
   });
+  it("places a logged code by the logged error's own frames (ADR 0907)", () => {
+    const at = (line) => run([], { consoleErrors: ["ContextNotFoundError: Context has no provider above this read and no default value."], consoleErrorPositions: [line === null ? [] : [{ file: "App.tsx", line, column: 1 }]] });
+    const claim = { ok: true, findings: [finding("missing-context-provider", "violation")] };
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(10) }).outcome).toBe("agree");
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: at(10) }).outcome).toBe("false-clean");
+    // No frame: unplaced, as before.
+    expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(null) }).outcome).toBe("unplaced");
+  });
   it("regions are the site line and the wrapper's line", () => expect(regionOf(site)).toEqual([10, 4]));
   it("agree: a violation of a rule that claims the code covers it at the diagnostic's position, never by a line range (review 4c, R8)", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation")] } }).outcome).toBe("agree");

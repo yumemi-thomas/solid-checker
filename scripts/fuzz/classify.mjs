@@ -108,6 +108,18 @@ export function sourceExprAt(lines, line, column) {
 }
 
 /** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
+/**
+ * The coded errors the page logged (ADR 0907): an `<Errored>` boundary logs what it caught instead of rethrowing it, and a user effect
+ * logs the throw of its compute or of a computation it read (`NoOwnerError: …`). Each is placed by the logged error's own frames and its
+ * cause's (`consoleErrorPositions`, index-aligned with `consoleErrors`), as a thrown one is; a logged value that is no error has none.
+ */
+export function loggedEvents(runtime) {
+  return (runtime.consoleErrors ?? []).flatMap((text, index) => {
+    const code = codeOfLogged(text);
+    return code ? [{ code, source: "thrown", positions: runtime.consoleErrorPositions?.[index] ?? [] }] : [];
+  });
+}
+
 export function runtimeEvents(runtime) {
   const rows = [];
   for (const diagnostic of runtime.diagnostics ?? []) {
@@ -205,11 +217,7 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     .sort((one, two) => two.line - one.line)[0];
   if (!findings.length) return [];
   const events = runtimeEvents(runtime);
-  // An `<Errored>` boundary logs a thrown code instead of rethrowing it (matrix.mjs `judge`): reported, with no position.
-  for (const text of runtime.consoleErrors ?? []) {
-    const code = codeOfLogged(text);
-    if (code) events.push({ code, source: "thrown", positions: [] });
-  }
+  events.push(...loggedEvents(runtime));
   const disturbed = disturbances(runtime, plan ?? { clicks: [] });
   // Without the program tree no registration is followed: a finding on a registering call is `unconnected` then, never a false positive.
   const registered = program && built?.lineTable ? registrationLines(program, built.lineTable) : () => [];

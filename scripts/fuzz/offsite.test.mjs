@@ -67,6 +67,18 @@ describe("offSiteVerdicts", () => {
     // Thrown on another line: nothing stands on these, a false positive.
     expect(verdictsOf([finding("missing-owner", 20)], run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed)"]);
   });
+  // ADR 0907: a logged error is placed by its own frames (`consoleErrorPositions`, index-aligned), as a thrown one; with none it is unplaced.
+  const logged = (text, ...lines) => ({ consoleErrors: [text], consoleErrorPositions: [lines.map((line) => ({ file: "App.tsx", line, column: 1 }))] });
+  it("a logged code substantiates the rule's finding at its line; unplaced it judges nothing; another rule's logged code first is a stacked claim (ADR 0887)", () => {
+    const ctx = "ContextNotFoundError: Context has no provider above this read and no default value.";
+    expect(verdictsOf([finding("missing-context-provider", 20)], run([], undefined, logged(ctx, 20)))).toEqual(["substantiated"]);
+    expect(verdictsOf([finding("missing-context-provider", 20)], run([], undefined, logged(ctx)))).toEqual(["unjudged(unplaced)"]);
+    expect(verdictsOf([finding("missing-context-provider", 20)], run([], undefined, { consoleErrors: [ctx] }))).toEqual(["unjudged(unplaced)"]);
+    // Logged on the finding's line by another rule's code, then the run halts: the logged throw came first, a stacked claim, as a diagnostic's.
+    const owner = "NoOwnerError: Context can only be accessed under a reactive root.";
+    const stacked = offSiteVerdicts({ findings: [finding("missing-context-provider", 20)], built, runtime: run([], undefined, { ...logged(owner, 20), ...threw(null) }), plan: built.plan });
+    expect(stacked).toEqual([{ finding: "missing-context-provider@20", verdict: "stacked", first: "NO_OWNER_CONTEXT", why: "disturbed" }]);
+  });
   it("a disturbed run: the rule's code placed only off the lines is a false positive, unplaced it judges nothing, lines that never ran stay unexecuted", () => {
     expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: withText({ 10: "r1();", 20: "r1();" }), runtime: run([event("STRICT_READ_UNTRACKED", 10)], undefined, threw(null)), plan: built.plan }).map((row) => `${row.verdict}(${row.why})`)).toEqual(["stacked(disturbed-repeat)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10), event("PRIMITIVE_IN_EFFECT_CALLBACK", 20)], undefined, threw(null)))).toEqual(["false-positive(disturbed-repeat-other-source)"]);

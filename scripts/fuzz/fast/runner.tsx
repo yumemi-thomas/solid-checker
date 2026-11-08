@@ -27,6 +27,11 @@ const describeError = (e: any) => ({
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,
 });
 
+/** A logged value's stacks: an error's own, then its cause's (as `errors` records them); nothing for any other value. */
+const errorStacks = (value: any): string[] => (value instanceof Error || (value && typeof value === 'object' && typeof value.stack === 'string'))
+  ? [String(value.stack ?? ''), ...(value.cause && typeof value.cause.stack === 'string' ? [String(value.cause.stack)] : [])]
+  : [];
+
 function events() {
   return [
     ...['click', 'dblclick', 'mousedown', 'mouseup', 'mouseover', 'mouseout', 'pointerdown', 'pointerup', 'contextmenu']
@@ -62,7 +67,9 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   const started = performance.now();
   const outDir = (outDirOverride ?? process.env.FUZZ_FAST_OUT) as string;
   const settings = { eventPasses: 2, pauseMs: Number(process.env.FUZZ_PAUSE_MS ?? 60), finalMs: Number(process.env.FUZZ_FINAL_MS ?? 150) };
-  const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
+  const diagnostics: any[] = [], errors: any[] = [], disposers: (() => void)[] = [];
+  // Each logged line, with the stacks of the errors it logged (ADR 0907; chrome-host/runner.tsx).
+  const consoleErrors: { text: string, stacks: string[] }[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];
   // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED or an error-severity diagnostic (thrown at its
@@ -91,7 +98,7 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   process.on('uncaughtException', onProcessError);
   process.on('unhandledRejection', onProcessRejection);
   const oldError = console.error, oldWarn = console.warn;
-  console.error = (...args) => { consoleErrors.push(args.map(x => String(x)).join(' ')); };
+  console.error = (...args) => { consoleErrors.push({ text: args.map(x => String(x)).join(' '), stacks: args.flatMap(errorStacks) }); };
   console.warn = () => {};
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onRejection);
@@ -174,7 +181,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, positions: appFrames(id, d.stack) })),
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...appFrames(id, e.stack), ...appFrames(id, e.cause?.stack)] })),
-      consoleErrors: consoleErrors.slice(0, 20), artifactCount,
+      consoleErrors: consoleErrors.slice(0, 20).map(row => row.text),
+      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => row.stacks.flatMap(stack => appFrames(id, stack))), artifactCount,
     };
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, `${id}.json`), JSON.stringify(record));
