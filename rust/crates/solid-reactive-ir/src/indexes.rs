@@ -1133,6 +1133,7 @@ impl<'a> SemanticLookup<'a> {
                 self,
                 crate::cache::typescript_unchanged(self.facts),
                 redirects,
+                self.memos.ticket(),
             )
         });
         world
@@ -2010,7 +2011,7 @@ impl<'a> SemanticLookup<'a> {
                 )]);
                 let mut keys = self
                     .base
-                    .definers(|| self.base_views())
+                    .definers(|| self.base_views(), || None)
                     .keys()
                     .map(|key| format!("{key:?}"))
                     .collect::<Vec<_>>();
@@ -2525,7 +2526,32 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn base_hazards(&self) -> &crate::base::BaseIndex<crate::base::Hazard, u32> {
         crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
         crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
-        self.base.hazards(|| self.base_views())
+        self.hazards_index()
+    }
+
+    /// The hazards index over this lookup's file table: the memo store's
+    /// kept index when this build's begin updated it (ADR 0909; the begin
+    /// checks it against a refold in shadow and verify-reused modes), under
+    /// this table's ids, else a fold of this build's views.
+    fn hazards_index(&self) -> &crate::base::BaseIndex<crate::base::Hazard, u32> {
+        self.base.hazards(
+            || self.base_views(),
+            || {
+                let kept = self.memos.kept_hazards()?;
+                let memo_table = self.memos.table();
+                let index = kept.rekeyed(|id| self.file_table.id_of(memo_table.path_of(id)))?;
+                let store = self.memos.store();
+                if store.checks_indexes()
+                    && index != self.base_views().fold(crate::base::contributions::hazards)
+                {
+                    store.poison(
+                        "IR memo mismatch: index `hazards`: the kept index under the lookup's ids differs from a fold",
+                    );
+                    return None;
+                }
+                Some(index)
+            },
+        )
     }
 
     /// Whether some analyzed file has `hazard`.
@@ -2535,16 +2561,14 @@ impl<'a> SemanticLookup<'a> {
         self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
             crate::base::memo::probes::PolledKey::Unit
         });
-        self.base
-            .hazards(|| self.base_views())
-            .contains_key(&hazard)
+        self.hazards_index().contains_key(&hazard)
     }
 
     /// L1: module edges by specifier.
     pub(crate) fn base_modules(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::ModuleKey, crate::base::ModuleEdge> {
-        self.base.modules(|| self.base_views())
+        self.base.modules(|| self.base_views(), || None)
     }
 
     /// L1: member uses by name.
@@ -2564,13 +2588,13 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn base_members(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::MemberName, crate::base::MemberUse> {
-        self.base.members(|| self.base_views())
+        self.base.members(|| self.base_views(), || None)
     }
 
     /// L1: reflective-definer keys.
     pub(crate) fn base_definers(&self) -> &crate::base::BaseIndex<crate::base::DefinerKey, ()> {
         crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
-        self.base.definers(|| self.base_views())
+        self.base.definers(|| self.base_views(), || None)
     }
 
     /// Every slot of the analyzed files in file order, with the entries

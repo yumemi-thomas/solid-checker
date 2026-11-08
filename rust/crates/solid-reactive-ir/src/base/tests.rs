@@ -607,6 +607,75 @@ fn base_indexes_updated_through_random_edits_equal_a_refold() {
     );
 }
 
+/// ADR 0909: the hazards index a memo begin keeps, updated build after
+/// build through random edits, equals a fold of each build's views.
+#[test]
+fn the_kept_hazards_index_through_random_edits_equals_a_refold() {
+    let mut steps = 0;
+    for fixture in FIXTURES {
+        let original = Project {
+            files: fixture_sources(fixture),
+            schemes: HashMap::default(),
+            unreferenced: Vec::new(),
+        };
+        for seed in 1..=2 {
+            let mut random = Random(seed);
+            let mut project = original.clone();
+            let store = super::memo::build::MemoStore::new(false, false);
+            for serial in 0..15 {
+                let kind = KINDS[random.below(KINDS.len())];
+                let mut next = project.clone();
+                if serial > 0 && edit(&mut next, kind, &mut random, serial).is_none() {
+                    continue;
+                }
+                let Some(facts) = facts(&next) else {
+                    continue;
+                };
+                project = next;
+                let ast_indexes = facts
+                    .files
+                    .iter()
+                    .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+                    .collect::<HashMap<_, _>>();
+                let symbols = entity_symbols(&facts);
+                let references = OnceLock::new();
+                let table = store.table(&super::FileTable::new(&facts.files));
+                let views = Views {
+                    table: &table,
+                    files: &facts.files,
+                    sources: ViewSources {
+                        ast_indexes: &ast_indexes,
+                        symbols: &symbols,
+                        typescript: &facts.typescript,
+                        references: &references,
+                        resolutions: None,
+                    },
+                    constants: BuildConstants {
+                        dialect: &solid_dialect::Solid2,
+                    },
+                };
+                let ticket = u64::try_from(serial).unwrap() + 1;
+                store.begin_with(
+                    &views,
+                    false,
+                    &super::memo::probes::NoProbes,
+                    false,
+                    false,
+                    ticket,
+                );
+                let kept = store.kept_hazards_any().expect("begin keeps the index");
+                assert!(
+                    *kept == views.fold(super::contributions::hazards),
+                    "{fixture} seed {seed} step {serial}: the kept hazards differ from a refold"
+                );
+                store.end();
+                steps += 1;
+            }
+        }
+    }
+    assert!(steps > 40, "only {steps} builds");
+}
+
 #[test]
 fn an_unchanged_project_updates_nothing() {
     let project = Project {
@@ -855,7 +924,14 @@ fn begin_over(
         },
     };
     // The producer says nothing changed: the store must not need its word.
-    let begin = store.begin_with(&views, false, &super::memo::probes::NoProbes, true, false);
+    let begin = store.begin_with(
+        &views,
+        false,
+        &super::memo::probes::NoProbes,
+        true,
+        false,
+        0,
+    );
     store.end();
     begin
 }

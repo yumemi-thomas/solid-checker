@@ -235,6 +235,29 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
         self.by_key.contains_key(key)
     }
 
+    /// The index under another file table's ids (`id` maps each file of
+    /// this one; `None` fails): what a fold over that table gives, postings
+    /// again in `FileId` order.
+    pub(crate) fn rekeyed(&self, id: impl Fn(FileId) -> Option<FileId>) -> Option<Self>
+    where
+        C: Clone,
+    {
+        let mut by_file = HashMap::default();
+        for (file, contribution) in &self.by_file {
+            by_file.insert(id(*file)?, contribution.clone());
+        }
+        let mut by_key = HashMap::<K, Vec<Posting>>::default();
+        for (key, postings) in &self.by_key {
+            let mut moved = Vec::with_capacity(postings.len());
+            for (file, positions) in postings {
+                moved.push((id(*file)?, positions.clone()));
+            }
+            moved.sort_unstable_by_key(|(file, _)| *file);
+            by_key.insert(key.clone(), moved);
+        }
+        Some(Self { by_file, by_key })
+    }
+
     /// Every key with at least one value, in no particular order.
     pub(crate) fn keys(&self) -> impl Iterator<Item = &K> {
         self.by_key.keys()
