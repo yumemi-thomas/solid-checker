@@ -5966,5 +5966,16 @@
    "mx-strict-read-untracked-flw-flow-show-returned-plain-signal-direct-none"
   ],
   "rediscovered": "census twin flw-flow-show-returned-plain (2, Chrome confirmed): b652545e2 no SC1001 row (SC9012 at the dispatch only); r59 SC1001 U at the child's call. flw-flow-show-inline-body unchanged"
+ },
+ {
+  "finding": "A helper written outside a generator and called past its `yield` kept the owned context of that call's edge, also beside an owned call from the body; the timer's later step runs it with no owner and Chrome raises NO_OWNER_* (reviewer R60)",
+  "found": "reviewer R60 on 9f362079d",
+  "fixed": "R60: a call past a yield of a plain generator is a MayResumeUnowned edge",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-flw-gen-step-helper-body-x-direct-none"
+  ],
+  "rediscovered": "flw-gen-step-helper(-body) ids (14, Chrome confirmed): b652545e2 7 -body ids with no row at the site; r60 SC4001 U at the site in all 14"
  }
 ]

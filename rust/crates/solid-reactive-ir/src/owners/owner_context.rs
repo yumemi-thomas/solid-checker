@@ -357,8 +357,40 @@ pub(super) fn call_owner_edge(
     match action_step_resumption(file, site, lookup) {
         Some(StepResumption::Proven) => OwnerEdgeKind::ResumesUnowned,
         Some(StepResumption::Possible) => OwnerEdgeKind::MayResumeUnowned,
+        // Reviewer R60 (ADR 0866 amendment): a call past a `yield` of a
+        // plain generator around it runs on a later `.next()`, wherever that
+        // is called; its callee inherits a possible unowned run.
+        None if past_generator_yield(file, site, lookup) => OwnerEdgeKind::MayResumeUnowned,
         None => OwnerEdgeKind::Preserve,
     }
+}
+
+/// Whether `at` follows a `yield` of a generator written around it (not an
+/// action's stepped generator, which `action_step_resumption` reads): the
+/// `yield` is written before it in that generator's body, or in a loop of
+/// the body that runs it again.
+pub(crate) fn past_generator_yield(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .functions_owning(at)
+        .filter(|generator| {
+            generator.generator && stepped_action_generator(file, generator, lookup).is_none()
+        })
+        .any(|generator| {
+            file.ast.yields.iter().any(|fact| {
+                owning_function(&file.ast, fact.span)
+                    .is_some_and(|owner| owner.span == generator.span)
+                    && (fact.span.start < at.start
+                        || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                            repeated.contains(at)
+                                && looped.contains(fact.span)
+                                && generator.body.contains(looped)
+                        }))
+            })
+        })
 }
 
 /// Where a site of an action's stepped generator stands to the generator's

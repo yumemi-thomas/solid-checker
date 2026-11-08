@@ -1021,24 +1021,7 @@ fn later_generator_step(
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
         .filter(|climb| !climb.exhausted)
         .map(|climb| climb.at);
-    std::iter::once(span).chain(climbed).any(|at| {
-        file.ast
-            .functions_owning(at)
-            .filter(|generator| {
-                generator.generator
-                    && crate::owners::stepped_action_generator(file, generator, lookup).is_none()
-            })
-            .any(|generator| {
-                file.ast.yields.iter().any(|fact| {
-                    crate::owners::owning_function(&file.ast, fact.span)
-                        .is_some_and(|owner| owner.span == generator.span)
-                        && (fact.span.start < at.start
-                            || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
-                                repeated.contains(at)
-                                    && looped.contains(fact.span)
-                                    && generator.body.contains(looped)
-                            }))
-                })
-            })
-    })
+    std::iter::once(span)
+        .chain(climbed)
+        .any(|at| crate::owners::past_generator_yield(file, at, lookup))
 }

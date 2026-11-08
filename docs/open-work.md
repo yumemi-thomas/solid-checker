@@ -330,3 +330,5 @@ ADR 0683 limit: a class extending a standard container vetoes that member projec
 ADR 0659 limits: `--rendering hydrated` resolves packages as the client, so dependency source is the client graph on both paths. A site in a function with no symbol that only an arm reaches keeps its finding (ADR 0677). `typeof window` is uncertifiable even under a browser selection that could decide it. `claims_client_runtime` lists the rules the audit measured: SC1001, SC2001, SC2002, SC2003, SC2008, SC5001, SC6002. The corpus sweep still runs every project as `csr`.
 
 - Named `Show`/`Match` value children (`length` 0): their child position gives no invocation proof. Unknown callers keep reads uncertifiable; a positive-length callback retains its untracked rendering role.
+
+- ADR 0643 (installed objects), open: an access through an alias (`const p = o; p.v`), a destructuring (`const { v } = o`), a callee's body reading an object handed to it, and an access in another file keep only the install's obligation, with no row at the access.

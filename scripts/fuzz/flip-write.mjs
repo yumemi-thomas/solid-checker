@@ -209,6 +209,16 @@ const ESCAPES = {
     const [C, g] = [kit.name("C"), kit.name("g")];
     return { before: [decl(C, domExpr(`createContext(${f})`, undefined, ["createContext"])), decl(g, domExpr(`useContext(${C})`, undefined, ["useContext"]))], fires: `${g}()` };
   }),
+  // Reviewer R60: a helper written outside the generator, called past its `yield`, runs on the timer's later step with no owner;
+  // `-body` also calls it in the body, an owned edge beside the unowned one.
+  "flw-gen-step-helper": (stmts, kit) => {
+    const [h, g, it] = [kit.name("h"), kit.name("g"), kit.name("it")];
+    return { hoisted: [decl(h, fn(stmts))], body: [decl(g, domExpr(`function* () { yield 1; ${h}(); }`)), decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`)), expr(domExpr(`setTimeout(() => ${it}.next(), 0)`))], view: [] };
+  },
+  "flw-gen-step-helper-body": (stmts, kit) => {
+    const [h, g, it] = [kit.name("h"), kit.name("g"), kit.name("it")];
+    return { hoisted: [decl(h, fn(stmts))], body: [expr(domExpr(`${h}()`)), decl(g, domExpr(`function* () { yield 1; ${h}(); }`)), decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`)), expr(domExpr(`setTimeout(() => ${it}.next(), 0)`))], view: [] };
+  },
   "flw-owned-returned": (stmts, kit) => {
     const [f, u, g] = [kit.name("f"), kit.name("u"), kit.name("g")];
     return { body: [decl(u, fn([decl(f, fn(stmts)), expr(call(ref(f))), ret(ref(f))])), decl(g, call(ref(u)))], view: [button(kit.name("b"), [expr(call(ref(g)))])] };
