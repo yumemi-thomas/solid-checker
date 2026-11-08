@@ -739,10 +739,10 @@ pub(crate) trait ReadAnswers {
     /// The identity of the memo store this build reads.
     fn memo_store_id(&self) -> u64;
     /// How many markings that store has made: answers kept within a pass
-    /// hold while it is unchanged ([`PassAnswers`]).
-    fn memo_marks(&self) -> u64 {
-        0
-    }
+    /// hold while it is unchanged ([`PassAnswers`]). Required, with no
+    /// default: an implementor answering a constant would let a pass serve
+    /// a memo answer a marking moved.
+    fn memo_marks(&self) -> u64;
     /// The revision `read`'s memo last changed in, brought up to date in
     /// this build (`None`: gone, or another store), or `Undecided` while
     /// bringing it up to date needs a derived table its pass has not
@@ -1094,6 +1094,9 @@ mod tests {
         }
         fn memo_store_id(&self) -> u64 {
             1
+        }
+        fn memo_marks(&self) -> u64 {
+            0
         }
         fn memo_check(&self, store: u64, read: MemoRead) -> MemoCheck {
             if self.undecided.borrow().contains(&read.query.0) {

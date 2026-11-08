@@ -897,6 +897,12 @@ fn nanos(duration: Duration) -> u64 {
 
 /// The memo store a retained session keeps between builds, and a one-shot
 /// build owns for itself.
+/// The identity of the build constants an index was folded under: the
+/// dialect's address (compared, never dereferenced).
+fn constants_key(constants: &super::super::BuildConstants<'_>) -> usize {
+    std::ptr::from_ref(constants.dialect).cast::<()>().addr()
+}
+
 /// The hazards index a begin keeps ([`MemoStore::kept_hazards`]).
 pub(crate) type KeptHazards = Arc<BaseIndex<crate::base::Hazard, u32>>;
 
@@ -926,7 +932,10 @@ pub(crate) struct MemoStore {
     /// updated by `begin` with the files whose views changed, as the census
     /// indexes are; stamped with the ticket of the lookup whose begin
     /// updated it, so no other build reads it ([`LookupMemos::kept_hazards`]).
-    kept_hazards: std::sync::RwLock<Option<(u64, KeptHazards)>>,
+    /// Also stamped with the build constants it was folded under
+    /// ([`constants_key`]): a contribution that one day reads them refolds
+    /// when they change instead of keeping a stale index.
+    kept_hazards: std::sync::RwLock<Option<(u64, usize, KeptHazards)>>,
     /// Project passes' kept solvers and published outputs.
     derived: super::derived::DerivedTables,
     /// This build's begin costs, when measured ([`crate::base::reads::cost`]).
@@ -1017,7 +1026,7 @@ impl MemoStore {
             .read()
             .expect("kept hazards lock")
             .as_ref()
-            .map(|(_, index)| Arc::clone(index))
+            .map(|(_, _, index)| Arc::clone(index))
     }
 
     /// Whether a later build reads this store (a retained daemon's).
@@ -1364,9 +1373,12 @@ impl MemoStore {
         let started = Instant::now();
         {
             let mut kept = self.kept_hazards.write().expect("kept hazards lock");
-            let previous = kept.take().filter(|_| !fresh && self.retained);
+            let constants = constants_key(&views.constants);
+            let previous = kept.take().filter(|(_, folded_under, _)| {
+                !fresh && self.retained && *folded_under == constants
+            });
             let mut index = match previous {
-                Some((_, index)) => {
+                Some((_, _, index)) => {
                     let mut index = Arc::unwrap_or_clone(index);
                     index.update(
                         crate::pipeline::parallel_slice_results(&changed_files, |id| {
@@ -1393,7 +1405,7 @@ impl MemoStore {
                     index = fold;
                 }
             }
-            *kept = Some((ticket, Arc::new(index)));
+            *kept = Some((ticket, constants, Arc::new(index)));
         }
         report.index_ns += nanos(started.elapsed());
         let recorded = self
@@ -2321,8 +2333,8 @@ impl<'a> LookupMemos<'a> {
     pub(crate) fn kept_hazards(&self) -> Option<KeptHazards> {
         let kept = self.store().kept_hazards.read().expect("kept hazards lock");
         kept.as_ref()
-            .filter(|(ticket, _)| *ticket == self.ticket)
-            .map(|(_, index)| Arc::clone(index))
+            .filter(|(ticket, _, _)| *ticket == self.ticket)
+            .map(|(_, _, index)| Arc::clone(index))
     }
 
     /// Runs `begin` once, before the build's first memo read.
